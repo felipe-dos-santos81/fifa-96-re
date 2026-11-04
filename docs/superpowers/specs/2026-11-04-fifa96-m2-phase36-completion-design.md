@@ -31,7 +31,7 @@ dead or never-written row still has a body to reverse and port; it simply has
 no live producer, which is a separate question.
 
 Current census, first-hand from the two tables in
-`src/fifa96_engine/fifa96_match_handlers.c`:
+`port/src/fifa96_engine/fifa96_match_handlers.c`:
 
 | Measure | Count |
 |---|---|

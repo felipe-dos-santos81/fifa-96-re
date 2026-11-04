@@ -6,7 +6,7 @@ Parent spec: `docs/superpowers/specs/2026-10-14-fifa96-m2-phase26-live-gameplay-
   (phase-26b is the second plan off that **whole** spec — its §5 split clause; D2 "all five clusters, one phase").
 Sibling plan (closed): `docs/superpowers/plans/2026-10-14-fifa96-m2-phase26a-camera-ball-visibility.md`
   (closed as an **honest Layer-2 waiver** — the camera's live producer is dispatch-dead behind R11-L4; FU272).
-Recon slices (produced by this phase's wave): `docs/ghidra/FU273…FU280`.
+Recon slices (produced by this phase's wave): `port/spec/FU273…FU280`.
 
 ## 1. Context
 
@@ -74,7 +74,7 @@ gate-index misreads). No code, no rename/comment/label/function/script/project s
 Each slice delivers: (a) the exact native producer with first-hand bytes, (b) a fresh live-path
 reachability census, (c) an explicit **live-vs-leg ruling** with its payoff (Layer 1 / Layer 2), (d)
 numbered open legs with native owners. Slices run in parallel read-only; the controller freeze-reviews
-and promotes each to a canonical `docs/ghidra/FU2xx_*.md` in serialized commits.
+and promotes each to a canonical `port/spec/FU2xx_*.md` in serialized commits.
 
 ## 4. Implementation task structure (Stage 2, serialized SDD)
 
@@ -125,7 +125,7 @@ visible anchor.
   (taker state), `ref_machine`/`replay.state`/`overlay.armed`, `field_4c2f2`.
 - **The engine seams** — `fifa96_match_run_frame`, `fifa96_match_run_situation`, the keeper/taker/
   foul/replay machines, the camera/follow consumers.
-- **The frozen slices** `docs/ghidra/FU264…FU272` + this wave's `FU273…FU280` — appended errata only.
+- **The frozen slices** `port/spec/FU264…FU272` + this wave's `FU273…FU280` — appended errata only.
 
 ## 8. Decisions (approved in-chat)
 

@@ -4,7 +4,7 @@
 
 **Goal:** Produce four frozen evidence docs — FU326–FU329 — that settle the no-slot seed arm (FU316-L1): the native algebra and the port's fidelity, the measured seed distribution on the current tree, the natural reachability of a moving no-slot band entry, and the acceptance/golden governance — with a GO/NO-GO on a natural no-slot pan.
 
-**Architecture:** Four independent read-only slices, one agent each. FU326 is a fresh-Ghidra static slice; FU327/FU328 measure with out-of-tree probe builds of the current tree; FU329 is the acceptance/governance design. Drafts land under `docs/ghidra/`, receive a whole-wave review + quoted errata, and are promoted one-per-commit. No production code, no test/golden change.
+**Architecture:** Four independent read-only slices, one agent each. FU326 is a fresh-Ghidra static slice; FU327/FU328 measure with out-of-tree probe builds of the current tree; FU329 is the acceptance/governance design. Drafts land under `port/spec/`, receive a whole-wave review + quoted errata, and are promoted one-per-commit. No production code, no test/golden change.
 
 **Tech Stack:** Ghidra MCP (standard tools only), the repo's C sources + docs, out-of-tree probes linking the prebuilt `build/libfifa96_*.a` libraries.
 
@@ -33,10 +33,10 @@
 ### Task 1: FU326 — the native no-slot seed algebra and the port audit
 
 **Files:**
-- Create: `docs/ghidra/FU326_r2l8_noslot_seed.md`
+- Create: `port/spec/FU326_r2l8_noslot_seed.md`
 
 **Interfaces:**
-- Consumes: the spec §3/§4; FU316 §3.2/§4.3 (the carried chain); the port's seed staging (`src/fifa96_loader/fifa96_outfield.c:685-720`).
+- Consumes: the spec §3/§4; FU316 §3.2/§4.3 (the carried chain); the port's seed staging (`port/src/fifa96_loader/fifa96_outfield.c:685-720`).
 - Produces: the seed-arm algebra (condition, words, packing, `v0`, `T(s)`, edge cases), the port-fidelity verdict, GO/NO-GO; legs `FU326-L1…`.
 
 - [ ] **Step 1: Re-read the seed arm fresh.** In `/FIFA96.EXE` (Ghidra MCP): the `0x7F056` arm and its siblings (the camY/slot arms), the seed word(s) and every packing term (dir/vel/type), the `v0` derivation (the `0xC` divisor and the truncation), and the `T(s)` decay table; disassemble the arm and the event-seed site (`FUN_00071C94`/`0x70544`).
@@ -50,13 +50,13 @@
 ### Task 2: FU327 — the measured seed distribution (the current tree)
 
 **Files:**
-- Create: `docs/ghidra/FU327_r2l8_seed_distribution.md`
+- Create: `port/spec/FU327_r2l8_seed_distribution.md`
 
 **Interfaces:**
-- Consumes: the spec §3/§6; FU326's algebra (or the carried FU316 if FU326 runs parallel — forward-cite); the phase-33 measured baseline (FU323 §2/§4); the harness (`tests/test_engine_m2.c`'s natural/claim/offset passes).
+- Consumes: the spec §3/§6; FU326's algebra (or the carried FU316 if FU326 runs parallel — forward-cite); the phase-33 measured baseline (FU323 §2/§4); the harness (`port/tests/test_engine_m2.c`'s natural/claim/offset passes).
 - Produces: the per-gate-pass distribution, the no-slot classification, the silent-bind reproduction, the max |seed|/|v0|/T, GO/NO-GO for the distribution question; legs `FU327-L1…`.
 
-- [ ] **Step 1: Build the probe.** An out-of-tree copy of the natural pass (the FU319 §9 / FU323 §3 method: a copy of `tests/test_engine_m2.c` with a dump-gated main linking the repo's prebuilt `build/libfifa96_*.a`; publish the build line; the unpatched binary must reproduce the committed golden byte-for-byte before any instrumentation).
+- [ ] **Step 1: Build the probe.** An out-of-tree copy of the natural pass (the FU319 §9 / FU323 §3 method: a copy of `port/tests/test_engine_m2.c` with a dump-gated main linking the repo's prebuilt `build/libfifa96_*.a`; publish the build line; the unpatched binary must reproduce the committed golden byte-for-byte before any instrumentation).
 - [ ] **Step 2: Sample every row-04 gate pass.** Over the natural window (`M2_KEYS` verbatim, 12 000 steps) and the two driven passes: the gate tuple (pos, lane, bound, camY, face/bearing/Δ), `has_slot`, the seed arm taken, the seed word, `v0`, the event cells, the place delta, the pan — per pass.
 - [ ] **Step 3: Classify + verify the baseline.** The no-slot instances (count, |seed| max, |v0| max, T); confirm the phase-33 silent bind at granted f=1517 (the zero seed, `trk=12`, no motion) reproduces; the slot-arm instances as controls.
 - [ ] **Step 4: Answer the distribution question.** Does ANY measured gate pass carry a no-slot `|v0| ≥ 1`? If yes, the exact pass(es); if no, the measured conditions (which velocities would be needed).
@@ -68,7 +68,7 @@
 ### Task 3: FU328 — the natural reachability sweep
 
 **Files:**
-- Create: `docs/ghidra/FU328_r2l8_reachability.md`
+- Create: `port/spec/FU328_r2l8_reachability.md`
 
 **Interfaces:**
 - Consumes: the spec §3/§6; FU327's distribution (forward-cite if parallel); FU315's claim producer; the natural probe/drive harness (FU317).
@@ -86,7 +86,7 @@
 ### Task 4: FU329 — the acceptance and golden governance
 
 **Files:**
-- Create: `docs/ghidra/FU329_r2l8_acceptance.md`
+- Create: `port/spec/FU329_r2l8_acceptance.md`
 
 **Interfaces:**
 - Consumes: the spec §5/§6/§7/§8; FU326's algebra; FU327's distribution; FU328's witness/NO-GO (forward-cite where parallel); the phase-32/33 acceptance precedents (`docs/screens/p32-l2-notes.md`, the register).

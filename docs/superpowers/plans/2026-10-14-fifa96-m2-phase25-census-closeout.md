@@ -8,13 +8,13 @@
 
 **Tech Stack:** C11/CMake/CTest, ASan/UBSan (`-fno-sanitize-recover=all`), the null backend (determinism source of truth), SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase25-census-closeout-design.md`. Frozen recon slices: `docs/ghidra/FU256…FU263`.
+**Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase25-census-closeout-design.md`. Frozen recon slices: `port/spec/FU256…FU263`.
 
 ## Global Constraints
 
 - **Baseline:** `make check` **110/110**; wired **58/80 = 72%** (`35 action + 23 phase`); M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` (**691 lines, immutable**); M2 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (**v22, 6522 lines**).
 - **M2 is byte-identical** unless the OL-65 fix **provably** un-dormants a tape-visible path; then stop and apply the written-reason + frame-diff re-pin rule (never silently). M1 never moves.
-- **The census rule:** a row counts only when a ported path **installs AND dispatches** it. `floor(100 × wired/80)`; a count change updates README title + `docs/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + the `tests/test_engine_m2.c` pins **in the same commit**.
+- **The census rule:** a row counts only when a ported path **installs AND dispatches** it. `floor(100 × wired/80)`; a count change updates README title + `port/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + the `port/tests/test_engine_m2.c` pins **in the same commit**.
 - **No fakes** (R15/R45/R49). Ghidra stays read-only (`/FIFA96.EXE`; LE globals at `+0x100000`).
 - Every new wire is RED-first with a mutation-RED rider.
 - Commits `feat`/`fix`/`docs(fuNNN)`/`test`/`chore`; work on `main`; push per dispatch.
@@ -23,11 +23,11 @@
 
 | Path | Responsibility |
 |---|---|
-| `src/fifa96_engine/fifa96_match_handlers.c` | The row-07 gate staging (`:983-985`) + the action table (`:5448..5548`, the `0x22` slot) |
-| `tests/test_engine_match_handlers.c` | The row-22 install/dispatch fixture (RED-first) + the mutation-RED rider |
-| `tests/test_engine_m2.c` | The census pins + the phase-25 provenance/riders |
-| `docs/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md` | The leg register + the census reconciliation |
-| `docs/ghidra/FU247…FU263` | The errata targets (appended errata only — prior sections never rewritten) |
+| `port/src/fifa96_engine/fifa96_match_handlers.c` | The row-07 gate staging (`:983-985`) + the action table (`:5448..5548`, the `0x22` slot) |
+| `port/tests/test_engine_match_handlers.c` | The row-22 install/dispatch fixture (RED-first) + the mutation-RED rider |
+| `port/tests/test_engine_m2.c` | The census pins + the phase-25 provenance/riders |
+| `port/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md` | The leg register + the census reconciliation |
+| `port/spec/FU247…FU263` | The errata targets (appended errata only — prior sections never rewritten) |
 
 ---
 
@@ -59,8 +59,8 @@ Expected: M1 `09b726b7…` ×3; M2 `b281a9b2…` ×3. If not stable → STOP; fa
 ### Task 2: The OL-65 staging fix + the row-22 wire (the one census candidate)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c:983-985` (the row-07 gate staging) and `:5522` (the `0x22` action-table slot)
-- Test: `tests/test_engine_match_handlers.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c:983-985` (the row-07 gate staging) and `:5522` (the `0x22` action-table slot)
+- Test: `port/tests/test_engine_match_handlers.c`
 
 **Interfaces:**
 - Consumes: the engine pool fields `opp->cam_dz6f` (the native `word[+0x6F]`, see `:2547`) and `opp->face7d` (the native `+0x7D`); the gate predicate in `fifa96_action_handlers.c` (~`:1701-1705`).
@@ -68,7 +68,7 @@ Expected: M1 `09b726b7…` ×3; M2 `b281a9b2…` ×3. If not stable → STOP; fa
 
 - [ ] **Step 1: Write the failing test.**
 
-In `tests/test_engine_match_handlers.c`, add a test that stages a row-07 dispatch whose opponent's `cam_dz6f`/`face7d` make `fold10(entity_angle(word[+0x6D],word[+0x6F]) − word[+0x7D]) < 0x55`, then asserts `opponent_invoke` fires and row `22` installs AND dispatches (the native `0x816D1 MOV ECX,1 / MOV EDX,0x22 / CALL 0x7D9A4`, FU259).
+In `port/tests/test_engine_match_handlers.c`, add a test that stages a row-07 dispatch whose opponent's `cam_dz6f`/`face7d` make `fold10(entity_angle(word[+0x6D],word[+0x6F]) − word[+0x7D]) < 0x55`, then asserts `opponent_invoke` fires and row `22` installs AND dispatches (the native `0x816D1 MOV ECX,1 / MOV EDX,0x22 / CALL 0x7D9A4`, FU259).
 
 ```c
 static void test_action_07_ol65_invoke_installs_row_22(void) {
@@ -87,7 +87,7 @@ Expected: FAIL — `opp_angle_z == 0` / `opp_face_word == 0`, so the fold never 
 
 - [ ] **Step 3: Apply the 2-line staging fix.**
 
-In `src/fifa96_engine/fifa96_match_handlers.c`, replace `:984-985`:
+In `port/src/fifa96_engine/fifa96_match_handlers.c`, replace `:984-985`:
 ```c
       s->opp_angle_z = 0;                /* word[+0x6F] unmodeled (OL-65) */
       s->opp_face_word = 0;              /* +0x7D facing word unmodeled (OL-65) */
@@ -114,14 +114,14 @@ Revert `s->opp_angle_z` to `0` in a scratch copy; re-run Step 5; confirm the tes
 
 - [ ] **Step 7: The M2 gate (the decision).**
 
-Run: `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt && echo IDENTICAL`
+Run: `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt && echo IDENTICAL`
 - **If IDENTICAL:** the row is tape-dormant → proceed to Step 8 (census rises to 59/80).
 - **If MOVED:** the fix un-dormants a tape-visible path (FU259-L1). **Per the M2 rail: revert the slot AND the fix** (`git checkout`), record a ledger Ruling, keep row `22` NULL/uncounted, and skip Step 8. The phase then reports the honest ceiling `58/80`.
 
 - [ ] **Step 8: Commit (only if M2 identical).**
 
 ```bash
-git add src/fifa96_engine/fifa96_match_handlers.c tests/test_engine_match_handlers.c
+git add port/src/fifa96_engine/fifa96_match_handlers.c port/tests/test_engine_match_handlers.c
 git commit -m "feat(ol65): the row-07 gate staging fix wires action 22 (row 22 installs+dispatches; census 59/80)"
 ```
 
@@ -130,7 +130,7 @@ git commit -m "feat(ol65): the row-07 gate staging fix wires action 22 (row 22 i
 ### Task 3: The errata sweep (doc-only)
 
 **Files:**
-- Modify: `docs/ghidra/FU247_exclusions_and_tape.md` (or the closest FU-247 file), `docs/ENGINE.md`, `src/fifa96_engine/fifa96_match_handlers.c` (comments only), any FU-84 slice.
+- Modify: `port/spec/FU247_exclusions_and_tape.md` (or the closest FU-247 file), `port/ENGINE.md`, `port/src/fifa96_engine/fifa96_match_handlers.c` (comments only), any FU-84 slice.
 
 **Interfaces:**
 - Consumes: `FU250` §2.3 (the FU247 erratum correction), `FU252`/`FU253` (OL-83), `FU256`/`FU258`/`FU261`/`FU262`/`FU263` (the drift legs).
@@ -143,7 +143,7 @@ git commit -m "feat(ol65): the row-07 gate staging fix wires action 22 (row 22 i
 - [ ] **Step 6: Commit.**
 
 ```bash
-git add docs/ghidra docs/ENGINE.md src/fifa96_engine/fifa96_match_handlers.c
+git add port/spec port/ENGINE.md port/src/fifa96_engine/fifa96_match_handlers.c
 git commit -m "docs(fu263): the phase-24/25 errata sweep (FU247 OL-65, OL-83 unify, ENGINE.md drift)"
 ```
 
@@ -152,15 +152,15 @@ git commit -m "docs(fu263): the phase-24/25 errata sweep (FU247 OL-65, OL-83 uni
 ### Task 4: The census close-out (only if Task 2 wired the row)
 
 **Files:**
-- Modify: `README.md` (title), `docs/ENGINE.md` (the census line + the leg register), `docs/PROGRESS.md`, `AGENTS.md:90`, `tests/test_engine_m2.c` (the census pins + the phase-25 riders).
+- Modify: `README.md` (title), `port/ENGINE.md` (the census line + the leg register), `docs/PROGRESS.md`, `AGENTS.md:90`, `port/tests/test_engine_m2.c` (the census pins + the phase-25 riders).
 
 - [ ] **Step 1: Recompute the count.** `floor(100 × 59/80) = 73`.
-- [ ] **Step 2: Update the four docs in one commit** — README title `73%`; `docs/ENGINE.md` "Action dispatch: 59/80"; `docs/PROGRESS.md` the phase-25 narrative; `AGENTS.md:90` `59/80 → 73%`.
+- [ ] **Step 2: Update the four docs in one commit** — README title `73%`; `port/ENGINE.md` "Action dispatch: 59/80"; `docs/PROGRESS.md` the phase-25 narrative; `AGENTS.md:90` `59/80 → 73%`.
 - [ ] **Step 3: Add the phase-25 riders** to `run_census_riders`/the tape pins (the row-22 slot non-NULL, the OL-65 staging non-zero) with mutation-RED verification.
 - [ ] **Step 4: Commit.**
 
 ```bash
-git add README.md docs/ENGINE.md docs/PROGRESS.md AGENTS.md tests/test_engine_m2.c
+git add README.md port/ENGINE.md docs/PROGRESS.md AGENTS.md port/tests/test_engine_m2.c
 git commit -m "docs: census 58/80 → 59/80 = 73% (OL-65 wires action 22)"
 ```
 
@@ -171,7 +171,7 @@ git commit -m "docs: census 58/80 → 59/80 = 73% (OL-65 wires action 22)"
 ### Task 5: The leg-register close-out + acceptance
 
 **Files:**
-- Modify: `docs/ENGINE.md` (the residual-leg register), `docs/PROGRESS.md`.
+- Modify: `port/ENGINE.md` (the residual-leg register), `docs/PROGRESS.md`.
 
 - [ ] **Step 1: Append the resolved/forbidden legs** from the 8 slices: `FU256-L*` (row `0D` gated), `FU257-L*` (row `1A`), `FU258-L*` (row `03` tape-visible), `FU260-L*` (the installer domain), `FU261/262-L*` (the phase slots), `FU263-L*`.
 - [ ] **Step 2: Acceptance.** Run `make check` (expect 110/110, sanitized); re-run the M1/M2 `cmp` (byte-identical).
@@ -179,7 +179,7 @@ git commit -m "docs: census 58/80 → 59/80 = 73% (OL-65 wires action 22)"
 - [ ] **Step 4: Commit.**
 
 ```bash
-git add docs/ENGINE.md docs/PROGRESS.md
+git add port/ENGINE.md docs/PROGRESS.md
 git commit -m "docs(fu263): the phase-25 leg-register close-out"
 ```
 
@@ -201,9 +201,9 @@ Hand to `superpowers:subagent-driven-development`: T1 is a verification gate (no
 
 - **Task 3 Step 5's replacement handler slots `:5012/:5111 → :5500/:5603` are
   stale.** At HEAD (after T2's row-`0x22` wire, commit `dd2e047`), the fresh
-  table (`grep -nE '\{0x17, NULL|\{0x1A, NULL' src/fifa96_engine/fifa96_match_handlers.c`)
+  table (`grep -nE '\{0x17, NULL|\{0x1A, NULL' port/src/fifa96_engine/fifa96_match_handlers.c`)
   puts **action row `0x17` at `:5508`** and **phase `0x1A` at `:5623`**
   (`:5603` is now `{0x10, fifa96_match_phase_10,`). The Step-5 line above is kept
-  verbatim; the correction is recorded in `docs/ENGINE.md` (phase-18 T2 errata)
+  verbatim; the correction is recorded in `port/ENGINE.md` (phase-18 T2 errata)
   and `FU263` §6.
 

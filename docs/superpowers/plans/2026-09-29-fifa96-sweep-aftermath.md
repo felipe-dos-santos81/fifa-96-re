@@ -8,12 +8,12 @@
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `disassemble_function`, `disassemble_bytes` (Task 1 `dry_run=true` only), `find_code_gaps`, `search_instructions` (authority), `get_xrefs_to`/`get_function_xrefs` (control only), `list_functions_enhanced`, `get_function_count`, `read_memory` (hex-vs-data protocol), Task 2 only: `delete_function`, `create_function`, `rename_function`, `save_program`), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-29 (ratify all sweep drift: H11 re-merge-vs-accept ruled on live external-in-flow evidence; 8 overlay bodies ratified against the records they re-cut; 3 defined-unowned halves status-quoted; `caseD_0` collision hygiene ruled before acting; `0c9f`/`286b` anomaly status rows; `0xDE22→0xDDFE` erratum + scan-drift note carried as append-only `### Errata` rows since slice-23's section is now a prior section) + `docs/ghidra/loader_rename_map.md` (`## vector dispatch handlers` — H11 ratified record `[0a9f..0ae1]`, plate, `0ad5..0ae1` shared-tail proposal text, `1000:26a3..26a4` orphan row; `## block head 2978..2a59` — `### Writes` side-effect ledger (3 `11bd` + 8 `1991`, Δ+2, count 329), the `286b..286e` undefined-hole bullet, the `0c9f` 27 B anomaly row, the `14638` scoped counts, the Fix wave 1 `0xe822` refutation with the `0xDE22` slip, the operand-`0xdfe` 1-hit "invisible by construction" pre-state claim; final-review triage minors 1-4).
+**Spec:** Approved chat design 2026-09-29 (ratify all sweep drift: H11 re-merge-vs-accept ruled on live external-in-flow evidence; 8 overlay bodies ratified against the records they re-cut; 3 defined-unowned halves status-quoted; `caseD_0` collision hygiene ruled before acting; `0c9f`/`286b` anomaly status rows; `0xDE22→0xDDFE` erratum + scan-drift note carried as append-only `### Errata` rows since slice-23's section is now a prior section) + `port/spec/loader_rename_map.md` (`## vector dispatch handlers` — H11 ratified record `[0a9f..0ae1]`, plate, `0ad5..0ae1` shared-tail proposal text, `1000:26a3..26a4` orphan row; `## block head 2978..2a59` — `### Writes` side-effect ledger (3 `11bd` + 8 `1991`, Δ+2, count 329), the `286b..286e` undefined-hole bullet, the `0c9f` 27 B anomaly row, the `14638` scoped counts, the Fix wave 1 `0xe822` refutation with the `0xDE22` slip, the operand-`0xdfe` 1-hit "invisible by construction" pre-state claim; final-review triage minors 1-4).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` vs `data` before verbatim (slice-17 protocol).
 - Task 1 writes NOTHING in Ghidra: `disassemble_bytes` only `dry_run=true`; reads only via the read tools; tool error on a required sub-step → BLOCKED report, never a write.
 - Program mutations belong to Task 2 and are capped: at most ONE `delete_function`/`create_function` pair for the H11 question (gated on Task-1's external-in-flow evidence — if any cited instruction statically branches into `0ad5`, the split is LEGITIMATE and NO delete happens; accept-split needs zero writes), at most ONE `rename_function` for the collision, verbatim before/after for every write, RATIFY-on-refusal, never fight the analyzer, `save_program` after any write batch with the slice-23 archive-repair recurrence check live (stale `user/` entry → backup + clear + disclose per slice-23 precedent).
@@ -21,7 +21,7 @@
 - Append-only map discipline: prior sections (everything through `## block head 2978..2a59`) byte-identical; errata recorded in the new section's `### Errata` by verbatim quote + correction; no editing of merged text ever.
 - Verdict vocabulary: RATIFIED / ACCEPTED-SPLIT / NOT-CONFIRMED-at-name / DYNAMIC-ONLY / OPEN-WINDOW; naming bar unchanged (CR0/LGDT/LIDT-class cite for mode-flavored words); no `decode_*`, no direction words; `caseD_0` hygiene rename to segment-convention `FUN_11bd_0337`-style default name is NOT a semantic claim and needs no bar.
 - Scope guard: no handler re-walks, no far-ret-half ATTRIBUTION work (status-only), no `[0x9b4]`/`[0x40]`/`[0x2fa]` consumer sweeps, no open-thread enumeration beyond the drift list — all cite-only deferrals.
-- Leave `fifa96.rep/**` churn unstaged (including the slice-23 repair deletions already showing); commit messages exactly per the briefs; no new tests.
+- Leave `data/fifa96.rep/**` churn unstaged (including the slice-23 repair deletions already showing); commit messages exactly per the briefs; no new tests.
 
 ---
 
@@ -31,16 +31,16 @@ One program-state reconciliation plus the standing errata log, two gates: eviden
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## sweep-aftermath ratification` (Task 1: drift enumeration + evidence tables + ruling proposals; Task 2: `### Writes` if any, `### Ratifications`, `### Errata`, `### Drift`, `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## sweep-aftermath ratification` (Task 1: drift enumeration + evidence tables + ruling proposals; Task 2: `### Writes` if any, `### Ratifications`, `### Errata`, `### Drift`, `### Deferrals`).
 - Modify (conditional): Ghidra program `/fifa96.exe` — Task 2 only: H11 re-merge attempt (only if no external in-flow into `0ad5`) and/or `caseD_0` rename; `save_program`.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Drift enumeration + evidence-grounded rulings (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## sweep-aftermath ratification` with enumeration/evidence/decision tables)
+- Modify: `port/spec/loader_rename_map.md` (append `## sweep-aftermath ratification` with enumeration/evidence/decision tables)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -61,14 +61,14 @@ Gap-row verbatims for the three halves + `get_function_by_address` at their star
 
 - [ ] **Step 4: Rulings + append + commit**
 
-Compose `## sweep-aftermath ratification (verified 2026-09-29, program \`/fifa96.exe\`)` — census tables + `### Rulings (proposed)` with per-item evidence cites: H11 → ACCEPTED-SPLIT if external-in-flow found (name the branching instruction verbatim) else RE-MERGE ADMISSIBLE; caseD_0 → rename `11bd:0337` to `FUN_11bd_0337` if ambiguity demonstrably degrades lookups, else leave; all others RATIFY status quo. Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: enumerate sweep-aftermath drift with flow evidence and ruling proposals" || true`
+Compose `## sweep-aftermath ratification (verified 2026-09-29, program \`/fifa96.exe\`)` — census tables + `### Rulings (proposed)` with per-item evidence cites: H11 → ACCEPTED-SPLIT if external-in-flow found (name the branching instruction verbatim) else RE-MERGE ADMISSIBLE; caseD_0 → rename `11bd:0337` to `FUN_11bd_0337` if ambiguity demonstrably degrades lookups, else leave; all others RATIFY status quo. Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: enumerate sweep-aftermath drift with flow evidence and ruling proposals" || true`
 
 ---
 
 ### Task 2: Execute rulings + ratification/errata rows
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes`, `### Ratifications`, `### Errata`, `### Drift`, `### Deferrals` to your section)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes`, `### Ratifications`, `### Errata`, `### Drift`, `### Deferrals` to your section)
 - Modify: Ghidra program `/fifa96.exe` ONLY if Task-1 rulings demand (H11 re-merge attempt and/or collision rename); `save_program` after writes
 
 **Interfaces:**
@@ -85,7 +85,7 @@ RE-MERGE branch only if Task-1 found zero external in-flow: before-states (both 
 
 - [ ] **Step 3: Append + verify + commit**
 
-Append `### Writes`/`### Ratifications`/`### Errata`/`### Drift`/`### Deferrals` (+ `### Fix wave` trailer if own-row edits needed). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: ratify sweep aftermath with errata and scan drift"`
+Append `### Writes`/`### Ratifications`/`### Errata`/`### Drift`/`### Deferrals` (+ `### Fix wave` trailer if own-row edits needed). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: ratify sweep aftermath with errata and scan drift"`
 
 ---
 

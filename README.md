@@ -7,8 +7,8 @@ Reverse engineering of the **FIFA 96** PC/DOS CD-ROM release: the 16-bit
 same file (where the codecs and audio live), and the game's data formats
 (`.QFS`, `.POG`, `.TGV`/kVGT/fVGT, `.PVI`/VIV/BIGF, `.BNK`/`.CRD`, EACS
 audio). The work proceeds in evidence-gated slices: every address, byte and
-claim in [`docs/ghidra/loader_rename_map.md`](docs/ghidra/loader_rename_map.md)
-and the `docs/ghidra/FU*.md` derivations is backed by a cited disassembly
+claim in [`port/spec/loader_rename_map.md`](port/spec/loader_rename_map.md)
+and the `port/spec/FU*.md` derivations is backed by a cited disassembly
 output or a reconciled raw-byte read; anything not statically provable is
 recorded as a named open leg, never asserted.
 
@@ -25,31 +25,31 @@ and the dump delta located by `fifa96_runtime.find_delta`.
 ## Game assets
 
 The original game files are **not included** in this repository. Place the CD
-image at `game/FIFAPCCD96.iso` (git-ignored, read-only by convention — no tool
-or test ever writes to it); `game/hdd/` is likewise ignored and is emulated
-disk state. The capture rig, `run-fifa96.sh` and the rig tests need the ISO;
+image at `data/game/FIFAPCCD96.iso` (git-ignored, read-only by convention — no tool
+or test ever writes to it); `data/game/hdd/` is likewise ignored and is emulated
+disk state. The capture rig, `tools/run-fifa96.sh` and the rig tests need the ISO;
 the port's golden fixtures — captured byte excerpts committed under
-`tests/golden/` — let the container/codec/audio tests run without it.
+`port/tests/golden/` — let the container/codec/audio tests run without it.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `docs/ghidra/loader_rename_map.md` | Real-mode loader evidence map: 30 dated sections, every claim byte-cited — the single source of truth for the loader spine (336 functions analysed) |
-| `docs/ghidra/FU*.md` | Per-slice derivations from the protected-mode LE image: codec maps (FU-19/22/24/25/28/33), containers (FU-29..32), EACS/audio/music (FU-35..53), presentation (FU-55..57), match logic (FU-58..75) |
-| `docs/ghidra/FU1_FU2_closeout.md`, `FU2_*`, `FU3_*` | Early closeouts: wrapper citations, the capture-resolved filename↔container binding, and the open CRC-over-transformed-content question |
+| `port/spec/loader_rename_map.md` | Real-mode loader evidence map: 30 dated sections, every claim byte-cited — the single source of truth for the loader spine (336 functions analysed) |
+| `port/spec/FU*.md` | Per-slice derivations from the protected-mode LE image: codec maps (FU-19/22/24/25/28/33), containers (FU-29..32), EACS/audio/music (FU-35..53), presentation (FU-55..57), match logic (FU-58..75) |
+| `port/spec/FU1_FU2_closeout.md`, `FU2_*`, `FU3_*` | Early closeouts: wrapper citations, the capture-resolved filename↔container binding, and the open CRC-over-transformed-content question |
 | `docs/superpowers/plans/`, `docs/superpowers/specs/` | One implementation plan/spec per slice (the process record) |
 | `docs/PROGRESS.md` | The current progress narrative (moved out of the README): evidence-map coverage, port chains, engine/M2 acceptance state, carried legs |
-| `src/fifa96_loader/`, `include/fifa96_loader/` | The C port (~40 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, ISO9660 reader, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD; presentation player/blit/VGA; match layer tick/input/match-pace/state/lifecycle/event-queue/display/control/camera/ball/keeper/outfield/entity/ring/stats/frontend/competition/settings-handoff |
-| `src/fifa96_engine/`, `include/fifa96_engine/` | The native engine layer (platform ABI, SDL3/null backends, boot/intro/front-end/match drivers, M1/M2 acceptance tapes) — see [`docs/ENGINE.md`](docs/ENGINE.md) |
-| `tests/`, `tests/golden/` | CTest suite (112 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
-| `tools/fifa96_play.c` | Host runner — the single `make run` tool ([docs/HOST_RUNNER.md](docs/HOST_RUNNER.md)): explicit `video`/`audio`/`sprite` modes plus `auto` (bare `FILE`) — TGV chunk stream → PPM/Mode-X, EACS/BNK/VIV → WAV, BIGF `.pvi` sprite → PPM, and an ISO9660 walk + bounded smoke pass |
-| `tools/fifa96_dump.c` | Standalone container dumper (debug aid) — `0xFB10` envelope, QFS, POG, `kVGT` TGV, VIV offset tables via the shared `tools/fifa96_detect.c` sniff |
+| `port/src/fifa96_loader/` | The C port (~40 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, ISO9660 reader, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD; presentation player/blit/VGA; match layer tick/input/match-pace/state/lifecycle/event-queue/display/control/camera/ball/keeper/outfield/entity/ring/stats/frontend/competition/settings-handoff |
+| `port/src/fifa96_engine/` | The native engine layer (platform ABI, SDL3/null backends, boot/intro/front-end/match drivers, M1/M2 acceptance tapes) — see [`port/ENGINE.md`](port/ENGINE.md) |
+| `port/tests/`, `port/tests/golden/` | CTest suite (112 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
+| `port/tools/fifa96_play.c` | Host runner — the single `make run` tool ([port/HOST_RUNNER.md](port/HOST_RUNNER.md)): explicit `video`/`audio`/`sprite` modes plus `auto` (bare `FILE`) — TGV chunk stream → PPM/Mode-X, EACS/BNK/VIV → WAV, BIGF `.pvi` sprite → PPM, and an ISO9660 walk + bounded smoke pass |
+| `port/tools/fifa96_dump.c` | Standalone container dumper (debug aid) — `0xFB10` envelope, QFS, POG, `kVGT` TGV, VIV offset tables via the shared `port/tools/fifa96_detect.c` sniff |
 | `tools/*.py`, `tools/keys/` | Runtime capture rig: LE-image rebuild (`fifa96_le.py`), ISO patch/probe (`fifa96_patch.py`, `fifa96_probe.py`), trace map/bind (`fifa96_runtime.py`, `fifa96_bind.py`), VGT/fVGT extraction, key-step driver, frame export |
-| `tsr/fifa96_capture.asm` | 16-bit `.COM` capture TSR emitting framed FILE/CODEC/PROBE records over COM1 (`make tsr`) |
-| `run-fifa96.sh`, `run-fifa96-capture.sh` | Original game under DOSBox-X; capture-run driver (`make capture` / `make trace`) |
-| `fifa96.gpr`, `fifa96.rep/` | The Ghidra project (MZ loader plus flat LE image); analysis lives with the docs |
-| `CMakeLists.txt`, `Makefile` | `make help` — `configure`/`build`/`test`/`check`/`run`/`game`/`tsr`/`capture`/`trace`/`clean`/`rebuild` |
+| `_tools/tsr/fifa96_capture.asm` | 16-bit `.COM` capture TSR emitting framed FILE/CODEC/PROBE records over COM1 (`make tsr`) |
+| `tools/run-fifa96.sh`, `tools/run-fifa96-capture.sh` | Original game under DOSBox-X; capture-run driver (`make capture` / `make trace`) |
+| `data/fifa96.gpr`, `data/fifa96.rep/` | The Ghidra project (MZ loader plus flat LE image); analysis lives with the docs |
+| `port/CMakeLists.txt`, `Makefile` | `make help` — `configure`/`build`/`test`/`check`/`run`/`game`/`tsr`/`capture`/`trace`/`clean`/`rebuild` |
 
 ## Toolchain
 
@@ -64,26 +64,26 @@ the port's golden fixtures — captured byte excerpts committed under
 
 The progress narrative (evidence-map coverage, port chains, engine/M2 state
 and carried legs) lives in **[docs/PROGRESS.md](docs/PROGRESS.md)**; the title
-percentage above is derived from the `docs/ENGINE.md` **port-coverage** census:
+percentage above is derived from the `port/ENGINE.md` **port-coverage** census:
 all **78 native dispatch bodies** (80 slots minus the phase-`0x16` INT3
 sentinel and the action-`0x2B` shared epilogue) now have a C implementation,
 so `floor(100 × 78 / 78) = 100`. The stricter runtime metric is reported
 separately: **55/80 dispatch slots naturally wired (62/80 install-live)**,
 with the seven producer-blocked rows named in the phase-36 register
-(`docs/ENGINE.md`, FU-338 §4).
+(`port/ENGINE.md`, FU-338 §4).
 
 ## Build and run
 
 ```bash
 make check                     # configure + strict build + full CTest suite (112 tests)
-make game                      # windowed native engine (needs SDL3 + game/FIFAPCCD96.iso)
-make run FILE=game/FIFAPCCD96.iso    # flagship: sniff the ISO, bounded decode pass under build/run/
-make run FILE=tests/golden/fw1.qfs   # any container: envelope/QFS/POG/TGV/VIV auto-detect + decode
+make game                      # windowed native engine (needs SDL3 + data/game/FIFAPCCD96.iso)
+make run FILE=data/game/FIFAPCCD96.iso    # flagship: sniff the ISO, bounded decode pass under build/run/
+make run FILE=port/tests/golden/fw1.qfs   # any container: envelope/QFS/POG/TGV/VIV auto-detect + decode
 make run ARGS="--help"         # host runner modes; ARGS="video FILE --out build/play" etc.
 make tsr                       # assemble build/FIFAPCCD.COM (capture TSR, needs nasm)
-make capture                   # run the game under the rig via run-fifa96-capture.sh (needs the ISO)
-make trace TRACE=captures/session-*/trace.bin   # parse a capture
-./run-fifa96.sh                # the original game under DOSBox-X (needs game/FIFAPCCD96.iso)
+make capture                   # run the game under the rig via tools/run-fifa96-capture.sh (needs the ISO)
+make trace TRACE=data/captures/session-*/trace.bin   # parse a capture
+./tools/run-fifa96.sh                # the original game under DOSBox-X (needs data/game/FIFAPCCD96.iso)
 ```
 
 ## Conventions

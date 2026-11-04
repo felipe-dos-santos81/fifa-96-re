@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, Ghidra MCP (read-only) for RE; the null backend is the deterministic test host; SDL3 only for the optional `make game` smoke.
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.4-3.5, §5, §6); scope authority `docs/ghidra/FU142_installer_arms_scope.md` (OL-70/OL-70a §6, App. J/K), `docs/ghidra/FU143_phase_rows.md`, `docs/ghidra/FU141_action_cluster_de.md` (OL-42/OL-80), `docs/ghidra/FU137_dispatch_mechanics.md`; predecessor plans `docs/superpowers/plans/2026-10-07-fifa96-m2-match.md`, `docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.4-3.5, §5, §6); scope authority `port/spec/FU142_installer_arms_scope.md` (OL-70/OL-70a §6, App. J/K), `port/spec/FU143_phase_rows.md`, `port/spec/FU141_action_cluster_de.md` (OL-42/OL-80), `port/spec/FU137_dispatch_mechanics.md`; predecessor plans `docs/superpowers/plans/2026-10-07-fifa96-m2-match.md`, `docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md`.
 
 ## Global Constraints
 
@@ -29,13 +29,13 @@
 
 | Path | Responsibility |
 |---|---|
-| `src/fifa96_loader/fifa96_outfield.c` / `.h` | Row 04/08 record-visible bodies (extend; helpers per App. K) |
-| `src/fifa96_engine/fifa96_match_handlers.c` (+ `.h` if the seam grows) | Row 04/08 binders + table classification/evidence (extend) |
-| `src/fifa96_engine/fifa96_match_run.c` / `.h` | Phase-driver wiring into the frame body; live anim staging; kickoff placement (extend) |
-| `src/fifa96_loader/fifa96_action_handlers.c` / `.h` | Score-event source helpers (C3-OL2) per owning cluster (extend) |
-| `src/fifa96_engine/fifa96_match_entities.c` / `.h` | Pool `+0x28`/`+0x3D` (anim id/frame) + kickoff placement inputs (extend) |
-| `tests/test_outfield.c`, `test_engine_match_handlers.c`, `test_engine_match_frame.c`, `test_engine_match_render.c`, `test_phase_drivers.c`, `test_engine_m2.c` + `tests/golden/engine/m2-frames.txt` | Expectation/chain/tape updates |
-| `docs/ghidra/FU142_installer_arms_scope.md`, `FU143_phase_rows.md`, `FU141_action_cluster_de.md`, `FU137_dispatch_mechanics.md`, `docs/ENGINE.md`, `README.md` | RE record and status |
+| `port/src/fifa96_loader/fifa96_outfield.c` / `.h` | Row 04/08 record-visible bodies (extend; helpers per App. K) |
+| `port/src/fifa96_engine/fifa96_match_handlers.c` (+ `.h` if the seam grows) | Row 04/08 binders + table classification/evidence (extend) |
+| `port/src/fifa96_engine/fifa96_match_run.c` / `.h` | Phase-driver wiring into the frame body; live anim staging; kickoff placement (extend) |
+| `port/src/fifa96_loader/fifa96_action_handlers.c` / `.h` | Score-event source helpers (C3-OL2) per owning cluster (extend) |
+| `port/src/fifa96_engine/fifa96_match_entities.c` / `.h` | Pool `+0x28`/`+0x3D` (anim id/frame) + kickoff placement inputs (extend) |
+| `port/tests/test_outfield.c`, `test_engine_match_handlers.c`, `test_engine_match_frame.c`, `test_engine_match_render.c`, `test_phase_drivers.c`, `test_engine_m2.c` + `port/tests/golden/engine/m2-frames.txt` | Expectation/chain/tape updates |
+| `port/spec/FU142_installer_arms_scope.md`, `FU143_phase_rows.md`, `FU141_action_cluster_de.md`, `FU137_dispatch_mechanics.md`, `port/ENGINE.md`, `README.md` | RE record and status |
 | `CMakeLists.txt` | New tests registration if any |
 
 ---
@@ -45,7 +45,7 @@
 ### Task 1: OL-70 — row 04 full record-visible body and wiring
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_outfield.c` / `.h`, `src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_04`), `tests/test_outfield.c`, `tests/test_engine_match_handlers.c`, `docs/ghidra/FU142_installer_arms_scope.md` (App. K.3/J errata), `docs/ghidra/FU141_action_cluster_de.md` / `FU75_outfield_decide.md` (errata), `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 04)
+- Modify: `port/src/fifa96_loader/fifa96_outfield.c` / `.h`, `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_04`), `port/tests/test_outfield.c`, `port/tests/test_engine_match_handlers.c`, `port/spec/FU142_installer_arms_scope.md` (App. K.3/J errata), `port/spec/FU141_action_cluster_de.md` / `FU75_outfield_decide.md` (errata), `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 04)
 - Read: FU-142 §6 OL-70 + App. J/K (span `0x7E7C8..0x7F141`, RET at `0x7F141`; helper inventory)
 
 **Interfaces:**
@@ -63,7 +63,7 @@
 ### Task 2: OL-70a — row 08 full record-visible body and wiring
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_outfield.c` / `.h`, `src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_08`), `tests/test_outfield.c`, `tests/test_engine_match_handlers.c`, `docs/ghidra/FU142_installer_arms_scope.md`, `docs/ghidra/FU141_action_cluster_de.md` / `FU75_outfield_decide.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 08)
+- Modify: `port/src/fifa96_loader/fifa96_outfield.c` / `.h`, `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_08`), `port/tests/test_outfield.c`, `port/tests/test_engine_match_handlers.c`, `port/spec/FU142_installer_arms_scope.md`, `port/spec/FU141_action_cluster_de.md` / `FU75_outfield_decide.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 08)
 - Read: FU-142 §6 OL-70a + App. K.4 (span `0x81068..0x814AF`, RET at `0x814AF`; the FU-141 `..0x81188` head is a prefix)
 
 **Interfaces:**
@@ -87,8 +87,8 @@
 ### Task 3: Wire the FU-143 phase drivers into the run loop
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` / `.h`, `tests/test_engine_match_frame.c`, `tests/test_engine_m2.c`, `tests/golden/engine/m2-frames.txt` (only if the tape upgrades), `docs/ghidra/FU143_phase_rows.md` (integration errata), `docs/ENGINE.md`
-- Read: `docs/ghidra/FU143_phase_rows.md` (all), child ledger records for C10 (selector-0 sequence 2 → 0x0C → 0; 0xC → 0x13 → 0x14 when `[0x157AC0]`)
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` / `.h`, `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_m2.c`, `port/tests/golden/engine/m2-frames.txt` (only if the tape upgrades), `port/spec/FU143_phase_rows.md` (integration errata), `port/ENGINE.md`
+- Read: `port/spec/FU143_phase_rows.md` (all), child ledger records for C10 (selector-0 sequence 2 → 0x0C → 0; 0xC → 0x13 → 0x14 when `[0x157AC0]`)
 
 **Interfaces:**
 - Produces: `int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);` — steps the derived `fifa96_action_phase_*` drivers from the run's phase/clock state each granted frame (the exact call shape per FU-143's derived entry points), with the class-1/class-2 gate and the `sec == limit+aux` period test driven by the match clock.
@@ -105,7 +105,7 @@
 ### Task 4: C3-OL2 — goal/score event source
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_action_handlers.c` / `.h` (or the owning module per the census), `src/fifa96_engine/fifa96_match_run.c` (score integration), `tests/test_action_handlers.c` (or owning suite), `tests/test_engine_match_frame.c`, `docs/ghidra/FU142_installer_arms_scope.md` (App. I.10 errata), `docs/ghidra/FU72_*.md` (errata), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_loader/fifa96_action_handlers.c` / `.h` (or the owning module per the census), `port/src/fifa96_engine/fifa96_match_run.c` (score integration), `port/tests/test_action_handlers.c` (or owning suite), `port/tests/test_engine_match_frame.c`, `port/spec/FU142_installer_arms_scope.md` (App. I.10 errata), `port/spec/FU72_*.md` (errata), `port/ENGINE.md`
 - Read: FU-142 App. I.10 (the 11 `FUN_00093944` call sites `0x93D98..0x9486E`), FU-72 score/event model
 
 **Interfaces:**
@@ -129,7 +129,7 @@
 ### Task 5: OL-80 + kickoff placement — live animation inputs and entity placement
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_entities.c` / `.h` (pool `+0x28`/`+0x3D`; kickoff placement), `src/fifa96_engine/fifa96_match_run.c` (staging into the bank chain), `tests/test_engine_match_entities.c`, `tests/test_engine_match_render.c`, `tests/golden/engine/m2-frames.txt` (re-pin iff entities draw), `docs/ghidra/FU141_action_cluster_de.md` (OL-42/OL-80 errata), `docs/ghidra/FU84_animation.md` (errata), `docs/ghidra/FU89_scene_assembly.md` (kickoff placement), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_entities.c` / `.h` (pool `+0x28`/`+0x3D`; kickoff placement), `port/src/fifa96_engine/fifa96_match_run.c` (staging into the bank chain), `port/tests/test_engine_match_entities.c`, `port/tests/test_engine_match_render.c`, `port/tests/golden/engine/m2-frames.txt` (re-pin iff entities draw), `port/spec/FU141_action_cluster_de.md` (OL-42/OL-80 errata), `port/spec/FU84_animation.md` (errata), `port/spec/FU89_scene_assembly.md` (kickoff placement), `port/ENGINE.md`
 - Read: FU-141 §8 (OL-42/OL-80), FU-84 (bank row table `0x10EF00`), FU-89 (placement), FU-142 App. J
 
 **Interfaces:**
@@ -153,7 +153,7 @@
 ### Task 6: Playability acceptance — tape v2, smoke, docs, final review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c`, `tests/golden/engine/m2-frames.txt`, `docs/ENGINE.md`, `README.md`; no other code unless the smoke uncovers a defect.
+- Modify: `port/tests/test_engine_m2.c`, `port/tests/golden/engine/m2-frames.txt`, `port/ENGINE.md`, `README.md`; no other code unless the smoke uncovers a defect.
 - Read: spec §5; the T15 tape's provenance/checklist
 
 **Interfaces:**

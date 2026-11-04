@@ -3,7 +3,7 @@
 > **Scope:** Stage-1 of phase-28 (`docs/superpowers/specs/2026-10-16-fifa96-m2-phase28-installer-live-design.md` §3/§4). Eight bounded, **read-only** Ghidra derivations that freeze the port shape of the surfaces the phase-27 close-out routed here (the P1 permission, the interlock ordering, the row-`0x1A` remainder, the FU293 wide path, the visible-motion cells, the seam contract, the acceptance surface). One draft slice per task; the wave runs concurrently (up to 8 agents); the controller reviews + promotes one-per-commit; **no production code**.
 > **REQUIRED SUB-SKILL:** superpowers:subagent-driven-development for the wave dispatch (fresh agent per slice; the controller's promotion gate between tasks).
 
-**Authority:** `docs/superpowers/specs/2026-10-16-fifa96-m2-phase28-installer-live-design.md` §3/§5/§6 + the phase-27 leg register (`docs/ENGINE.md:1765-1914`) + the wave `docs/ghidra/FU290…FU297`.
+**Authority:** `docs/superpowers/specs/2026-10-16-fifa96-m2-phase28-installer-live-design.md` §3/§5/§6 + the phase-27 leg register (`port/ENGINE.md:1765-1914`) + the wave `port/spec/FU290…FU297`.
 
 ## Global constraints (every task)
 
@@ -11,7 +11,7 @@
 - **Read-only.** No rename/comment/label/create_function/set_global/apply_data_type/create_struct/script/save. `/FIFA96.EXE` untouched; ISO untouched; **no git** from the agent.
 - **Evidence:** every address/byte a *fresh* `disassemble_bytes`/`disassemble_function`/`decompile_function`/`read_memory`/`get_xrefs_to` this session, or marked *carried* (source named). Alias traps: `dword[x]>>16` = word at `x+2`; `>>24` = byte at `x+3`; verify CALL rel32; caller counts need a fresh `get_xrefs_to`; LE globals at `+0x100000`.
 - **Unprovable ⇒ a numbered leg** with a native owner — never asserted or faked.
-- **Output:** one draft `docs/ghidra/FU29N_<slug>.md` — a single H1, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, numbered legs. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
+- **Output:** one draft `port/spec/FU29N_<slug>.md` — a single H1, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, numbered legs. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
 
 ## Tasks
 
@@ -21,7 +21,7 @@
 **GO/NO-GO:** can the permission go live honestly (writer reachable) vs a dead producer (spec §6 stop).
 
 ### Task 2 — `FU299`: the interlock `[0x157C5D]` ordering
-**Native:** fresh xrefs on `0x157C5D` (all readers/writers); the row-`0x19` set site (the native owner of `src/fifa96_engine/fifa96_match_handlers.c:4097`); the `0x785A2` clear inside `FUN_00077EAC`; the engine seam's write-back (`src/fifa96_engine/fifa96_match_run.c:4257`) vs bind (`:4249`).
+**Native:** fresh xrefs on `0x157C5D` (all readers/writers); the row-`0x19` set site (the native owner of `port/src/fifa96_engine/fifa96_match_handlers.c:4097`); the `0x785A2` clear inside `FUN_00077EAC`; the engine seam's write-back (`port/src/fifa96_engine/fifa96_match_run.c:4257`) vs bind (`:4249`).
 **Deliverable:** the native set/clear ordering relative to the ladder gate; the ordering model; the fix options (in-frame publish à la `latch_written` vs the corrected bind/step/write-back order) and the chosen shape with its test seam.
 
 ### Task 3 — `FU300`: the row-`0x1A` body remainder (the 59→60 verdict)
@@ -42,7 +42,7 @@
 **Deliverable:** per cell — **needed-for-visible** vs **honestly waivable**, each with its consuming chain named (which render/scene reader makes it visible).
 
 ### Task 7 — `FU304`: `copy_pos` apply + the ladder→seam contract
-**Native:** the `0x77F20` `+0x81` pos→target copy (`FUN_00077EAC 0x77F16..0x77F20`, FU186-L5/L6; the report-but-unapplied `out->copy_pos`, `src/fifa96_loader/fifa96_keeper_cpu.c:241`).
+**Native:** the `0x77F20` `+0x81` pos→target copy (`FUN_00077EAC 0x77F16..0x77F20`, FU186-L5/L6; the report-but-unapplied `out->copy_pos`, `port/src/fifa96_loader/fifa96_keeper_cpu.c:241`).
 **Deliverable:** the copy's preconditions + the exact step-output list the engine seam must consume/apply (install, copy_valid, copy_pos, the `latch_written`-class publishes).
 
 ### Task 8 — `FU305`: the Layer-2 acceptance surface + tape impact

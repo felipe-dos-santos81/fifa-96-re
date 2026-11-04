@@ -108,7 +108,7 @@ and after the reset at 0,0,0 — no later no-slot event panned.
 - **G2 (arithmetic):** the observed `(|Δ|, frames) = (0x26, 13)` read off the
   trace; against the recorded seed (`vel=(−2,0)` ⇒ `s = −0x18`, `v0 = −2`) it is `T(−0x18)` over 13 frames (`T = 2·Σ n·v`, `v ← trunc(3v/4)`;
   FU321 §3.4), the same closed form the tree's `m2_pan_curve` pins
-  (`tests/test_engine_m2.c`; the Task-2 witness prints `seed (−24,0) v0 (−2,0)
+  (`port/tests/test_engine_m2.c`; the Task-2 witness prints `seed (−24,0) v0 (−2,0)
   T (−38,0)`).
 - **G4 (seed):** `|v0| = 2` on the event line (`vel=−2,0`, `spd=2`); the
   `pan`-count trap is avoided: `pan=2` counts pan steps, not frames; the run is
@@ -119,7 +119,7 @@ carries no record/gate/face cells (its cells are `ph`, `clock`, `tick` and the
 camera cells; `match_run.c:4657-4671`); it reproduces the **event and the
 arithmetic** and **cannot show the seed or the gate** (FU321-L1). Those are
 cited from the tree's own natural witness in the same session (Task 2's pins,
-`tests/test_engine_m2.c`; the stderr line quoted above): `code 4`, `has_slot 0`,
+`port/tests/test_engine_m2.c`; the stderr line quoted above): `code 4`, `has_slot 0`,
 `lane 56/−56`, `cam_dz6f 0`, `bound 68`, `timer81 0`, `face7d 0xFF00`,
 `dir (0,0)`, the live face `Δ 0x0`, and the producer chain `timer79 6`,
 `timer7b 6`, `nib 6`, `vel (−6,0)`, `speed71 6`, `pos (56,0,0)` — the
@@ -290,8 +290,8 @@ and no pitch), the run-end pair's 502 px is the sprite's animation frame
 
 No code/test/golden change. M1 `09b726b7…` (22 004 B) and M2 `6aa2703b…`
 (295 087 B) unchanged; `./build/test_engine_m1 | cmp -
-tests/golden/engine/m1-frames.txt` and `./build/test_engine_m2 | cmp -
-tests/golden/engine/m2-frames.txt` are identical (re-run at the close of this
+port/tests/golden/engine/m1-frames.txt` and `./build/test_engine_m2 | cmp -
+port/tests/golden/engine/m2-frames.txt` are identical (re-run at the close of this
 task). The trace sink stayed default-off outside this run; the ISO was only
 read. The census stays `60/80 = 75%` (the producer wires no dispatch row), so
 the README title is untouched. `make check` is **111/111** green on this tree

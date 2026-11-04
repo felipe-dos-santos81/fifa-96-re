@@ -1,0 +1,1011 @@
+/* port/src/fifa96_engine/fifa96_match_entities.c — M2 Task 8 / FU-141: the
+ * entity/ball pool and the FU-67 per-frame update chain. Evidence and open
+ * legs: port/spec/FU141_action_cluster_de.md (read-only /FIFA96.EXE). */
+#include <string.h>
+
+#include "fifa96_engine/fifa96_match_entities.h"
+/* FU319 §5 writer 3 (phase-33): the kickoff narrow install helper lives on
+ * the run side (`fifa96_match_run_record_kickoff_row43`). */
+#include "fifa96_engine/fifa96_match_run.h"
+#include "fifa96_loader/fifa96_arm_bodies.h"
+#include "fifa96_loader/fifa96_arm_helpers.h"
+#include "fifa96_loader/fifa96_entity_update.h"
+
+#define ENTITY_ID(pool, team, index) \
+  ((int32_t)((uint32_t)(team) * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)(index)))
+
+static struct fifa96_match_entity *entity_by_id(struct fifa96_match_entities *pool,
+                                                int32_t id) {
+  if (id < 0 || id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return NULL;
+  return &pool->team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
+             .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+}
+
+static int32_t entity_abs(int32_t value) {
+  return value < 0 ? -value : value;
+}
+
+/* FU-330 §3.1/§4 / FU-331 §5.1 (phase-35 P1): the placement-limit value
+ * function — the native `0x79A29..0x79A4D` block:
+ *
+ *   0x79a29 MOV EDX,[rec+0x4]       ; the player descriptor
+ *   0x79a33 MOV EBX,[EDX+0xA]
+ *   0x79a36 MOV EDX,[0x157A38]      ; -> 0x10F394
+ *   0x79a3c SAR EBX,0x18            ; byte[[rec+4]+0xD] (sign-extended)
+ *   0x79a3f ADD EDX,EBX             ; + base (NO range check — FU330-L2)
+ *   0x79a41 XOR BH,BH               ; the STORE's high byte, not the index
+ *   0x79a43 MOV BL,byte[EDX]        ; the tier byte
+ *   0x79a45 MOV DL,byte[rec+0x9D]   ; the per-record flag (OL-72)
+ *   0x79a4b OR BL,DL
+ *   0x79a4d MOV word[rec+0x79],BX
+ *
+ * The 32-byte tier `0x10F394` is the port's single shared copy
+ * (`fifa96_arm_26_timer_table`; FU330 §4 re-read it byte for byte). The native
+ * index is unguarded: `desc_d >= 0x20` walks into the `0x10F3B4` continuation
+ * and `>= 0x80` wraps to `0x0FF4xx`. The port models the 32-byte tier only and
+ * refuses the rest instead of inventing a byte (FU330-L2 keeps the leg). The
+ * `+0x9D` OR cannot exceed 15 in range because its only producer emits 0/0x0F
+ * (FU330 §5); the port's `byte9d` has no producer yet (OL-72), staged 0. */
+int fifa96_match_entities_placement_limit(uint8_t desc_d, uint8_t byte9d,
+                                          uint16_t *out) {
+  if (!out) return 0;
+  if (desc_d >= 0x20u) return 0;                 /* the unmodelled continuation */
+  *out = (uint16_t)((uint16_t)fifa96_arm_26_timer_table[desc_d] |
+                    (uint16_t)byte9d);
+  return 1;
+}
+
+int fifa96_match_entities_placement_seed(struct fifa96_match_entity *entity) {
+  uint16_t limit;
+  if (!entity) return 0;
+  if (!fifa96_match_entities_placement_limit(entity->desc_d, entity->byte9d,
+                                             &limit))
+    return 0;                                    /* cells left unchanged */
+  entity->timer79 = limit;                       /* 0x79A4D */
+  entity->timer7b = limit;                       /* 0x79A86 */
+  return 1;
+}
+
+int fifa96_match_entities_init(struct fifa96_match_entities *pool) {
+  if (!pool) return -FIFA96_ERR_INVALID;
+  memset(pool, 0, sizeof *pool);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    struct fifa96_match_team *team = &pool->team[t];
+    team->side = (uint8_t)t;
+    team->target = FIFA96_MATCH_ENTITY_NONE;
+    team->second = FIFA96_MATCH_ENTITY_NONE;
+    team->chosen = FIFA96_MATCH_ENTITY_NONE;
+    team->intercept = FIFA96_MATCH_ENTITY_NONE;
+    team->chosen831 = FIFA96_MATCH_ENTITY_NONE;
+    team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &team->records[i];
+      e->team = (uint8_t)t;
+      e->index = (uint8_t)i;
+      e->stage92 = 0xFF; /* FUN_0007DAB4 0x7DABA */
+      e->code = 0;       /* FUN_0007DAB4 0x7DAFB installs action 0 */
+      /* FU-147 S1: `FUN_0008C2E0` 0x8C329 seeds `[rec+0x8D] = index` for
+       * records 0..10 (loop at 0x8C322..0x8C336); only record 0 reads back as
+       * inactive to the `0x7DA26` code-3 coercion and the `0x79C13` row
+       * selector. */
+      e->active = (uint8_t)i;
+      /* FU-330 §6.2 / FU-331 §5.3 (phase-35 P1): the native placement prelude
+       * (`FUN_0007417C -> FUN_0008C33C -> 11 x FUN_0007997C`) runs at match
+       * start / kickoff / period transition on both pools and stores
+       * `+0x79` then `+0x7B` before the first frame. The native caller chain
+       * is unported (FU295-L1/FU330 §6.2); `entities_init` is the port's
+       * match-begin construction (`match_run_begin -> entities_init`) and is
+       * therefore the derived live seam. The store precedes the first row
+       * install, so no record starts with a produced limit and a zero
+       * counter. The value is the declared staging value for the unported
+       * descriptor/`+0x9D` inputs (FU330-L1), never a native per-record
+       * measurement. */
+      (void)fifa96_match_entities_placement_seed(e);
+    }
+  }
+  pool->controlled = FIFA96_MATCH_ENTITY_NONE;
+  pool->slot_merge = FIFA96_MATCH_ENTITY_NONE;
+  pool->ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  /* M2 phase-11 T2 (L14.8): the FUN_000886D4 reset posture of the
+   * FUN_0008BAF0 machine cells — target := the ball record (0x88755..0x8876D
+   * copies 0x15880C/10/14 into 0x158830/34/38), velocity/heading/timer words
+   * zeroed (0x88787/0x88798/0x887BB), and the FUN_0006E724(0x1587EC, 3, 0)
+   * row-3 appearance install whose +2 flags & 2 = 2 gate the heading steer
+   * (0x158881; first-hand row 3 `03 0B 07 03 7E E2 10 00 03` at 0x10EF1B). */
+  pool->ball.target_x = pool->ball.x;
+  pool->ball.target_y = pool->ball.y;
+  pool->ball.target_z = pool->ball.z;
+  pool->ball.head_gate = 2;
+  pool->ball.appear_row = 3;   /* FUN_0006E724(0x1587EC, 3, 0) at 0x887D5 */
+  return FIFA96_OK;
+}
+
+int fifa96_match_entities_release(struct fifa96_match_entities *pool) {
+  if (!pool) return -FIFA96_ERR_INVALID;
+  memset(pool, 0, sizeof *pool);
+  return FIFA96_OK;
+}
+
+int fifa96_match_entities_install(struct fifa96_match_entity *entity, uint8_t phase,
+                                  uint8_t code, uint8_t staged) {
+  if (!entity) return -FIFA96_ERR_INVALID;
+  if (entity->skip_9a != 0) return 0;                       /* 0x7D9BE */
+  if ((int8_t)entity->code == (int8_t)code) return 0;       /* 0x7D9D6 */
+  if (entity->skip_98 != 0 && code != 0x0Cu && phase != 2u && phase != 0x0Au &&
+      phase != 0x0Fu) {
+    /* The native FUN_0006E598(rec, 0x0F, type8, 0) animation select is
+     * unported (FU-141 leg); the derived +0x98 clear is kept. */
+    entity->skip_98 = 0;
+  }
+  if (entity->active == 0 && code == 3u) code = 0x19u;      /* 0x7DA26 */
+  if (code == 5u || code == 0x21u) entity->carrier |= 1u;   /* 0x7DA42 */
+  else entity->carrier &= (uint8_t)~1u;
+  entity->code = code;                                      /* 0x7DA63 */
+  entity->timer89 = 0;                                      /* 0x7DA7E */
+  entity->ran = 0;                                          /* 0x7DA88 */
+  entity->stage92 = staged;                                 /* 0x7DA95 */
+  entity->timer7b = entity->timer79;                        /* 0x7DA9B */
+  return 1;
+}
+
+static void entity_drain(struct fifa96_match_entities *pool,
+                         struct fifa96_match_entity *e) {
+  if (e->install != 0) {
+    (void)fifa96_match_entities_install(e, pool->phase, e->install, 0);
+    e->install = 0;
+  }
+  if (e->helper_request != 0) {
+    (void)fifa96_match_entities_merge_slot(pool, e->team, e->index);
+    e->helper_request = 0;
+  }
+  if (e->controlled != 0) {
+    pool->controlled = ENTITY_ID(pool, e->team, e->index);
+    e->controlled = 0;
+  }
+  if (e->place_valid != 0) {
+    pool->place_pending = 1;
+    pool->place_x = e->place_x;
+    pool->place_y = e->place_y;
+    pool->place_z = e->place_z;
+    e->place_valid = 0;
+  }
+}
+
+int fifa96_match_entities_team_select(struct fifa96_match_entities *pool, uint32_t team,
+                                      int16_t target_x, int16_t target_y) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  int16_t best = 0;
+  int index;
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &pool->team[team].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z; /* record +0x61, the search's Y */
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  /* FUN_0008D8EC 0x8D9AA calls FUN_0008DE8C(skip 0). */
+  index = fifa96_entity_find_nearest(candidates, FIFA96_MATCH_ENTITY_RECORDS, 0,
+                                     target_x, target_y, &best);
+  pool->team[team].target =
+      index < 0 ? FIFA96_MATCH_ENTITY_NONE : ENTITY_ID(pool, team, index);
+  return index;
+}
+
+/* FU-151 §2.8: `FUN_0008DDE0` — the ranked unsigned-lane pick. */
+int fifa96_match_entities_team_pick(struct fifa96_match_entities *pool, uint32_t team,
+                                    int32_t skip) {
+  uint16_t best = 0xFFFFu;
+  int index = FIFA96_MATCH_ENTITY_NONE;
+  int16_t skip16 = (int16_t)skip;   /* 0x8DDEF MOVSX EBX,DI */
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &pool->team[team].records[i];
+    uint16_t lane;
+    if ((int32_t)i == (int32_t)skip16) continue;               /* 0x8DDF4 */
+    if (e->skip_9a != 0 || e->skip_98 != 0) continue;          /* 0x8DDFD/0x8DE06 */
+    lane = (uint16_t)e->lane_x;                                /* word +0x6B */
+    if (lane < best) {                                         /* 0x8DE0F JNC */
+      best = lane;
+      index = (int)i;
+    }
+  }
+  return index;
+}
+
+/* FU295 §2.2/§2.3 (phase-27 T6): the `FUN_0008C33C` controlled-side actor lift
+ * (`0x8C3BE`). Fresh `decompile_function 0x8C33C` (this session) / the fresh
+ * `disassemble_bytes 0x8C370` sequence derive the full gate:
+ *
+ *   (0x8C393) EBX = [0x157AAC]
+ *   (0x8C3A1) SAR EBX, 0x18               ; EBX = controlled side byte
+ *   (0x8C3A4) MOVZX EAX, byte[team+0x826] ; team side (zero-extended)
+ *   (0x8C3B4) CMP EBX, EAX
+ *   (0x8C3B6) JNZ 0x8C3C3                 ; skip the lift for the other team
+ *   (0x8C3B8) EAX = [team+0x7B2]
+ *   (0x8C3BE) MOV [0x157A83], EAX         ; lift the pick into the actor cell
+ *
+ * The engine models `[0x157A83]` as `pool->controlled` and `[0x157AAC]>>0x18`
+ * as `controlled_side`; `[team+0x7B2]` is `team->target`. NULL pool / team >= 2
+ * -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_actor_lift(struct fifa96_match_entities *pool, uint32_t team,
+                                     uint8_t controlled_side) {
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  if (controlled_side == pool->team[team].side)
+    pool->controlled = pool->team[team].target;                 /* 0x8C3BE */
+  return FIFA96_OK;
+}
+
+/* FU-151 §2.8/§3.4: `FUN_0008C33C` + the derived `FUN_0007997C` reset. */
+int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_t team,
+                                     int32_t cam_x, int32_t cam_z,
+                                     uint8_t controlled_side) {
+  struct fifa96_match_team *t;
+  int pick;
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  t = &pool->team[team];
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &t->records[i];
+    /* 0x7997C derived reset: the post-commit record bytes (0x799da..0x79a65)
+     * zero the velocity half-words/timers and the code/stage/ball/exclusion
+     * bytes. The native's virtual `[rec+0x1C]` target restore and the
+     * 0x79B6C commit run before those writes; the virtual body is unported,
+     * so the derived subset keeps the live position/target (numbered leg,
+     * FU-151 §3.4) and only applies the bounded resets. */
+    e->vel75 = 0;             /* word +0x75 */
+    e->timer81 = 0;           /* word +0x81 */
+    e->timer89 = 0;           /* dword +0x89 */
+    e->code = 0;              /* byte +0x91 */
+    e->vel73 = e->vel75;      /* word +0x73 = +0x75 (0x79a21) */
+    e->speed71 = e->vel75;    /* word +0x71 = +0x75 (0x79a25) */
+    e->stage92 = 0;           /* +0x92 (0x79a2c) */
+    /* 0x79a29..0x79a4d then 0x79a86: the producer's own store pair (the exact
+     * native site; FU330 §3.1). Live only from tests (no engine caller,
+     * FU295-L1); `entities_init` is the live seam. */
+    (void)fifa96_match_entities_placement_seed(e);
+    e->timer93 = 0;           /* +0x93 (0x79a51) */
+    e->skip_98 = 0;           /* +0x98 (0x79a5f) */
+    e->has_ball = 0;          /* +0x9B (0x79a6c) */
+    /* 0x799d5 0x795B4(rec+0x59, 0x15774C, &rec+0x6B): the lane refresh from
+     * the camera focus. The helper's out[0] is the `FUN_000CD514` folded-angle
+     * hypot (FU-147 S1 errata 1 / OL-41, ported as
+     * `fifa96_entity_intercept_band`), NOT the `0x8DC68` octagonal metric
+     * (that is the BF20 lane block's own call). Writes +0x6B/+0x6D/+0x6F. */
+    {
+      fifa96_entity_intercept_band_out band;
+      if (fifa96_entity_intercept_band(e->pos_x, e->pos_z, cam_x, cam_z,
+                                       &band) == FIFA96_OK) {
+        e->lane_z = band.dx;         /* +0x6D = cam.x - pos.x */
+        e->cam_dz6f = band.dz;       /* +0x6F = cam.z - pos.z */
+        e->lane_x = band.band;       /* +0x6B = the folded-angle hypot */
+      }
+    }
+    e->bound = e->lane_x;                                       /* 0x79a19 */
+    /* 0x79a8e..: +0x9A not set -> install `active ? 3 : 0x19` (0x7D9A4). */
+    if (e->skip_9a == 0)
+      (void)fifa96_match_entities_install(e, pool->phase,
+                                          e->active != 0 ? 3u : 0x19u, 0);
+  }
+  t->timer7cb = 0;                                              /* 0x8C362 */
+  pick = fifa96_match_entities_team_pick(pool, team, -1);       /* 0x8C36C */
+  t->second = FIFA96_MATCH_ENTITY_NONE;                         /* 0x8C371 (+0x7B6=0) */
+  t->target = pick < 0 ? FIFA96_MATCH_ENTITY_NONE : ENTITY_ID(pool, team, (uint32_t)pick);
+  t->tracker7c7 = t->target;                                    /* 0x8C37B/0x8C387 */
+  /* FU295 §2.2/§2.3 (phase-27 T6): the FUN_0008C33C tail lift (0x8C3BE) — the
+   * freshly-picked target is lifted into `[0x157A83]` for the controlled team
+   * (the native `0x8C38D..0x8C3BE`). The sibling tail writes (`+0x7C3`,
+   * `+0x7BF = 0`, the `+0x82x`/`+0x7E7` clears, `FUN_0008C418`) stay unported. */
+  return fifa96_match_entities_actor_lift(pool, team, controlled_side);
+}
+
+/* M2 interactive Task 1 / FU-70 §1.3: the derived `FUN_0008DB6C` free-record
+ * pick (`0x8DB6C..0x8DC49`) for the setup slot bind `FUN_000785E0`. The native
+ * walk skips bound holders, the skip index, `[team+0x7BF]`, record 0 while
+ * `[team+0x829] == 0`, and the `+0x98`/`+0x9A` exclusions, then returns the
+ * record nearest the `0x5774C` point under the `0x8DC68` metric (the sort/tie
+ * order of `FUN_000A1860` is the carried leg). The pool's chosen pointer is
+ * NONE and the holders are tracked by `has_slot`, so the derived subset is the
+ * same metric with the record-0 gate and holder skip applied in the walk. */
+int fifa96_match_entities_bind_slot(struct fifa96_match_entities *pool, uint32_t team,
+                                    int16_t from_x, int16_t from_z) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  uint16_t best_distance = 0xFFFFu;
+  int index = -1;
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &pool->team[team].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    uint16_t d;
+    /* `0x8DBA2`: record 0 is skipped while the team search gate is clear. */
+    if (i == 0u && pool->team[team].search_gate == 0) continue;
+    /* `0x8DB89`: an already-bound holder cannot take the slot again. */
+    if (pool->team[team].records[i].has_slot != 0) continue;
+    if (candidates[i].skip_98 != 0 || candidates[i].skip_9a != 0) continue;
+    d = (uint16_t)fifa96_entity_distance((int16_t)(from_x - candidates[i].x),
+                                         (int16_t)(from_z - candidates[i].y));
+    if (d < best_distance) {
+      best_distance = d;
+      index = (int)i;
+    }
+  }
+  if (index < 0) return FIFA96_MATCH_ENTITY_NONE;
+  pool->team[team].records[index].has_slot = 1;
+  pool->team[team].slot_pool++;
+  return (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+}
+
+int fifa96_match_entities_merge_slot(struct fifa96_match_entities *pool, uint32_t team,
+                                     uint32_t record) {
+  struct fifa96_match_team *t;
+  struct fifa96_match_entity *requester;
+  int best = -1;
+  int16_t best_distance = 0;
+  uint32_t slot_holders = 0;
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS ||
+      record >= FIFA96_MATCH_ENTITY_RECORDS)
+    return -FIFA96_ERR_INVALID;
+  t = &pool->team[team];
+  requester = &t->records[record];
+  if (requester->has_slot != 0) return 0;                    /* 0x7877D */
+  if (t->slot_pool == 0) return 0;                           /* 0x78789 */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *candidate = &t->records[i];
+    int32_t distance;
+    if (candidate->has_slot == 0) continue;                  /* 0x787A3/A7 */
+    distance = (int32_t)(int16_t)fifa96_entity_distance(
+        (int16_t)(requester->pos_x - candidate->pos_x),
+        (int16_t)(requester->pos_z - candidate->pos_z));
+    /* The native counter (`INC ECX` at 0x787E4) increments only for
+     * slot-holding candidates; `TEST CX,CX` (0x787C6) therefore takes the
+     * *first slot-holder* unconditionally, and later holders only when their
+     * signed-word distance is strictly greater. */
+    if (slot_holders == 0 || (int16_t)distance > best_distance) {
+      best = (int)i;
+      best_distance = (int16_t)distance;
+    }
+    slot_holders++;
+  }
+  if (best < 0) return 0;
+  requester->has_slot = 1;
+  t->records[best].has_slot = 0;
+  pool->slot_merge = ENTITY_ID(pool, team, record);
+  return 1;
+}
+
+int32_t fifa96_match_entities_take_slot_merge(struct fifa96_match_entities *pool) {
+  int32_t merged;
+  if (!pool) return FIFA96_MATCH_ENTITY_NONE;
+  merged = pool->slot_merge;
+  pool->slot_merge = FIFA96_MATCH_ENTITY_NONE;
+  return merged;
+}
+
+int fifa96_match_entities_take_place(struct fifa96_match_entities *pool, int32_t *x,
+                                     int32_t *y, int32_t *z) {
+  if (!pool || !x || !y || !z) return -FIFA96_ERR_INVALID;
+  if (pool->place_pending == 0) return 0;
+  *x = pool->place_x;
+  *y = pool->place_y;
+  *z = pool->place_z;
+  pool->place_pending = 0;
+  return 1;
+}
+
+/* FU-89 §kickoff placement / OL-T11-8: the native setup/restart record commit
+ * `FUN_00079B6C` (`0x79B6C..0x79C1C`, single RET at `0x79C1C`; first-hand
+ * get_function_by_address 0x79BB5 -> body_end 0x79C1C). Commit block: the
+ * position triple takes the target triple (`MOVSD x3` 0x79B77..0x79B79),
+ * position.y is zeroed (0x79B7A), the target is then the committed position
+ * (`MOVSD x3` 0x79B87..0x79B89), and the words +0x69/+0x67/+0x65/+0x71/
+ * +0x73/+0x75 and the byte +0x9C are zeroed (0x79B8A..0x79BB1). The pool's
+ * `lane`/`vel_x`/`vel_z` are dwords over those words: `lane` is the `+0x69`
+ * word (the native clears it; the `+0x6B` high word is the separate `lane_x`
+ * field, untouched), while the three
+ * velocity words +0x71/+0x73/+0x75 are cleared — the port zeroes the word
+ * views (`speed71`/`vel73`/`vel75`) and the recomposed dword views so no stale
+ * word survives a commit. */
+int fifa96_match_entities_place(struct fifa96_match_entity *entity) {
+  if (!entity) return -FIFA96_ERR_INVALID;
+  entity->pos_x = entity->target_x;
+  entity->pos_y = entity->target_y;
+  entity->pos_z = entity->target_z;
+  entity->pos_y = 0;
+  entity->target_x = entity->pos_x;
+  entity->target_y = entity->pos_y;
+  entity->target_z = entity->pos_z;
+  entity->lane = 0;      /* native word +0x69 (the +0x6B high word is `lane_x`) */
+  entity->speed71 = 0;   /* native word +0x71 */
+  entity->vel73 = 0;     /* native word +0x73 */
+  entity->vel75 = 0;     /* native word +0x75 */
+  entity->vel_x = 0;     /* dword +0x71 view */
+  entity->vel_z = 0;     /* dword +0x73 view */
+  return FIFA96_OK;
+}
+
+/* FU-89 §11 / OL-T11-8: the phase-cell seed (`FUN_0006E1D0`) over both teams'
+ * records. The formation file is indexed by the record block position (the
+ * native `byte[rec+0x8D]` that `FUN_0008C2E0` initializes to the record
+ * index), so the loop passes the pool `index` directly. */
+int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
+                                         const fifa96_scene_formation *formation,
+                                         uint8_t controlled_side) {
+  if (!pool || !formation) return -FIFA96_ERR_INVALID;
+  if (!formation->loaded) return FIFA96_ERR_NOT_FOUND;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &pool->team[t].records[i];
+      fifa96_err_t err = fifa96_scene_formation_place(
+          formation, i, (uint8_t)t, controlled_side, &e->target_x, &e->target_y,
+          &e->target_z);
+      if (err != FIFA96_OK) return (int)err;
+    }
+  }
+  return FIFA96_OK;
+}
+
+/* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the per-record OL-13 metadata bind
+ * (`FUN_0006D920` mirror). The native writes `[rec+0x8/+0xC/+0x10/+0x14]` from
+ * `FUN_0004C384(form*6 + {0,1,2,4}) + idx*stride` with
+ * `idx = (int8)byte[rec+0x8D]`; the pool models only the three non-`[rec+8]`
+ * pointers (`phase_meta`/`phase_meta10`/`phase_meta14`), so this stages those
+ * three. Strides: 0x256 bytes (598) for the `pl` byte blob, 8 bytes (2 dwords)
+ * for the `pk` blob and 0x958 bytes (0x256 dwords) for the `fk` blob. A NULL
+ * blob clears the pointer (the native gate). */
+int fifa96_match_entities_bind_record_meta(struct fifa96_match_entities *pool,
+                                           uint32_t team, const int8_t *pl,
+                                           const int32_t *pk, const int32_t *fk) {
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &pool->team[team].records[i];
+    int32_t idx = (int32_t)(int8_t)e->active;      /* native MOVSX byte[rec+0x8D] */
+    e->phase_meta = pl ? pl + idx * 0x256 : NULL;
+    e->phase_meta10 = pk ? pk + idx * 2 : NULL;    /* 8 bytes = 2 dwords */
+    e->phase_meta14 = fk ? fk + idx * 0x256 : NULL; /* 0x958 bytes / 4 */
+  }
+  return FIFA96_OK;
+}
+
+/* FU-148 §3 (S4): the formation layout table 0x11033A (5 rows x 0x1D,
+ * first-hand read_memory): row byte 0 = the id, then 4 x 7-byte blocks
+ * {role, count, slots[5]} (0xFF padding). */
+static const uint8_t match_formation_layout_table[5][0x1D] = {
+    {0, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 3, 1, 2, 3, 0xFF, 0xFF,
+     2, 5, 4, 5, 6, 7, 8, 3, 2, 9, 10, 0xFF, 0xFF, 0xFF},
+    {1, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 4, 1, 2, 3, 4, 0xFF,
+     2, 4, 5, 6, 7, 8, 0xFF, 3, 2, 9, 10, 0xFF, 0xFF, 0xFF},
+    {2, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 4, 1, 2, 3, 4, 0xFF,
+     2, 4, 5, 6, 7, 8, 0xFF, 3, 2, 9, 10, 0xFF, 0xFF, 0xFF},
+    {3, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 4, 1, 2, 3, 4, 0xFF,
+     2, 2, 5, 6, 0xFF, 0xFF, 0xFF, 3, 4, 7, 8, 9, 10, 0xFF},
+    {4, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 4, 1, 2, 3, 4, 0xFF,
+     2, 3, 5, 6, 7, 0xFF, 0xFF, 3, 3, 8, 9, 10, 0xFF, 0xFF},
+};
+
+/* The 0x14BFC0 `6*id` placement names built by FUN_0004A6BC ("%s.fmt" over the
+ * 0x107370 loader table entries 0/6/12/18/24; first-hand strings 0x101A30,
+ * 0x101A64, 0x101A8C, 0x101AB4, 0x101ADC). */
+static const char *const match_formation_fmt_names[5] = {
+    "352ko.fmt", "442ko.fmt", "swko.fmt", "424ko.fmt", "433ko.fmt",
+};
+
+int fifa96_match_formation_layout(uint8_t id, fifa96_match_formation_block out[4]) {
+  if (!out || id > 4u) return -FIFA96_ERR_INVALID;
+  for (uint32_t b = 0; b < 4u; b++) {
+    const uint8_t *row = match_formation_layout_table[id] + 1u + b * 7u;
+    out[b].role = row[0];
+    out[b].count = row[1];
+    for (uint32_t s = 0; s < 5u; s++) out[b].slots[s] = row[2 + s];
+  }
+  return 4;
+}
+
+const char *fifa96_match_formation_fmt_name(uint8_t id) {
+  if (id > 4u) return NULL;
+  return match_formation_fmt_names[id];
+}
+
+/* FU-96 leg 5 (M2 interactive T2): the `FUN_00079F3C` phase gate
+ * (`byte[0x1106C3 + phase] != 0`). First-hand `read_memory 0x1106C3` (29
+ * bytes, phases 0x00..0x1C): `00 01 00 00 01 00 01 01 01` then zeros and the
+ * 0x1A..0x1C tail `03 01 78`; non-zero admits the place. Phases >= 0x1D read
+ * the adjacent action-pointer table at 0x1106E0 in the native, so this path
+ * (kickoff, phase 1) only models the byte table (numbered leg). */
+static const uint8_t match_camera_place_phase_gate[29] = {
+  0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0x78,
+};
+
+static int match_camera_place_active(uint8_t phase) {
+  return phase < 29u && match_camera_place_phase_gate[phase] != 0;
+}
+
+/* One `FUN_00079F3C` record body (`0x79F45..0x7A01D`): side gate, phase gate
+ * (checked by the caller), the `FUN_0008DCD4` metric, then the angle/sine
+ * place onto the 0x180 ring. Returns 1 when the target moved. */
+static int match_camera_place_record(struct fifa96_match_entity *e, uint8_t team_side,
+                                     uint8_t controlled_side, int32_t cam_x, int32_t cam_z) {
+  fifa96_arm_vec from;
+  fifa96_arm_vec to;
+  int32_t length = 0;
+  int32_t lane = 0;
+  int32_t angle = 0;
+  int16_t dx;
+  int16_t dz;
+  int16_t off_x;
+  int16_t off_z;
+  if (team_side == controlled_side) return 0;                 /* 0x79F45..0x79F59 */
+  from.x = cam_x;
+  from.y = 0;
+  from.z = cam_z;
+  to.x = e->target_x;
+  to.y = e->target_y;
+  to.z = e->target_z;
+  if (fifa96_arm_dist_stage(&from, &to, &length, &lane) != FIFA96_OK) return 0;
+  /* 0x79F83..0x79F8F: `MOV EAX,[ESP-2]; SAR EAX,0x10` sign-extends the
+   * distance word; only <= 0x180 is placed. */
+  if ((int32_t)(int16_t)length > 0x180) return 0;
+  dx = (int16_t)((uint16_t)e->target_x - (uint16_t)cam_x);
+  dz = (int16_t)lane;                                         /* 0x79F95..0x79F9F */
+  if (fifa96_entity_angle(dx, dz, &angle) != FIFA96_OK) return 0;   /* 0x79FA2 */
+  /* 0x79FA7..0x79FD5: the 0x114E04 sine fold; off = round16(0x180 * sin). */
+  off_x = (int16_t)(((int64_t)0x180 * fifa96_entity_sine(angle) + 0x8000) >> 16);
+  off_z = (int16_t)(((int64_t)0x180 * fifa96_entity_sine(angle + 0x100) + 0x8000) >> 16);
+  e->target_x = cam_x + off_x;                                /* 0x79FD8..0x79FDF */
+  e->target_z = cam_z + off_z;                                /* 0x7A016..0x7A01D */
+  return 1;
+}
+
+int fifa96_match_entities_camera_place(struct fifa96_match_entities *pool,
+                                       uint8_t controlled_side, uint8_t phase,
+                                       int32_t cam_x, int32_t cam_z) {
+  if (!pool) return -FIFA96_ERR_INVALID;
+  if (!match_camera_place_active(phase)) return FIFA96_OK;    /* 0x79F5F..0x79F6E */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      (void)match_camera_place_record(&pool->team[t].records[i],
+                                      pool->team[t].side, controlled_side, cam_x, cam_z);
+  }
+  return FIFA96_OK;
+}
+
+/* The derived kickoff pass (see the header contract). The native tail of
+ * `FUN_00079B6C` (`0x79BB5..0x79C13`) runs per record after the commit:
+ *  - `FUN_00079C50(camera - target)` face (0x79BB5..0x79BCF): the ported
+ *    `fifa96_arm_face` takes the committed target as the source and the
+ *    camera as the destination; a zero delta leaves the +0x8E octant alone;
+ *  - the conditional `FUN_0006E48C` write `byte[rec+0x3E] = byte[rec+0x8E]`
+ *    (0x79BD4..0x79BEC) targets a byte the pool does not model (row-pointer
+ *    and row `+0x44` gates also unmodeled) -> numbered leg;
+ *  - the unconditional selector `FUN_0006E598(rec, active ? 0 : 0x26, 0)`
+ *    (0x79BF1..0x79C13): `fifa96_arm_anim_select` maps the id (inactive ->
+ *    0x26; active -> the keep/fallback rule for id 0) and the frame resolver's
+ *    `[rec+0x3D] = 0` request lands on the pool `frame`. */
+int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int32_t cam_x,
+                                        int32_t cam_y, int32_t cam_z) {
+  if (!pool) return -FIFA96_ERR_INVALID;
+  pool->ball.x = FIFA96_MATCH_ENTITY_KICKOFF_BALL_X;
+  pool->ball.y = 0;   /* FUN_0008C24C 0x8C299: `[0x158810] = 0` */
+  pool->ball.z = 0;
+  /* M2 phase-11 T2 (L14.8): the commit (`FUN_0008C24C`) copies the staged
+   * target triple into the ball record and zeroes the velocity words
+   * (0x8C272/0x8C280/0x8C2A6/0x8C2AD/0x8C2B4); the kickoff machine
+   * (FUN_0008B688 0x8B709) stores the visual byte dword 3 and the reset
+   * posture's target := ball holds. */
+  pool->ball.target_x = pool->ball.x;
+  pool->ball.target_y = pool->ball.y;
+  pool->ball.target_z = pool->ball.z;
+  pool->ball.vel_x = 0;
+  pool->ball.vel_z = 0;
+  pool->ball.speed = 0;
+  pool->ball.heading = 0;
+  pool->ball.target_heading = 0;
+  pool->ball.visual_dir = 3;
+  pool->ball.appear_row = 3;   /* the FUN_0008B688 kickoff re-install posture */
+  pool->ball.ramp_timer = 0;
+  pool->ball.metric = 0;
+  pool->ball.metric_dx = 0;
+  pool->ball.metric_dz = 0;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &pool->team[t].records[i];
+      uint8_t slot;
+      (void)fifa96_match_entities_place(e);
+      {
+        fifa96_arm_vec from = { e->target_x, e->target_y, e->target_z };
+        fifa96_arm_vec to = { cam_x, cam_y, cam_z };
+        uint8_t face = e->type;
+        if (fifa96_arm_face(&from, &to, &face) == FIFA96_OK) e->type = face;
+      }
+      if (fifa96_arm_anim_select(e->active != 0 ? 0u : 0x26u, e->anim_id, &slot) ==
+          FIFA96_OK) {
+        e->anim_id = slot;
+        /* FU319 §5 writer 3 (phase-33): the native `0x79C13` tail is a real
+         * row install — write the +0x43 latch from the selected row's flags
+         * (rows 0/0x26 carry flags 0x07, so the latch is 2 for every record
+         * after the placement). The narrow write: no anim_timer/aux_seen
+         * side effects here; +0x44 reproduces through the dispatch staging. */
+        fifa96_match_run_record_kickoff_row43(e, (int32_t)slot);
+      }
+      e->frame = 0;   /* FUN_0006E490 with BX = 0 (0x79C13 selector request) */
+    }
+  }
+  return FIFA96_OK;
+}
+
+static void entity_timer_decay(struct fifa96_match_entity *e, uint16_t delta) {
+  /* The native compares the signed high word of the limit against the
+   * zero-extended delta word (0x7CA74, 0x7CAA0). */
+  int32_t d = (int32_t)delta;
+  if (e->timer81 != 0) {
+    int32_t limit = (int16_t)(e->timer7f >> 16);
+    if (limit > d) e->timer81 = (uint16_t)(e->timer81 - (uint16_t)delta);
+    else e->timer81 = 0;
+  }
+  if (e->timer93 != 0) {
+    if ((int32_t)e->timer93 > d)
+      e->timer93 = (uint8_t)(e->timer93 - (uint8_t)delta);
+    else e->timer93 = 0;
+  }
+}
+
+static void team_select_target(struct fifa96_match_entities *pool, uint32_t t,
+                               const struct fifa96_match_entities_frame *frame) {
+  const int32_t *vector;
+  int32_t target_x;
+  int32_t target_y;
+  if (frame->timer_a < frame->timer_b) {
+    vector = frame->select_vector[0];                       /* 0x157788 */
+    target_x = vector[0];
+    target_y = vector[2];
+  } else if (frame->timer_a < frame->timer_c) {
+    vector = frame->select_vector[1];                       /* 0x157794 */
+    target_x = vector[0];
+    target_y = vector[2];
+  } else {
+    vector = frame->select_vector[2];                       /* 0x157770 */
+    target_x = vector[0] + (int32_t)((uint32_t)(frame->lead_x >> 16) << 5);
+    target_y = vector[2] + (int32_t)((uint32_t)(frame->lead_z >> 16) << 5);
+  }
+  (void)fifa96_match_entities_team_select(pool, t, (int16_t)target_x,
+                                          (int16_t)target_y);
+}
+
+static void team_select_intercept(struct fifa96_match_entities *pool, uint32_t t,
+                                  const struct fifa96_match_entities_frame *frame) {
+  struct fifa96_match_team *team = &pool->team[t];
+  struct fifa96_match_entity *controlled;
+  struct fifa96_match_entity *target;
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  uint32_t side;
+  int16_t best = 0;
+  int index;
+  team->intercept = FIFA96_MATCH_ENTITY_NONE;
+  if (pool->controlled == FIFA96_MATCH_ENTITY_NONE) return;
+  controlled = entity_by_id(pool, pool->controlled);
+  if (!controlled) return;
+  /* The native compares the two blocks' +0x826 side bytes (0x8D9E3). */
+  if (pool->team[controlled->team].side != team->side) return;
+  if (entity_abs(frame->cam_z) <= 0x480) return;
+  if (((frame->cam_z < 0) ? 1u : 0u) != team->side) return;
+  /* `0x8DA2C MOV EBX,[EBP+0x7B2]; MOV EBX,[EBX+0x8A]; SAR EBX,0x18` reads the
+   * *team target's* +0x8D byte, not the controlled actor's. */
+  target = entity_by_id(pool, team->target);
+  if (!target) return;
+  side = team->side;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &team->records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  /* Skip index = team target[+0x8A]>>24, i.e. its +0x8D byte; the target base
+   * is 0x10F37C + side*0xC (0x8DA4D). */
+  index = fifa96_entity_find_nearest(
+      candidates, FIFA96_MATCH_ENTITY_RECORDS, (int16_t)(int8_t)target->active,
+      frame->intercept_x[side], frame->intercept_y[side], &best);
+  if (index >= 0 && team->records[index].has_slot != 0)
+    index = FIFA96_MATCH_ENTITY_NONE;                       /* 0x8DA5D */
+  team->intercept =
+      index < 0 ? FIFA96_MATCH_ENTITY_NONE : ENTITY_ID(pool, t, index);
+  /* OL-41 (M2 Task 14): the `FUN_0008D824` bind (`0x8DA72..0x8DA7A`, EAX =
+   * the controlled actor `[0x157A83]`, EDX = the nearest, EBX = `nearest
+   * +0x4D`) writes the nearest record's +0x4D triple from the *actor's*
+   * x/z. Then `FUN_000795B4` (`0x8DA7F..0x8DA8F`) runs on (nearest+0x59,
+   * nearest+0x4D) with a stack scratch output (`0x8DA88 LEA EBX,[ESP+0xC]`),
+   * so the record's target triple is an input only — the band/dx/dz words are
+   * never stored back. The band's `0x8DA94` gate and the
+   * `0x8DAAE..0x8DAE7` lane/height arm then feed `team+0x7BE`.
+   *
+   * The slot-rejected path (index NONE) has the native call the helpers with
+   * the NULL record (`[team+0x7BA]=0`), reading absolute low-memory words at
+   * 0x4D..0x69; those have no derived value, so the derived model stages a
+   * zero record there (band 0, dx/dz 0, lane/height 0) and the gate refuses
+   * (`0 < 0xF0` but `0 <= |cam_z| + 0x90`). Recorded as OL-71. */
+  if (index >= 0) {
+    struct fifa96_match_entity *nearest = &team->records[index];
+    fifa96_entity_intercept_target bound;
+    fifa96_entity_intercept_band_out band;
+    if (fifa96_entity_intercept_bind(controlled->pos_x, controlled->pos_z,
+                                     pool->team[controlled->team].side,
+                                     nearest->pos_x, &bound) == FIFA96_OK) {
+      nearest->target_x = bound.x;
+      nearest->target_y = bound.y;
+      nearest->target_z = bound.z;
+    }
+    if (fifa96_entity_intercept_band(nearest->pos_x, nearest->pos_z,
+                                     nearest->target_x, nearest->target_z,
+                                     &band) == FIFA96_OK) {
+      if ((int16_t)band.band < 0xF0) {                      /* 0x8DA9B */
+        int16_t lane = nearest->lane_x;                     /* word +0x6B */
+        int32_t nz = entity_abs(nearest->pos_z);            /* 0x8DAB6 */
+        if (lane > 0x1E0 || nz > entity_abs(frame->cam_z) + 0x90) /* 0x8DAAE */
+          team->flag7be = 1;                                /* 0x8DAE0 */
+      }
+    }
+  }
+}
+
+int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32_t team,
+                                      const struct fifa96_match_entities_frame *frame,
+                                      fifa96_match_entity_action_fn action, void *ctx) {
+  struct fifa96_match_team *t;
+  if (!pool || !frame || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  /* Latch the frame inputs here so a direct team call is safe (the update
+   * wrapper sets the same values before the ball pairing reads them). */
+  pool->phase = frame->phase;
+  pool->delta = frame->delta;
+  t = &pool->team[team];
+  t->flag7be = 0;                                            /* 0x8D9C5 */
+  t->update_count = (uint8_t)(t->update_count + 1);          /* 0x8D8F7 */
+  if (t->update_count >= 0xBu) t->update_count = 0;
+  if (frame->phase == 2u) {
+    if (t->target == FIFA96_MATCH_ENTITY_NONE ||
+        pool->controlled == FIFA96_MATCH_ENTITY_NONE) {
+      team_select_target(pool, team, frame);
+    }
+    team_select_intercept(pool, team, frame);
+  } else {
+    t->intercept = FIFA96_MATCH_ENTITY_NONE;
+  }
+  if (t->timer7cb != 0) {                                    /* 0x8DAF3 */
+    /* First-hand `disassemble_bytes 0x8DAF3..0x8DB2C`: the limit is
+     * `dword[team+0x81E] >> 16` = **word[team+0x820]** (the dword alias's high
+     * word), i.e. the timer itself: `if (timer > delta) timer -= delta; else {
+     * timer = 0; [team+0x7CB] = 0; }`. The pre-T1 port read a separate +0x81E
+     * cell instead (which cleared the arm on the first frame); that dead field
+     * is deleted (final review). */
+    int32_t limit = (int16_t)t->timer820;
+    int32_t d = (int32_t)frame->delta;
+    if (limit > d) t->timer820 = (uint16_t)(t->timer820 - (uint16_t)frame->delta);
+    else {
+      t->timer820 = 0;
+      t->timer7cb = 0;
+    }
+  }
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &t->records[i];
+    /* FU282 §3: the one `FUN_000782D0` operation the engine models for record 0
+     * is this `word[+0x7B] := word[+0x79]` copy (native 0x7836A/0x78374, not the
+     * `0x782D0` entry the old comment named). The machine's head (0x782D8..), its
+     * install tree (0x784D3..) and its ladder gate (0x7857B..) are the bounded
+     * skeleton in `fifa96_loader/fifa96_keeper_cpu.c`; they stay unported on the
+     * engine path while their producers are staged zero (FU282-L2/L3/L4). */
+    if (i == 0) {
+      e->timer7b = e->timer79;
+      /* FU296 Seam A (phase-27 T3): the record-0 machine `FUN_000782D0` runs
+       * in the `i == 0` branch of the native `0xB2`-stride walk (`0x8DB35`),
+       * BEFORE the single `CALL dword[rec+0x18]` dispatch (`0x785A8`) below.
+       * Writing `e->code` here makes that one dispatch run the installed row —
+       * a standalone pre-pass call would double-dispatch (FU281 §3). The view
+       * is caller-owned; NULL (the fixture default) leaves the walk inert. P1
+       * is live (FU298); the unported producers (P3 possession, P6/P8/P12)
+       * stay zero. */
+      if (frame->keeper_cpu) {
+        struct fifa96_keeper_cpu_record kc_rec;
+        struct fifa96_keeper_cpu_out kc_out;
+        int32_t act = pool->controlled;
+        memset(&kc_rec, 0, sizeof kc_rec);
+        kc_rec.side = pool->team[team].side;                 /* byte +0x826 */
+        kc_rec.code = e->code;                               /* byte +0x91 */
+        kc_rec.phase = frame->phase;                         /* [0x157A4A]>>0x18 */
+        kc_rec.is_actor = (uint8_t)(act == ENTITY_ID(pool, team, i));
+        /* FU290 (phase-27 T5): the actor cell `[0x157A83]` (P10/P11) and the
+         * stage-select machine's live inputs. The latch cells FU292-L1
+         * (`0x157C44`/`C48`) and FU290-L1/L2/L5 stay staged zero; the FU292-L2
+         * band cells are live (frame->band_fa/F6, FU303-L10) and byte3
+         * `[0x157824]` is the honest producer-entry `0xFF` stage (FU303-L8/
+         * FU292-L3). */
+        kc_rec.actor_present = (uint8_t)(act != FIFA96_MATCH_ENTITY_NONE);
+        if (act != FIFA96_MATCH_ENTITY_NONE) {
+          uint32_t at = (uint32_t)act / FIFA96_MATCH_ENTITY_RECORDS;
+          uint32_t ai = (uint32_t)act % FIFA96_MATCH_ENTITY_RECORDS;
+          kc_rec.actor_same_side =
+              (uint8_t)(pool->team[at].side == pool->team[team].side);
+          kc_rec.actor_vel_x = pool->team[at].records[ai].vel_x;
+          kc_rec.actor_vel_z = pool->team[at].records[ai].vel_z;
+        }
+        kc_rec.timer81 = e->timer81;                         /* word +0x81 */
+        kc_rec.queued20 = e->has_slot ? 1u : 0u;             /* dword +0x20 */
+        kc_rec.gate_9a = e->skip_9a;                         /* byte +0x9A */
+        kc_rec.side_swap = frame->keeper_cpu->side_xor;      /* [0x157ABE] */
+        /* FU298 (phase-28 T1): P1 is live — the `0x784DC` gate is the static
+         * `0x110680` table read at the record's own code (`perm[code] & 1`,
+         * bound ≤0x2C); the caller-supplied permit cell is retired. */
+        kc_rec.permit = fifa96_keeper_cpu_permit(e->code);
+        kc_rec.cam_x = frame->cam_pos_x;                     /* [0x15774C] */
+        kc_rec.cam_y = frame->cam_pos_y;                     /* [0x157750] */
+        kc_rec.cam_z = frame->cam_pos_z;                     /* [0x157754] */
+        /* FU311-L5 (phase-30 T2): the native lane cell is the packed
+         * `dword[+0x69]` — the low word is the `+0x69` dz word (`e->lane`) and
+         * the high word the `+0x6B` lane (`e->lane_x`). The machine reads the
+         * high word (`0x78032 MOV EAX,[EBP+0x69] / SAR EAX,0x10`), so the bind
+         * re-packs the two port words exactly; binding `e->lane` alone leaves
+         * the high word 0/-1 by construction (FU311 §4.3, review erratum 2). */
+        kc_rec.lane69 = (int32_t)((uint32_t)(uint16_t)e->lane |
+                                  ((uint32_t)(uint16_t)e->lane_x << 16));
+        kc_rec.follow_speed = frame->follow_speed;           /* [0x1577BE] */
+        kc_rec.global_157a4c = frame->global_157a4c;         /* [0x157A4C] */
+        kc_rec.pan_counter = frame->pan_counter;             /* [0x157821] */
+        /* FU303-L10 (phase-28 T8): the FU292-L2 band cells are live now.
+         * `band_1577fa` = word[0x1577FA] (the camera timer) and
+         * `band_1577f6` = word[0x1577F6] = timer_limit - ramp_divisor (the
+         * 0x705e8 identity). */
+        kc_rec.band_1577f6 = frame->band_f6;
+        kc_rec.band_1577fa = frame->band_fa;
+        /* FU303-L8/FU292-L3 (phase-28 T8): the byte3 `[0x157824]` producer is
+         * FUN_000703E8; its input cells (`[0x157764]/[0x15776C]/[0x157778]`,
+         * `[0x1577CA]`'s `+0x826`, `[0x1577C2]`) are the carried FU303-L11
+         * mapping, so the classifier is NOT ported. The honest live value is
+         * the producer's entry init `0xFF` (0x703f3/0x703ff), not 0: with 0 a
+         * side-0 record passes the ladder side gate where native 0xFF blocks
+         * it. */
+        kc_rec.side_157824 = 0xFFu;
+        /* FU292-L1 (FU-179 §4): the `[0x157C44]`/`[0x157C48]` writer
+         * `fifa96_keeper_hold_predict` -> `mr->predict_c44`/`predict_c48_*`. */
+        kc_rec.latch_157c44 = frame->latch_c44;
+        kc_rec.target_157c48[0] = frame->target_c48[0];
+        kc_rec.target_157c48[1] = frame->target_c48[1];
+        kc_rec.target_157c48[2] = frame->target_c48[2];
+        /* FU299 (phase-28 T2, Option B): the per-step hug. The run's process
+         * cells bind into the machine view immediately before the step and the
+         * view publishes back to them immediately after it — both before this
+         * record's single dispatch. Native order (fresh FU299 §1): gate read
+         * `0x7858E` -> `CALL 0x77EAC` -> clear `0x785A2` -> row dispatch
+         * `0x785A8`; the row-`0x19` set (`0x74707`) then survives to the next
+         * step's gate read (a one-step pulse), so team 1's step gate sees team
+         * 0's same-frame set. The frame-level bind/write-back is deleted
+         * (FU299 §4); the `[0x157AB2]` publish moves here too (FU304-L2: the
+         * native write is mid-machine, `0x7856C`, before the same-walk row
+         * bodies 0x1E/0x1D read it). The three pointers travel together; NULL
+         * leaves the view caller-owned. */
+        uint8_t hug = (uint8_t)(frame->interlock_157c5d != NULL &&
+                                frame->latch_157c5c != NULL &&
+                                frame->latch_157ab2 != NULL);
+        if (hug) {
+          frame->keeper_cpu->interlock_157c5d = *frame->interlock_157c5d;
+          frame->keeper_cpu->latch_157c5c = *frame->latch_157c5c;
+          frame->keeper_cpu->force_install = *frame->latch_157ab2;
+        }
+        (void)fifa96_keeper_cpu_step(frame->keeper_cpu, &kc_rec, &kc_out);
+        if (hug) {
+          *frame->interlock_157c5d = frame->keeper_cpu->interlock_157c5d;
+          *frame->latch_157c5c = frame->keeper_cpu->latch_157c5c;
+          *frame->latch_157ab2 = frame->keeper_cpu->force_install;
+        }
+        /* FU300 T4 (phase-28, G2): the ladder's `[0x157C2C]` stamp is ONE
+         * process cell — the native arm writes it (0x78230/0x78258/0x7827E)
+         * BEFORE its `CALL 0x7D9A4`, and the row-`0x1A` direction machine reads
+         * it back in the SAME frame (0x766FC). Publish it before the install
+         * apply, mirroring that order; a stamp of 0 is the arm-not-reached
+         * value (the native never clears the cell). */
+        if (frame->stamp_157c2c != NULL &&
+            kc_out.ladder_out.stamp_157c2c != 0)
+          *frame->stamp_157c2c = kc_out.ladder_out.stamp_157c2c;
+        /* FU304 §3(A) / FU300-G1 (phase-28 T3): both installs apply through
+         * the pool installer, not a bare `e->code` write — the native
+         * `0x78576` and the ladder arms (fresh FU304 §1: `XOR EBX,EBX`
+         * before each `CALL 0x7D9A4`) call `FUN_0007D9A4`, which stages
+         * `+0x89=0/+0x9E=0/+0x92=BL(0)/+0x7B=+0x79` before the same-frame
+         * `0x785A8` dispatch, so a stale `stage92`/`timer89` would mis-route
+         * the installed row (FU300 §3.2-G1; FU304's review erratum adopts
+         * the merge). */
+        if (kc_out.install)                                  /* 0x78576 */
+          (void)fifa96_match_entities_install(e, pool->phase,
+                                              kc_out.install_code, 0);
+        if (kc_out.ladder_out.install)                       /* 0x78599 arms */
+          (void)fifa96_match_entities_install(e, pool->phase,
+                                              kc_out.ladder_out.install_code, 0);
+        /* FU290: the ladder's `+0x4D/+0x51/+0x55` copy target (0x7805b/0x780a5/
+         * 0x781d4) — the native writes it before the same-frame row dispatch. */
+        if (kc_out.ladder_out.copy_valid) {
+          e->target_x = kc_out.ladder_out.copy_x;
+          e->target_y = kc_out.ladder_out.copy_y;
+          e->target_z = kc_out.ladder_out.copy_z;
+        }
+        /* FU304 §1/§3(A) (phase-28 T3, closes FU290-L10): the ladder's `+0x81`
+         * arm (0x77F16..0x77F29: 3-dword `pos +0x59 -> target +0x4D`, no
+         * install, no stage machine) — the port reports `copy_pos` but the
+         * phase-27 seam dropped it. Mutually exclusive with `copy_valid` by
+         * construction; both write before the same-frame row dispatch. */
+        if (kc_out.ladder_out.copy_pos) {                    /* 0x77F20 */
+          e->target_x = e->pos_x;
+          e->target_y = e->pos_y;
+          e->target_z = e->pos_z;
+        }
+      }
+    }
+    else if (e->skip_9a != 0) continue;                      /* 0x8DB42 */
+    entity_timer_decay(e, frame->delta);
+    if (action) {
+      int rc = action(ctx, e);
+      if (rc != FIFA96_OK && rc != -FIFA96_ERR_UNSUPPORTED) return rc;
+    }
+    entity_drain(pool, e);
+  }
+  return FIFA96_OK;
+}
+
+int fifa96_match_entities_ball_pair(struct fifa96_match_entities *pool) {
+  struct fifa96_match_entity *a;
+  struct fifa96_match_entity *b;
+  fifa96_ball_pair_actor interceptor;
+  fifa96_ball_pair_actor opponent;
+  fifa96_ball_pair_vector out;
+  int rc;
+  if (!pool) return -FIFA96_ERR_INVALID;
+  if (pool->phase != 2u) return FIFA96_OK;                   /* 0x4B2BF */
+  a = entity_by_id(pool, pool->team[0].target);
+  b = entity_by_id(pool, pool->team[1].target);
+  if (!a || !b) return FIFA96_OK;
+  memset(&interceptor, 0, sizeof interceptor);
+  memset(&opponent, 0, sizeof opponent);
+  interceptor.position.x = (int16_t)a->pos_x;
+  interceptor.position.height = (int16_t)a->pos_y;
+  interceptor.position.z = (int16_t)a->pos_z;
+  interceptor.velocity_x = (int16_t)a->vel_x;
+  interceptor.velocity_z = (int16_t)a->vel_z;
+  opponent.position.x = (int16_t)b->pos_x;
+  opponent.position.height = (int16_t)b->pos_y;
+  opponent.position.z = (int16_t)b->pos_z;
+  opponent.velocity_x = (int16_t)b->vel_x;
+  opponent.velocity_z = (int16_t)b->vel_z;
+  rc = fifa96_ball_pair_decide(&interceptor, &opponent, (int16_t)pool->delta, &out);
+  if (rc < 0) return rc;
+  if (rc == 1) {
+    a->target_x = out.x;
+    a->target_y = out.height;
+    a->target_z = out.z;
+  }
+  return FIFA96_OK;
+}
+
+int fifa96_match_entities_update(struct fifa96_match_entities *pool,
+                                 const struct fifa96_match_entities_frame *frame,
+                                 fifa96_match_entity_action_fn action, void *ctx) {
+  int rc;
+  if (!pool || !frame) return -FIFA96_ERR_INVALID;
+  pool->phase = frame->phase;
+  pool->delta = frame->delta;
+  /* FU-142 OL-63 (M2 phase-9 T2): the possession-block release countdown
+   * decay, native `FUN_0004B100 0x4B163..0x4B17B` — a signed-positive byte
+   * decays by the zero-extended frame delta (unsigned byte subtract, so it
+   * can wrap past zero; the signed `TEST CL,CL; JLE` then stops). Runs every
+   * frame body regardless of phase, before the team walks. */
+  if (pool->ball.pos_release != 0) {
+    if ((int8_t)pool->ball.pos_release > 0)
+      pool->ball.pos_release =
+          (uint8_t)(pool->ball.pos_release - (uint8_t)frame->delta);
+  }
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    rc = fifa96_match_entities_team_update(pool, t, frame, action, ctx);
+    if (rc != FIFA96_OK) return rc;
+  }
+  return fifa96_match_entities_ball_pair(pool);
+}

@@ -4,7 +4,7 @@
 
 **Goal:** Freeze the eight read-only evidence slices (`FU273…FU280`) that establish, first-hand, the native **live producer** of each remaining phase-7 chain's gate cell — and, for R11-L4, an explicit **port shape + go/no-go** — so the phase-26b producer plan can be written without guessing.
 
-**Architecture:** This is the phase-26 **Stage 1** (recon-ahead), the phase-21…26 shape, applied to the 26b half of the phase-26 spec. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase26b-remaining-chains-r11l4-design.md` §3) sequences the recon before the implementation plan; the Stage-2 producer tasks are authored off these frozen slices. Each of the 8 agents investigates one slice, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `docs/ghidra/FU2xx_*.md` in a serialized commit.
+**Architecture:** This is the phase-26 **Stage 1** (recon-ahead), the phase-21…26 shape, applied to the 26b half of the phase-26 spec. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase26b-remaining-chains-r11l4-design.md` §3) sequences the recon before the implementation plan; the Stage-2 producer tasks are authored off these frozen slices. Each of the 8 agents investigates one slice, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `port/spec/FU2xx_*.md` in a serialized commit.
 
 **Tech Stack:** Ghidra MCP (read-only), REA MCP (second read), C11/CMake/CTest, ASan/UBSan, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
@@ -18,7 +18,7 @@
 - **Alias traps:** `dword[addr] >> 16` = the word at `addr+2`, `>> 24` = the byte at `addr+3`; verify CALL bytes (rel32); watch sign/width, inverted gates, gate-index misreads. Any "only/sole/exactly" or caller-count claim needs a **fresh** `get_xrefs_to`. (The phase-24/25/26 waves caught alias-trap errors — re-verify before trusting an inherited verdict.)
 - **The live-chain rule:** a chain is **live** only when a **ported producer raiser** raises its gate on a live engine path (the frame loop / a granted-frame scenario) — a fixture that stages the gate does **not** count; a stand-in producer is a fake. Report the exact live trigger and whether it is **headless-reachable** (Layer 1) and **smoke-reachable** (Layer 2).
 - **The R11-L4 go/no-go:** FU273 must return an explicit **GO** (the keeper CPU chain is portable within a tractable task count) or **NO-GO** (phase-scale → the honest-stop branch, spec §6), with the machine inventory + the effort estimate behind the ruling.
-- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `docs/ghidra/FU2xx_*.md` and commits.
+- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `port/spec/FU2xx_*.md` and commits.
 - **No fakes** (R15/R45/R49). A cell with no live producer stays a numbered leg.
 - **No census chase.** A live producer that wires a NULL row is honest **upside** only; the census holds at 59/80 otherwise.
 - **M2 preservation:** byte-identical unless a producer genuinely changes a live path (written reason + frame diff).
@@ -30,7 +30,7 @@
 |---|---|
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/progress.md` | The SDD ledger (recovery map) |
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-<n>-*.md` | The 8 recon drafts (git-ignored scratch) |
-| `docs/ghidra/FU273_*.md … FU280_*.md` | The promoted canonical slices (controller, serialized commits) |
+| `port/spec/FU273_*.md … FU280_*.md` | The promoted canonical slices (controller, serialized commits) |
 | Prior slices `FU264…FU272`, `FU266`, `FU267`, `FU268`, `FU269`, `FU270`, `FU241`, `FU149`, `FU150`, `FU151`, `FU152`, `FU180`, `FU186`, `ENGINE.md` leg register | Prior evidence — appended errata only, never rewritten |
 
 **Ordering (dependency):** Tasks 1–8 are independent read-only investigations and run in **parallel**. FU273 (R11-L4) is table-first because its GO/NO-GO is the largest plan-shaping input, but it is **not** a serial gate — per spec §8 D2 all 8 fan out flat and the verdict is absorbed at plan time. The controller reconciles at promotion time only if two slices reach the same producer (e.g. Tasks 2 and 3 both touch the taker-arm state cells; Tasks 5 and 1 both touch the keeper cluster).
@@ -40,7 +40,7 @@
 ### Task 1: W26b-1 / FU273 — R11-L4 (the keeper CPU chain) — port shape + go/no-go
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-1-r11l4-keeper-cpu-chain.md`
-**Promotes to:** `docs/ghidra/FU273_r11l4_keeper_cpu_chain.md`
+**Promotes to:** `port/spec/FU273_r11l4_keeper_cpu_chain.md`
 
 **Objective:** Derive the **port shape** of R11-L4 — the keeper CPU chain `FUN_0008D8EC`→`FUN_000782D0`→`FUN_00077EAC`, the rows `1A`/`1B` body remainders, the phase-6/row-`0x1F` chain, and the claim bridge (R11-L1/L2/L3) — so the keeper stage-5 release (`camY := 0x50`) raises the camera-Y cell on a live path. Return an explicit **GO / NO-GO** with a machine inventory and an effort estimate.
 
@@ -54,7 +54,7 @@
 ### Task 2: W26b-2 / FU274 — the set-piece/restart live arm
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-2-set-piece-live-arm.md`
-**Promotes to:** `docs/ghidra/FU274_set_piece_live_arm.md`
+**Promotes to:** `port/spec/FU274_set_piece_live_arm.md`
 
 **Objective:** Derive the live engine arm that dispatches the taker rows `0x10`/`0x12`/`0x13` — the throw-in scanner + the foul adjudicator — and the `goal_armed`→phase 3/4/6/7 producers that gate them.
 
@@ -68,7 +68,7 @@
 ### Task 3: W26b-3 / FU275 — the taker-arm residuals (FU266 L266-1..14)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-3-taker-arm-residuals.md`
-**Promotes to:** `docs/ghidra/FU275_taker_arm_residuals_2.md`
+**Promotes to:** `port/spec/FU275_taker_arm_residuals_2.md`
 
 **Objective:** Derive the **port shapes** of FU266's open legs `L266-1..14` — the per-phase triple `FUN_00083164`, the pick `FUN_0008DB6C`, the timer+draw machine `FUN_00083428`, the presentation sinks `0x974DC(0x1E)`/`0x8F188`, and the `[0x157821]`/`[0x157A6A]` state cells.
 
@@ -82,12 +82,12 @@
 ### Task 4: W26b-4 / FU276 — fouls/offside + the contact gate
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-4-fouls-offside-contact.md`
-**Promotes to:** `docs/ghidra/FU276_fouls_offside_contact.md`
+**Promotes to:** `port/spec/FU276_fouls_offside_contact.md`
 
 **Objective:** Derive the live **contact-gate invoker** and the unported **offside** path — the row-`0x04` duel / the pad `want 0x60` handler that raises the contact gate, the offside receive arm `FUN_0007A084 0x7A448`, `field_4c2f2`, and the `FU268-L10` byte divergence.
 
 - [ ] **Step 1: The contact gate.** `fifa96_match_run_contact` (`run.c:6489`, called from row `0x0C` `fifa96_match_handlers.c:3329` → act-3 invoke-now `run.c:6530`); what live path raises the contact precondition; the pad `want 0x60` handler.
-- [ ] **Step 2: The offside entry.** `fifa96_match_run_offside_reception` (`run.c:6544`, no engine caller today — only unit tests `tests/test_engine_match_frame.c:4236`…); the unported receive arm `FUN_0007A084 0x7A448`; the offside-enable producer for `field_4c2f2`.
+- [ ] **Step 2: The offside entry.** `fifa96_match_run_offside_reception` (`run.c:6544`, no engine caller today — only unit tests `port/tests/test_engine_match_frame.c:4236`…); the unported receive arm `FUN_0007A084 0x7A448`; the offside-enable producer for `field_4c2f2`.
 - [ ] **Step 3: The L10 divergence.** The offside eligibility byte: native `code` / `+0x91` vs engine `type` / `+0x8E` (`match_run.c:6597`); the reconciliation.
 - [ ] **Step 4: The port shapes + the live-trigger ruling.** Hand off.
 
@@ -96,7 +96,7 @@
 ### Task 5: W26b-5 / FU277 — the keeper-restart trigger
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-5-keeper-restart-trigger.md`
-**Promotes to:** `docs/ghidra/FU277_keeper_restart_trigger.md`
+**Promotes to:** `port/spec/FU277_keeper_restart_trigger.md`
 
 **Objective:** Derive the live upstream trigger for the keeper restart rows `1D`/`1E` — the live `goal_armed`/goal-kick producer (the keeper CPU ladder) — and the `FU269-L5` sit-5 emit-route divergence.
 
@@ -110,7 +110,7 @@
 ### Task 6: W26b-6 / FU278 — replay / overlay / sub-strip
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-6-replay-overlay-sub.md`
-**Promotes to:** `docs/ghidra/FU278_replay_overlay_sub.md`
+**Promotes to:** `port/spec/FU278_replay_overlay_sub.md`
 
 **Objective:** Derive the live **caller** from the period/screen machine for the replay/overlay/sub producers — `FUN_000510DC` / `FUN_00054104` / `FUN_000515C8` — and the substitution-event writer (`0x8A938` case 6/8).
 
@@ -124,7 +124,7 @@
 ### Task 7: W26b-7 / FU279 — the situation-0xB producers + the act-8 tail
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-7-situation-producers-sinks.md`
-**Promotes to:** `docs/ghidra/FU279_situation_producers_sinks.md`
+**Promotes to:** `port/spec/FU279_situation_producers_sinks.md`
 
 **Objective:** Derive the remaining situation-0xB producers (`FU267`: the six dormant rows) + the row-01 sinks (`0x974DC(0x1E)` / `0x8F188` / `0x8DCD4`) + the `FU241-L1/L3` residues.
 
@@ -138,7 +138,7 @@
 ### Task 8: W26b-8 / FU280 — the live-trigger census (re-cut)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26b-recon-ahead/w26b-8-live-trigger-census.md`
-**Promotes to:** `docs/ghidra/FU280_live_trigger_census_2.md`
+**Promotes to:** `port/spec/FU280_live_trigger_census_2.md`
 
 **Objective:** The cross-cutting reachability map for the 26b half: for each remaining phase-7 gating cell, the live engine path that raises it, whether it is **interactively reachable** (smoke) vs **granted-frame-only** (headless Layer 1) — and, given FU273's verdict, the **visible-anchor verdict** (is the follow-cam reachable once R11-L4 lands?).
 
@@ -172,5 +172,5 @@ chains) and 26b-ii (R11-L4) off this spec.**
 
 Hand this plan to `superpowers:subagent-driven-development`: dispatch a fresh
 read-only subagent per task (all 8 in parallel), then the controller freeze-reviews
-and promotes each draft to a canonical `docs/ghidra/FU2xx_*.md` in a serialized
+and promotes each draft to a canonical `port/spec/FU2xx_*.md` in a serialized
 commit per slice.

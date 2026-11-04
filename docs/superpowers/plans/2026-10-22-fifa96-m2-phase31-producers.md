@@ -8,7 +8,7 @@
 
 **Tech Stack:** C (strict `-Wall -Wextra -Werror`, ASan/UBSan), the repo's frame-tape tests, the T1 harness, SDL3 `make game`, Ghidra MCP read-only.
 **Spec:** `docs/superpowers/specs/2026-10-22-fifa96-m2-phase31-natural-claim-pans-design.md` (§4, §5, §6, §8).
-**Authority:** the phase-31 wave `docs/ghidra/FU314..FU317` (reviewed, errata appended 2026-10-22) + the phase-30 register.
+**Authority:** the phase-31 wave `port/spec/FU314..FU317` (reviewed, errata appended 2026-10-22) + the phase-30 register.
 
 ## Global Constraints
 
@@ -31,7 +31,7 @@
 
 ### Task 1: The natural-pan witness (FU317)
 
-**Files:** `tests/test_engine_m2.c` (the probe extension; ~200 LOC); read `docs/ghidra/FU317_r2l6_claim_acceptance.md` §4/§5 + its erratum and `docs/ghidra/FU314_r2l6_pan_triggers.md` + its erratum.
+**Files:** `port/tests/test_engine_m2.c` (the probe extension; ~200 LOC); read `port/spec/FU317_r2l6_claim_acceptance.md` §4/§5 + its erratum and `port/spec/FU314_r2l6_pan_triggers.md` + its erratum.
 
 - [ ] **Step 1: RED** — the probe drive: the verbatim `M2_KEYS` + a DOWN hold from tape index 1820; assert the natural pan (the delta run: the camera place `0→−0x90` over 27 frames at f≈1514, the pan counter `0→4`, `tracked=2`, Y/Z=0, armer/follow=0) and the pins the erratum requires (`controlled=1`, `slot.entity=2`, the staged face `0x100` at the gate); the delta-run count, not the off-zero count.
 - [ ] **Step 2: Implement** the probe extension; keep the natural pass's zero control; no camera staging.
@@ -40,7 +40,7 @@
 
 ### Task 2: The row-`0x24` staged-face fidelity (FU314-L1a)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (the staged-face sites `:2646`/`:5381`, the row-0x24 face); `fifa96_action_handlers.c` if the `out.tail` face path is the same cell; tests `tests/test_engine_match_frame.c`. Read `docs/ghidra/FU314_r2l6_pan_triggers.md` + its erratum (the native `0x865B5/0x865BE/0x865C6` constants; the port's staged 0).
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (the staged-face sites `:2646`/`:5381`, the row-0x24 face); `fifa96_action_handlers.c` if the `out.tail` face path is the same cell; tests `port/tests/test_engine_match_frame.c`. Read `port/spec/FU314_r2l6_pan_triggers.md` + its erratum (the native `0x865B5/0x865BE/0x865C6` constants; the port's staged 0).
 
 - [ ] **Step 1: RED** — the staged face is the native row-0x24 constant (not 0); a frame-path pin where the face-aligned gate passes (the Δ `≤ 0xAB`), and the current zero-staged face fails it.
 - [ ] **Step 2: Implement** the staged-face constants at the sites the wave names; the face-aligned pan route.
@@ -49,7 +49,7 @@
 
 ### Task 3: The visible-pan acceptance (Layer 2)
 
-**Files:** `docs/screens/p31-l2-pan-*.png` + the acceptance report; no production code. Read `docs/ghidra/FU317_r2l6_claim_acceptance.md` §6 + the phase-30 acceptance procedure (FU313 §6).
+**Files:** `docs/screens/p31-l2-pan-*.png` + the acceptance report; no production code. Read `port/spec/FU317_r2l6_claim_acceptance.md` §6 + the phase-30 acceptance procedure (FU313 §6).
 
 - [ ] **Step 1:** `make game` (`DISPLAY=:1`, the ISO): the phase-8 walkthrough to phase 2, then the FU317 drive (the DOWN hold at the tape-equivalent moment); the pan/still pairs at the same clock (`960x591+0+0`), the AE relative gate, the trace primary (`FIFA96_CAMERA_TRACE`).
 - [ ] **Step 2:** Record the verdict: a visible pan (the camera place moves; the scene shifts) or the honest waiver with the exact timing limits; commit the captures + the acceptance note.
@@ -58,7 +58,7 @@
 
 ### Task 4: The close-out (the natural-pan verdict)
 
-**Files:** `docs/ENGINE.md` (the phase-31 register, append-only), `docs/PROGRESS.md`; no census/README change.
+**Files:** `port/ENGINE.md` (the phase-31 register, append-only), `docs/PROGRESS.md`; no census/README change.
 
 - [ ] **Step 1:** Append the phase-31 register: the natural-pan witness (the one-pan, zero-delta, 27-frame, `−0x90`; GREEN), the face fidelity (T2 outcome + the M2 status), the Layer-2 verdict, the armer NO-GO (the 13-pan ceiling; the no-slot L1 as a Stage-3/4 leg), the carried legs (FU314-L1a, FU316-L1/L9, FU315-L1/L2 out of phase, the follow waiver), and the quoted errata (the FU314/FU317 reconciliation; the row-6-self install correction; the controlled/slot pins).
 - [ ] **Step 2:** `docs/PROGRESS.md`: the phase-31 narrative (the camera pans in natural play; the follow stays waived; the census holds).
@@ -70,7 +70,7 @@
 The Task-2 headline above ("the staged-face constants at the sites the wave
 names; the face-aligned pan route") overstates the landed scope. T2 delivered
 the **fidelity prerequisite** (the live `s.face_word7d = r->face7d` at
-`src/fifa96_engine/fifa96_match_handlers.c:2651` and the native row-0x24
+`port/src/fifa96_engine/fifa96_match_handlers.c:2651` and the native row-0x24
 `(1,0)` constant at `:5391`) plus the **frame-path face-aligned pair**
 (`test_row04_live_face_passes_face_aligned_gate` /
 `test_row04_zero_face_fails_face_aligned_gate`). The **natural** witness

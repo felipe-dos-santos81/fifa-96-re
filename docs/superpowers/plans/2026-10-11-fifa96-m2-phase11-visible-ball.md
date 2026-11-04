@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan, Ghidra MCP read-only, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU148…` (§14.3/§14.4), `FU145…`, `FU147…`; predecessor `docs/superpowers/plans/2026-10-09-fifa96-m2-phase10-visible-layer.md` and its final review.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU148…` (§14.3/§14.4), `FU145…`, `FU147…`; predecessor `docs/superpowers/plans/2026-10-09-fifa96-m2-phase10-visible-layer.md` and its final review.
 
 ## Global Constraints
 
@@ -24,7 +24,7 @@
 ### Task 1: T1 — ball-height producer (`0x157750`) + long-ball key (`0x40`)
 
 **Files:**
-- Modify: the ball-pairing/possession producer path (`src/fifa96_loader/fifa96_ball_pairing.c` / engine `fifa96_match_run.c` kick path), `src/fifa96_engine/fifa96_match_handlers.c` (the dormant `match_sp_kick(mr, NULL, 0x40u, 0u)` call site), `src/fifa96_engine/fifa96_camera.c` (tail gate/materialisation), tests + `docs/ghidra/FU148…` (§14.3/§14.4), `docs/ENGINE.md`
+- Modify: the ball-pairing/possession producer path (`port/src/fifa96_loader/fifa96_ball_pairing.c` / engine `fifa96_match_run.c` kick path), `port/src/fifa96_engine/fifa96_match_handlers.c` (the dormant `match_sp_kick(mr, NULL, 0x40u, 0u)` call site), `port/src/fifa96_engine/fifa96_camera.c` (tail gate/materialisation), tests + `port/spec/FU148…` (§14.3/§14.4), `port/ENGINE.md`
 - Read: L14.6 (the `0x40` key → traj arm; the code-4/0x40 arm is already ported), L14.7 (the `0x157750` height producer), the camera tail gate `[0x157750] != 0` and the follow arm
 
 **Interfaces:**
@@ -40,7 +40,7 @@
 ### Task 2: T2 — code-16 ball-record machine (`L14.8`)
 
 **Files:**
-- Modify: the ball record/position producer (`src/fifa96_engine/fifa96_match_entities.c` / `fifa96_match_run.c` per first-hand derivation), the render path if needed (`fifa96_match_handlers` render seam), tests, `docs/ghidra/FU148…`, `docs/ENGINE.md`
+- Modify: the ball record/position producer (`port/src/fifa96_engine/fifa96_match_entities.c` / `fifa96_match_run.c` per first-hand derivation), the render path if needed (`fifa96_match_handlers` render seam), tests, `port/spec/FU148…`, `port/ENGINE.md`
 - Read: L14.8 (code-16 machine: the ball record's open-play position producer), the ball-slot render test from phase-10 T1, the receiving/render path
 
 **Interfaces:**
@@ -56,7 +56,7 @@
 ### Task 3: T3 — acceptance v11 + deferred docs-minors sweep
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (+ golden iff it genuinely moves), `tests/golden/engine/m2-frames.txt`, `docs/ENGINE.md`, `README.md`, `docs/screens/*`, and the seven deferred comment/doc minors: `tests/test_engine_m2.c:1-9` (header v9→v11), `include/fifa96_loader/fifa96_input.h:33-36`, `include/fifa96_engine/fifa96_match_run.h:291-295`, `include/fifa96_engine/fifa96_match_entities.h:71`, `docs/ghidra/FU148_presentation_hud_camera.md:1152` (+0x8D inversion), `:1178` (timer81 wording), dead exit-path leftovers in the tape test
+- Modify: `port/tests/test_engine_m2.c` (+ golden iff it genuinely moves), `port/tests/golden/engine/m2-frames.txt`, `port/ENGINE.md`, `README.md`, `docs/screens/*`, and the seven deferred comment/doc minors: `port/tests/test_engine_m2.c:1-9` (header v9→v11), `port/src/fifa96_loader/fifa96_input.h:33-36`, `port/src/fifa96_engine/fifa96_match_run.h:291-295`, `port/src/fifa96_engine/fifa96_match_entities.h:71`, `port/spec/FU148_presentation_hud_camera.md:1152` (+0x8D inversion), `:1178` (timer81 wording), dead exit-path leftovers in the tape test
 - Read: the final review of phase-10 (triage list), tape v10 provenance
 
 **Interfaces:**

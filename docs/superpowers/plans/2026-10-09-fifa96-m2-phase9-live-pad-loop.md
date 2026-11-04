@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan, Ghidra MCP read-only, SDL3 smoke (`make game`, DISPLAY=:1).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU75_*.md`, `FU137…FU152`; predecessors `docs/superpowers/plans/2026-10-09-fifa96-m2-phase8-live-loop.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU75_*.md`, `FU137…FU152`; predecessors `docs/superpowers/plans/2026-10-09-fifa96-m2-phase8-live-loop.md`.
 
 ## Global Constraints
 
@@ -23,7 +23,7 @@
 ### Task 1: T1 — on-screen movement (FU-75 L4.1/L4.2 + L4.6)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c`, `src/fifa96_engine/fifa96_match_handlers.c` (apply `out.forced`/`out.chase` per FU-75 §1.5/§1.6; row-02 `locomotion_restart_target` per FU-138 OL-18), `src/fifa96_loader/fifa96_outfield.c` / `fifa96_keeper*.c` (keeper tables per FU-74 §2 as needed), `tests/test_engine_match_frame.c`, `tests/test_outfield.c`, `docs/ghidra/FU75_*.md` (L4.1/L4.2 status), `docs/ghidra/FU137_dispatch_mechanics.md` (row 02), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c`, `port/src/fifa96_engine/fifa96_match_handlers.c` (apply `out.forced`/`out.chase` per FU-75 §1.5/§1.6; row-02 `locomotion_restart_target` per FU-138 OL-18), `port/src/fifa96_loader/fifa96_outfield.c` / `fifa96_keeper*.c` (keeper tables per FU-74 §2 as needed), `port/tests/test_engine_match_frame.c`, `port/tests/test_outfield.c`, `port/spec/FU75_*.md` (L4.1/L4.2 status), `port/spec/FU137_dispatch_mechanics.md` (row 02), `port/ENGINE.md`
 - Read: FU-75 L4.1–L4.6, FU-138 (row 02), FU-74 §2, the T3 f-up5/f-up8 input seam (held key → `input_state`), the live probe finding (slot record code 02, vel 0)
 
 **Interfaces:**
@@ -39,7 +39,7 @@
 ### Task 2: T2 — live carrier producers (kick target)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_handlers.c` / `fifa96_match_entities.c` / `fifa96_match_run.c` (row-05 carrier claim per OL-63; ball-pair possession producers; the ball spawn/possession chain), `tests/test_engine_match_handlers.c`, `tests/test_engine_match_frame.c`, `docs/ghidra/FU142_installer_arms_scope.md` (OL-63 status), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_handlers.c` / `fifa96_match_entities.c` / `fifa96_match_run.c` (row-05 carrier claim per OL-63; ball-pair possession producers; the ball spawn/possession chain), `port/tests/test_engine_match_handlers.c`, `port/tests/test_engine_match_frame.c`, `port/spec/FU142_installer_arms_scope.md` (OL-63 status), `port/ENGINE.md`
 - Read: OL-63 (row-05 claim `0x7F1FF`), FU-147 (possession flips, code-5 claim), S1/T3 f-up8 (kick path needing a carrier)
 
 **Interfaces:**
@@ -55,7 +55,7 @@
 ### Task 3: T3 — pan origin and auto-camera (live pan → tape goal)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_camera.c` / `fifa96_match_run.c` / `fifa96_match_handlers.c` (nine remaining `FUN_00071C94` callers — the gameplay rows that set follow-cam events; `walk_gate` producer per FU-148 §12.2 leg; `FUN_00071DF4` every-frame auto-camera per FU-148/T4; half-line band reach), `tests/test_camera.c`, `tests/test_engine_match_frame.c`, `tests/test_engine_m2.c` (+ golden **re-pin expected**), `docs/ghidra/FU148…` (OL-T11-79 close/narrow), `docs/ghidra/FU152…`, `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_camera.c` / `fifa96_match_run.c` / `fifa96_match_handlers.c` (nine remaining `FUN_00071C94` callers — the gameplay rows that set follow-cam events; `walk_gate` producer per FU-148 §12.2 leg; `FUN_00071DF4` every-frame auto-camera per FU-148/T4; half-line band reach), `port/tests/test_camera.c`, `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_m2.c` (+ golden **re-pin expected**), `port/spec/FU148…` (OL-T11-79 close/narrow), `port/spec/FU152…`, `port/ENGINE.md`
 - Read: FU-148 §2/§5.2/§12, FU-152 §2, FU-145 (armer), T2 f-up8 (pan rate/jitter/arm-A), T4 f-up8 (natural goal + tracked-side)
 
 **Interfaces:**
@@ -71,7 +71,7 @@
 ### Task 4: T4 — acceptance v9 + whole-plan review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (+ golden iff moved), `docs/ENGINE.md`, `README.md`, `docs/screens/*`
+- Modify: `port/tests/test_engine_m2.c` (+ golden iff moved), `port/ENGINE.md`, `README.md`, `docs/screens/*`
 - Read: spec §5; tape v8 provenance
 
 **Interfaces:**

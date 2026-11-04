@@ -7,7 +7,7 @@ with: the record's `head` bytes are searched in the candidate file and the
 record's FNV-1a-32 `hash` is recomputed over the read length to confirm.
 
 Usage:
-  fifa96_bind.py TRACE --iso game/FIFAPCCD96.iso [--out report.txt]
+  fifa96_bind.py TRACE --iso data/game/FIFAPCCD96.iso [--out report.txt]
   fifa96_bind.py TRACE --dir /path/to/extracted/files
 
 The --dir mode is also what the unit tests exercise (no xorriso needed).

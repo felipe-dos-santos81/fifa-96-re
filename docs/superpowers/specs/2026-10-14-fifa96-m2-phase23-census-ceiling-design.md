@@ -6,7 +6,7 @@ census ceiling", both fronts chosen by the user).
 Parent spec: `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`
 Predecessor spec: `docs/superpowers/specs/2026-10-13-fifa96-m2-phase22-end-spine-design.md`
 Predecessor plan: `docs/superpowers/plans/2026-10-13-fifa96-m2-phase22-end-spine.md`
-Recon slices (to be produced by this phase's wave): `docs/ghidra/FU240…FU247`.
+Recon slices (to be produced by this phase's wave): `port/spec/FU240…FU247`.
 
 ## 1. Context
 
@@ -40,7 +40,7 @@ freeze with a fresh census.
 
 - `make check` **110/110** (sanitized, strict).
 - Wired **55/80 = 68%** (`33 action + 22 phase`); dispatch `24 UNSUP / 55 OK / 1 NOTF`.
-  The test pins are `tests/test_engine_m2.c:3666` and `:4041`
+  The test pins are `port/tests/test_engine_m2.c:3666` and `:4041`
   (`action_wired == 33u && phase_wired == 22u`).
 - M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` (691 lines, immutable).
 - M2 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (**6522 lines**, v22).
@@ -48,7 +48,7 @@ freeze with a fresh census.
 
 ### The 24 NULL rows and their named blockers (frozen per-row evidence)
 
-The engine slot comments (`src/fifa96_engine/fifa96_match_handlers.c:5097..5259`)
+The engine slot comments (`port/src/fifa96_engine/fifa96_match_handlers.c:5097..5259`)
 carry the authoritative per-row evidence. Enumerated at the 55/80 baseline:
 
 **Action NULL (12):** `03 0A 0D 15 17 1A 22 25 27 29 2B 2C`.
@@ -187,8 +187,8 @@ One implementer at a time; dependency order T1 → T2 → … → Tn.
   written reason + frame diff otherwise). Otherwise the tape stays byte-exact
   and the movers are asserted off-tape on a fixture.
 - **T(k+2) — the census close-out.** Recompute `floor(100 × wired/80)`; update
-  the README title + `docs/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md` +
-  the `tests/test_engine_m2.c` census pins (`:3666`/`:4041`) **in the same
+  the README title + `port/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md` +
+  the `port/tests/test_engine_m2.c` census pins (`:3666`/`:4041`) **in the same
   commit**; record the honest smoke.
 
 The exact T-list and count are **not fixed here** — they are derived from the
@@ -202,7 +202,7 @@ task).
   mutation-RED rider; every frozen row carries a numbered ceiling leg with a
   fresh census.
 - The census recompute `floor(100 × wired / 80)` is derived, never hand-set; the
-  README title, `docs/ENGINE.md`, `docs/PROGRESS.md`, `AGENTS.md` and the test
+  README title, `port/ENGINE.md`, `docs/PROGRESS.md`, `AGENTS.md` and the test
   pins are consistent in the same commit.
 - **M1 `09b726b7…` never moves.**
 - **Tape:** byte-exact unless a tape-visible mover forces a re-pin; then written
@@ -237,7 +237,7 @@ to ceiling legs. The census is recomputed from what actually wires.
 - ISO-gated tests skip cleanly without the ISO.
 - Commits `feat` / `fix` / `docs(fuNNN)` / `test` / `chore`; work on `main`; push
   per dispatch. The recon drafts live in `.superpowers/sdd/<phase>/` (git-ignored);
-  the controller promotes them to `docs/ghidra/FU240…FU247` in serialized commits.
+  the controller promotes them to `port/spec/FU240…FU247` in serialized commits.
 
 ## 9. Interfaces
 
@@ -247,9 +247,9 @@ to ceiling legs. The census is recomputed from what actually wires.
   + `FUN_000888FC` — the frontier's hinge (FU242).
 - **The A-movers** — the `FUN_0008D098` case-`0x13/0x14` producer (FU240) and the
   phase-`0x1E` de-compression (FU241).
-- **The census pins** `tests/test_engine_m2.c:3666`/`:4041` — updated in the
+- **The census pins** `port/tests/test_engine_m2.c:3666`/`:4041` — updated in the
   close-out commit.
-- **The recon slices** `docs/ghidra/FU240…FU247` — appended errata only (prior
+- **The recon slices** `port/spec/FU240…FU247` — appended errata only (prior
   sections never rewritten).
 
 ## 10. Decisions (approved in-chat)
@@ -260,7 +260,7 @@ to ceiling legs. The census is recomputed from what actually wires.
   or a numbered permanent ceiling leg; no row is left ambiguous.
 - **D3 — read-only recon, serialized promotion.** The 8 slices run in parallel
   read-only; the controller freeze-reviews and promotes each to a canonical
-  `docs/ghidra/FU2xx_*.md`.
+  `port/spec/FU2xx_*.md`.
 - **D4 — no faked producers.** The AGENTS.md census rule binds; the rows-27/29/2C
   precedent governs.
 - **Tooling note.** Ghidra MCP is the recon tool; **context7 is not applicable**

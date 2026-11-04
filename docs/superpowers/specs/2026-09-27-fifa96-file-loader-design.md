@@ -17,7 +17,7 @@ Goal: Recreate `fifa96.exe` logic in portable C, starting with file/data loading
   - `soccer/fnames.dat, lengths.dat, crcvals.dat, instdat/instgrps.dat, iart/, readme/`
   - `sound/*.{viv,bnk,asf,par,crd}` (545 entries: plr_t*.viv / tem_t*.viv chants, que_*.asf, sfx_*.bnk, par_*.par)
   - `video/*.tgv` (73 entries), `modem/`, `fegfx/`
-- Runner: `game/FIFAPCCD96.iso` + `run-fifa96.sh` (DOSBox-X, `svga_s3`, 16 MB) mounts ISO as D:, runs `D:FIFA96.EXE`.
+- Runner: `data/game/FIFAPCCD96.iso` + `tools/run-fifa96.sh` (DOSBox-X, `svga_s3`, 16 MB) mounts ISO as D:, runs `D:FIFA96.EXE`.
 - Workspace: `/home/felipe/code/fifa96-reversed/` (no git repo at design time).
 
 ## 2. Scope (approved)
@@ -38,22 +38,22 @@ Out-of-scope (later slices): VGA/SVGA blit, match sim/AI/physics, audio synthesi
 
 - (A) EXE-only tracing: anchor on INT 21h sites, expand outward. Pro: exact function boundaries. Con: format semantics stay implicit, slow.
 - (B) Format-first only: probe CD files, write parsers, map back later. Pro: fast testable wins. Con: risks diverging from original function split.
-- (C) Hybrid (chosen): INT 21h-anchored EXE pass + data-driven decoder pass + `src/fifa96_loader/` harness with golden vectors. Every C function cites its source `FUN_11bd_*` address. Meets "matching functions" success criterion while staying testable on modern Linux.
+- (C) Hybrid (chosen): INT 21h-anchored EXE pass + data-driven decoder pass + `port/src/fifa96_loader/` harness with golden vectors. Every C function cites its source `FUN_11bd_*` address. Meets "matching functions" success criterion while staying testable on modern Linux.
 
 ## 4. Architecture
 
 New layout (not yet created — implementation phase):
 
 ```
-src/fifa96_loader/
+port/src/fifa96_loader/
   fifa96_file.{h,c}     # DOS shim: open/read/seek/close, seg:off -> flat, POSIX backend
   fifa96_pog.{h,c}
   fifa96_qfs.{h,c}
   fifa96_viv.{h,c}      # covers .viv/.bnk/.asf/.par/.crd framing
   fifa96_tgv.{h,c}      # framing only
   fifa96_tables.{h,c}   # fnames/lengths/crcvals
-include/fifa96_loader/  # public headers (same names)
-tests/
+port/src/fifa96_loader/  # public headers (same names)
+port/tests/
   golden/               # manifests + vectors copied from /media/felipe/FIFAPCCD (never moved)
   test_file.c, test_pog.c, test_qfs.c, test_viv.c, test_tgv.c, test_tables.c, test_load_order.c
 tools/
@@ -101,7 +101,7 @@ DOS carry-flag errors map to `NOT_FOUND/IO/SHORT_READ`. `BAD_MAGIC/TRUNCATED` fr
 
 ## 8. Testing
 
-- Golden vectors from real CD (copied into `tests/golden/`, originals untouched).
+- Golden vectors from real CD (copied into `port/tests/golden/`, originals untouched).
 - Per-format `ctest` suites assert byte-identical payloads + field-level header asserts.
 - Matching-function check: each C function's doc comment cites `Ghidra: FUN_11bd_XXXX @ 11bd:XXXX` + golden file + decompile hash at time of port.
 - Regression: any Ghidra rename must keep `FUN_11bd_* -> new_name` map in spec appendix during implementation.

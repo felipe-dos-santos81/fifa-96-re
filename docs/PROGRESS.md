@@ -17,12 +17,12 @@ into the port:
   load-order tables, script and trace helpers;
 * **video decode chain** — refpack `0x10/0x11`, huff `0x30/0x32/0x34`, tree
   `0x46`, the record dispatcher, kVGT, the TGV stream walker and fVGT delta
-  frames, validated against live-captured `tests/golden/vgt/` vectors;
+  frames, validated against live-captured `port/tests/golden/vgt/` vectors;
 * **audio chain** — file → BIGF `.VIV`/`.BNK` banks → EACS sample decode
   (including the `f10==2` adaptive-delta path) → voice allocation → SFX
   events/settings → deterministic 22050 Hz 16-bit stereo mixer → music
-  sequencer (CRDF/CRD), validated against `tests/golden/eacs/` and
-  `tests/golden/audio/`;
+  sequencer (CRDF/CRD), validated against `port/tests/golden/eacs/` and
+  `port/tests/golden/audio/`;
 * **presentation chain** — TGV stream player (key/delta frames, sentinels,
   audio pump) → Mode-X blitter (plane interleave, clip, page flip) → VGA
   presentation sequence (page addresses, DAC palette upload ordering);
@@ -32,7 +32,7 @@ into the port:
   and outfield dispatch, event pump, history ring, stats, match
   lifecycle/start/teardown, front-end state dispatch, settings hand-off.
 
-**108 CTest tests** (`make test`, `make check`) are green. The native engine layer on top of the port ([`../src/fifa96_engine/`](../src/fifa96_engine/), see
+**108 CTest tests** (`make test`, `make check`) are green. The native engine layer on top of the port ([`../port/src/fifa96_engine/`](../port/src/fifa96_engine/), see
 [`ENGINE.md`](ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
@@ -312,7 +312,7 @@ literally, mutation-RED verified by reintroducing the `dword[+0x81]>>16`
 alias strike) makes the alias class regression-proof on the second ported
 one-shot arm, and the **no-ISO tape path is now CI-covered** (the
 `test_engine_m2_noiso` CTest registration runs the same tape from the build
-directory, where `game/FIFAPCCD96.iso` does not resolve: `SKIP golden
+directory, where `data/game/FIFAPCCD96.iso` does not resolve: `SKIP golden
 comparison (no ISO)`, rc 0, even with the ISO present). FU166-L5 decided
 **keep the staged byte-1 session** (the tape pins the deepest ported chain —
 queue -> scheduler -> post -> writer; the byte-0 default stays pinned at
@@ -497,7 +497,7 @@ targets in the FU docs.
 
 **Phase-15 T1 (2026-10-12) landed the native act/phase dispatch seam** (FU-175:
 `FUN_000888FC` + the `0x8B669..0x8B672` clock-tail tick) as the new module
-`src/fifa96_engine/fifa96_match_act.{c,h}`, giving
+`port/src/fifa96_engine/fifa96_match_act.{c,h}`, giving
 `fifa96_match_dispatch_phase` its first live caller and absorbing the FU-170 §7
 ad-hoc act-9 singleton. The phase table gains its first honest row — phase
 `0x1F` (= act 9 handler `0x88F4C`), reached each granted frame by the live
@@ -536,7 +536,7 @@ census 28/80 → 29/80 (**36%**).
 M2 acceptance **v15** — a strata-only layer (the transcript is byte-identical
 to the v14 golden `7b4b241a…`, 792 lines; M1 `09b726b7…` unmoved; no re-pin —
 T1's act seam reproduced the exact FU-170 §7 act-9 cadence and T2/T3 are
-install-live/tape-dormant). `tests/test_engine_m2.c` gains the v15 provenance
+install-live/tape-dormant). `port/tests/test_engine_m2.c` gains the v15 provenance
 block plus the T1–T3 regression **riders** as tape/strata-level cross-checks
 (**all seven mutation-RED** — each mutation aborts `run_phase15_riders` at its
 own assertion; the per-rider mutation is recorded in the phase-15 T4 report):
@@ -693,7 +693,7 @@ intro (`docs/screens/p16-t6-intro.png`) and the front-end
 host-library memory (pre-existing LSan noise, not an engine leak). The census is
 reconciled against FU-190: action non-NULL `31` + phase rows `0x18/0x19/0x1F` =
 **34/80**, dispatch `45 UNSUP / 34 OK / 1 NOTF` (sum 80), **42%**. Every
-unmoved phase-16 frontier item is registered with its owner in `docs/ENGINE.md`
+unmoved phase-16 frontier item is registered with its owner in `port/ENGINE.md`
 (the T6 bullet) — `FU181-L1`, `OL-13`, `FU184-L1..L7`, `OL-65/FU185-L6`,
 `FU186-L1..L9`, `FU187-L1..L5`, `FU188-L1/L3/L5`, `FU189-L1/L2`, `FU178-L1`,
 `FU177-L1`, `FU175-L1`, `FU190-L1/L2`. `make check` **110/110**.
@@ -835,7 +835,7 @@ slice). Per Ruling R8, FU-193 finds each native producer statically
 strict "engine reaches it" test, so the three phase-table slots stay
 **NULL/uncounted** (the rows-27/29/2C precedent) and the bodies are exported for
 direct unit testing with the producer remainder as numbered legs. Ported bodies
-(`src/fifa96_engine/fifa96_match_run.c`, the act-tail family with
+(`port/src/fifa96_engine/fifa96_match_run.c`, the act-tail family with
 `0x18`/`0x19`/`0x20`): `fifa96_match_action_phase_17` (act-1 kickoff entry
 `0x88DC8`: head `timer += frame_delta`, stage 0 clears `[0x15882A]` + runs the
 derived kickoff entry, stage 1 hands off to act 4 on `[0x157A4C] != 1 && a
@@ -873,7 +873,7 @@ R8, FU-194 finds each native producer statically (sit 8 → act 7; the
 under the strict "engine reaches it" test, so the three phase-table slots stay
 **NULL/uncounted** (the rows-27/29/2C precedent) and the bodies are exported for
 direct unit testing with the producer remainder as numbered legs. Ported bodies
-(`src/fifa96_engine/fifa96_match_run.c`): `fifa96_match_action_phase_1D` (the
+(`port/src/fifa96_engine/fifa96_match_run.c`): `fifa96_match_action_phase_1D` (the
 act-7 10-arm set-piece timeline `0x89868`: head `timer += frame_delta`; stage 0
 clears `[0x15882A]`, writes phase 0x10 and installs action row 0x19 on the
 **team base** (`records[0]`, once per team — the native `0x8990A` CALL sits
@@ -940,11 +940,11 @@ re-pin), the phase/act-seam riders folded in, the smoke recorded, the census
 reconciled (`48/80 = 60%`).** Every phase-17 landing is install-live,
 producer-gated off, or tape-dormant, so no presented frame moved: M1
 `09b726b7…` is unmoved and M2 is held at the v16 bytes `7b4b241a…` (792 lines,
-`cmp` clean against `tests/golden/engine/m2-frames.txt`). The v17 label records
+`cmp` clean against `port/tests/golden/engine/m2-frames.txt`). The v17 label records
 the phase's acceptance strata at the acceptance layer (the phase-15 v14→v15
 precedent labels the acceptance layer, not the tape bytes); the one frame-body
 touch — T1's native per-record walk — landed with nothing new dispatched, so it
-provably cannot move the tape. `tests/test_engine_m2.c` gains the v17 provenance
+provably cannot move the tape. `port/tests/test_engine_m2.c` gains the v17 provenance
 block and the acceptance riders (`run_phase17_riders`): the **seam rider** (the
 per-record `[rec+0x1C]` seam is walk-only, one dispatch per non-skipped record
 routed to the staged record — a silent re-seam, a double-run or a store slip
@@ -966,7 +966,7 @@ the dark pitch + two placed players + ball + `0-0` HUD) draw; no visible delta
 is claimed (install-live/gated/tape-dormant). `make check` **110/110**; README
 title `60%`; census **48/80 = 60%**, dispatch `31 UNSUP / 48 OK / 1 NOTF`
 (sum 80). Remaining frontier items are registered with their owners in the
-`docs/ENGINE.md` T7 bullet (FU177-L1, FU178-L1, FU181-L1, FU188-L1,
+`port/ENGINE.md` T7 bullet (FU177-L1, FU178-L1, FU181-L1, FU188-L1,
 FU191-L1..L6, FU192-L1..L3, FU193-L1..L8, FU194-L1..L9, FU195-L2/L3/L4,
 FU196-L1..L8, FU197-L1..L4, FU198-L1..L6, OL-13, OL-65).
 
@@ -977,7 +977,7 @@ engine writer**: its only writer is `match_run_write_phase(mr, out.phase)` with
 `out.phase == 0x0D` from `fifa96_action_phase_situations[7]`
 (`fifa96_action_handlers.c:1141`, i.e. `set_piece(mr, 7, …)`), and no live caller
 in `src/`/`tools/` passes situation 7 — the only passes-7 sites are the direct
-test calls in `tests/test_engine_match_frame.c` (gate-open queue route, which
+test calls in `port/tests/test_engine_match_frame.c` (gate-open queue route, which
 writes no phase). The per-record walk therefore never dispatches the row, so it
 belongs with the never-live-written `0x0B`/`0x0E`/`0x10`, not the counted class.
 **Fix:** `fifa96_match_phase_table[0x0D].fn = NULL` (comment retained; owner leg
@@ -991,7 +991,7 @@ unchanged `47/80 = 58%`; T6 `47/80 → 48/80 = 60%`; T7 `48/80 = 60%`. Dispatch
 **Reconciled write-set (I1):** one engine-reach set
 `{0,1,2,3,4,5,6,7,8,9,0xA,0xC,0xF,0x11,0x13,0x14,0x15}` (derived from the live
 `match_run_write_phase` call sites; excludes `0x0D`/`0x0B`/`0x0E`/`0x10`) is
-stated in `docs/ENGINE.md` phase-17 T1 and cross-cited FU-175 §7B/FU-195 §5; the
+stated in `port/ENGINE.md` phase-17 T1 and cross-cited FU-175 §7B/FU-195 §5; the
 call-site count is corrected `9 → 11` (M6). `make check` **110/110**; README
 title `60%`.
 
@@ -1118,7 +1118,7 @@ keeper CPU ladder `FUN_00077EAC`; fresh `get_xrefs_to 0x77EAC` = 1 into
 
 **Phase-18 T6 (2026-10-12) — acceptance: the tape strata v18 + the producer
 riders; census unchanged (`+0`, `51/80 = 63%`); M2 byte-identical** (this slice,
-R54/FU-206). `tests/test_engine_m2.c` is re-labelled **v18** (the phase-18
+R54/FU-206). `port/tests/test_engine_m2.c` is re-labelled **v18** (the phase-18
 producer-spine acceptance strata). **Tape decision:** the phase-18 spine's one
 presented-frame move is T3's situation-0 cutscene (row-`0x24` `pos_x`, render-read
 — the earned re-pin `7b4b241a… → 441415fc…`, frame 12 first diff, 781/792 lines
@@ -1136,7 +1136,7 @@ action `32` + phase `19` = `51/80 = 63%`; dispatch `28 UNSUP / 51 OK / 1 NOTF`;
 the `0x1106E0`/`0x110794` tables + the installer xref census byte-identical to
 FU-198/FU-190); the census-record note `AGENTS.md:90` swept `48/80 → 60%` →
 `51/80 → 63%`. **Smoke:** the windowed SDL3 engine still builds and boots under
-`DISPLAY=:1` (`./build/fifa96 game/FIFAPCCD96.iso`, survived the 12s timeout with
+`DISPLAY=:1` (`./build/fifa96 data/game/FIFAPCCD96.iso`, survived the 12s timeout with
 only external SDL3/X11/GL/dbus teardown leaks on the kill path — no engine
 crash); no new PNG artifact is warranted (no visual/menu change landed; the T4
 smoke remains representative). `make check` **110/110**. Remaining legs: the
@@ -1279,7 +1279,7 @@ one record per granted frame → the stage-2 stored-situation re-dispatch) is a
 ignores its `EAX=0x19`, so no record's code is rewritten), and the M2 tape never
 enters the compressed `set_piece(bx != 0)` path (the golden carries no `state=3`).
 So de-compressing would move no presented frame — the slot stays `NULL` and the
-bound is **pinned**: `tests/test_engine_match_frame.c::
+bound is **pinned**: `port/tests/test_engine_match_frame.c::
 test_phase_1E_compressed_model_pin` asserts the compressed in-frame re-dispatch
 (`set_piece(2,1,1)` → phase 3, `store_15882b == 0xFF`) **and** that the live path
 never drives the sweep (`fifa96_match_phase_table[0x1E].fn == NULL`, the
@@ -1329,7 +1329,7 @@ slot) aborts `test_phase_1E_compressed_model_pin`. **Determinism:** `make check`
 
 **The acceptance layer closes the period-end spine: the tape strata is re-labelled
 `v19` (strata-only, no re-pin) and the producers are pinned by four mutation-RED
-riders; census unchanged `53/80 = 66%`.** `tests/test_engine_m2.c` gains
+riders; census unchanged `53/80 = 66%`.** `port/tests/test_engine_m2.c` gains
 `run_phase19_riders` (the durable acceptance-layer cross-check; the handler
 primaries live in `test_engine_match_frame.c` / `test_engine_match_act.c` /
 `test_engine_match_handlers.c`) and the v19 provenance block. The riders protect
@@ -1375,7 +1375,7 @@ host/env record).
 
 **Census recomputed against R62/FU-214:** `53 OK = 32 action + 21 phase`; the
 `0x16` INT3 slot is the one `NOTF`; dispatch `26 UNSUP / 53 OK / 1 NOTF`
-(sum 80); `floor(100 × 53/80) = 66`. README title `66%`, `docs/ENGINE.md`
+(sum 80); `floor(100 × 53/80) = 66`. README title `66%`, `port/ENGINE.md`
 status + Action-dispatch bullets `53/80`, and `AGENTS.md:90` are consistent —
 **no inflation** (the phase-19 wave adds no census row: T2 `0x1D` + T4 `0x22`
 were counted in their own commits; row `0x20` stays a leg).
@@ -1425,14 +1425,14 @@ the live behavioural rider in `run_phase19_riders` block 4 (`active == 0` → th
 
 **Census recomputed:** `54 OK = 32 action + 22 phase`; the `0x16` INT3 slot is
 the one `NOTF`; dispatch `25 UNSUP / 54 OK / 1 NOTF` (sum 80);
-`floor(100 × 54/80) = 67`. README title `67%`, `docs/ENGINE.md` status +
+`floor(100 × 54/80) = 67`. README title `67%`, `port/ENGINE.md` status +
 Action-dispatch bullets `54/80`, and `AGENTS.md:90` are consistent — **no
 inflation**.
 
 ## M2 phase-20 T3 — the sit-8 actor-cell bind + action row `0x20` (FU-217)
 
 **The `[0x1587D4]` actor cell is bound live and action row `0x20` is COUNTED
-(`+1` action, census `54/80 → 55/80 = 68%`).** FU-217 (`docs/ghidra/
+(`+1` action, census `54/80 → 55/80 = 68%`).** FU-217 (`port/spec/
 FU217_actor_cell_producer.md`) derives the producer: the sit-8 arm
 `0x8AE08..0x8AE54` of `FUN_0008A938`, guarded by `byte[0x157A4C] != 1`, stores
 the first non-occupied outfield record of each side (`FUN_000897F4(side, 0xA)`)
@@ -1463,7 +1463,7 @@ the re-init block leaves `global_157a4c == 0`/`actor_1587d4 == -1`/no code
 
 **Census recomputed:** `55 OK = 33 action + 22 phase`; the `0x16` INT3 slot is
 the one `NOTF`; dispatch `24 UNSUP / 55 OK / 1 NOTF` (sum 80);
-`floor(100 × 55/80) = 68`. README title `68%`, `docs/ENGINE.md` status +
+`floor(100 × 55/80) = 68`. README title `68%`, `port/ENGINE.md` status +
 Action-dispatch bullets `55/80`, and `AGENTS.md:90` are consistent — **no
 inflation**.
 
@@ -1514,7 +1514,7 @@ accumulates), **not** `word[0x15881A]` (the config period-limit); the ported
 alias error already falsified by FU-170 §4.
 
 **The residual-leg register (each with its native owner; no fake producer).**
-`docs/ENGINE.md`'s phase-20 leg block names every unported native:
+`port/ENGINE.md`'s phase-20 leg block names every unported native:
 
 - **FU215-L1..L5** — L1 the bit-8 gate's intent vs the bit-9 config mapping
   (`0x4B0CB`; owner FU196-L1/FU208-L1); L2 the front-end `[0x157AC2] = 4` producer
@@ -1560,7 +1560,7 @@ commit. **Determinism:** no source or golden touched.
 **The acceptance layer closes the phase-20 sit-8 completion: the tape strata is
 re-labelled `v20` (strata-only, no re-pin) and the four phase-20 mutation classes
 are confirmed present and mutation-RED; census unchanged `55/80 = 68%`.**
-`tests/test_engine_m2.c` gains the v20 provenance block (and the file-header/main
+`port/tests/test_engine_m2.c` gains the v20 provenance block (and the file-header/main
 bumps). The four rider classes are **not duplicated** — T1/T3 already landed them
 at the durable v18/v19 acceptance layer, and this task confirms each aborts at
 its own assertion:
@@ -1600,7 +1600,7 @@ golden file was **not** touched. Any *unexplained* drift is a regression to
 investigate, never a re-pin.
 
 **Smoke (honest).** `make game` under `DISPLAY=:1` (SDL3 and
-`game/FIFAPCCD96.iso` both present) opened the 960×720 “FIFA 96” window, booted the
+`data/game/FIFAPCCD96.iso` both present) opened the 960×720 “FIFA 96” window, booted the
 ISO and reached the match: the intro-RETURN front-end frame is **byte-identical**
 (ImageMagick AE = 0) to the committed `docs/screens/p9-v9-frontend.png`, and the
 panel BACKSPACE→RETURN bridge draws the live match HUD/pitch (the frame tracks the
@@ -1616,7 +1616,7 @@ engine-owned (the ESC-quit path is the normal exit).
 
 **Census recomputed:** `55 OK = 33 action + 22 phase`; the `0x16` INT3 slot is
 the one `NOTF`; dispatch `24 UNSUP / 55 OK / 1 NOTF` (sum 80);
-`floor(100 × 55/80) = 68`. README title `68%`, `docs/ENGINE.md` status +
+`floor(100 × 55/80) = 68`. README title `68%`, `port/ENGINE.md` status +
 Action-dispatch bullets `55/80`, and `AGENTS.md` are consistent — **no inflation**
 (the phase-20 wave's two movers `0x10`/`0x20` were counted in their own commits;
 T6 adds no census row).
@@ -1624,7 +1624,7 @@ T6 adds no census row).
 **Remaining legs (each with its native owner, per the T5 register):**
 **FU215-L1..L5**, **FU216-L1/L3**, **FU217-L1/L2/L3/L5**, **FU219-L2..L6** (L1
 landed), **FU220-L1..L6**, **FU221-L1** (parked), **FU208-L8** — the phase-20 leg
-block in `docs/ENGINE.md` names each native locus; no fake producer was added.
+block in `port/ENGINE.md` names each native locus; no fake producer was added.
 
 **TDD:** the v20 label is doc/label-only; each of the four rider classes is
 mutation-RED (the mutations + failing outputs above, re-verified first-hand in
@@ -1690,7 +1690,7 @@ the native bit-8 `[0x4B0CB]` range-word gate that raises the index to 4 is
 **dead** (no instruction sets bit 8; spec §2 “No dead-gate synthesis”, FU-215) —
 the reachable extra-time entry is the differing reg-end completion.
 
-**Smoke (honest).** `make game` under `DISPLAY=:1` (SDL3 + `game/FIFAPCCD96.iso`
+**Smoke (honest).** `make game` under `DISPLAY=:1` (SDL3 + `data/game/FIFAPCCD96.iso`
 present) opened the windowed engine, booted the ISO and drew the
 intro/front-end for 12 s with no crash; the `SIGTERM` shutdown LeakSanitizer
 report (184 B) is inside `libdbus-1` via SDL3/X11 GL — external, not
@@ -1700,7 +1700,7 @@ the **live clock → completions reach is proven by the headless v21 tape**
 
 **Census recomputed:** `55 OK = 33 action + 22 phase`; dispatch
 `24 UNSUP / 55 OK / 1 NOTF` (sum 80); `floor(100 × 55/80) = 68` — **unchanged**;
-README title `68%`, `docs/ENGINE.md` status + action-dispatch bullets and
+README title `68%`, `port/ENGINE.md` status + action-dispatch bullets and
 `AGENTS.md` stay consistent (T6 wires no new row). `make check` **110/110**
 (sanitized). **Determinism:** M1 `09b726b7…` unmoved; M2 re-pinned to
 `0b87fd18…` (v21, 2522 lines).
@@ -1781,7 +1781,7 @@ self-terminating, no over-screen).
 
 **Census recomputed:** `55 OK = 33 action + 22 phase`; dispatch
 `24 UNSUP / 55 OK / 1 NOTF` (sum 80); `floor(100 × 55/80) = 68` — **unchanged**;
-README title `68%`, `docs/ENGINE.md` phase-22 bullet stay consistent (no row
+README title `68%`, `port/ENGINE.md` phase-22 bullet stay consistent (no row
 wired). `make check` **110/110** (sanitized); M1 `09b726b7…` unmoved; M2
 re-pinned to `b281a9b2…` (v22, 6522 lines). **Residual legs:** FU239-L1 (the
 exact `0x13 → 0x0C → sit-8 → phase 2` route), FU239-L3 (`[0x157AC2]=4` vs the
@@ -1804,7 +1804,7 @@ model is deliberately **not** changed (adding the guard would hold the tape's 1-
 terminal). No golden re-pin, no census change.
 
 **Smoke (honest; whole-branch review, 2026-10-14).** `make game` under
-`DISPLAY=:1` (SDL3 + `game/FIFAPCCD96.iso` present) opened the 960×720 windowed
+`DISPLAY=:1` (SDL3 + `data/game/FIFAPCCD96.iso` present) opened the 960×720 windowed
 engine, booted the ISO, and drew the EA-SPORTS intro
 (`docs/screens/p22-smoke-intro.png`), reached the front-end menu on RETURN
 (`docs/screens/p22-smoke-frontend.png`), and entered the live match kickoff (the
@@ -1915,7 +1915,7 @@ deferral is unexercised by a landed fixture), not a producer gap — see leg
 `FU279-L5`. The residual-leg list above is kept verbatim.)* **Census
 recomputed:** `58 OK = 35 action + 23 phase`; `floor(100 × 58/80) = 72`; README
 title `72%`; `action_wired == 35u` / `phase_wired == 23u` pins
-(`test_engine_m2.c`); `AGENTS.md:90` and the `docs/ENGINE.md` census surfaces
+(`test_engine_m2.c`); `AGENTS.md:90` and the `port/ENGINE.md` census surfaces
 synced. `make check` **110/110**.
 
 ## M2 phase-25 — the OL-65 row-07 staging fix + action row `0x22` (FU-259)
@@ -1945,7 +1945,7 @@ mutation-RED rider is exercised on both re-sourced fields (zeroing either makes
 the fixture fold `0x80 >= 0x55`, aborting the install assertion).
 
 **Tape-dormant (FU259-L1 accepted):** `./build/test_engine_m2 | cmp -
-tests/golden/engine/m2-frames.txt` is byte-identical — M2 `b281a9b2…` and M1
+port/tests/golden/engine/m2-frames.txt` is byte-identical — M2 `b281a9b2…` and M1
 `09b726b7…` unmoved. The two re-sourced cells are consumed only by the row-07
 post-kick gate, so the tape's staged row-07 kick does not reach `diff < 0x55` with
 live cells.
@@ -1955,7 +1955,7 @@ unforced match yields `entity_angle(cam−opp_pos) ≈ opp->face7d` within `0x55
 a code-6, no-slot, `<0xD0` opponent; carried forward from FU247-L1). **Census
 recomputed:** `59 OK = 36 action + 23 phase`; `floor(100 × 59/80) = 73`; README
 title `73%`; `action_wired == 36u` / `phase_wired == 23u` pins
-(`test_engine_m2.c`); `AGENTS.md:90` and the `docs/ENGINE.md` census surfaces
+(`test_engine_m2.c`); `AGENTS.md:90` and the `port/ENGINE.md` census surfaces
 synced. `make check` **110/110**.
 
 ### M2 phase-25 close-out — the leg register (FU-256…FU-263)
@@ -1964,7 +1964,7 @@ synced. `make check` **110/110**.
 phase-25 wave (`FU256…FU263`) re-derived the producer frontier behind every
 unwired row. The only honest wire was OL-65 (the row-07 staging fix → action
 `0x22`; Task 2/`dd2e047`); every other candidate is frozen as a **numbered leg
-with a named native owner** in the `docs/ENGINE.md` residual-leg register
+with a named native owner** in the `port/ENGINE.md` residual-leg register
 (appended, prior sections never rewritten):
 
 - **FU256-L1..L6** — the row-09 arm-1 chain behind action row `0D` (the arm-1
@@ -2047,8 +2047,8 @@ phase. R11-L4 is the **enabling leg for the eventual visible anchor**: when it
 lands, the keeper stage-5 release installs row `0x1E` live, posts
 `camera.pos_y = 0x50`, and the follow/pan can surface. The RED-first reach-test
 spec that must fail on this baseline (`camera.pos_y == 0`) is carried in
-`docs/ghidra/FU272_r11l4_derivation.md` §4.2. The derivation is promoted
-canonical as **FU-272** (`docs/ghidra/FU272_r11l4_derivation.md`); its evidence
+`port/spec/FU272_r11l4_derivation.md` §4.2. The derivation is promoted
+canonical as **FU-272** (`port/spec/FU272_r11l4_derivation.md`); its evidence
 table, numbered legs **T2a-L1..L6** and doc-errata candidates hold the detail.
 
 **Nothing regressed.** The camera/follow chain remains the numbered legs
@@ -2056,11 +2056,11 @@ table, numbered legs **T2a-L1..L6** and doc-errata candidates hold the detail.
 FU264-L2 the event bootstrap — both carried); the
 phase wired no row, so the census is unchanged at `59/80 = 73%`
 (`action_wired == 36u` / `phase_wired == 23u`) and **`README.md` /
-`AGENTS.md:90` / `tests/test_engine_m2.c` are untouched**. `make check`
+`AGENTS.md:90` / `port/tests/test_engine_m2.c` are untouched**. `make check`
 **110/110**; M1 `09b726b7…` and M2 `b281a9b2…` byte-identical (cmp-verified).
 
 **The camera leg register closes as `FU264-L1..L5`** (canonical in
-`docs/ghidra/FU264_camera_y_producer.md`): this close-out names **L1** (the live
+`port/spec/FU264_camera_y_producer.md`): this close-out names **L1** (the live
 producer) and **L2** (the event bootstrap), and **L3–L5 are unchanged** (still
 open, carried verbatim) — the plan's Task-5 leg append covers all five legs, not
 just the two.
@@ -2070,7 +2070,7 @@ just the two.
 **The four remaining chain families land their live arms where reachable without
 R11-L4; R11-L4 routes onward (`FU273` NO-GO). Census holds `59/80 = 73%`
 (`36 action + 23 phase`); M1 `09b726b7…` and M2 `b281a9b2…` byte-identical; no
-re-pin.** The phase-26b recon wave (`docs/ghidra/FU273…FU280`) froze the producer
+re-pin.** The phase-26b recon wave (`port/spec/FU273…FU280`) froze the producer
 frontier behind the four remaining phase-7 families and re-cut the live-trigger
 census. Per the spec's honest-stop rule (§6), the keeper CPU chain (**R11-L4**:
 `FUN_0008D8EC`→`FUN_000782D0`→`FUN_00077EAC`, rows `0x1A`/`0x1B`, the
@@ -2112,7 +2112,7 @@ the goldens are unmoved.
 (`FUN_0004B100` per-tick → the descriptor walkers `FUN_000513EC`/`FUN_00053BB8` →
 the mode machine `FUN_00052030`) is unported, and every engine row
 (`fifa96_match_run_replay_step`, `_overlay_arm`, the `_sub_*` setters,
-`fifa96_match_run_ball_row_reachable`) is referenced only from `tests/`, so any
+`fifa96_match_run_ball_row_reachable`) is referenced only from `port/tests/`, so any
 "live" claim would be a fixture-only stand-in; `ball_row` (`[0x14E660]`) stays
 **pinned dormant** (`FU278` §2.4). No port — legs `FU278-L1..L7`.
 
@@ -2140,7 +2140,7 @@ chain stays **FU264-L1/L2**.
 **Acceptance:** `make check` **110/110** (sanitized, strict); M1 `09b726b7…` and
 M2 `b281a9b2…` byte-identical (cmp-verified, no re-pin); census recomputed and
 **held** `59/80 = 73%` (`action_wired == 36u` / `phase_wired == 23u`) — no
-`README.md` / `AGENTS.md:90` / `tests/test_engine_m2.c` census-pin edit. **The
+`README.md` / `AGENTS.md:90` / `port/tests/test_engine_m2.c` census-pin edit. **The
 honest ceiling:** no faked producer; the `0x12`/`0x13`, `0x1E` and
 replay/overlay legs each carry a named native owner.
 
@@ -2149,15 +2149,15 @@ replay/overlay legs each carry a named native owner.
 **The bounded wins land, the chain is ported as far as a live path permits, and
 the phase closes honestly: census holds `59/80 = 73%` (`36 action + 23 phase`);
 M1 `09b726b7…` and M2 `b281a9b2…` byte-identical (no re-pin); Layer-1 GREEN,
-Layer-2 an honest waiver.** The phase-26c recon wave (`docs/ghidra/FU281…FU289`)
+Layer-2 an honest waiver.** The phase-26c recon wave (`port/spec/FU281…FU289`)
 froze the keeper-CPU producer frontier and the phase landed, in order: T2 the
 FU289 contact-cell fix; T3/T4 the **R11-L1/L2/L3 claim bridge**
-(`src/fifa96_loader/fifa96_keeper.c`); T5 the row-`0x1B` stage-2 wide/steer; T6
+(`port/src/fifa96_loader/fifa96_keeper.c`); T5 the row-`0x1B` stage-2 wide/steer; T6
 the pre-pass reconciliation; T7 the record-0 machine skeleton
-(`src/fifa96_loader/fifa96_keeper_cpu.c`); T8 the `FUN_00077EAC` ladder; T9 the
+(`port/src/fifa96_loader/fifa96_keeper_cpu.c`); T8 the `FUN_00077EAC` ladder; T9 the
 granted-frame release reach GREEN + the camera acceptance. **No task proved a
 live install+dispatch**, so the census is unmoved (FU288) and no `README.md` /
-`AGENTS.md:90` / `tests/test_engine_m2.c` census-pin edit was made.
+`AGENTS.md:90` / `port/tests/test_engine_m2.c` census-pin edit was made.
 
 **Landed (each with a headless granted-frame test):**
 
@@ -2182,7 +2182,7 @@ live install+dispatch**, so the census is unmoved (FU288) and no `README.md` /
   by FU-141** (`9b7abbe8`, 2026-10-07). `fifa96_match_entities_team_update`
   fully models `FUN_0008D8EC`; the walk's single `action(ctx,e)` **is** the
   native `CALL dword[rec+0x18]`, so a standalone pre-pass would **double-dispatch**
-  → **not created**. New `tests/test_keeper_cpu.c` pins once-per-team-per-frame +
+  → **not created**. New `port/tests/test_keeper_cpu.c` pins once-per-team-per-frame +
   no double-dispatch.
 - **T7/T8 — the record-0 machine + the ladder** (`9486dae`, `f26b075`): the
   `FUN_000782D0` skeleton (the `[0x157823]` head counter, the **deferred** install
@@ -2237,7 +2237,7 @@ ladder is wired-but-unraised **LIVE-LEG**; row `0x1A` NULL.
 **Acceptance:** `make check` **111/111** (sanitized, strict ~143 s); M1
 `09b726b7…` and M2 `b281a9b2…` byte-identical (cmp-verified, no re-pin); census
 recomputed and **held** `59/80 = 73%` (`action_wired == 36u` / `phase_wired ==
-23u`) — no `README.md` / `AGENTS.md:90` / `tests/test_engine_m2.c` census-pin
+23u`) — no `README.md` / `AGENTS.md:90` / `port/tests/test_engine_m2.c` census-pin
 edit.
 
 **The honest Layer-2 waiver (spec §6):** the T9 reach test proves the release
@@ -2261,13 +2261,13 @@ through `ladder_run` under `if (rec->permit != 0)`, so it does **not** run on a
 live frame) from real engine state — but no end-to-end install fires, so the
 phase closes as a Layer-1 reach + a Layer-2 waiver. Census holds
 `59/80 = 73%` (`36 action + 23 phase`); M1 `09b726b7…` and M2 `b281a9b2…`
-byte-identical (no re-pin).** The phase-27 recon wave (`docs/ghidra/FU290…FU297`)
+byte-identical (no re-pin).** The phase-27 recon wave (`port/spec/FU290…FU297`)
 froze the installer frontier past R11-L4, and the Stage-2 plan, in order: T1 the
 RED reach test; T2 the FU291 gate value; T3 the FU296 **Seam A**; T4 the staged
 Layer-1 reach (GREEN); T5 the ported `CX` **stage-select machine** + the FU292
 cell readers; T6 the FU295 controlled-side actor lift; T7 the honest Layer-2
 waiver. **No task proved a live end-to-end install**, so the census is unmoved
-and no `README.md` / `AGENTS.md:90` / `tests/test_engine_m2.c` census-pin edit
+and no `README.md` / `AGENTS.md:90` / `port/tests/test_engine_m2.c` census-pin edit
 was made.
 
 **Landed (each with a headless granted-frame test):**
@@ -2355,7 +2355,7 @@ un-gates `team_select_intercept` and moves M2) / **FU281-L5** (the un-gated
 **Acceptance:** `make check` **111/111** (sanitized, strict); M1 `09b726b7…` and
 M2 `b281a9b2…` byte-identical (cmp-verified, no re-pin); census recomputed and
 **held** `59/80 = 73%` (`action_wired == 36u` / `phase_wired == 23u`) — no
-`README.md` / `AGENTS.md:90` / `tests/test_engine_m2.c` census-pin edit.
+`README.md` / `AGENTS.md:90` / `port/tests/test_engine_m2.c` census-pin edit.
 
 **The honest Layer-2 waiver (spec §6):** the T4 reach test proves the release
 end-to-end behind a **granted-frame fixture the golden tape does not traverse**
@@ -2420,11 +2420,11 @@ and the dispatch is the walk's single `action(ctx, e)`.
   input past the stage-select install arms (`lane_x >= 0x30`) so the row-`0x1A`
   sit-7 emit cannot pre-empt the row-`0x1D`/row-`0x04` routes under test.
 - **Tape:** M1 `09b726b7…` and M2 `b281a9b2…` byte-identical (`cmp`); the wire
-  is tape-neutral. `tests/test_engine_m2.c` pins `action_wired == 37u`,
+  is tape-neutral. `port/tests/test_engine_m2.c` pins `action_wired == 37u`,
   `phase_wired == 23u`, and the row-`0x1A` non-NULL slot;
-  `tests/test_engine_match_handlers.c` flips the row's dispatch class to OK.
+  `port/tests/test_engine_match_handlers.c` flips the row's dispatch class to OK.
 - **Acceptance:** `make check` **111/111** (sanitized, strict `-Wall -Wextra
-  -Werror`); README title `75%`, `docs/ENGINE.md`, `AGENTS.md:90` and the m2
+  -Werror`); README title `75%`, `port/ENGINE.md`, `AGENTS.md:90` and the m2
   census pins updated in the same commit.
 
 ## M2 phase-28 close-out — the installer live + the Layer-2 verdict (FU298…FU305)
@@ -2436,12 +2436,12 @@ interlock ordering (FU299), the merged seam contract + `copy_pos` (FU304), row
 `0x1A` in full (FU300), the Layer-1 reach proof + the census (T5), the deep pan
 I/II (FU301/FU302), the visible-motion cells (FU303) and this acceptance +
 register (FU305). Census **`59/80 = 73%` → `60/80 = 75%`** (`37 action + 23
-phase`) on the proven live install+dispatch; README title, `docs/ENGINE.md`,
-`AGENTS.md:90` and the `tests/test_engine_m2.c` pins move together. M1
+phase`) on the proven live install+dispatch; README title, `port/ENGINE.md`,
+`AGENTS.md:90` and the `port/tests/test_engine_m2.c` pins move together. M1
 `09b726b7…` and M2 `b281a9b2…` are byte-identical through every task (the
 install tree is same-code-suppressed on the tape and the ladder never installs
 there — no re-pin, no stop). The full leg register (FU298–FU305, the native
-owners, the split and the review errata) is appended to `docs/ENGINE.md`.
+owners, the split and the review errata) is appended to `port/ENGINE.md`.
 
 **Layer 1 (the hard gate), GREEN.** `test_keeper_installer_live_reach` drives
 the real frame body with producer inputs only: team 0's row-`0x19` sets
@@ -2499,10 +2499,10 @@ four live `[0x157750]` stand-ins (T2/FU308), the keeper-band camera-Y delivery
 + the single cell (T3/FU307), the chaser corrections (T4/FU306), the event
 chain (T5/FU309) and this acceptance + register (T6). Census holds
 **`60/80 = 75%`** (`37 action + 23 phase`): no row joins; the README title,
-`AGENTS.md:90` and the `tests/test_engine_m2.c` pins are untouched. M1
+`AGENTS.md:90` and the `port/tests/test_engine_m2.c` pins are untouched. M1
 `09b726b7…` and M2 `b281a9b2…` are byte-identical through every task (`cmp`;
 no re-pin). The full leg register (FU306–FU309, the native owners, the
-closures and the errata) is appended to `docs/ENGINE.md`.
+closures and the errata) is appended to `port/ENGINE.md`.
 
 **Layer 1 (the hard gate), GREEN.** `test_keeper_installer_live_reach` Part A
 drives the real frame body with producer inputs only: the keeper release
@@ -2587,12 +2587,12 @@ the per-stage act-2 gate (T3/FU310), the restart place triples (T4/FU310), the
 row-`0x1E` stage-1 triple (T5/FU307), the bounded armer spike (T6/FU310) and
 this close-out (T7). Census holds **`60/80 = 75%`** (`37 action + 23 phase`):
 no row joins; the README title, `AGENTS.md:90` and the
-`tests/test_engine_m2.c` pins are untouched. M1 `09b726b7…` is byte-identical;
+`port/tests/test_engine_m2.c` pins are untouched. M1 `09b726b7…` is byte-identical;
 M2 is **`8434cfab…`**, re-pinned once (T2) for the intended chase correction —
 5 568 hash-only lines from frame 955, every frame id/`state=` tag identical,
 no assertion or ET-directive change. The full leg register (FU310–FU313, the
 harness matrix, the fixes, the spike and the quoted errata) is appended to
-`docs/ENGINE.md`.
+`port/ENGINE.md`.
 
 **The four-slice verdicts.** **FU310 (the bootstrap):** the only live camera
 writer is the row-04 half-line pan, and it moves the *place* only (X/Z; never
@@ -2660,7 +2660,7 @@ place now syncs, a full unification is a separate slice). The deferred review
 minors are listed in the ENGINE register; none is a fidelity defect.
 
 **The quoted errata (detail in the register).** The phase corrects the
-phase-29 sentence "the ladder does not run at all" (`docs/ENGINE.md:2338` /
+phase-29 sentence "the ladder does not run at all" (`port/ENGINE.md:2338` /
 `docs/PROGRESS.md:2554`): the ladder runs (2 019 whole-binary / 6 118 natural
 calls), and `ran=0` is the AX prepass refusal. The row-`0x1E`
 "dispatch-dead" reading is partial — the body is dispatch-ready, the producer
@@ -2694,7 +2694,7 @@ is the one move; README and AGENTS are untouched.
 
 **2. The full-register sentence (Important 2).** Quoted (close-out,
 paragraph 1): "The full leg register (FU310–FU313, the harness matrix, the
-fixes, the spike and the quoted errata) is appended to `docs/ENGINE.md`."
+fixes, the spike and the quoted errata) is appended to `port/ENGINE.md`."
 **Corrected:** this was **not true of the original close-out** — the ENGINE
 register lacked the FU312 legs and the FU313-L1/L2/L4/L5 list. The fix-round
 ENGINE erratum (`## T7 close-out erratum (fix round 1, 2026-10-22)`) now
@@ -2703,7 +2703,7 @@ FU309-L5/FU310-L8 closures), so the sentence is true of the corrected tree.
 The leg text lives in ENGINE, not in this narrative.
 
 **3. The test-pin sentence (Minor 7).** Quoted (close-out, paragraph 1):
-"the README title, `AGENTS.md:90` and the `tests/test_engine_m2.c` pins are
+"the README title, `AGENTS.md:90` and the `port/tests/test_engine_m2.c` pins are
 untouched." **Corrected:** the golden-path **assertion** pins are unchanged;
 the T2 re-pin is recorded above (the T2 fixture lanes changed, and the test
 comment's provenance still says `b281a9b2…`); README and AGENTS are untouched.
@@ -2757,7 +2757,7 @@ and M2 `8434cfab…` are byte-identical; the census holds `60/80 = 75%`;
 probe and the P1–P10 matrix, landed in T1." Quoted (close-out, "The Layer-1
 result"): "P10 (the trace self-check) stays manual this phase." **Corrected:**
 P10 now lands and is **asserted** in `run_natural_probe`
-(`tests/test_engine_m2.c`): one natural pass with `FIFA96_CAMERA_TRACE` set to
+(`port/tests/test_engine_m2.c`): one natural pass with `FIFA96_CAMERA_TRACE` set to
 a unique temp path (the caller's environment is restored), one header +
 **3 598** body lines, contiguous run-relative frame ids, and every sampled
 `pos` triple at `(0,0,0)`. The trace was always correct and default-off; the
@@ -2792,7 +2792,7 @@ acceptance (T3) and this close-out (T4). Census holds **`60/80 = 75%`**
 the T2 face fidelity's diff is empty and the reason is recorded below). The
 full register (the verdict, the witness, the face, the visible pan, the
 wave's verdicts, the quoted errata and the legs) is appended to
-`docs/ENGINE.md` as the phase-31 section.
+`port/ENGINE.md` as the phase-31 section.
 
 **The witness (T1, `dcf171b`).** The natural drive is the **verbatim
 `M2_KEYS` prefix plus a plain DOWN hold from tape index 1820**, run from the
@@ -2899,13 +2899,13 @@ NO-GO) is unchanged. The full corrections are in the ENGINE section
 **1. The trace count (Minor 6).** Quote (`docs/PROGRESS.md:2810`): "the
 trace 1 header + 3 598 lines with `trk=2` across the run and `follow=0`".
 **Corrected:** the trace is **1 header + 3 598 body lines** (one body line
-per granted frame — the P16 count asserted in `tests/test_engine_m2.c`).
+per granted frame — the P16 count asserted in `port/tests/test_engine_m2.c`).
 
 **2. The off-zero count (Important 2, same clarification as ENGINE).**
 Quote (close-out, "The witness"): "the off-zero count is 2 084 and is never
 the count". **Corrected/qualified:** 2 084 is the **driven** run's off-zero
 count (`pos != (0,0,0)` on each granted frame; asserted as
-`granted_frames − first_motion_f` at `tests/test_engine_m2.c:4141-4142`);
+`granted_frames − first_motion_f` at `port/tests/test_engine_m2.c:4141-4142`);
 the delta run is 27 changed frames. FU317 §3.4's **2 082/33** is a
 **different** counter — the test-side algebraic half-line predicate over
 undriven vs driven granted frames — not the off-zero count.
@@ -2918,7 +2918,7 @@ broader continuation is FU314-L1a), and **FU311-L1**, which the phase-30 T2
 bind pack closed (`fifa96_match_entities.c:784-785`); the carried list is
 FU310-L4/L6/L7 and FU311-L2/L3/L4/L5a. The ENGINE errata carries the detail.
 (The Layer-1 fixture correction — the same-chain fixture is
-`test_live_claim_pan_row04_half_line`, `tests/test_engine_match_frame.c:2610`;
+`test_live_claim_pan_row04_half_line`, `port/tests/test_engine_match_frame.c:2610`;
 the T2 pair is the added face pin — lives only in the ENGINE errata; this
 narrative makes no Layer-1 fixture claim.)
 
@@ -2932,11 +2932,11 @@ live-face producer deferred to phase 33.** Census holds **`60/80 = 75%`**
 `09b726b7…` (22 004 B) and M2 `8434cfab…` (295 087 B) byte-identical (**no
 re-pin** — no production change); `make check` 111/111. The full register (the
 verdict, the witness, the acceptance, the wave's verdicts, the quoted errata,
-the legs and the deferred minors) is appended to `docs/ENGINE.md` as the
+the legs and the deferred minors) is appended to `port/ENGINE.md` as the
 phase-32 section.
 
 **The witness (T1, `6fb8062`).** `run_natural_offset_pass`
-(`tests/test_engine_m2.c:4279`) replays the FU320 drive — **`M2_KEYS` verbatim
+(`port/tests/test_engine_m2.c:4279`) replays the FU320 drive — **`M2_KEYS` verbatim
 0..1799 + LEFT 1820..1849 + DOWN 1850..end** — for 12 000 steps / 3 598
 granted frames, with **no staged camera, gate or face**. At the passing
 dispatch (trace key **`f=1528`**) record 2 is at **`pos (−32,0,16)`**, `lane
@@ -2990,7 +2990,7 @@ placement) and gives the exact staging (a `row43` latch, the camera-triple
 focus) — but its M2 move is **broad and intended**: 38/111 rows armed, the
 replay turns 4 140/67 320 record-frames, the band record settles at face
 `0x300` facing the camera park, so the **undriven** tape would pan and the
-natural-pass zero-camera baseline (`tests/test_engine_m2.c:3722-3724`) flips
+natural-pass zero-camera baseline (`port/tests/test_engine_m2.c:3722-3724`) flips
 by design, with the P7/P8 window/lockout asserts to land in the same commit.
 **FU320** returns the drive GO but NO-GO on calling it robust; **FU321** gives
 the acceptance design and the M2 policy GO with C1/C2 satisfied. The plan's
@@ -3040,13 +3040,13 @@ must be named. The phase-31 `+95` is live tick 1 897 vs the null 1 802.
 bound` refuses 12 frames". **Corrected:** **13** refusals — `f=1514` plus
 the 12-frame `f=1516…1527` block — inside `f=1513…1528`, alongside 2 angle
 fails (`f=1513`, `f=1515`) and the pass (`f=1528`)
-(`docs/ghidra/FU320_r2l6_nonzero_drive.md:92-98`). The plateau-riding
+(`port/spec/FU320_r2l6_nonzero_drive.md:92-98`). The plateau-riding
 conclusion stands.
 
 **3. "No code/test/golden change" (Important 3).** Quote (`:3015-3017`): "no
 code/test/golden change in Stage 2". **Corrected:** the T3 commit is
 docs-only, but the phase's Stage 2 includes T1's test-side witness
-(`tests/test_engine_m2.c`, +349 lines, `6fb8062`). The accurate formula is:
+(`port/tests/test_engine_m2.c`, +349 lines, `6fb8062`). The accurate formula is:
 **no production code/golden change; the only code change is T1's test-side
 witness (`6fb8062`, +349 lines)**.
 
@@ -3065,7 +3065,7 @@ unqualified form is too broad.
 **6. The §5 frame-path fixture (Minor 5).** The verdict record now names
 the same-chain fixture the spec §5 requires: the existing
 **`test_live_claim_pan_row04_half_line`**
-(`tests/test_engine_match_frame.c:2610`; FU317 §6 H5). With no producer
+(`port/tests/test_engine_match_frame.c:2610`; FU317 §6 H5). With no producer
 landed, **no new fixture and no new mutation rider** is added; the T2 unit
 pair stays the added face pin.
 
@@ -3081,7 +3081,7 @@ fix. The verdict (a natural non-zero-delta pan; drive-only; the offset
 Layer-1; the live face deferred) is unchanged.
 
 **1. The fresh test-line cites.** The T1 pass is
-`tests/test_engine_m2.c:4285` (not `:4279`); its calls are `:4599`/`:4602`
+`port/tests/test_engine_m2.c:4285` (not `:4279`); its calls are `:4599`/`:4602`
 (not `:4580`/`:4583`); the offset pin is `:4397`, the lane pin `:4409`, the
 claim `:4457`, the delta run `:4463-4481`, the trace `:4494-4567`. The
 `b72e2b8` hardening shifted the lines; the ENGINE section
@@ -3089,11 +3089,11 @@ claim `:4457`, the delta run `:4463-4481`, the trace `:4494-4567`. The
 detail.
 
 **2. The deferred-minors list is superseded.** The register's "not fixed
-here" list (`docs/ENGINE.md:6538-6553`) is fixed by `b72e2b8` for the gate
+here" list (`port/ENGINE.md:6538-6553`) is fixed by `b72e2b8` for the gate
 resting cells, the plateau comment, the ladder counters, the `trk` tail and
 the T2 note's twelve items. What remains deferred: the near-verbatim harness
 duplication (declared; the extraction is a follow-up), the pre-existing
-empty-env guards (`tests/test_engine_m2.c:3863`, `:4061`), and the full
+empty-env guards (`port/tests/test_engine_m2.c:3863`, `:4061`), and the full
 trace being scratch (the extract is the committed evidence).
 
 **3. The §5 fixture gap.** The existing `test_live_claim_pan_row04_half_line`
@@ -3107,7 +3107,7 @@ full-engine frame path.
 FU319-L7 leaves the actual M2 diff unmeasured (the spec §8.1's faithful-diff
 condition), not only because of scope breadth.
 
-**5. Tape and gate.** Test-side fix only (`tests/test_engine_match_frame.c`);
+**5. Tape and gate.** Test-side fix only (`port/tests/test_engine_match_frame.c`);
 no production code/golden. M1 `09b726b7…` / M2 `8434cfab…` byte-identical;
 `make check` 111/111; census `60/80 = 75%`; README/AGENTS untouched.
 
@@ -3124,12 +3124,12 @@ verbatim, no `anim_id` derivation, no metric fold), the unit pins
 (P-W1/W2/W3/CLR/MOV/TURN), the re-shaped baseline inversion, the segment-aware
 witness re-pins, the golden re-pin and the provenance note. Nothing was RED at
 any commit point — with the engine live, the standing
-`tests/test_engine_m2.c:3722` zero-baseline asserts fired on the patched probe
+`port/tests/test_engine_m2.c:3722` zero-baseline asserts fired on the patched probe
 (FU323's measured RED), so the phase-32 plan's P1/P2 split could not keep the
 suite green; FU322-L11's rule binds the atomic shape (FU322's erratum 5). Then
 `7b3cc10` (`fix(fu319)`) lands the move_attr metric as its own contract-pinned
 commit, and `eb9e521` (`docs(fu325)`) lands the Layer-2 live acceptance. The
-close-out register is appended to `docs/ENGINE.md` as the phase-33 section.
+close-out register is appended to `port/ENGINE.md` as the phase-33 section.
 
 **The pan story's honest shape.** The face is live — every record's face
 settles from the camera bearings from the first phase-2 grant (engine step 9)
@@ -3217,7 +3217,7 @@ artefacts are `docs/screens/p33-l2-*`.
 and unable to pan on this tree — because the native placement timer `+0x79` has
 no port producer.** It is a **NO-GO / measurement phase** (the spec's §5 branch):
 no production, test or golden change. The record is the phase-34 register
-appended to `docs/ENGINE.md`; the wave is FU326 (the seed algebra + the 22-cell
+appended to `port/ENGINE.md`; the wave is FU326 (the seed algebra + the 22-cell
 port audit), FU327 (the measured distribution), FU328 (the 32-run reachability
 sweep) and FU329 (the Branch B acceptance design), each with its wave-review
 erratum, plus the wave erratum that carried the FU323 cell correction, the
@@ -3321,7 +3321,7 @@ survival/driven re-pins, the fixture re-derivations, the M2 re-pin and the
 provenance. Then `673a10d` (`test(fu333)`) pins the natural witness, and
 `79819a4` + `21f5f44` (`docs(fu333)`) land the live acceptance and its
 evidence-attribution round. The close-out register is the phase-35 section
-appended to `docs/ENGINE.md`.
+appended to `port/ENGINE.md`.
 
 **The natural pan's honest shape.** With the producer and **no staged
 slot/seed/face/timer cell**, the undriven `M2_KEYS` tape's band record (entity
@@ -3464,7 +3464,7 @@ Two live rows joined the wired set:
   (`fifa96_match_act_dispatch(mr, 6, 0, 1)`); the duplicate
   `ref_machine`/`referee_step` route is retired.
 
-The new `tests/test_engine_match_port_census.c` derives and prints the census,
+The new `port/tests/test_engine_match_port_census.c` derives and prints the census,
 asserts 78 bodies + 2 no-body slots, and refuses a dispatch/port mismatch. The
 fresh natural-reach audit of the 60 pre-wave rows found seven counted rows
 whose producers are structurally blocked (action `0x25/0x28/0x2A/0x13/0x1F`,

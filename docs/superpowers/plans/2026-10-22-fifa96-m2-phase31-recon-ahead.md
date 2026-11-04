@@ -5,9 +5,9 @@
 
 **Goal:** freeze the exact native shapes of (1) the row-04 pan's natural triggers, (2) the possession/claim chain, (3) the pan re-arm + the camera walk, (4) the acceptance harness — so the Stage-2 plan can make the camera pan in natural `make game` play.
 **Spec:** `docs/superpowers/specs/2026-10-22-fifa96-m2-phase31-natural-claim-pans-design.md` (§3 in/out, §5 acceptance, §6 honest-stop, §8 the calls).
-**Architecture:** a read-only four-slice wave → a promoted authority (one `docs/ghidra/FU31N` draft per slice) → the Stage-2 producer plan → SDD.
+**Architecture:** a read-only four-slice wave → a promoted authority (one `port/spec/FU31N` draft per slice) → the Stage-2 producer plan → SDD.
 **Tech Stack:** Ghidra MCP (`/FIFA96.EXE`, `watcom:LE:32:default`), the repo's C engine tests, deterministic frame tapes, the T1 harness.
-**Authority:** the frozen docs `FU310`/`FU313` (the pan route + the harness), `FU157` (the producer set), `FU163` (the claim/kick routes), `FU148`/`FU153` (the ball machine + the claim), the phase-30 register (`docs/ENGINE.md`).
+**Authority:** the frozen docs `FU310`/`FU313` (the pan route + the harness), `FU157` (the producer set), `FU163` (the claim/kick routes), `FU148`/`FU153` (the ball machine + the claim), the phase-30 register (`port/ENGINE.md`).
 
 ## Global constraints (every task)
 
@@ -15,7 +15,7 @@
 - **Read-only.** No rename/comment/label/create_function/set_global/apply_data_type/create_struct/script/save. `/FIFA96.EXE` untouched; ISO untouched; **no git** from the agent.
 - **Evidence:** every address/byte a *fresh* `disassemble_bytes`/`disassemble_function`/`decompile_function`/`read_memory`/`get_xrefs_to` this session, or marked *carried* (source named). Alias traps: `dword[x]>>16` = word at `x+2`; `>>24` = byte at `x+3`; verify CALL rel32; caller counts need a fresh `get_xrefs_to`; LE globals at `+0x100000`; the `[0x1577EE]`/`[0x157750]`/`[0x15774C]` overlap traps.
 - **Unprovable ⇒ a numbered leg** with a native owner — never asserted or faked.
-- **Output:** one draft `docs/ghidra/FU31N_r2l6_<slug>.md` — a single H1, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, numbered legs, a GO/NO-GO verdict with the exact natural chain. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
+- **Output:** one draft `port/spec/FU31N_r2l6_<slug>.md` — a single H1, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, numbered legs, a GO/NO-GO verdict with the exact natural chain. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
 - Engine/test source reads are read-only; cite file:line. Existing test binaries may be run for measurement; **no repo file changes** beyond your draft.
 
 ## Review focus (the claims most likely to mislead Stage-2)
@@ -34,7 +34,7 @@
 
 **Native:** the row-04 body `0x7ED89..0x7EDE3` (the half-line gate + the `0x71C94` set + the `0x71D27` track), the gate inputs (`lane`/`bound`/`timer81`/`camY`/the record distance), the caller chain (the action row 04 dispatch, the claim/kick/tackle emitters), and the event height `0`.
 
-**Port:** `src/fifa96_engine/fifa96_match_handlers.c` (the row-04 half-line arm ~`:2741-2752`), `fifa96_match_run.c` (the integrator `:4370`), the record cells (`lane`/`lane_x`, `bound`, `timer81`, `has_slot`), the T1 probe.
+**Port:** `port/src/fifa96_engine/fifa96_match_handlers.c` (the row-04 half-line arm ~`:2741-2752`), `fifa96_match_run.c` (the integrator `:4370`), the record cells (`lane`/`lane_x`, `bound`, `timer81`, `has_slot`), the T1 probe.
 
 **Deliverable:** the exact gate → pan chain with each input's live/staged status; the reason the natural probe's records never satisfied the gate; the minimal natural trigger. **GO/NO-GO** on a natural pan.
 
@@ -46,7 +46,7 @@
 
 **Native:** the ball-pair possession/claim machine (`FU148` §16, `FU153`), the claim bind (`0x73B65`), the record `+0x20`, the P3 possession producer (the phase-28 register), the pass/claim/kick routes (`FU163`).
 
-**Port:** `src/fifa96_loader/fifa96_ball_pairing.c`, `fifa96_match_run.c` (`ball_receive`, the pair state), `fifa96_match_entities.c` (the record slots/`has_slot`), the keeper bind's P3 cell.
+**Port:** `port/src/fifa96_loader/fifa96_ball_pairing.c`, `fifa96_match_run.c` (`ball_receive`, the pair state), `fifa96_match_entities.c` (the record slots/`has_slot`), the keeper bind's P3 cell.
 
 **Deliverable:** the claim-state map (which cells are live, which are the P3/P6/P8/P12 legs), the natural claim sequence (a pass/loose ball → the claim), and the bounded port shape. **GO/NO-GO** on a natural claim.
 

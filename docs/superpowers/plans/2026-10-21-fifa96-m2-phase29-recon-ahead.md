@@ -5,9 +5,9 @@
 
 **Goal:** freeze the exact native shapes of (1) the record-event chaser, (2) the mid-band camera-Y producer, (3) the `[0x157750]` stand-ins + the keeper `follow_speed` seam, (4) the live event source + the visible acceptance — so the Stage-2 plan can make the follow/pan camera move live.
 **Spec:** `docs/superpowers/specs/2026-10-21-fifa96-m2-phase29-visible-follow-cam-design.md` (§3 in/out, §5 acceptance, §6 honest-stop, §8 the calls).
-**Architecture:** a read-only four-slice wave → a promoted authority (one `docs/ghidra/FU30N` draft per slice) → the Stage-2 producer plan → SDD.
+**Architecture:** a read-only four-slice wave → a promoted authority (one `port/spec/FU30N` draft per slice) → the Stage-2 producer plan → SDD.
 **Tech Stack:** Ghidra MCP (`/FIFA96.EXE`, `watcom:LE:32:default`), the repo's C engine tests, deterministic frame tapes.
-**Authority:** the frozen docs `FU168` (the pan arm + the strict mid-band window), `FU171` (the sustained-follow inputs, gates, legs), `FU305` (the acceptance + the event-source leg), plus the phase-28 register (`docs/ENGINE.md`).
+**Authority:** the frozen docs `FU168` (the pan arm + the strict mid-band window), `FU171` (the sustained-follow inputs, gates, legs), `FU305` (the acceptance + the event-source leg), plus the phase-28 register (`port/ENGINE.md`).
 
 ## Global constraints (every task)
 
@@ -15,7 +15,7 @@
 - **Read-only.** No rename/comment/label/create_function/set_global/apply_data_type/create_struct/script/save. `/FIFA96.EXE` untouched; ISO untouched; **no git** from the agent.
 - **Evidence:** every address/byte a *fresh* `disassemble_bytes`/`disassemble_function`/`decompile_function`/`read_memory`/`get_xrefs_to` this session, or marked *carried* (source named). Alias traps: `dword[x]>>16` = word at `x+2`; `>>24` = byte at `x+3`; verify CALL rel32; caller counts need a fresh `get_xrefs_to`; LE globals at `+0x100000`.
 - **Unprovable ⇒ a numbered leg** with a native owner — never asserted or faked.
-- **Output:** one draft `docs/ghidra/FU30N_<slug>.md` — a single H1, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, numbered legs. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
+- **Output:** one draft `port/spec/FU30N_<slug>.md` — a single H1, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, numbered legs. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
 
 ## Review focus (the claims most likely to mislead Stage-2)
 
@@ -38,7 +38,7 @@
 **GO/NO-GO:** per spec §8.1 (the keeper band is in scope when installer-proven; the R11-L4 remainder/set-piece/throw-in cut stay out; NO-GO ⇒ Stage-2 still runs with Layer-2 waived).
 
 ### Task 3 — `FU308`: the `[0x157750]`/`ball.y` stand-ins + the keeper `follow_speed` seam
-**Native:** the FU171-L7 sites (rows 05/06/08 + the record machine's chase gate); the seam split: `kc_rec.follow_speed` ← the pre-tail `camera.follow_speed` snapshot vs the native `[0x1577BE]` = `camera.speed`; the CX=1 gate (`src/fifa96_loader/fifa96_keeper_cpu.c:182`).
+**Native:** the FU171-L7 sites (rows 05/06/08 + the record machine's chase gate); the seam split: `kc_rec.follow_speed` ← the pre-tail `camera.follow_speed` snapshot vs the native `[0x1577BE]` = `camera.speed`; the CX=1 gate (`port/src/fifa96_loader/fifa96_keeper_cpu.c:182`).
 **Deliverable:** the exact stand-in list + the seam port shape and its test seam.
 
 ### Task 4 — `FU309`: the live event source + the visible acceptance

@@ -7,7 +7,7 @@ one phase).
 Parent spec: `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`
 Predecessor spec: `docs/superpowers/specs/2026-10-14-fifa96-m2-phase25-census-closeout-design.md`
 Predecessor plan: `docs/superpowers/plans/2026-10-14-fifa96-m2-phase25-census-closeout.md`
-Recon slices (to be produced by this phase's wave): `docs/ghidra/FU264…FU271`.
+Recon slices (to be produced by this phase's wave): `port/spec/FU264…FU271`.
 
 ## 1. Context
 
@@ -17,7 +17,7 @@ chains are **fixture-proven** — they run when a test stages their gate — but
 live engine path raises the gate**, so they never fire in the running match. This
 is the last mile between "the rows are ported" and "the game does it".
 
-The frontier, per `docs/ENGINE.md`'s known-gaps table (`:1750-1756`) and the leg
+The frontier, per `port/ENGINE.md`'s known-gaps table (`:1750-1756`) and the leg
 register, is five clusters:
 
 | cluster | the missing **live producer** | the chain it un-blocks | legs |
@@ -170,7 +170,7 @@ precedent. The spec stays whole; the plan may split.
 - ISO-gated tests skip cleanly without the ISO.
 - Commits `feat`/`fix`/`docs(fuNNN)`/`test`/`chore`; work on `main`; push per
   dispatch. Recon drafts in `.superpowers/sdd/<phase>/` (git-ignored); the controller
-  promotes them to `docs/ghidra/FU264…FU271` in serialized commits.
+  promotes them to `port/spec/FU264…FU271` in serialized commits.
 
 ## 9. Interfaces
 
@@ -182,7 +182,7 @@ precedent. The spec stays whole; the plan may split.
   `ref_machine`/`replay.state`/`overlay.armed` cells.
 - **The engine seams** — `fifa96_match_run_frame`, `fifa96_match_run_situation`,
   the camera/follow consumers, the taker/foul/keeper machines.
-- **The recon slices** `docs/ghidra/FU264…FU271` — appended errata only.
+- **The recon slices** `port/spec/FU264…FU271` — appended errata only.
 
 ## 10. Decisions (approved in-chat)
 
@@ -195,7 +195,7 @@ precedent. The spec stays whole; the plan may split.
   wires a NULL row is honest upside only.
 - **D4 — read-only recon, serialized promotion.** The 8 slices run in parallel
   read-only; the controller freeze-reviews and promotes each to a canonical
-  `docs/ghidra/FU2xx_*.md`.
+  `port/spec/FU2xx_*.md`.
 - **D5 — M2 preserved.** Producers land tape-dormant; only a genuine live-path change
   triggers an honest re-pin (written reason + frame diff).
 - **Tooling note.** Ghidra MCP is the recon tool; **context7 is not applicable**

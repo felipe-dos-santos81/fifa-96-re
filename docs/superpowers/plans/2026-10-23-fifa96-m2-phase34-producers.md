@@ -38,7 +38,7 @@
 ### Task 1: The close-out register and narrative
 
 **Files:**
-- Modify: `docs/ENGINE.md` (append the phase-34 register), `docs/PROGRESS.md` (append the narrative)
+- Modify: `port/ENGINE.md` (append the phase-34 register), `docs/PROGRESS.md` (append the narrative)
 - Test: the final verification commands
 
 **Interfaces:**

@@ -4,7 +4,7 @@
 
 **Goal:** Produce four frozen evidence docs — FU322–FU325 — that convert the phase-32 deferral's two unknowns (FU319-L7's actual M2 diff, FU319-L3's stride blast radius) into measured numbers, and design the Stage-2 producer plan's acceptance, baseline inversion, and golden governance for the live record face.
 
-**Architecture:** Four independent read-only slices, one agent each. FU323/FU324 measure with out-of-tree patched-probe builds; FU322/FU325 are repo-static designs. Drafts land under `docs/ghidra/`, receive a whole-wave review + quoted errata, and are promoted one-per-commit. No production code, no test/golden change.
+**Architecture:** Four independent read-only slices, one agent each. FU323/FU324 measure with out-of-tree patched-probe builds; FU322/FU325 are repo-static designs. Drafts land under `port/spec/`, receive a whole-wave review + quoted errata, and are promoted one-per-commit. No production code, no test/golden change.
 
 **Tech Stack:** Ghidra MCP (standard tools only; FU324 chiefly), the repo's C sources + docs, out-of-tree patched builds linking the prebuilt `build/libfifa96_*.a` libraries (the FU319 §9 method).
 
@@ -33,10 +33,10 @@
 ### Task 1: FU322 — the natural-pass baseline inversion design (FU321-L11)
 
 **Files:**
-- Create: `docs/ghidra/FU322_r2l7_baseline_inversion.md`
+- Create: `port/spec/FU322_r2l7_baseline_inversion.md`
 
 **Interfaces:**
-- Consumes: the spec §2/§6 (inversion rule); FU321 §5 (item 7) + §8 L11; `tests/test_engine_m2.c` (the natural pass, the probes, the baseline asserts `:3701-3707`, the P6–P8 label `:2293`/`:6049-6054`); the phase-32 register (the witness pins).
+- Consumes: the spec §2/§6 (inversion rule); FU321 §5 (item 7) + §8 L11; `port/tests/test_engine_m2.c` (the natural pass, the probes, the baseline asserts `:3701-3707`, the P6–P8 label `:2293`/`:6049-6054`); the phase-32 register (the witness pins).
 - Produces: the exact replacement-assert design (what the honest post-producer baseline pins, per window) and the inversion commit's shape with hazards and legs `FU322-L1…`.
 
 - [ ] **Step 1: Read the natural-pass harness end to end.** What P6/P7/P8 mean today (`:2293`, the CTA label `:6049-6054`), what cells the natural pass samples (`camera_left_zero`, `first_left_zero_step`, `camera_zero_frames`, `:2457`, `:3588-3608`), and exactly which asserts pin the zero baseline (`:3701-3707`) — file:line for each.
@@ -50,7 +50,7 @@
 ### Task 2: FU323 — the measured M2 diff of the live-face producer (FU319-L7)
 
 **Files:**
-- Create: `docs/ghidra/FU323_r2l7_m2_probe.md`
+- Create: `port/spec/FU323_r2l7_m2_probe.md`
 
 **Interfaces:**
 - Consumes: the spec §5/§6/§7; FU319 §5 (the minimal staging — the patch's fidelity definition), §6 (the open-loop prediction to be re-measured), §9 (the probe method); the phase-32 witnesses (`run_natural_offset_pass` `:4285`, `run_natural_claim_pass` `:4031`, the calls `:4599/:4602`).
@@ -68,7 +68,7 @@
 ### Task 3: FU324 — the `move_attr` metric census and blast radius (FU319-L3)
 
 **Files:**
-- Create: `docs/ghidra/FU324_r2l7_move_attr.md`
+- Create: `port/spec/FU324_r2l7_move_attr.md`
 
 **Interfaces:**
 - Consumes: the spec §3/§7 (the separately-pinned rule); FU319 §2.2/§4 (the `+0x63` turn input and the port's `0x8DCD4` audit), §6 (the measured branch-straddles); FU77 §1.2 (block A `0x8E267..0x8E278`); the port (`match_run.c:521-522`, `fifa96_arm_helpers.c:38-71`, `fifa96_entity_distance`).
@@ -85,10 +85,10 @@
 ### Task 4: FU325 — the Stage-2 acceptance and golden governance
 
 **Files:**
-- Create: `docs/ghidra/FU325_r2l7_acceptance.md`
+- Create: `port/spec/FU325_r2l7_acceptance.md`
 
 **Interfaces:**
-- Consumes: the spec §5/§6/§7/§8; FU322's inversion design; FU323's measured numbers; FU324's sub-change design; FU317's Layer-2 method (`docs/screens/p31-l2-notes.md`); FU321 §5's re-pin procedure; the unit-test surface (`tests/test_action_locomotion.c:118-149`, `tests/test_engine_match_frame.c`).
+- Consumes: the spec §5/§6/§7/§8; FU322's inversion design; FU323's measured numbers; FU324's sub-change design; FU317's Layer-2 method (`docs/screens/p31-l2-notes.md`); FU321 §5's re-pin procedure; the unit-test surface (`port/tests/test_action_locomotion.c:118-149`, `port/tests/test_engine_match_frame.c`).
 - Produces: the unit-pin plan, the golden recipe, the Layer-2 live design, the hazard list, GO/NO-GO; legs `FU325-L1…`.
 
 - [ ] **Step 1: The unit-pin plan.** RED→GREEN per change: the three writers, the clear, the mover staging, the turn arm; name the test file/fixture per pin and the minimal harness addition; mark the pre-existing pins reuse (`test_step_direct_face`, the match_frame fixtures) vs new.

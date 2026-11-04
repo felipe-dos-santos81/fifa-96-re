@@ -6,11 +6,11 @@
 
 **Baseline (this plan's, verified at HEAD `3358e0c`):** wired **34/80 = 42%** (31 action + the wired phase rows `0x18`, `0x19`, `0x1F`); `make check` **110/110** (sanitized, `-Wall -Wextra -Werror`); README title **42%**; M1 `09b726b7…` (691 lines); M2 `7b4b241a…` (v16 strata label, 792 lines, byte-identical). FU-190 §9 is the authoritative phase-16 census (`45 UNSUP / 34 OK / 1 NOTF`, sum 80); FU-190 §3's envelope is the projection baseline.
 
-**Architecture:** the native phase table `0x110794[35]` has three regions. **Per-record** `0x00–0x15` (the `0x6Dxxx` family) dispatched per-record by `FUN_0008D098` (selector `[0x157A4A]` → `0x110794` → store `[rec+0x1C]` → `CALL [rec+0x1C]`, 11 records @ `0xB2`). **INT3** `0x16` (native slot `0`, NOTF by design). **Act-tail** `0x17–0x22` (the `0x88xxx` family) dispatched by the act machine `FUN_000888FC` via the dedicated table `0x1107EC` (= `0x110794 + 0x16*4`; act `a` → phase `0x16+a`). The engine already has *half* of each: the act seam (`fifa96_match_act.{c,h}`, landed by phase-16 T1) covers the act-tail path; the per-record path is today modeled by the global `fifa96_match_dispatch_phase`. Phase-17 **unifies the per-record path onto the native walk** and **extends the act seam** across its remaining tail rows — one seam per region, retiring the FU175-L7 double-dispatch class for good. Derivations from FU-175 (the act/phase seam + §7 phase ranking), FU-182 §7 (the frontier), FU-190 (the phase-16 audit + §6 completion paths), FU-177 (row 03), FU-181 (row `0x17`/act-4), FU-186 (the keeper chain), FU-165 §6 (act-machine legs). Consumers: `src/fifa96_engine/fifa96_match_handlers.c` (phase/action tables + bodies), `fifa96_match_run.c` (the frame body + the dispatch seam), `fifa96_match_act.{c,h}` (the act seam), the loader helpers (`fifa96_keeper.c`/`fifa96_action_handlers.c`/`fifa96_outfield.c`). Serialized implementers; parallel read-only recon is the only parallel surface.
+**Architecture:** the native phase table `0x110794[35]` has three regions. **Per-record** `0x00–0x15` (the `0x6Dxxx` family) dispatched per-record by `FUN_0008D098` (selector `[0x157A4A]` → `0x110794` → store `[rec+0x1C]` → `CALL [rec+0x1C]`, 11 records @ `0xB2`). **INT3** `0x16` (native slot `0`, NOTF by design). **Act-tail** `0x17–0x22` (the `0x88xxx` family) dispatched by the act machine `FUN_000888FC` via the dedicated table `0x1107EC` (= `0x110794 + 0x16*4`; act `a` → phase `0x16+a`). The engine already has *half* of each: the act seam (`fifa96_match_act.{c,h}`, landed by phase-16 T1) covers the act-tail path; the per-record path is today modeled by the global `fifa96_match_dispatch_phase`. Phase-17 **unifies the per-record path onto the native walk** and **extends the act seam** across its remaining tail rows — one seam per region, retiring the FU175-L7 double-dispatch class for good. Derivations from FU-175 (the act/phase seam + §7 phase ranking), FU-182 §7 (the frontier), FU-190 (the phase-16 audit + §6 completion paths), FU-177 (row 03), FU-181 (row `0x17`/act-4), FU-186 (the keeper chain), FU-165 §6 (act-machine legs). Consumers: `port/src/fifa96_engine/fifa96_match_handlers.c` (phase/action tables + bodies), `fifa96_match_run.c` (the frame body + the dispatch seam), `fifa96_match_act.{c,h}` (the act seam), the loader helpers (`fifa96_keeper.c`/`fifa96_action_handlers.c`/`fifa96_outfield.c`). Serialized implementers; parallel read-only recon is the only parallel surface.
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan (engine + tests), Ghidra MCP read-only (`/FIFA96.EXE`; the authoritative recon tool — rea MCP only as a secondary read-only view, context7 only if SDL3/CMake docs are needed), SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU191…FU198`; predecessor `docs/superpowers/plans/2026-10-12-fifa96-m2-phase16-act-machine-frontier.md` + its final review; frontier map `docs/ghidra/FU182_census_audit.md` (§7) and `docs/ghidra/FU190_census_audit_phase16.md` (§4/§6).
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU191…FU198`; predecessor `docs/superpowers/plans/2026-10-12-fifa96-m2-phase16-act-machine-frontier.md` + its final review; frontier map `port/spec/FU182_census_audit.md` (§7) and `port/spec/FU190_census_audit_phase16.md` (§4/§6).
 
 ## Global Constraints
 
@@ -19,14 +19,14 @@
 - Evidence floor: first-hand bytes/addresses; **fresh `get_xrefs_to` for census claims**; `/FIFA96.EXE` (case-sensitive); +0x100000 rule; **alias traps** (`dword[addr]>>16` = word at `addr+2`; `>>24` = byte at `addr+3`); verify CALL bytes before trusting a call target.
 - **Determinism — the spine:** null backend source of truth; **M1 never moves**; **M2 stays `7b4b241a…` byte-identical** (v16 bytes). The per-record walk is render-invisible by construction; **any presented-frame move is a regression to investigate, not a re-pin** — the task stops and reports. The T7 acceptance adds a **v17 strata label + riders** (the phase-15 v14→v15 precedent: the label tracks the acceptance layer, not the bytes) with the reason recorded; **no re-pin**.
 - No fakes; unreachable → numbered legs; single situation entry; ISO-gated tests skip without the ISO.
-- **Wired census rule:** if a task changes the wired count, recompute the README title percentage in the same commit per AGENTS.md; keep it consistent with the `docs/ENGINE.md` census line (title + the dispatch sum-to-80 line). Status narrative → `docs/PROGRESS.md`.
+- **Wired census rule:** if a task changes the wired count, recompute the README title percentage in the same commit per AGENTS.md; keep it consistent with the `port/ENGINE.md` census line (title + the dispatch sum-to-80 line). Status narrative → `docs/PROGRESS.md`.
 - Commits `feat/fix/docs/test`; implementers commit and push per dispatch; controller verifies (`make check` + tape `cmp` + tree clean).
 
 ---
 
 ## Wave R — parallel read-only recon, eight agents (gate: eight FU slices + reports, committed)
 
-R39–R46 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `docs/ghidra/FU19N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-191…FU-198 in one `docs(fu191-fu198)` commit after the wave returns.
+R39–R46 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `port/spec/FU19N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-191…FU-198 in one `docs(fu191-fu198)` commit after the wave returns.
 
 ### R39 → FU-191: the per-record phase seam (the enabler) (unblocks T1)
 - Question: derive `FUN_0008D098`'s **full** 11-record walk byte-level (the `[0x157A4A]` phase selector's `SAR EAX,0x18` byte decomposition, the `0x110794` index, the `[rec+0x1C]` store, the `CALL dword[ECX+0x1C]`, the `0xB2` stride + `[rec+0x9A]` skip), the **handler signature** the per-record handlers expect (the `param_1`/`param_2`/`param_3` ABI the `0x6Dxxx` bodies read/write — `[rec+0xC]`/`[rec+0x4D]`/`[rec+0x51]`/`[rec+0x55]`), and the engine-conversion rec: exactly how to replace `fifa96_match_dispatch_phase` with the native walk without perturbing the existing act seam or the render.
@@ -72,49 +72,49 @@ R39–R46 run **concurrently** (the user-directed speed-up surface). Each is rea
 
 ### Task 1: T1 — the per-record phase seam + row 03 (from R39/R46)
 
-**Files:** `src/fifa96_engine/fifa96_match_run.c` (the frame body — replace the global `fifa96_match_dispatch_phase` call with the native per-record walk) and/or `fifa96_match_act.{c,h}` (the seam module); `src/fifa96_engine/fifa96_match_handlers.c` + `include/fifa96_engine/fifa96_match_handlers.h` (the phase-table row-`0x02` slot + the `0x6DCC8` body, row-`03` action slot); tests + FU-191/FU-198 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_run.c` (the frame body — replace the global `fifa96_match_dispatch_phase` call with the native per-record walk) and/or `fifa96_match_act.{c,h}` (the seam module); `port/src/fifa96_engine/fifa96_match_handlers.c` + `port/src/fifa96_engine/fifa96_match_handlers.h` (the phase-table row-`0x02` slot + the `0x6DCC8` body, row-`03` action slot); tests + FU-191/FU-198 status + `port/ENGINE.md` + README title.
 **Produces:** the native per-record walk runs in the live frame body (11 records, selector `[0x157A4A]` → `0x110794` → `[rec+0x1C]` → call); the `0x6DCC8` handler is ported; action row `03` dispatches it (counted). **Nothing else new is dispatched** in this task, so the tape provably cannot move.
 **Gate T1:** the walk + the `0x6DCC8` handler covered by RED/GREEN + mutation-RED; **tape decision:** replay M2 — byte-identical (record the check); any drift is a regression (stop, report) — **not** a re-pin. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate (`make check` + tape `cmp`) → census/README update → commit `feat(engine,fu191): per-record phase seam + row 03`.
 
 ### Task 2: T2 — the producer machine (from R44/R45)
 
-**Files:** the situation machine (`fifa96_match_run.c` / a new producer seam) + the act-4 sit-2..4 formation-order arm (`fifa96_match_run.c`/`fifa96_outfield.c`), the `0x14C360`/`0x157BD2` matrices, the `[rec+0xC]`/OL-13 metadata source; tests + FU-196/FU-197 status + `docs/ENGINE.md` + README title.
+**Files:** the situation machine (`fifa96_match_run.c` / a new producer seam) + the act-4 sit-2..4 formation-order arm (`fifa96_match_run.c`/`fifa96_outfield.c`), the `0x14C360`/`0x157BD2` matrices, the `[rec+0xC]`/OL-13 metadata source; tests + FU-196/FU-197 status + `port/ENGINE.md` + README title.
 **Produces:** situations `0/8/0xB` are drivable (the selector + the act map), and the act-4 arm installs row `0x17` — so the act-tail/per-record rows have live producers. Rows whose producer is proven live flip on; rows still producer-gated stay honest numbered legs.
 **Gate T2:** each producer RED/GREEN + mutation-RED; the situation selector write + the act-4 arm fixtured; ISO-gated live chain where reachable, else fixture + dormancy pin. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p17-t2-*` → census/README update → commit `feat(engine,fu196): situation/act producer machine + act-4 formation arm`.
 
 ### Task 3: T3 — the per-record phase handlers `0x00–0x15` (from R40)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (the per-record phase-handler bodies + the phase-table rows R40 proves live), helper gaps in the loader; tests + FU-192 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (the per-record phase-handler bodies + the phase-table rows R40 proves live), helper gaps in the loader; tests + FU-192 status + `port/ENGINE.md` + README title.
 **Produces:** the distinct `0x6Dxxx` handlers are ported; every row the walk drives producer-live is counted (the shared `0x6DE34` reset counted once).
 **Gate T3:** each body RED/GREEN + mutation-RED; tape-dormancy pinned per row (the walk runs; the handlers are render-invisible on the tape). Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p17-t3-*` → census/README update → commit `feat(engine,fu192): per-record phase handlers 0x00–0x15`.
 
 ### Task 4: T4 — act-tail cohort 1: phase `0x17`/`0x1A`/`0x1C` (from R41)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (the `0x88DC8`/`0x89620`/`0x89110` bodies + the phase-table rows), the act seam (`fifa96_match_act.{c,h}`); tests + FU-193 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (the `0x88DC8`/`0x89620`/`0x89110` bodies + the phase-table rows), the act seam (`fifa96_match_act.{c,h}`); tests + FU-193 status + `port/ENGINE.md` + README title.
 **Produces:** phase `0x17`/`0x1A`/`0x1C` execute through the act seam; each counted iff R41 proves its producer live (else numbered leg).
 **Gate T4:** each body RED/GREEN + mutation-RED; the producer route proven; tape-dormancy pinned. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p17-t4-*` → census/README update → commit `feat(engine,fu193): act-tail phase 0x17/0x1A/0x1C`.
 
 ### Task 5: T5 — act-tail cohort 2: phase `0x1D`/`0x1E`/`0x20` (from R42)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (the `0x89868`/`0x8A798`/`0x8B688` bodies + the phase-table rows), the act seam; tests + FU-194 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (the `0x89868`/`0x8A798`/`0x8B688` bodies + the phase-table rows), the act seam; tests + FU-194 status + `port/ENGINE.md` + README title.
 **Produces:** phase `0x1D`/`0x1E`/`0x20` execute; row `0x20`'s installer (`0x899a2`, inside `0x89868`) flips on iff act 7 is producer-live (R42's verdict); counted per the strict test.
 **Gate T5:** each body RED/GREEN + mutation-RED; the act-7 → row-`0x20` route proven or leg'd; tape-dormancy pinned. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p17-t5-*` → census/README update → commit `feat(engine,fu194): act-tail phase 0x1D/0x1E/0x20`.
 
 ### Task 6: T6 — act-tail cohort 3: phase `0x21`/`0x22` + the `0x1B` verdict (from R43)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (the `0x8B874`/`0x8B900` bodies + the phase-table rows), the act seam; tests + FU-195 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (the `0x8B874`/`0x8B900` bodies + the phase-table rows), the act seam; tests + FU-195 status + `port/ENGINE.md` + README title.
 **Produces:** phase `0x21`/`0x22` execute (counted iff producer-live); phase `0x1B`/act 5 is either wired (if R43 finds an invoker) or recorded as an honest leg with owner FU175-L2.
 **Gate T6:** each body RED/GREEN + mutation-RED; the `0x1B` verdict pinned; tape-dormancy pinned. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p17-t6-*` → census/README update → commit `feat(engine,fu195): act-tail phase 0x21/0x22 + 0x1B verdict`.
 
 ### Task 7: T7 — acceptance v17 + riders + smoke + docs + final review
 
-**Files:** `tests/test_engine_m2.c` (+ golden iff genuinely moved — expected not), `docs/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
+**Files:** `port/tests/test_engine_m2.c` (+ golden iff genuinely moved — expected not), `port/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
 **Produces:** the v17 strata (strata-only label; M2 bytes byte-identical — no re-pin); the seam rider (mutation-RED: a silent re-seam/double-run/`[rec+0x1C]` slip aborts the tape); the cheap regression pins the T1–T6 reviews surface; the honest smoke record; the remaining legs with owners; the census recomputed against R46's audit.
 - [ ] Tests + riders → tape decision (byte-identical; record the check) → smoke → docs → commit `test(engine): phase-17 acceptance tape v17 and docs` → whole-plan final review (one fix wave max) → close.
 

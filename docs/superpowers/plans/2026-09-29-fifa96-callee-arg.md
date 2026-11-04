@@ -4,22 +4,22 @@
 
 **Goal:** Answer the one question slice 18 formally carried one layer out: do the callees `11bd:1e9f` and `11bd:6250` (`publish_mode_vector`) indirect-branch on the `0x29bc` arg value they receive from the slot stores — producing a three-way disposition (NONE-INDIRECT / CELL-STORAGE / INDIRECT-ON-ARG) with every hop cited, and at most ONE capped write batch if an entry mechanism materializes.
 
-**Architecture:** Read-only trace pass (dumps + indirect enumeration + arg-propagation one hop, zero Ghidra writes, Task 1), then disposition + capped writes only if INDIRECT-ON-ARG (Task 2). Rows appended to `docs/ghidra/loader_rename_map.md` under `## callee arg question`; prior sections referenced, never rewritten. No C, no tests, no CMake, no tools.
+**Architecture:** Read-only trace pass (dumps + indirect enumeration + arg-propagation one hop, zero Ghidra writes, Task 1), then disposition + capped writes only if INDIRECT-ON-ARG (Task 2). Rows appended to `port/spec/loader_rename_map.md` under `## callee arg question`; prior sections referenced, never rewritten. No C, no tests, no CMake, no tools.
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `disassemble_function`, `disassemble_bytes` (Task 1 `dry_run=true` only), `decompile_function`, `analyze_dataflow` (optional accelerator; disassembly is the authority it must agree with), `search_instructions`, `read_memory`, `get_xrefs_to` (control only), `create_function`, `rename_function`, `set_comment`, `save_program`), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-29 (callee trace for the arg-indirect question only — NOT full verdicts of `1e9f`/`6250`; three-way disposition; one-hop propagation; cell leads named-and-deferred; capped write path) + `docs/ghidra/loader_rename_map.md` (`## 0x29bc slot consumers` — `452f PUSH word ptr [BP+-0x5a]` → `4536 CALL 0x1000:7e20` → `6250` with the slot value; `1e9f` called from `2ec9` on the slot value + `[BP+0x4]` per `2f40`-family cites; zero indirects in the two CALLERS established; callee-condition clause is THIS slice's assignment; `## paging block 2978..2ada` — block `2978..2ada` zero static entries, `0x29bc` inside it; slice-8 — `publish_mode_vector@6250` publishes `[0x9bc]` mode vector).
+**Spec:** Approved chat design 2026-09-29 (callee trace for the arg-indirect question only — NOT full verdicts of `1e9f`/`6250`; three-way disposition; one-hop propagation; cell leads named-and-deferred; capped write path) + `port/spec/loader_rename_map.md` (`## 0x29bc slot consumers` — `452f PUSH word ptr [BP+-0x5a]` → `4536 CALL 0x1000:7e20` → `6250` with the slot value; `1e9f` called from `2ec9` on the slot value + `[BP+0x4]` per `2f40`-family cites; zero indirects in the two CALLERS established; callee-condition clause is THIS slice's assignment; `## paging block 2978..2ada` — block `2978..2ada` zero static entries, `0x29bc` inside it; slice-8 — `publish_mode_vector@6250` publishes `[0x9bc]` mode vector).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler and over `analyze_dataflow` — any accelerator output must be reconciled with cited instructions; every `read_memory` quote reconciles the response's `hex` field against its own `data` array before being called verbatim (slice-17 protocol).
 - Task 1 writes NOTHING in Ghidra: `disassemble_bytes` only with `dry_run=true`; if it errors or yields no instruction text, report that sub-step BLOCKED rather than writing. All listing mutations belong to Task 2 and ONLY under INDIRECT-ON-ARG, with the inherited cap: real disassembly → at most ONE `create_function` nudge (`disassemble_first=false`) → RATIFY on second refusal; delete nothing beyond objects this slice's own nudge created.
 - Do NOT invent addresses: resolve `1e9f`'s body and confirm `6250`'s body/name live at task start; far-target render delta `0x1bd0` recomputed per hit; `get_xrefs_to` is DEAD for absolute-operand forms — `search_instructions` is the authority, xrefs control-only.
 - Scope guard: this slice traces `1e9f`/`6250` for the ARG-INDIRECT question only — full verdicts of either function are OUT (name/role stays as previously recorded); if the arg is stored into a cell, that cell is a named-and-deferred lead with one cited propagation hop — no further dive, no verdict on the cell's consumers.
 - Verdict honesty: "indirects on the arg" requires the cited chain (arg received at the callee's frame/entry → every store/load hop → an indirect `CALL`/`JMP` form whose operand derives from it without documented clobber); NONE-INDIRECT must show the COMPLETE indirect-form enumeration per function (zero `CALL`/`JMP` with reg-or-`[mem]` operands — the slice-18 reviewer's method: full dumps, every transfer operand a literal address); CELL-STORAGE must cite both the store site and the cell.
-- Prior sections read-only (pure append, zero deletions); `save_program` after any write batch; leave `fifa96.rep` churn unstaged; no `decode_*`; NOT-CONFIRMED gets nothing; no direction words or caller-lore in any name unless bit-arithmetic is cited (slice-15 discipline).
+- Prior sections read-only (pure append, zero deletions); `save_program` after any write batch; leave `data/fifa96.rep` churn unstaged; no `decode_*`; NOT-CONFIRMED gets nothing; no direction words or caller-lore in any name unless bit-arithmetic is cited (slice-15 discipline).
 - Slice-17 quote-protocol note in `## paging block 2978..2ada` is binding evidence for how read-backs are quoted — this slice's Writes/unmoved-proof rows follow its form.
 
 ---
@@ -30,16 +30,16 @@ One question, two callees, three-way disposition, in two gates: read-only trace 
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## callee arg question` section (Task 1 site-confirmation + enumeration + propagation + disposition-so-far tables; Task 2 `### Disposition` + optional `### Writes`/walk + deferral lines).
+- Modify: `port/spec/loader_rename_map.md` — append `## callee arg question` section (Task 1 site-confirmation + enumeration + propagation + disposition-so-far tables; Task 2 `### Disposition` + optional `### Writes`/walk + deferral lines).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only, ONLY under INDIRECT-ON-ARG: real `disassemble_bytes` at the cited transfer site + `create_function` at the arg-derived target if a boundary materializes (capped) + rename/plate if CONFIRMED + `save_program`. NONE-INDIRECT / CELL-STORAGE execute the zero-write unmoved-proof form (slice-18 `### Writes` pattern).
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Callee dumps + indirect enumeration + arg propagation (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## callee arg question` with confirmation, enumeration, propagation tables + disposition-so-far line)
+- Modify: `port/spec/loader_rename_map.md` (append `## callee arg question` with confirmation, enumeration, propagation tables + disposition-so-far line)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -60,14 +60,14 @@ Per callee: where does the pushed `0x29bc` value arrive (standard stack frame: a
 
 - [ ] **Step 4: Disposition-so-far + append + verify + commit**
 
-Combined answer line (does either callee indirect on the arg — the slice-18 condition resolved). Append `## callee arg question (verified 2026-09-29, program \`/fifa96.exe\`)` — paragraph + confirmation/enumeration/propagation tables + disposition-so-far. Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → expect 10/10 (docs-only). Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: enumerate callee indirects and trace 0x29bc arg propagation at 1e9f and 6250" || true`
+Combined answer line (does either callee indirect on the arg — the slice-18 condition resolved). Append `## callee arg question (verified 2026-09-29, program \`/fifa96.exe\`)` — paragraph + confirmation/enumeration/propagation tables + disposition-so-far. Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → expect 10/10 (docs-only). Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: enumerate callee indirects and trace 0x29bc arg propagation at 1e9f and 6250" || true`
 
 ---
 
 ### Task 2: Disposition + capped write path + deferrals
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Disposition` + `### Writes` (zero-write proof form OR capped writes) + deferral lines)
+- Modify: `port/spec/loader_rename_map.md` (append `### Disposition` + `### Writes` (zero-write proof form OR capped writes) + deferral lines)
 - Modify: Ghidra program `/fifa96.exe` — ONLY under INDIRECT-ON-ARG: real disassembly / `create_function` (capped) / rename+plate if CONFIRMED / `save_program`
 
 **Interfaces:**
@@ -84,7 +84,7 @@ NONE-INDIRECT / CELL-STORAGE: ZERO Ghidra writes; record the unmoved-proof pair 
 
 - [ ] **Step 3: Append + verify + commit**
 
-Append the blocks. Run suite (expect 10/10) + `grep -c "callee arg question"` nonzero. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: settle callee arg question disposition and carry named leads" || true`
+Append the blocks. Run suite (expect 10/10) + `grep -c "callee arg question"` nonzero. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: settle callee arg question disposition and carry named leads" || true`
 
 ---
 

@@ -7,7 +7,7 @@
 > production code** in this wave.
 
 **Governing spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase26b-remaining-chains-r11l4-design.md` §4.
-**Authority:** `docs/ghidra/FU273_r11l4_keeper_cpu_chain.md` (the machine inventory, §4.2's ~9–11 task estimate, legs T2b-L1..L6).
+**Authority:** `port/spec/FU273_r11l4_keeper_cpu_chain.md` (the machine inventory, §4.2's ~9–11 task estimate, legs T2b-L1..L6).
 
 ## Global constraints (every task)
 
@@ -17,7 +17,7 @@
 - **Alias traps:** `dword[x]>>16` = the word at `x+2`; `>>24` = the byte at `x+3` (e.g. `[rec+0x8E]>>24` = byte `+0x91`); verify CALL rel32 bytes; caller-count claims need a **fresh** `get_xrefs_to`.
 - **LE globals at `+0x100000`** from the file offset.
 - **Numbered legs**, never asserted: anything not statically provable becomes a leg with its native owner.
-- **Output:** one draft slice `docs/ghidra/FU28N_<slug>.md` — a **single H1**, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, and numbered legs. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
+- **Output:** one draft slice `port/spec/FU28N_<slug>.md` — a **single H1**, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, and numbered legs. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
 
 ## Dependency order
 
@@ -77,6 +77,6 @@ FU281 → FU282 → FU283 → {FU284, FU285} → FU286 → FU287 → FU288 (seri
 
 ## Promotion protocol (controller)
 
-1. Each agent returns a draft at `docs/ghidra/FU28N_<slug>.md` + a short summary. The controller **verifies the key byte claims** (spot-check with fresh reads) before promoting.
+1. Each agent returns a draft at `port/spec/FU28N_<slug>.md` + a short summary. The controller **verifies the key byte claims** (spot-check with fresh reads) before promoting.
 2. Promote one-per-commit (`docs(fu28N): phase-26c recon — <slug>`), preserving the agent's draft verbatim + a `**Phase/Provenance:**` line.
 3. After the wave: a close-out commit (single H1 per file, label/attribution tidy), then the **Stage-2 producer plan** (`docs/superpowers/plans/…-phase26c-producers.md`, refining the current draft against the frozen slices), then SDD execution.

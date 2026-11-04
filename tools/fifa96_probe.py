@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """fifa96_probe.py — decode T_PROBE frames from a capture trace.
 
-Frame wire format (emitted by tsr/fifa96_capture.asm):
+Frame wire format (emitted by _tools/tsr/fifa96_capture.asm):
     type:u8, seq:u16 LE, len:u16 LE, payload[len]
 T_PROBE (0x08) payload = four LE u32: site, caller_lo, caller_hi, target_ret.
 

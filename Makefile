@@ -3,6 +3,7 @@
 #   build & test → maintenance
 SERVICE = fifa96_loader
 
+PORT_DIR = port
 BUILD = build
 CMAKE = cmake
 CTEST = ctest
@@ -21,7 +22,7 @@ help: ## Print this help message
 		{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
 
 configure: ## Configure the CMake build tree (C11, -Wall -Wextra -Werror)
-	$(CMAKE) -S . -B $(BUILD)
+	$(CMAKE) -S $(PORT_DIR) -B $(BUILD)
 
 build: configure ## Compile all libraries and test binaries
 	$(CMAKE) --build $(BUILD)
@@ -33,12 +34,12 @@ check: test ## Exactly the gate set: configure + strict build + full suite
 
 # ── Run ────────────────────────────────────────────────────────────────────────
 
-run: build ## Build and run the port on any input (make run FILE=game/FIFAPCCD96.iso; make run ARGS="--help")
+run: build ## Build and run the port on any input (make run FILE=data/game/FIFAPCCD96.iso; make run ARGS="--help")
 	@if [ -n "$(FILE)" ]; then ./$(BUILD)/fifa96_play auto "$(FILE)"; else ./$(BUILD)/fifa96_play $(ARGS); fi
 
-game: build ## Build and run the native engine (needs SDL3 + game/FIFAPCCD96.iso)
+game: build ## Build and run the native engine (needs SDL3 + data/game/FIFAPCCD96.iso)
 	@test -x $(BUILD)/fifa96 || { echo "fifa96 not built (SDL3 missing)"; exit 1; }
-	./$(BUILD)/fifa96 $(if $(FILE),$(FILE),game/FIFAPCCD96.iso)
+	./$(BUILD)/fifa96 $(if $(FILE),$(FILE),data/game/FIFAPCCD96.iso)
 
 # ── Maintenance ────────────────────────────────────────────────────────────────
 
@@ -49,17 +50,17 @@ rebuild: clean build ## Clean rebuild from scratch
 
 # ── Capture rig ────────────────────────────────────────────────────────────────
 
-TRACE ?= captures/session-latest/trace.bin
+TRACE ?= data/captures/session-latest/trace.bin
 
 tsr: ## Assemble the capture TSR (requires nasm)
 	@command -v nasm >/dev/null || { echo "nasm not installed (apt install nasm)" >&2; exit 1; }
 	@mkdir -p $(BUILD)
-	nasm -f bin tsr/fifa96_capture.asm -o $(BUILD)/FIFACAP.COM
+	nasm -f bin _tools/tsr/fifa96_capture.asm -o $(BUILD)/FIFACAP.COM
 	@printf 'FIFACAP.COM: '; wc -c < $(BUILD)/FIFACAP.COM
 	@sha256sum $(BUILD)/FIFACAP.COM
 
-capture: tsr ## Launch the game under the capture rig (needs game/FIFAPCCD96.iso)
-	./run-fifa96-capture.sh
+capture: tsr ## Launch the game under the capture rig (needs data/game/FIFAPCCD96.iso)
+	./tools/run-fifa96-capture.sh
 
-trace: build ## Parse a captured trace (make trace TRACE=captures/…/trace.bin)
+trace: build ## Parse a captured trace (make trace TRACE=data/captures/…/trace.bin)
 	./$(BUILD)/fifa96_trace $(TRACE)

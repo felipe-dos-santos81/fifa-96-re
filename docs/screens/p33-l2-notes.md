@@ -6,7 +6,7 @@
 — the natural clause is **NOT-GO-as-measured** (FU323-L1) and the **driven
 variant is the Layer-2 witness**, replayed per the phase-32 procedure and
 re-pinned on FU323 §5's measured drive timelines (FU322's erratum 2 tables).
-**Procedure:** `docs/ghidra/FU321_r2l6_nonzero_acceptance.md` §4 (the trace
+**Procedure:** `port/spec/FU321_r2l6_nonzero_acceptance.md` §4 (the trace
 cells, the same-clock pairs, G1–G8, the attribution rules) + the frozen
 p32 procedure (`docs/screens/p32-l2-notes.md`, FU317 §5).
 **Scope:** the captures + the trace extract (`p33-l2-trace-pan.txt`) + this
@@ -35,7 +35,7 @@ offset", and never silently upgraded to the natural route.
 ## The run
 
 `DISPLAY=:1 FIFA96_CAMERA_TRACE=/tmp/opencode/p33/p33-trace.log
-./build/fifa96 game/FIFAPCCD96.iso` (the `make game` entry; SDL3; the client
+./build/fifa96 data/game/FIFAPCCD96.iso` (the `make game` entry; SDL3; the client
 is 960×720, `import -window` used for every capture).
 
 Walkthrough: `windowactivate --sync` on the 960×720 client (id 56623156), then
@@ -67,7 +67,7 @@ The live and the re-pinned timelines agree **tick-for-tick** at every anchor.
 The `f=` cells are run-relative granted-frame indices, not a shared clock, so
 their equality follows from the matched grant pacing; the **tick** agreement is
 the strong claim. The re-pinned cells are the tree's offset-pass asserts
-(`tests/test_engine_m2.c`, the segment-aware re-pin block — task 2's
+(`port/tests/test_engine_m2.c`, the segment-aware re-pin block — task 2's
 commit `7b3cc10`); the live cells are from the `FIFA96_CAMERA_TRACE` sink.
 
 **The pan (trace primary), cells from the sink:**
@@ -192,7 +192,7 @@ segment, `trk=2` then `trk=1`, and each committed pair lies inside its named
 segment's delta run on one displayed second. The drive is FU320's nominated
 tape (`LEFT 1820..1849`, `DOWN 1850..end`) replayed at phase 2 + 20 ticks with
 the DOWN release held past the final stop; its **offset tuples are cited from
-the tree's re-pinned asserts** (`tests/test_engine_m2.c`, the offset pass:
+the tree's re-pinned asserts** (`port/tests/test_engine_m2.c`, the offset pass:
 seg[1] gate `pos (−16,0,4)`, `lane 129`, `Δ 0x0`, `face7d −261`; seg[0] bind
 `code 5` trk 2 at f=1483) — **not** read from the trace. The pan is the same
 `T(s)` family as phases 31/32 (the seed is the event's `vel=(−5,0)`, not the
@@ -259,8 +259,8 @@ face"** and is never a claim about the undriven tape.
 
 No code/test/golden change. M1 `09b726b7…` (22 004 B) and M2 `d5446144…`
 (295 087 B) unchanged; `./build/test_engine_m1 | cmp -
-tests/golden/engine/m1-frames.txt` and `./build/test_engine_m2 | cmp -
-tests/golden/engine/m2-frames.txt` are identical (re-run at the close of this
+port/tests/golden/engine/m1-frames.txt` and `./build/test_engine_m2 | cmp -
+port/tests/golden/engine/m2-frames.txt` are identical (re-run at the close of this
 task, both OK). The trace sink stayed default-off outside this run; the ISO
 was only read. The census stays `60/80 = 75%`.
 
@@ -269,7 +269,7 @@ was only read. The census stays `60/80 = 75%`.
 ```sh
 # the run (a4-run.sh: the walkthrough taps + the driver + the watcher)
 DISPLAY=:1 FIFA96_CAMERA_TRACE=/tmp/opencode/p33/p33-trace.log \
-  ./build/fifa96 game/FIFAPCCD96.iso          # Makefile's `make game` entry
+  ./build/fifa96 data/game/FIFAPCCD96.iso          # Makefile's `make game` entry
 # walkthrough: windowactivate --sync $WID, then 0.2 s holds
 #   Return (intro) / BackSpace (front-end) / Return (match)
 # the driver: the M2 prefix by trace tick, the FU320 tail by wall clock,

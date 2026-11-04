@@ -10,7 +10,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan (engine + tests), Ghidra MCP read-only (`/FIFA96.EXE`; the authoritative recon tool — rea MCP only as a secondary read-only view, context7 only if SDL3/CMake docs are needed), SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU183…FU190`; predecessor `docs/superpowers/plans/2026-10-12-fifa96-m2-phase15-census-frontier.md` + its final review; frontier map `docs/ghidra/FU182_census_audit.md` (§7).
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU183…FU190`; predecessor `docs/superpowers/plans/2026-10-12-fifa96-m2-phase15-census-frontier.md` + its final review; frontier map `port/spec/FU182_census_audit.md` (§7).
 
 ## Global Constraints
 
@@ -19,14 +19,14 @@
 - Evidence floor: first-hand bytes/addresses; **fresh `get_xrefs_to` for census claims**; `/FIFA96.EXE` (case-sensitive); +0x100000 rule; **alias traps** (`dword[addr]>>16` = word at `addr+2`; `>>24` = byte at `addr+3`); verify CALL bytes.
 - Determinism: null backend source of truth; **M1 never moves**; **T1 is the one tape risk** (the act producer entering the live frame body) — M2 stays v15 if byte-identical (record the check), else additive re-pin **v16** with a written reason + frame diff. T2–T5 are expected tape-dormant (install-live, not tape-dispatched) → no re-pin.
 - No fakes; unreachable → numbered legs; single situation entry; ISO-gated tests skip without the ISO.
-- **Wired census rule:** if a task changes the wired count, recompute the README title percentage in the same commit per AGENTS.md; keep it consistent with the `docs/ENGINE.md` census line. Status narrative → `docs/PROGRESS.md`.
+- **Wired census rule:** if a task changes the wired count, recompute the README title percentage in the same commit per AGENTS.md; keep it consistent with the `port/ENGINE.md` census line. Status narrative → `docs/PROGRESS.md`.
 - Commits `feat/fix/docs/test`; implementers commit and push per dispatch; controller verifies (`make check` + tape `cmp` + tree clean).
 
 ---
 
 ## Wave R — parallel read-only recon, eight agents (gate: eight FU slices + reports, committed)
 
-R31–R38 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `docs/ghidra/FU18N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-183…FU-190 in one `docs(fu183-fu190)` commit after the wave returns.
+R31–R38 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `port/spec/FU18N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-183…FU-190 in one `docs(fu183-fu190)` commit after the wave returns.
 
 ### R31 → FU-183: the act-machine producer (the enabler) (unblocks T1)
 - Question: derive `FUN_000888FC`'s producer chain — what fills the act slot and drives the per-record phase call (`[rec+0x1C]`, `FUN_0008D098`'s walk — landed by FU-175), the `0x1107EC` act table (FU182-L1) semantics, and the exact engine wiring that gives the phase seam a live phase-row cohort. Derive the **act-4 sit-2..4 formation-order arm** `0x8AB08..0x8AB62` whose stage-0 `0x89740` is row `0x17`'s only producer (FU181-L1). Rank which phase rows become honestly producer-live once the act machine runs.
@@ -72,42 +72,42 @@ R31–R38 run **concurrently** (the user-directed speed-up surface). Each is rea
 
 ### Task 1: T1 — the act-machine producer + row 0x17 + producer-live phase rows (from R31)
 
-**Files:** per the rec (the act producer site in `src/fifa96_engine/fifa96_match_run.c` and/or `fifa96_match_act.{c,h}`; `include/fifa96_engine/fifa96_match_handlers.h` + `src/fifa96_engine/fifa96_match_handlers.c` row 0x17 slot + the phase-table rows R31 proves producer-live); tests + FU-183 status + `docs/ENGINE.md` + README title.
+**Files:** per the rec (the act producer site in `port/src/fifa96_engine/fifa96_match_run.c` and/or `fifa96_match_act.{c,h}`; `port/src/fifa96_engine/fifa96_match_handlers.h` + `port/src/fifa96_engine/fifa96_match_handlers.c` row 0x17 slot + the phase-table rows R31 proves producer-live); tests + FU-183 status + `port/ENGINE.md` + README title.
 **Produces:** the act machine's producer runs in the live frame body; `fifa96_match_dispatch_phase` gets a live producer; action row 0x17 dispatches (counted); the phase rows R31 proves producer-live are counted.
 **Gate T1:** the producer + row 0x17 + each counted phase row covered by RED/GREEN + mutation-RED tests; a phase-row census claim only if R31 proves it producer-live (else numbered leg, table stays honest). **Tape decision:** replay M2 — byte-identical → no re-pin (record the check), else additive v16 with reason + frame diff. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate (`make check` + tape `cmp` + smoke `p16-t1-*`) → census/README update → commit `feat(engine,fu183): act-machine producer + row 0x17 + live phase rows`.
 
 ### Task 2: T2 — celebration + sequence: 0x14 + 0x22 (from R32/R33)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (rows 0x14/0x22 bodies), helper gaps in `fifa96_action_handlers.c`/`fifa96_outfield.c` (scatter_celebration / sequence_press_event), the goal-record release path (`fifa96_match_run.c`); tests + FU-184/FU-185 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (rows 0x14/0x22 bodies), helper gaps in `fifa96_action_handlers.c`/`fifa96_outfield.c` (scatter_celebration / sequence_press_event), the goal-record release path (`fifa96_match_run.c`); tests + FU-184/FU-185 status + `port/ENGINE.md` + README title.
 **Produces:** rows 0x14 and 0x22 execute end-to-end in the live chain (0x22 counted only if R33 shows the strict "engine reaches it" test passes; if the OL-56 target producer is required and unported, 0x22 is an honest leg and stays uncounted).
 **Gate T2:** each body RED/GREEN + mutation-RED; the phase-5 goal arm's live route proven where reachable, else unit fixture + tape-dormancy pin. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p16-t2-*` → census/README update → commit `feat(engine,fu184): rows 0x14 + 0x22 — celebration, sequence/press`.
 
 ### Task 3: T3 — keeper chain → rows 0x1A + 0x1C (from R34)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (rows 0x1A/0x1C bodies), `src/fifa96_loader/fifa96_keeper.c` + `fifa96_action_handlers.c` (the `FUN_00077EAC`/`_782D0`/`_76130` chain and row-0x1B sine/steering legs); tests + FU-186 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (rows 0x1A/0x1C bodies), `port/src/fifa96_loader/fifa96_keeper.c` + `fifa96_action_handlers.c` (the `FUN_00077EAC`/`_782D0`/`_76130` chain and row-0x1B sine/steering legs); tests + FU-186 status + `port/ENGINE.md` + README title.
 **Produces:** the keeper chain is ported and both rows 0x1A/0x1C execute; the row-0x1B legs close as far as the chain allows.
 **Gate T3:** each body RED/GREEN + mutation-RED; the keeper-chain installs proven; ISO-gated live chain where the keeper route is reachable, else unit fixture + tape-dormancy pin. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p16-t3-*` → census/README update → commit `feat(engine,fu186): keeper chain — rows 0x1A/0x1C + 0x1B legs`.
 
 ### Task 4: T4 — face-the-ball + lane: rows 0x16 + 0x24 (from R35/R36)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (rows 0x16/0x24 bodies), the phase-0x19/phase-0x20 handler hooks (`fifa96_match_handlers.c` phase table + the act seam); tests + FU-187/FU-188 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (rows 0x16/0x24 bodies), the phase-0x19/phase-0x20 handler hooks (`fifa96_match_handlers.c` phase table + the act seam); tests + FU-187/FU-188 status + `port/ENGINE.md` + README title.
 **Produces:** rows 0x16 and 0x24 execute through T1's act-machine phase handlers (phase 0x19 / phase 0x20).
 **Gate T4:** each body RED/GREEN + mutation-RED; the phase-handler install path proven; **depends on T1's act seam** — if the act path to phase 0x19/0x20 is not producer-live, the rows are honest legs and stay uncounted. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p16-t4-*` → census/README update → commit `feat(engine,fu187): rows 0x16 + 0x24 — face-the-ball, sequence/lane`.
 
 ### Task 5: T5 — installer hunt + 03/0x0D completion (from R37/R38)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (rows 0x20/0x25 iff an installer is found; row 03's handler path; row-09 arm 1 for 0x0D), `fifa96_outfield.c`/`fifa96_action_handlers.c` (the arm-1 helpers); tests + FU-189/FU-190 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (rows 0x20/0x25 iff an installer is found; row 03's handler path; row-09 arm 1 for 0x0D), `fifa96_outfield.c`/`fifa96_action_handlers.c` (the arm-1 helpers); tests + FU-189/FU-190 status + `port/ENGINE.md` + README title.
 **Produces:** `0x0D` counted iff row-09 arm 1 lands (FU178-L1); `03` counted iff the live phase-2 handler `0x6DCC8` lands (FU177-L1); `0x20`/`0x25` counted iff R37 finds a real installer — otherwise honest numbered legs (no invented wiring).
 **Gate T5:** each landed row RED/GREEN + mutation-RED; conditional rows either counted or recorded as legs with owners. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p16-t5-*` → census/README update → commit `feat(engine,fu189): installer hunt + rows 03/0x0D completion`.
 
 ### Task 6: T6 — acceptance v16 + riders + smoke + docs + final review
 
-**Files:** `tests/test_engine_m2.c` (+ golden iff genuinely moved), `docs/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
+**Files:** `port/tests/test_engine_m2.c` (+ golden iff genuinely moved), `port/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
 **Produces:** the v16 strata (or v15-held with recorded reason); the cheap regression pins the T1–T5 reviews surface; the honest smoke record; the remaining legs with owners; the census recomputed against R38's audit.
 - [ ] Tests + riders → tape decision → smoke → docs → commit `test(engine): phase-16 acceptance tape v16 and docs` → whole-plan final review (one fix wave max) → close.
 

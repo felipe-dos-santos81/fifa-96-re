@@ -4,16 +4,16 @@
 
 **Goal:** Close slice 15's two live pins on `FUN_11bd_02b7`: (a) inventory every static contact with cells `[0xf52]`/`[0xf54]` so the withheld name's missing leg is either filled (rename) or re-declared on harder evidence, and (b) repair the `02d4..02d9` decode-pocket with the byte-authority `ADD`/`ADD` parse so the function body re-joins its orphaned tail `02da..02f8` — or ratify truncation with a stated reason.
 
-**Architecture:** Read-only evidence pass first (cell inventory + neighborhood scan + pocket re-derivation, zero Ghidra writes — Task 1), then writes (pocket `disassemble_bytes` real at the 6 bytes + body re-flow / rename / plate updates + map append — Task 2). Rows appended to `docs/ghidra/loader_rename_map.md` under `## 02b7 twin completion`; slice-15 rows are referenced, never rewritten. No C, no tests, no CMake.
+**Architecture:** Read-only evidence pass first (cell inventory + neighborhood scan + pocket re-derivation, zero Ghidra writes — Task 1), then writes (pocket `disassemble_bytes` real at the 6 bytes + body re-flow / rename / plate updates + map append — Task 2). Rows appended to `port/spec/loader_rename_map.md` under `## 02b7 twin completion`; slice-15 rows are referenced, never rewritten. No C, no tests, no CMake.
 
 **Tech Stack:** Ghidra-MCP (`search_instructions`, `get_xrefs_to`, `get_function_by_address`, `disassemble_bytes` (Task 1 `dry_run=true` only), `disassemble_function`, `read_memory`, `list_data_items`/`audit_global` for cell state, `rename_function`, `set_comment`, `create_function`, `save_program`), `grep` (content checks), CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-29 (cell roles inventory + pocket repair, rename-if-pinned, ratify-if-analyzer-still-refuses, `2978..2ada` out, one-layer guard) + `docs/ghidra/loader_rename_map.md` (`## 02b7 twin` — Task-1 walk table with both parses of `02d4..02d9`, Task-2 `### Writes` pocket/orphan disclosure + deferral (e), verdict row "NOT-CONFIRMED-at-name, missing leg = cell roles"; `## 0290/0293 fall-through` sibling cite-only).
+**Spec:** Approved chat design 2026-09-29 (cell roles inventory + pocket repair, rename-if-pinned, ratify-if-analyzer-still-refuses, `2978..2ada` out, one-layer guard) + `port/spec/loader_rename_map.md` (`## 02b7 twin` — Task-1 walk table with both parses of `02d4..02d9`, Task-2 `### Writes` pocket/orphan disclosure + deferral (e), verdict row "NOT-CONFIRMED-at-name, missing leg = cell roles"; `## 0290/0293 fall-through` sibling cite-only).
 
 ## Global Constraints
 
 - No C, test, or CMake changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; where they conflict, cite the disassembly and say the decompiler differed.
 - No `decode_*` name without an observed byte transform; NOT-CONFIRMED (at-name) keeps no rename — the missing leg must be named on the evidence, not lore.
 - Task 1 writes NOTHING in Ghidra: `disassemble_bytes` only with `dry_run=true`; if it errors or yields no instruction text, report that sub-step BLOCKED rather than writing. All listing mutations (real `disassemble_bytes` on `02d4..02d9`, any `create_function` re-flow, `rename_function`, `set_comment`) belong to Task 2 with before-state recorded.
@@ -31,16 +31,16 @@ Two closely-coupled questions about one function (cell roles → name; pocket �
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## 02b7 twin completion` section (Task 1 inventory + pocket tables; Task 2 disposition rows + rename/plate record + ratify-or-repair outcome).
+- Modify: `port/spec/loader_rename_map.md` — append `## 02b7 twin completion` section (Task 1 inventory + pocket tables; Task 2 disposition rows + rename/plate record + ratify-or-repair outcome).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only: real `disassemble_bytes` at `02d4..02d9`, body re-flow if it follows, `rename_function` + `set_comment` if inventory pins the roles, `save_program`.
-- `src/`, `tests/`, `CMakeLists.txt`, headers, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, headers, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Cell inventory + pocket re-derivation (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## 02b7 twin completion` with inventory table + pocket table)
+- Modify: `port/spec/loader_rename_map.md` (append `## 02b7 twin completion` with inventory table + pocket table)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -57,14 +57,14 @@ For each of `11bd:0f50`, `0f52`, `0f54`, `0f56`, `0f58` (and note the pair struc
 
 - [ ] **Step 3: Append the map section + verify + commit**
 
-Append `## 02b7 twin completion (verified 2026-09-29, program \`/fifa96.exe\`)` — one-paragraph summary (cell-roles: PINNED to <what> / THIN (twin-only); pocket: tool parse unchanged / changed) + the two tables (filled Evidence, searches enumerated, caveats stated). No rename column, no writes. Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build` — expect 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: inventory 0xf52/0xf54 cell roles and re-derive 02b7 pocket" || true`
+Append `## 02b7 twin completion (verified 2026-09-29, program \`/fifa96.exe\`)` — one-paragraph summary (cell-roles: PINNED to <what> / THIN (twin-only); pocket: tool parse unchanged / changed) + the two tables (filled Evidence, searches enumerated, caveats stated). No rename column, no writes. Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build` — expect 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: inventory 0xf52/0xf54 cell roles and re-derive 02b7 pocket" || true`
 
 ---
 
 ### Task 2: Pocket repair + name disposition + write-batch
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Pocket repair` + `### Name disposition` + post-state rows to the completion section)
+- Modify: `port/spec/loader_rename_map.md` (append `### Pocket repair` + `### Name disposition` + post-state rows to the completion section)
 - Modify: Ghidra program `/fifa96.exe` (real `disassemble_bytes` at `02d4..02d9`; `create_function`/body re-flow if the analyzer joins the tail; rename + plate if PINNED; `save_program`)
 
 **Interfaces:**
@@ -81,7 +81,7 @@ Only if Task-1 inventory PINNED roles: choose a mechanism-level verb-led snake_c
 
 - [ ] **Step 3: Append + verify + commit**
 
-`save_program(program=/fifa96.exe)`; append `### Pocket repair` + `### Name disposition` + post-state rows. Run suite (expect 10/10) + `grep -c "02b7 twin completion"` nonzero. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: repair 02b7 pocket and settle twin name disposition" || true`
+`save_program(program=/fifa96.exe)`; append `### Pocket repair` + `### Name disposition` + post-state rows. Run suite (expect 10/10) + `grep -c "02b7 twin completion"` nonzero. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: repair 02b7 pocket and settle twin name disposition" || true`
 
 ---
 

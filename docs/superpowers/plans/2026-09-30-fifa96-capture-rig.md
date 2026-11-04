@@ -4,7 +4,7 @@
 
 **Goal:** Build the P0 capture rig: a resident 16-bit DOS TSR that emits an ordered per-session binary trace of every FIFA96 INT-21 file operation and of five cited codec-funnel patch sites, plus an in-repo C parser that turns that trace into citable text.
 
-**Architecture:** A `.COM` TSR (`tsr/fifa96_capture.asm`, assembled with `nasm -f bin`) installs itself, hooks INT-21h (file records) and INT-60h/INT-1h (codec patch-site records), snoops the game's INT-21 calls, and streams records out the DOSBox-X serial port (`COM1`) to a host file. A C11 library + CLI (`fifa96_trace`) parses the byte stream (frame walk, resync, seq-gap detection, summary stats). A wrapper of `run-fifa96.sh` wires the serial sink to a per-session `captures/…/trace.bin`.
+**Architecture:** A `.COM` TSR (`_tools/tsr/fifa96_capture.asm`, assembled with `nasm -f bin`) installs itself, hooks INT-21h (file records) and INT-60h/INT-1h (codec patch-site records), snoops the game's INT-21 calls, and streams records out the DOSBox-X serial port (`COM1`) to a host file. A C11 library + CLI (`fifa96_trace`) parses the byte stream (frame walk, resync, seq-gap detection, summary stats). A wrapper of `tools/run-fifa96.sh` wires the serial sink to a per-session `data/captures/…/trace.bin`.
 
 **Tech Stack:** NASM 2.16 (`nasm -f bin`, 16-bit real mode), C11 + CMake ≥ 3.28 + CTest `-Wall -Wextra -Werror`, DOSBox-X serial file sink (`serial1=file file:<path>`), GNU make.
 
@@ -14,11 +14,11 @@
 
 Copied verbatim from the spec; every task's requirements implicitly include this section.
 
-- Never write to `game/FIFAPCCD96.iso` (read-only convention). The TSR lives in `game/hdd/` (writable emulated state), copied there by the run script.
+- Never write to `data/game/FIFAPCCD96.iso` (read-only convention). The TSR lives in `data/game/hdd/` (writable emulated state), copied there by the run script.
 - Honesty rules extend to captured evidence: a map/FU citation quotes parsed trace output verbatim; "runtime-captured" is labeled as its own evidence class, never blended with static cites; **no address is patched that the map does not cite with instruction bytes**.
-- Existing 10 golden CTests stay green; no edits to existing `src/`, `include/`, `tests/golden/` behavior baselines. New files are additive only.
+- Existing 10 golden CTests stay green; no edits to existing `src/`, `include/`, `port/tests/golden/` behavior baselines. New files are additive only.
 - `nasm` is required. If unavailable at build time, `make tsr` fails with a clear message; **no hand-emitted blob fallback**.
-- Nothing in `captures/` is ever committed (derived from copyrighted content); only synthetic parser fixtures and verbatim parsed lines in docs are.
+- Nothing in `data/captures/` is ever committed (derived from copyrighted content); only synthetic parser fixtures and verbatim parsed lines in docs are.
 - Single-program sessions: the PSP captured for the game is the current PSP at the game's first INT-21 call; documented assumption.
 - TSR array/behavior verification is live-session-only (documented); the parser is the only unit-tested component.
 - Wire values are little-endian. Frame: `type:u8 | seq:u16 | len:u16 | payload[len]`.
@@ -63,28 +63,28 @@ unsigned 16-bit form the TSR adds to BP):
 
 | File | Responsibility |
 |------|----------------|
-| `include/fifa96_loader/fifa96_trace.h` (new) | Wire-format constants + `fifa96_trace_format()` / `fifa96_trace_raw()` declarations |
-| `src/fifa96_loader/fifa96_trace.c` (new) | Frame walk, resync, seq-gap, per-record text lines, summary; no game knowledge beyond the five site addresses |
-| `tests/test_trace.c` (new) | Synthetic hand-authored frame streams → expected parser text |
-| `tools/fifa96_trace.c` (new) | CLI: `fifa96_trace [--raw] FILE` |
-| `tsr/fifa96_capture.asm` (new) | The resident COM: serial sink, INT-21/60/1 hooks, patch pass, framing |
-| `run-fifa96-capture.sh` (new) | DOSBox-X launcher with serial file sink + FIFACAP.COM in autoexec |
+| `port/src/fifa96_loader/fifa96_trace.h` (new) | Wire-format constants + `fifa96_trace_format()` / `fifa96_trace_raw()` declarations |
+| `port/src/fifa96_loader/fifa96_trace.c` (new) | Frame walk, resync, seq-gap, per-record text lines, summary; no game knowledge beyond the five site addresses |
+| `port/tests/test_trace.c` (new) | Synthetic hand-authored frame streams → expected parser text |
+| `port/tools/fifa96_trace.c` (new) | CLI: `fifa96_trace [--raw] FILE` |
+| `_tools/tsr/fifa96_capture.asm` (new) | The resident COM: serial sink, INT-21/60/1 hooks, patch pass, framing |
+| `tools/run-fifa96-capture.sh` (new) | DOSBox-X launcher with serial file sink + FIFACAP.COM in autoexec |
 | `CMakeLists.txt` (modify, append-only) | Build `fifa96_trace` lib + `test_trace` + `fifa96_trace` tool |
 | `Makefile` (modify, append-only) | `tsr`, `capture`, `trace` targets |
-| `.gitignore` (modify) | add `captures/` |
+| `.gitignore` (modify) | add `data/captures/` |
 
 ---
 
 ## Task 1: Trace parser library (`fifa96_trace`) with synthetic-fixture tests
 
 **Files:**
-- Create: `include/fifa96_loader/fifa96_trace.h`
-- Create: `src/fifa96_loader/fifa96_trace.c`
-- Create: `tests/test_trace.c`
+- Create: `port/src/fifa96_loader/fifa96_trace.h`
+- Create: `port/src/fifa96_loader/fifa96_trace.c`
+- Create: `port/tests/test_trace.c`
 - Modify: `CMakeLists.txt` (append at end)
 
 **Interfaces:**
-- Consumes: `fifa96_err_t` from `include/fifa96_loader/fifa96_err.h` (`FIFA96_OK`, `FIFA96_ERR_BAD_MAGIC`, `FIFA96_ERR_TRUNCATED`).
+- Consumes: `fifa96_err_t` from `port/src/fifa96_loader/fifa96_err.h` (`FIFA96_OK`, `FIFA96_ERR_BAD_MAGIC`, `FIFA96_ERR_TRUNCATED`).
 - Produces:
   - `int fifa96_trace_format(const uint8_t *data, size_t len, char **out);` → `*out` = malloc'd NUL-terminated text, one line per record + summary; returns `FIFA96_OK` (0) on success even when the stream contains resync/gap lines; `FIFA96_ERR_BAD_MAGIC` when no HEADER is found; `FIFA96_ERR_TRUNCATED` only for OOM-free internal failure.
   - `int fifa96_trace_raw(const uint8_t *data, size_t len, char **out);` → same but each line is `RAW type=.. seq=.. len=.. payload_hex`; still resyncs.
@@ -93,7 +93,7 @@ unsigned 16-bit form the TSR adds to BP):
 
 - [ ] **Step 1: Write the header**
 
-`include/fifa96_loader/fifa96_trace.h`:
+`port/src/fifa96_loader/fifa96_trace.h`:
 ```c
 #pragma once
 #include <stddef.h>
@@ -117,7 +117,7 @@ int fifa96_trace_raw(const uint8_t *data, size_t len, char **out);
 
 - [ ] **Step 2: Write the failing tests**
 
-`tests/test_trace.c`. Build every fixture as an explicit byte array; assert on exact substrings (not whole-document equality) so the summary wording can evolve:
+`port/tests/test_trace.c`. Build every fixture as an explicit byte array; assert on exact substrings (not whole-document equality) so the summary wording can evolve:
 ```c
 #include <assert.h>
 #include <stdio.h>
@@ -218,9 +218,9 @@ SUMMARY end=<END|no-END> lost=<n> seqgaps=<n>
 
 Append to `CMakeLists.txt`:
 ```cmake
-add_library(fifa96_trace src/fifa96_loader/fifa96_trace.c)
+add_library(fifa96_trace port/src/fifa96_loader/fifa96_trace.c)
 target_link_libraries(fifa96_trace PRIVATE fifa96_file)
-add_executable(test_trace tests/test_trace.c)
+add_executable(test_trace port/tests/test_trace.c)
 target_link_libraries(test_trace PRIVATE fifa96_trace fifa96_file)
 add_test(NAME test_trace COMMAND test_trace WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 ```
@@ -230,7 +230,7 @@ Expected: `100% tests passed`, including `test_trace`.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add include/fifa96_loader/fifa96_trace.h src/fifa96_loader/fifa96_trace.c tests/test_trace.c CMakeLists.txt
+git add port/src/fifa96_loader/fifa96_trace.h port/src/fifa96_loader/fifa96_trace.c port/tests/test_trace.c CMakeLists.txt
 git commit -m "feat(trace): frame parser with resync, seq-gap and summary"
 ```
 
@@ -239,7 +239,7 @@ git commit -m "feat(trace): frame parser with resync, seq-gap and summary"
 ## Task 2: Parser CLI + build targets + ignore captures
 
 **Files:**
-- Create: `tools/fifa96_trace.c`
+- Create: `port/tools/fifa96_trace.c`
 - Modify: `CMakeLists.txt` (append)
 - Modify: `Makefile` (append targets)
 - Modify: `.gitignore`
@@ -250,9 +250,9 @@ git commit -m "feat(trace): frame parser with resync, seq-gap and summary"
 
 - [ ] **Step 1: Write the CLI**
 
-`tools/fifa96_trace.c`:
+`port/tools/fifa96_trace.c`:
 ```c
-// tools/fifa96_trace.c — CLI: parse a capture-rig trace.bin to text.
+// port/tools/fifa96_trace.c — CLI: parse a capture-rig trace.bin to text.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -282,24 +282,24 @@ int main(int argc, char **argv) {
 
 Append to `CMakeLists.txt`:
 ```cmake
-add_executable(fifa96_trace tools/fifa96_trace.c)
+add_executable(fifa96_trace port/tools/fifa96_trace.c)
 target_link_libraries(fifa96_trace PRIVATE fifa96_trace fifa96_file)
 ```
 
-Append to `Makefile` (keep `FILE ?= tests/golden/fw1.qfs` untouched; add a distinct var):
+Append to `Makefile` (keep `FILE ?= port/tests/golden/fw1.qfs` untouched; add a distinct var):
 ```make
-TRACE ?= captures/session-latest/trace.bin
+TRACE ?= data/captures/session-latest/trace.bin
 
 tsr: ## Assemble the capture TSR (requires nasm)
 	@command -v nasm >/dev/null || { echo "nasm not installed (apt install nasm)" >&2; exit 1; }
-	nasm -f bin tsr/fifa96_capture.asm -o $(BUILD)/FIFACAP.COM
+	nasm -f bin _tools/tsr/fifa96_capture.asm -o $(BUILD)/FIFACAP.COM
 	@printf 'FIFACAP.COM: '; wc -c < $(BUILD)/FIFACAP.COM
 	@sha256sum $(BUILD)/FIFACAP.COM
 
-capture: tsr ## Launch the game under the capture rig (needs game/FIFAPCCD96.iso)
-	./run-fifa96-capture.sh
+capture: tsr ## Launch the game under the capture rig (needs data/game/FIFAPCCD96.iso)
+	./tools/run-fifa96-capture.sh
 
-trace: build ## Parse a captured trace (make trace TRACE=captures/…/trace.bin)
+trace: build ## Parse a captured trace (make trace TRACE=data/captures/…/trace.bin)
 	./$(BUILD)/fifa96_trace $(TRACE)
 ```
 Add `tsr capture trace` to the `.PHONY` line.
@@ -308,7 +308,7 @@ Add `tsr capture trace` to the `.PHONY` line.
 
 Append to `.gitignore`:
 ```
-captures/
+data/captures/
 ```
 
 - [ ] **Step 4: Verify**
@@ -316,13 +316,13 @@ captures/
 Run: `make test` → all tests pass.
 Run: `make build` → `build/fifa96_trace` exists.
 Run: `printf '' > /tmp/empty.bin; ./build/fifa96_trace /tmp/empty.bin` → prints `BAD-HEADER` and exits 1.
-Run: `git check-ignore -v captures/x` → reports `.gitignore:…:captures/`.
+Run: `git check-ignore -v data/captures/x` → reports `.gitignore:…:data/captures/`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/fifa96_trace.c CMakeLists.txt Makefile .gitignore
-git commit -m "feat(trace): CLI tool, make targets, ignore captures/"
+git add port/tools/fifa96_trace.c CMakeLists.txt Makefile .gitignore
+git commit -m "feat(trace): CLI tool, make targets, ignore data/captures/"
 ```
 
 ---
@@ -330,7 +330,7 @@ git commit -m "feat(trace): CLI tool, make targets, ignore captures/"
 ## Task 3: Capture TSR — install, COM1 sink, INT-21 file trace
 
 **Files:**
-- Create: `tsr/fifa96_capture.asm`
+- Create: `_tools/tsr/fifa96_capture.asm`
 
 **Interfaces:**
 - Produces: `build/FIFACAP.COM`, a `.COM` that (a) probes COM1, (b) emits a HEADER,
@@ -341,10 +341,10 @@ git commit -m "feat(trace): CLI tool, make targets, ignore captures/"
 
 - [ ] **Step 1: Write the resident skeleton with the serial sink and framing**
 
-`tsr/fifa96_capture.asm` (complete file; Task 4 appends the patch pass and INT-60 body):
+`_tools/tsr/fifa96_capture.asm` (complete file; Task 4 appends the patch pass and INT-60 body):
 ```asm
-; tsr/fifa96_capture.asm — FIFA96 P0 capture rig (16-bit COM).
-;   nasm -f bin tsr/fifa96_capture.asm -o build/FIFACAP.COM
+; _tools/tsr/fifa96_capture.asm — FIFA96 P0 capture rig (16-bit COM).
+;   nasm -f bin _tools/tsr/fifa96_capture.asm -o build/FIFACAP.COM
         org 0x100
         bits 16
 
@@ -603,7 +603,7 @@ If nasm is missing, temporarily test the guard with `PATH=/usr/bin:/bin` minus n
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tsr/fifa96_capture.asm
+git add _tools/tsr/fifa96_capture.asm
 git commit -m "feat(tsr): resident COM install with COM1 sink and INT-21 file trace"
 ```
 
@@ -612,7 +612,7 @@ git commit -m "feat(tsr): resident COM install with COM1 sink and INT-21 file tr
 ## Task 4: Capture TSR — patch pass, INT-60 codec records, INT-1 re-arm
 
 **Files:**
-- Modify: `tsr/fifa96_capture.asm`
+- Modify: `_tools/tsr/fifa96_capture.asm`
 
 **Interfaces:**
 - Consumes: Task 3's `send_frame`, `putc`, `putw`, resident data, and the five-site
@@ -733,7 +733,7 @@ Expected: `FIFACAP.COM: <n> bytes` + sha256, exit 0. Record the size and hash in
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tsr/fifa96_capture.asm
+git add _tools/tsr/fifa96_capture.asm
 git commit -m "feat(tsr): patch pass, INT-60 codec records, INT-1 re-arm"
 ```
 
@@ -742,25 +742,25 @@ git commit -m "feat(tsr): patch pass, INT-60 codec records, INT-1 re-arm"
 ## Task 5: Capture launcher + live acceptance checklist
 
 **Files:**
-- Create: `run-fifa96-capture.sh`
+- Create: `tools/run-fifa96-capture.sh`
 - Modify: `Makefile` (already has `capture` from Task 2; verify it points here)
 
 **Interfaces:**
-- Consumes: `build/FIFACAP.COM` (Task 3/4), `run-fifa96.sh` (existing), `game/FIFAPCCD96.iso`.
-- Produces: `captures/session-<UTC>/trace.bin`.
+- Consumes: `build/FIFACAP.COM` (Task 3/4), `tools/run-fifa96.sh` (existing), `data/game/FIFAPCCD96.iso`.
+- Produces: `data/captures/session-<UTC>/trace.bin`.
 
 - [ ] **Step 1: Write the launcher**
 
-`run-fifa96-capture.sh` (executable; mirror `run-fifa96.sh`'s shape):
+`tools/run-fifa96-capture.sh` (executable; mirror `tools/run-fifa96.sh`'s shape):
 ```sh
 #!/bin/sh
 set -eu
 DIR=$(cd "$(dirname "$0")" && pwd)
-ISO="$DIR/game/FIFAPCCD96.iso"
-HDD="$DIR/game/hdd"
+ISO="$DIR/data/game/FIFAPCCD96.iso"
+HDD="$DIR/data/game/hdd"
 COM="$DIR/build/FIFACAP.COM"
 SESSION=${SESSION:-$(date -u +%Y%m%dT%H%M%SZ)}
-CAP_DIR="$DIR/captures/session-$SESSION"
+CAP_DIR="$DIR/data/captures/session-$SESSION"
 CAP_FILE="$CAP_DIR/trace.bin"
 CONF=$(mktemp -t fifa96cap.XXXXXX.conf)
 trap 'rm -f "$CONF"' EXIT INT TERM
@@ -798,9 +798,9 @@ printf 'capture: %s\n' "$CAP_FILE"
 
 - [ ] **Step 2: Verify statically**
 
-Run: `chmod +x run-fifa96-capture.sh`
-Run: `shellcheck run-fifa96-capture.sh` (or `sh -n run-fifa96-capture.sh` if shellcheck absent) → clean.
-Run: `SESSION=selftest ./run-fifa96-capture.sh` with the ISO absent → prints `missing ISO:` and exits 1 (proves the guard before any DOSBox launch). Remove `captures/session-selftest` if created.
+Run: `chmod +x tools/run-fifa96-capture.sh`
+Run: `shellcheck tools/run-fifa96-capture.sh` (or `sh -n tools/run-fifa96-capture.sh` if shellcheck absent) → clean.
+Run: `SESSION=selftest ./tools/run-fifa96-capture.sh` with the ISO absent → prints `missing ISO:` and exits 1 (proves the guard before any DOSBox launch). Remove `data/captures/session-selftest` if created.
 
 - [ ] **Step 3: Manual live acceptance checklist (do not automate; record the outcome verbatim)**
 
@@ -810,13 +810,13 @@ Run `make capture`, play boot→intro→asset load, quit, then `make trace TRACE
 - [ ] a. Trace contains `HEADER magic=FCAP version=1 patches=5`, ≥1 `FILE` record for a CD file, and `END` (or a flagged truncation: summary `end=no-END`).
 - [ ] b. Patch pass: every one of the five sites emits exactly one result — `PATCH_OK site=<addr>` or `PATCH_SKIP site=<addr> reason=…`; summary `patch: ok=5 skip=0` (or a reason naming the mismatch). If all five skip, the PSP/base assumption failed — attach the raw first INT-21 records.
 - [ ] c. Reaching an asset load emits ≥1 `CODEC site=…` line for the responsible site.
-- [ ] d. The game behaves as with plain `./run-fifa96.sh` — no new hangs or corruption (the self-checksum assumption, stated as an assumption until observed).
+- [ ] d. The game behaves as with plain `./tools/run-fifa96.sh` — no new hangs or corruption (the self-checksum assumption, stated as an assumption until observed).
 - [ ] e. Append the accepted parsed lines **verbatim** (quote-only rule) to the report; do not edit the map in this slice.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add run-fifa96-capture.sh
+git add tools/run-fifa96-capture.sh
 git commit -m "feat(rig): DOSBox-X capture launcher with serial file sink"
 ```
 
@@ -824,7 +824,7 @@ git commit -m "feat(rig): DOSBox-X capture launcher with serial file sink"
 
 ## Self-Review
 
-- **Spec coverage:** Guest TSR (Tasks 3–4: COM1 sink, frame format, INT-21 hook, deferred patch table, INT-60 handler, INT-1 re-arm, heartbeat) ✓; Host (Task 2/5: `run-fifa96-capture.sh`, `tools/fifa96_trace.c`, Makefile targets, `.gitignore captures/`) ✓; Testing 1 parser CTests (Task 1) ✓; Testing 2 TSR checked by `make tsr` + size/hash (Task 3/4) ✓; Testing 3 live checklist (Task 5) ✓; Hard constraints: no ISO write, no patches to uncited addresses (five-site table), existing tests untouched, `nasm` guard, nothing in `captures/` committed (`.gitignore`) ✓.
+- **Spec coverage:** Guest TSR (Tasks 3–4: COM1 sink, frame format, INT-21 hook, deferred patch table, INT-60 handler, INT-1 re-arm, heartbeat) ✓; Host (Task 2/5: `tools/run-fifa96-capture.sh`, `port/tools/fifa96_trace.c`, Makefile targets, `.gitignore data/captures/`) ✓; Testing 1 parser CTests (Task 1) ✓; Testing 2 TSR checked by `make tsr` + size/hash (Task 3/4) ✓; Testing 3 live checklist (Task 5) ✓; Hard constraints: no ISO write, no patches to uncited addresses (five-site table), existing tests untouched, `nasm` guard, nothing in `data/captures/` committed (`.gitignore`) ✓.
 - **Placeholder scan:** three `> Implementer:` callouts remain (send_frame body, patch-pass 32-bit shift, CODEC payload packing). These are bounded implementation detail, not requirements; the interfaces and exact values are fixed. Task 3 Step 1's stub is explicitly marked "do not commit half-done".
 - **Type consistency:** Task 1 fixes the wire layout; Tasks 3–4 reference the same constants and the same five values as Global Constraints. `emit_file` is introduced in Task 3 Step 3 and reused in Task 4.
 - **Open risk:** the TSR is live-verified only; Task 5's live checklist is the acceptance gate. If §Ruling mechanisms prove wrong, they surface there, not in unit tests.

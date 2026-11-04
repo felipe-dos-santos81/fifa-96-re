@@ -6,7 +6,7 @@ match end"; boundary/penalty-split chosen by the user).
 Parent spec: `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`
 Predecessor spec: `docs/superpowers/specs/2026-10-13-fifa96-m2-phase21-live-period-end-design.md`
 Predecessor plan: `docs/superpowers/plans/2026-10-13-fifa96-m2-phase21-live-period-end.md`
-Recon slices (to be produced by this phase's wave): `docs/ghidra/FU231…FU238`.
+Recon slices (to be produced by this phase's wave): `port/spec/FU231…FU238`.
 Deferred to phase-23: the **penalty shootout** (a separate subsystem; own spec→recon→plan).
 
 ## 1. Context
@@ -129,7 +129,7 @@ One implementer at a time. Dependency order: T1 → T2 → T3 → T4 → T5 → 
 
 **Census caveat (stated, not hidden).** The phase likely wires **zero new rows** (it
 activates already-counted rows); if a row's live-dispatch status changes the census,
-recompute `floor(100 × wired / 80)` and update the README title + `docs/ENGINE.md` +
+recompute `floor(100 × wired / 80)` and update the README title + `port/ENGINE.md` +
 `docs/PROGRESS.md` + `AGENTS.md` in the same commit.
 
 ## 6. Acceptance and the tape extension / re-pin
@@ -176,8 +176,8 @@ Any *unexplained* drift is a regression to investigate, never a re-pin.
 - **The lifecycle trigger** — `mark_over` at T3 (re-pointed from phase-21's condition).
 - **The extra-time halves** — the clock's periods 2/3 (`extra_length`) + the phase-`0x13`/`0x14` rows at T4.
 - **The match-over screen + return** — the lifecycle at T5.
-- **The tape scenario** (`tests/test_engine_m2.c`) — extended at T1/T6; `tests/golden/engine/m2-frames.txt` — re-pinned at T6.
-- **The recon slices** `docs/ghidra/FU231…FU238` — appended errata only (prior sections never rewritten).
+- **The tape scenario** (`port/tests/test_engine_m2.c`) — extended at T1/T6; `port/tests/golden/engine/m2-frames.txt` — re-pinned at T6.
+- **The recon slices** `port/spec/FU231…FU238` — appended errata only (prior sections never rewritten).
 
 ## 10. Decisions (approved in-chat)
 
@@ -199,7 +199,7 @@ Prior sections (§1–§10) are **not** rewritten; the corrections land here.
   plays the live extra-time halves to the ET-over **consume** (`word 2`, the
   same-frame resume, no over-screen — FU-232-L6) and stops there. The **OVER
   screen** and the **front-end return** are **not** on the forced-ET tape; they are
-  asserted **off-tape** by `run_regulation_over_probe` (`tests/test_engine_m2.c`),
+  asserted **off-tape** by `run_regulation_over_probe` (`port/tests/test_engine_m2.c`),
   the **D2** scope exercised through the word-`1` regulation-over route
   (controller-ruled 2026-10-13).
 - **(b) T4's "phase-`0x13`/`0x14` rows" is superseded.** §5 T4 ("the extra-time

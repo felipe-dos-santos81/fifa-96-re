@@ -8,18 +8,18 @@
 
 Order S1 → S2 → S3 → S4 → S5, each from its frozen slice, SDD loop as established (brief → implementer → task review → fix loop → controller verify (`make check`, tape `cmp`, tree clean) → push).
 
-- **S1: possession/locomotion** — from `docs/ghidra/FU-147_possession_locomotion.md` (verdict: yes; lane writer `0x7C7AF`, `+0x8D` seed `0x8C329`, driver `FUN_0008D8EC`, situation-0xB producers, possession flips). Port the reachable subset; pad-driven possession changes in a headless fixture; golden re-pins only with reason + frame diff.
-- **S2: goal arming** — from `docs/ghidra/FU-145_goal_arming.md` (armer `FUN_0007131C`, classifier `FUN_00070074`, scanner `FUN_00088940`, queue arm).
+- **S1: possession/locomotion** — from `port/spec/FU-147_possession_locomotion.md` (verdict: yes; lane writer `0x7C7AF`, `+0x8D` seed `0x8C329`, driver `FUN_0008D8EC`, situation-0xB producers, possession flips). Port the reachable subset; pad-driven possession changes in a headless fixture; golden re-pins only with reason + frame diff.
+- **S2: goal arming** — from `port/spec/FU-145_goal_arming.md` (armer `FUN_0007131C`, classifier `FUN_00070074`, scanner `FUN_00088940`, queue arm).
   **Ruling (approved):** S2 lands the armer against a fixture-driven pan; the pan producer (`FUN_00071C94` lead in FU-148 §2.1(c)) completes in S4 if it proves camera-scoped — S2/S3 proceed on the seam, no reordering.
-- **S3: goal consumers** — from `docs/ghidra/FU-146_goal_consumers.md` (queue `0x8A8E0`, scheduler `FUN_000948AC`, installer `0x92D8C/0x92E2C`, reachable leg handlers → `fifa96_match_run_score_event`). Shared 0xB entry point per the freeze reconciliation (no parallel mechanism; `fifa96_match_run_situation` stays table-2/row-01).
-- **S4: presentation completion** — from `docs/ghidra/FU-148_presentation_hud_camera.md` §2–§4 (camera legs FU-96 1/3, FU-71 event bodies, formation-id producer, palette translation tables) as reachable.
+- **S3: goal consumers** — from `port/spec/FU-146_goal_consumers.md` (queue `0x8A8E0`, scheduler `FUN_000948AC`, installer `0x92D8C/0x92E2C`, reachable leg handlers → `fifa96_match_run_score_event`). Shared 0xB entry point per the freeze reconciliation (no parallel mechanism; `fifa96_match_run_situation` stays table-2/row-01).
+- **S4: presentation completion** — from `port/spec/FU-148_presentation_hud_camera.md` §2–§4 (camera legs FU-96 1/3, FU-71 event bodies, formation-id producer, palette translation tables) as reachable.
 - **S5: acceptance v6** — possess → score → restart → period end; deepest-reachable honesty rule; every remaining forcing listed with its leg; fresh smoke; whole-phase review.
 
 Phase-6 gate: milestone DoD met (or deepest reachable chain, full legs), tape v6 green, smoke honest, M1 immovable.
 
 ## Track B — phase-7 recon-ahead (parallel, read-only, 4 agents)
 
-Same discipline as wave 1: Ghidra read-only; each agent writes ONLY `docs/ghidra/drafts/w7-<n>-*.md`; evidence floor (first-hand bytes/addresses, fresh xrefs for census claims, numbered legs, port contract); controller freeze review then canonical FU promotion in a serialized commit. No `src/`/`test/`/shared-doc edits, no commits.
+Same discipline as wave 1: Ghidra read-only; each agent writes ONLY `port/spec/drafts/w7-<n>-*.md`; evidence floor (first-hand bytes/addresses, fresh xrefs for census claims, numbered legs, port contract); controller freeze review then canonical FU promotion in a serialized commit. No `src/`/`test/`/shared-doc edits, no commits.
 
 - **B1 set pieces & restarts** — throw-in/corner/goal-kick/free-kick dispatch rows + their situation producers (extend FU-146 legs 1–4); restart placement/state.
 - **B2 fouls / referee / offside** — the foul/offside/referee rows and their match-state effects (cards, free-kick awards, whistle chain).

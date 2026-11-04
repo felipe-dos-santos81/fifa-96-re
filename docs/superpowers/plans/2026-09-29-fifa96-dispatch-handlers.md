@@ -4,23 +4,23 @@
 
 **Goal:** Walk and disposition the unique landing offsets of the 26 band+block `JMP word ptr [0x9bc]/[0x9be]` dispatch targets from slice 21's determinability table — dedupe to a handler set, dry-run walk each handler from its cited target offset to a cited exit (the `PUSH/PUSH/MOV BX…/CLI` prelude pattern is the entry signature to verify per handler), then capped-create the handlers at cited boundaries with mechanism-level names only where the walk's own ops support them. This finally gives the indirect dispatch story owners for its landing code — including the first attributed entry points into the block `2978..2ada` (`0x2a5a`/`0x2a60`, adjacent to the slice-16 MSW-clear shape at `2a6c`).
 
-**Architecture:** Read-only evidence pass (dedupe + walks + collision checks, zero Ghidra writes, Task 1), then capped creates + verdicts + map rows (Task 2). Append `## vector dispatch handlers` to `docs/ghidra/loader_rename_map.md`; prior sections referenced, never rewritten. No C, no tests, no CMake, no tools.
+**Architecture:** Read-only evidence pass (dedupe + walks + collision checks, zero Ghidra writes, Task 1), then capped creates + verdicts + map rows (Task 2). Append `## vector dispatch handlers` to `port/spec/loader_rename_map.md`; prior sections referenced, never rewritten. No C, no tests, no CMake, no tools.
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `disassemble_bytes` (Task 1 `dry_run=true` only), `disassemble_function`, `read_memory` (hex-vs-data protocol), `search_instructions`, `find_code_gaps`, `create_function`, `rename_function`, `set_comment`, `save_program`), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-29 (dedupe → walk each unique handler to cited exit → capped creates with mechanism-level names where ops support them; one-hop callee guard; handler trees, `[0x9b4]` cell role, `3ed8` arm semantics, islands `08c2/033c/0bc3` stay out/cite-only) + `docs/ghidra/loader_rename_map.md` (`## 2811..296c pocket + 9bc vector` — determinability table: 26 band+block targets, per-arg pair sources and cited landing insns (`0x0938` = `50 53 bb0010 fa`; `0x2a5a` = `50538b1eb409fa`-form); readers `092d`@`dispatch_mode_vector` (`092c..`), `0934`@`FUN_11bd_0931` (`0931..0937`, caller `0d80`); three flow islands ratified+deferred; `mode_vector_source_pair@2820`; `## paging block 2978..2ada` — block fully named-open, `2978` = `CMP byte [0xdfe],0x1`, MSW-clear shape `2a6c..2a73` flagged-not-adopted, quote-protocol note binding; `## 7c62 exit arm` — `092c` called at `7d15/7d1e`; slice-16 row for `2a6c`).
+**Spec:** Approved chat design 2026-09-29 (dedupe → walk each unique handler to cited exit → capped creates with mechanism-level names where ops support them; one-hop callee guard; handler trees, `[0x9b4]` cell role, `3ed8` arm semantics, islands `08c2/033c/0bc3` stay out/cite-only) + `port/spec/loader_rename_map.md` (`## 2811..296c pocket + 9bc vector` — determinability table: 26 band+block targets, per-arg pair sources and cited landing insns (`0x0938` = `50 53 bb0010 fa`; `0x2a5a` = `50538b1eb409fa`-form); readers `092d`@`dispatch_mode_vector` (`092c..`), `0934`@`FUN_11bd_0931` (`0931..0937`, caller `0d80`); three flow islands ratified+deferred; `mode_vector_source_pair@2820`; `## paging block 2978..2ada` — block fully named-open, `2978` = `CMP byte [0xdfe],0x1`, MSW-clear shape `2a6c..2a73` flagged-not-adopted, quote-protocol note binding; `## 7c62 exit arm` — `092c` called at `7d15/7d1e`; slice-16 row for `2a6c`).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` against `data` before verbatim (slice-17 protocol, restated in `## paging block 2978..2ada`).
 - Task 1 writes NOTHING in Ghidra: `disassemble_bytes` only with `dry_run=true`; all reads via `disassemble_function`/`search_instructions`/`read_memory`/`get_function_by_address`/`find_code_gaps`; tool error on a required sub-step → BLOCKED report, never a write. All listing mutations belong to Task 2 at Task-1-cited boundaries.
 - Do NOT invent addresses: every handler's start offset must trace to the determinability table row (source cell + cited LE word) — re-quote the row per handler; owner-state at each start re-confirmed live (`get_function_by_address`); far delta `0x1bd0` per far operand.
 - Capped write path (inherited): real `disassemble_bytes` → at most ONE `create_function` nudge (`disassemble_first=false`) → RATIFY on second refusal, verbatim outputs; delete nothing beyond this slice's own nudge objects; **never create over defined bytes or into existing FUNs** — if a walk crosses an island (`08c2`/`033c`/`0bc3`), `2824`-family pocket FUN, `092c`/`0931` stub, or any defined body, the handler boundary STOPS one byte short, cited; overlaps that would force a merge → record collision + STOP-BLOCKED per handler, never fight.
 - Scope guard: handler callees cited address-only, one hop; no walk into pocket CODE, block interior beyond a handler's own cited exit, `[0x9b4]` consumers, islands' bodies, or `3ed8` arm dispatch semantics — status lines cite prior rows.
 - Naming honesty: verb-led snake_case from the handler body's own cited ops; mechanism wording only to the extent bytes show it (a `CLI`/segment-load/MOV-CR-class op names itself; "protected-mode"-flavored words allowed ONLY if a `MOV CR0`/LGDT/LIDT-class op is cited in-body or in the landing prelude — else record the missing leg and keep default names); NOT-CONFIRMED gets no rename/plate beyond the create; no `decode_*`, no direction words.
-- Prior sections read-only (pure append, zero deletions outside new section); `save_program` after writes; leave `fifa96.rep` churn unstaged; commit messages exactly per the briefs; no new tests, suite 10/10 gate only.
+- Prior sections read-only (pure append, zero deletions outside new section); `save_program` after writes; leave `data/fifa96.rep` churn unstaged; commit messages exactly per the briefs; no new tests, suite 10/10 gate only.
 
 ---
 
@@ -30,16 +30,16 @@ One deduped handler set, two gates: read-only dedupe+walks (Task 1), capped crea
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## vector dispatch handlers` (Task 1 dedupe table + per-handler walk tables + prelude-signature rows; Task 2 `### Writes` + per-handler verdict rows + `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## vector dispatch handlers` (Task 1 dedupe table + per-handler walk tables + prelude-signature rows; Task 2 `### Writes` + per-handler verdict rows + `### Deferrals`).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only: real disassembly + `create_function` (capped) at cited ranges; rename/plate only where legs cited; `save_program`.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Dedupe + per-handler walks (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## vector dispatch handlers` with dedupe table + walk tables + signature rows)
+- Modify: `port/spec/loader_rename_map.md` (append `## vector dispatch handlers` with dedupe table + walk tables + signature rows)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -60,14 +60,14 @@ Per handler, state whether the prelude matches the `0x0938`/`0x2a5a` cited forms
 
 - [ ] **Step 4: Append + verify + commit**
 
-Append `## vector dispatch handlers (verified 2026-09-29, program \`/fifa96.exe\`)` — paragraph + dedupe table + walk tables + signature/adjacency rows + boundary proposals (filled Evidence, calls address-only, no rename column — Task 1 names nothing). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: dedupe dispatch targets and walk handlers to cited exits" || true`
+Append `## vector dispatch handlers (verified 2026-09-29, program \`/fifa96.exe\`)` — paragraph + dedupe table + walk tables + signature/adjacency rows + boundary proposals (filled Evidence, calls address-only, no rename column — Task 1 names nothing). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: dedupe dispatch targets and walk handlers to cited exits" || true`
 
 ---
 
 ### Task 2: Capped creates + verdicts + dispositions
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
 - Modify: Ghidra program `/fifa96.exe` (per handler: real disassembly at cited range → `create_function` (capped) → rename/plate only if legs cited → `save_program`)
 
 **Interfaces:**
@@ -84,7 +84,7 @@ Apply naming honesty rule per handler; record the missing leg (e.g. "exit = tail
 
 - [ ] **Step 3: Append + verify + commit**
 
-Append `### Writes`, verdict rows, `### Deferrals`. Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: create dispatch handlers and settle verdicts" || true`
+Append `### Writes`, verdict rows, `### Deferrals`. Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: create dispatch handlers and settle verdicts" || true`
 
 ---
 

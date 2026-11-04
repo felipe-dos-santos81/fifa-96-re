@@ -19,7 +19,7 @@ import fifa96_patch as patch  # noqa: E402
 
 CODE_START = 0x10000
 CODE_END = 0x10000 + 0xC1EA0  # obj1: base 0x10000, vsize 0xC1EA0 (LE parse)
-DEFAULT_ISO = Path(__file__).resolve().parents[1] / "game" / "FIFAPCCD96.iso"
+DEFAULT_ISO = Path(__file__).resolve().parents[1] / "data" / "game" / "FIFAPCCD96.iso"
 
 
 def load_image(iso_path):

@@ -4,16 +4,16 @@
 
 **Goal:** Delimit all ~20 arms of the `3ed8` SI mode-word dispatch (`11bd:42de..4368`) — per-arm condition, target, and published constant — with instruction evidence and map rows.
 
-**Architecture:** Read-only Ghidra evidence pass in two gates: arm-table skeleton first (chain walk, no dives), then one-layer callee verdicts for arms that stay in scope. Rows appended to `docs/ghidra/loader_rename_map.md` under `## 3ed8 mode dispatch`. No C, no tests, no CMake.
+**Architecture:** Read-only Ghidra evidence pass in two gates: arm-table skeleton first (chain walk, no dives), then one-layer callee verdicts for arms that stay in scope. Rows appended to `port/spec/loader_rename_map.md` under `## 3ed8 mode dispatch`. No C, no tests, no CMake.
 
 **Tech Stack:** Ghidra-MCP (`disassemble_function`, `decompile_function`, `get_function_by_address`, `get_function_callees`, `rename_function`, `set_comment`, `save_program`), `grep` (content checks), CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-29 (all arms one pass + one-FUN-layer guard per arm + skeleton-plus closeout) + `docs/ghidra/loader_rename_map.md` (`### SI-producer boundary: 11bd:3f9c` derivation facts, `### 3ed8 verdict: NEEDS-OWN-SLICE` exit facts).
+**Spec:** Approved chat design 2026-09-29 (all arms one pass + one-FUN-layer guard per arm + skeleton-plus closeout) + `port/spec/loader_rename_map.md` (`### SI-producer boundary: 11bd:3f9c` derivation facts, `### 3ed8 verdict: NEEDS-OWN-SLICE` exit facts).
 
 ## Global Constraints
 
 - No C, test, or CMake changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/`xxd`/golden citation; disassembly wins over prior descriptions.
 - No `decode_*` name without an observed byte transform; NOT-CONFIRMED members get no rename and no map row.
 - Scope guard (per arm): a callee dive may descend at most one FUN layer past the arm body; deeper fan-out is recorded (address + call-site) with the dive deferred. If more than a third of arms hit the guard, the slice still closes with the arm table complete — a skeleton-plus, never a balloon.
@@ -27,16 +27,16 @@ One subsystem (mode dispatch) in two gates: arm-table skeleton with zero dives (
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## 3ed8 mode dispatch` section (Task 1 arm table, Task 2 callee rows + guard-deferred notes).
+- Modify: `port/spec/loader_rename_map.md` — append `## 3ed8 mode dispatch` section (Task 1 arm table, Task 2 callee rows + guard-deferred notes).
 - Modify: Ghidra program `/fifa96.exe` — evidence-based renames + plate comments, CONFIRMED only (Task 2 only; Task 1 renames nothing).
-- `src/`, `tests/`, `CMakeLists.txt`, headers — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, headers — UNTOUCHED.
 
 ---
 
 ### Task 1: Arm-table skeleton (chain walk, no dives)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## 3ed8 mode dispatch` section with arm table)
+- Modify: `port/spec/loader_rename_map.md` (append `## 3ed8 mode dispatch` section with arm table)
 - Modify: none in Ghidra (no renames, no plates, no save — read-only pass)
 
 **Interfaces:**
@@ -54,7 +54,7 @@ Acceptance: every reachable arm from `42db` has a table row with filled conditio
 
 - [ ] **Step 2: Append the map section**
 
-Append to `docs/ghidra/loader_rename_map.md`:
+Append to `port/spec/loader_rename_map.md`:
 ```markdown
 ## 3ed8 mode dispatch (verified 2026-09-29, program `/fifa96.exe`)
 
@@ -74,7 +74,7 @@ Expected: PASS — 10/10 green (docs-only).
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/ghidra/loader_rename_map.md
+git add port/spec/loader_rename_map.md
 git commit -m "docs: map 3ed8 mode-dispatch arm table with instruction evidence" || true
 ```
 
@@ -83,7 +83,7 @@ git commit -m "docs: map 3ed8 mode-dispatch arm table with instruction evidence"
 ### Task 2: One-layer callee verdicts + renames + closeout
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append callee rows + guard-deferred notes to the `## 3ed8 mode dispatch` section)
+- Modify: `port/spec/loader_rename_map.md` (append callee rows + guard-deferred notes to the `## 3ed8 mode dispatch` section)
 - Modify: Ghidra program `/fifa96.exe` (rename + plate ONLY for CONFIRMED one-layer callees, then `save_program`)
 
 **Interfaces:**
@@ -104,10 +104,10 @@ CONFIRMED one-layer callees: append row + `rename_function` (verb-tier, no `deco
 - [ ] **Step 3: Verify suite + content and commit**
 
 Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build`
-Expected: PASS — 10/10 green. Verify: `grep -c "3ed8 mode dispatch" docs/ghidra/loader_rename_map.md` is nonzero.
+Expected: PASS — 10/10 green. Verify: `grep -c "3ed8 mode dispatch" port/spec/loader_rename_map.md` is nonzero.
 
 ```bash
-git add docs/ghidra/loader_rename_map.md
+git add port/spec/loader_rename_map.md
 git commit -m "docs: verdict dispatch-arm callees and close mode-dispatch regression" || true
 ```
 

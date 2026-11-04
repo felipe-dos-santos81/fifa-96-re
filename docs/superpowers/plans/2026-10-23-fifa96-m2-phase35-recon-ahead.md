@@ -4,7 +4,7 @@
 
 **Goal:** Produce four frozen evidence docs — FU330–FU333 — that settle the native placement-limit producer (`+0x79`, FU328-L1) and its `+0x7B` staging (FU328-L2): the fresh native census, the port audit + producer design, the measured whole-formation/M2 blast radius, and the acceptance/governance for the natural no-slot pan — with a GO/NO-GO on the undriven witness.
 
-**Architecture:** Four independent read-only slices, one agent each. FU330 is a fresh-Ghidra static slice; FU331 is the port audit + design (repo-static); FU332 measures with an out-of-tree patched build; FU333 is the acceptance/governance design. Drafts land under `docs/ghidra/`, receive a whole-wave review + quoted errata, and are promoted one-per-commit. No production code, no test/golden change.
+**Architecture:** Four independent read-only slices, one agent each. FU330 is a fresh-Ghidra static slice; FU331 is the port audit + design (repo-static); FU332 measures with an out-of-tree patched build; FU333 is the acceptance/governance design. Drafts land under `port/spec/`, receive a whole-wave review + quoted errata, and are promoted one-per-commit. No production code, no test/golden change.
 
 **Tech Stack:** Ghidra MCP (standard tools only), the repo's C sources + docs, out-of-tree probes linking the prebuilt `build/libfifa96_*.a` libraries.
 
@@ -33,7 +33,7 @@
 ### Task 1: FU330 — the native `+0x79` producer census
 
 **Files:**
-- Create: `docs/ghidra/FU330_r2l9_placement_timer.md`
+- Create: `port/spec/FU330_r2l9_placement_timer.md`
 
 **Interfaces:**
 - Consumes: the spec §3/§4; FU84 §6 (carried); FU328 §4/§5/L1-L3 + its erratum 2.
@@ -50,13 +50,13 @@
 ### Task 2: FU331 — the port audit and the producer design
 
 **Files:**
-- Create: `docs/ghidra/FU331_r2l9_producer_design.md`
+- Create: `port/spec/FU331_r2l9_producer_design.md`
 
 **Interfaces:**
 - Consumes: the spec §3/§4/§8; FU330's census (or the carried FU328 chain if parallel — forward-cite); the port's `timer79`/`timer7b` sites.
 - Produces: the port audit (every site, the OL-82 assumption, the row-09 interplay), the exact producer design, the RED/GREEN plan, GO/NO-GO; legs `FU331-L1…`.
 
-- [ ] **Step 1: Audit every `timer79`/`timer7b` site** (`include/fifa96_engine/fifa96_match_entities.h:129`; `src/fifa96_engine/fifa96_match_entities.c:94/209/744`; `src/fifa96_engine/fifa96_match_handlers.c:497/737/749/848/866/2344/4861/5034`; any others fresh); classify: the producer's target, the copies, the consumers, the row-09 velocity staging, the OL-82 assumption.
+- [ ] **Step 1: Audit every `timer79`/`timer7b` site** (`port/src/fifa96_engine/fifa96_match_entities.h:129`; `port/src/fifa96_engine/fifa96_match_entities.c:94/209/744`; `port/src/fifa96_engine/fifa96_match_handlers.c:497/737/749/848/866/2344/4861/5034`; any others fresh); classify: the producer's target, the copies, the consumers, the row-09 velocity staging, the OL-82 assumption.
 - [ ] **Step 2: The row-09 interplay.** What the row-09 staging does with `timer7b` (the `vel73/vel75` computation) and what a live `+0x79` does to it; the native side (FU330); the OL-82 correction.
 - [ ] **Step 3: The producer design.** The exact cell, the writer site(s) and timing, the values (from FU330), the interaction with the `+0x7B` reset (`entities.c:94`), and the FU328-L1/L2/L3/L8 mapping; the RED/GREEN unit pins (the producer, the counter, the row-09 consumer).
 - [ ] **Step 4: Write the doc** in the house format: the audit table, the design, the pins, legs, GO/NO-GO.
@@ -67,7 +67,7 @@
 ### Task 3: FU332 — the measured blast radius
 
 **Files:**
-- Create: `docs/ghidra/FU332_r2l9_blast_radius.md`
+- Create: `port/spec/FU332_r2l9_blast_radius.md`
 
 **Interfaces:**
 - Consumes: the spec §3/§6; FU330's census; FU331's design (forward-cite if parallel); the FU328 §5.4 diagnostic; the phase-32/33 golden recipe.
@@ -85,14 +85,14 @@
 ### Task 4: FU333 — the acceptance and governance
 
 **Files:**
-- Create: `docs/ghidra/FU333_r2l9_acceptance.md`
+- Create: `port/spec/FU333_r2l9_acceptance.md`
 
 **Interfaces:**
-- Consumes: the spec §5–§8; FU329 Branch B (`docs/ghidra/FU329_r2l8_acceptance.md`); FU332's measured numbers (forward-cite); the phase-33 golden governance (the stratum-set gate, the faithful-move).
+- Consumes: the spec §5–§8; FU329 Branch B (`port/spec/FU329_r2l8_acceptance.md`); FU332's measured numbers (forward-cite); the phase-33 golden governance (the stratum-set gate, the faithful-move).
 - Produces: the Branch B concretized, the A3 re-pin, the Layer-2, the faithful-move recipe, the hazards, GO/NO-GO; legs `FU333-L1…`.
 
 - [ ] **Step 1: Concretize the witness.** The exact tuple/pins from FU332 (or the designed slots if NO-GO); the no-staged-cell rule; the drive naming.
-- [ ] **Step 2: The A3 re-pin.** The phase-33 inversion's window constants (`tests/test_engine_m2.c:3972-3979`) with the measured pacing shift; the exact values from FU332.
+- [ ] **Step 2: The A3 re-pin.** The phase-33 inversion's window constants (`port/tests/test_engine_m2.c:3972-3979`) with the measured pacing shift; the exact values from FU332.
 - [ ] **Step 3: The golden recipe.** The faithful-move procedure (the first-diff, the `state=` check, the stratum-set gate, M1 `cmp`, the written reason), the tripwires, the P1/P2 commit split.
 - [ ] **Step 4: The hazards.** The row-09 interplay, the OL-82 retirement, the whole-formation AI movement, the `+0x9D` OR, the no-slot/`lane = 0`/zero-seed traps, the census/README invariants.
 - [ ] **Step 5: Write the doc** in the house format: the design sections, legs, GO/NO-GO.

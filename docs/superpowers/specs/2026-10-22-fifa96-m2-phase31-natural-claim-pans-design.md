@@ -9,7 +9,7 @@ Make the camera move in **natural** `make game` play through the native row-04 h
 
 ## 2. What phase 30 left (the binding starting state)
 
-- The camera cells stay `(0,0,0)` in natural play; the phase-30 register records the NO-GO and the full route analysis (`docs/ENGINE.md`, the phase-30 section).
+- The camera cells stay `(0,0,0)` in natural play; the phase-30 register records the NO-GO and the full route analysis (`port/ENGINE.md`, the phase-30 section).
 - The only live place writer is the row-04 half-line claim pan: the gate (`0x7ED89..0x7EDE3`: a record within `0x40 - timer81` of the camera, `lane < 0x90`, `≤ bound`, `camY ≤ 0x50`) → `fifa96_camera_event_set` + `fifa96_camera_set_tracked` (`handlers.c` ~`:2741-2752`) → `fifa96_camera_update_walk` integrates `acc_x/acc_z` (`camera.c:110-111`; `match_run.c:4370`). Scripted witness: `0→0x90→0x120`, two pans, Y=0 (FU310 §6, FU313 §5).
 - The pan is **one-shot per claim** and the tracked record is excluded from the next arm (`0x7EFEE`, `tracked = 10` after the second pan); the fusion of repeated claims and the tracked lifecycle is the open question (FU310-L9's spike plateaued at `0x120` with the scripted drive; the natural drive was never tested).
 - The phase-30 probe (T1) measured 3,598 granted frames with zero camera cells and 6,118 ladder calls / `ran=0`; the pan witness is the only motion.
@@ -31,7 +31,7 @@ Make the camera move in **natural** `make game` play through the native row-04 h
 
 ## 4. Structure
 
-**Stage-1 (recon-ahead):** a four-slice read-only wave, FU314–FU317, one agent per slice (the up-to-4 cap), each a draft `docs/ghidra/FU31N_r2l6_<slug>.md` (single H1, Phase/Provenance line, port shape, evidence table, numbered legs, GO/NO-GO verdict); promoted one-per-commit; read-only Ghidra discipline (fresh reads, the alias traps, LE globals `+0x100000`, unprovable ⇒ a numbered leg with its native owner). No production code. A whole-wave review + errata before Stage-2.
+**Stage-1 (recon-ahead):** a four-slice read-only wave, FU314–FU317, one agent per slice (the up-to-4 cap), each a draft `port/spec/FU31N_r2l6_<slug>.md` (single H1, Phase/Provenance line, port shape, evidence table, numbered legs, GO/NO-GO verdict); promoted one-per-commit; read-only Ghidra discipline (fresh reads, the alias traps, LE globals `+0x100000`, unprovable ⇒ a numbered leg with its native owner). No production code. A whole-wave review + errata before Stage-2.
 **Stage-2:** a producer plan written after the wave promotes (task text from the FU314–FU317 verdicts), executed via subagent-driven development — the claim chain first, then the pan/fusion, then the acceptance + close-out.
 
 ## 5. Acceptance

@@ -2,21 +2,21 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Land the live **producers** (and the small ready correctness edits) that make the remaining phase-7 gameplay chains dispatch on a live engine path (Layer 1, proven headless), with the honest legs kept where the trigger is genuinely unported — off the frozen recon `docs/ghidra/FU273…FU280`.
+**Goal:** Land the live **producers** (and the small ready correctness edits) that make the remaining phase-7 gameplay chains dispatch on a live engine path (Layer 1, proven headless), with the honest legs kept where the trigger is genuinely unported — off the frozen recon `port/spec/FU273…FU280`.
 
 **Architecture:** The recon wave (`FU273…FU280`) proved that for **four of the five families the bodies are already ported** — the missing pieces are **triggers** (a live `goal_armed`/sideline precondition, the row-`0x0C` contact entry) plus a few **small ready edits** (the `FU268-L10` byte, the `sp_157821` shadow). R11-L4 (the keeper CPU chain) is **NO-GO — phase-scale** (`FU273`) and is **out of this plan** (routed to phase-26b-ii / 26c). So Stage-2 is short and surgical: five producer/trigger tasks + three ready fixes + the close-out.
 
 **Tech Stack:** C11/CMake/CTest; ASan/UBSan (`-fno-sanitize-recover=all`); the null backend as determinism source of truth; SDL3 smoke (`make game`, `DISPLAY=:1`); Ghidra MCP (read-only) for re-checks.
 
-**Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase26b-remaining-chains-r11l4-design.md` (binding) + parent `…phase26-live-gameplay-producers-design.md`. Frozen evidence: `docs/ghidra/FU273…FU280` (this plan's authority per task).
+**Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase26b-remaining-chains-r11l4-design.md` (binding) + parent `…phase26-live-gameplay-producers-design.md`. Frozen evidence: `port/spec/FU273…FU280` (this plan's authority per task).
 
 ## Global Constraints
 
 - **`make check` green** (sanitized, strict, `-Wall -Wextra -Werror`); run it before any push. Full suite ~143 s → allow ≥600 s.
-- **M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` never moves** (691 lines, immutable). Verify with `./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt`.
-- **M2 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (v22, 6522 lines) stays byte-identical** unless a producer genuinely changes a live path — then a **written reason + frame diff** and an honest re-pin. The phase prefers tape-dormant producers. Verify `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt`.
+- **M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` never moves** (691 lines, immutable). Verify with `./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt`.
+- **M2 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (v22, 6522 lines) stays byte-identical** unless a producer genuinely changes a live path — then a **written reason + frame diff** and an honest re-pin. The phase prefers tape-dormant producers. Verify `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt`.
 - **The live-chain rule (binding):** a chain is **live** only when a **ported producer raiser** raises its gate on a real engine path; a fixture that stages the gate does **not** count; a stand-in producer is a **fake** (R15/R45/R49). An unported/unreachable producer stays a **numbered leg** with its native owner.
-- **Census:** 59/80 = 73% (`36 action + 23 phase`) at the start. A task that wires a NULL row into a live path is **honest upside**; if the count changes, update README title + `docs/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + `tests/test_engine_m2.c` pins **in the same commit** (`floor(100 × wired/80)`).
+- **Census:** 59/80 = 73% (`36 action + 23 phase`) at the start. A task that wires a NULL row into a live path is **honest upside**; if the count changes, update README title + `port/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + `port/tests/test_engine_m2.c` pins **in the same commit** (`floor(100 × wired/80)`).
 - **Ghidra stays read-only** when re-checking (`/FIFA96.EXE`, case-sensitive; alias traps: `dword[x]>>16` = word at `x+2`, `>>24` = byte at `x+3`; fresh `get_xrefs_to` for any caller count).
 - **No fakes, no front-end work** (a front-end-produced cell is a leg), no audio subsystem, no new subsystem beyond the live producers. ISO-gated tests skip cleanly without the ISO.
 - Commits: `feat`/`fix`/`docs(fuNNN)`/`test`/`chore`; work on `main`; push per task.
@@ -25,14 +25,14 @@
 
 | Path | Responsibility |
 |---|---|
-| `src/fifa96_engine/fifa96_match_run.c` | the referee/offside seam (`:6597`), the goal-scan set-piece arms (`:3274-3340`), the receive arm (`:3769`), the phase arm (`:2853-2861`) |
-| `src/fifa96_engine/fifa96_match_handlers.c` | the action/phase tables + the row-0x10 gate (`:1724`), the row-0x0C body (`:3329`), the keeper rows (`:5512-5522`) |
-| `src/fifa96_engine/fifa96_match_input.c` *(or wherever `match_input_handler` lives)* | the pad `0x7CE38` handler (the `want 0x60` contact install) |
-| `src/fifa96_loader/fifa96_outfield.c` | the row-`0x04` AI duel install (`:598-600`) |
-| `src/fifa96_loader/fifa96_camera.c` | `fifa96_camera.pan_counter` (`:863`/`:893`) — the `[0x157821]` native cell |
-| `src/fifa96_engine/fifa96_match_handlers.h` (`sp_157821`), `fifa96_match_run.h` (`:1487` contract) | the shadow field + the offside contract comment |
-| `tests/test_engine_match_frame.c`, `tests/test_engine_m2.c` | the granted-frame reach tests + the census/golden pins |
-| `docs/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md` | the census line + the leg register (close-out only) |
+| `port/src/fifa96_engine/fifa96_match_run.c` | the referee/offside seam (`:6597`), the goal-scan set-piece arms (`:3274-3340`), the receive arm (`:3769`), the phase arm (`:2853-2861`) |
+| `port/src/fifa96_engine/fifa96_match_handlers.c` | the action/phase tables + the row-0x10 gate (`:1724`), the row-0x0C body (`:3329`), the keeper rows (`:5512-5522`) |
+| `port/src/fifa96_engine/fifa96_match_input.c` *(or wherever `match_input_handler` lives)* | the pad `0x7CE38` handler (the `want 0x60` contact install) |
+| `port/src/fifa96_loader/fifa96_outfield.c` | the row-`0x04` AI duel install (`:598-600`) |
+| `port/src/fifa96_loader/fifa96_camera.c` | `fifa96_camera.pan_counter` (`:863`/`:893`) — the `[0x157821]` native cell |
+| `port/src/fifa96_engine/fifa96_match_handlers.h` (`sp_157821`), `fifa96_match_run.h` (`:1487` contract) | the shadow field + the offside contract comment |
+| `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_m2.c` | the granted-frame reach tests + the census/golden pins |
+| `port/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md` | the census line + the leg register (close-out only) |
 
 **Dependency order:** T1 (gate) → T2..T7 (any order; T4–T7 are independent) → T8 (close-out).
 
@@ -41,13 +41,13 @@
 ### Task 1: The determinism + reachability gate
 
 **Files:**
-- Test: `tests/test_engine_m2.c` (read; the census pins)
+- Test: `port/tests/test_engine_m2.c` (read; the census pins)
 
 **Interfaces:**
 - Produces: the frozen baseline (census `36+23`, M1/M2 hashes) every later task compares against.
 
 - [ ] **Step 1: Recompute the census.** Run `make check`; confirm `wired == 59` (`action_wired == 36u`, `phase_wired == 23u`) and `110/110` pass. If either moved, **stop and report** — do not continue.
-- [ ] **Step 2: Prove the tape stability.** Run `./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt`, `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt` three times; confirm byte-identity and hash M1 `09b726b7…`, M2 `b281a9b2…`.
+- [ ] **Step 2: Prove the tape stability.** Run `./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt`, `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt` three times; confirm byte-identity and hash M1 `09b726b7…`, M2 `b281a9b2…`.
 - [ ] **Step 3: Record the reachability map** (from FU280 §3): set-piece/restart + keeper + fouls are `granted-frame-only`; replay/overlay + the camera are legs. Write it into the task report.
 - [ ] **Step 4: Commit.** `git commit -m "test: phase-26b T1 — the determinism + reachability gate"` (a test-only or no-op commit if nothing changed; if nothing changed, record the gate result in the report and skip the commit).
 
@@ -56,15 +56,15 @@
 ### Task 2: The `FU268-L10` offside-eligibility correctness fix
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c:6597`
-- Modify: `include/fifa96_engine/fifa96_match_run.h:1487`
-- Test: `tests/test_engine_match_frame.c` (the offside chain, `:4220-4295`)
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c:6597`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.h:1487`
+- Test: `port/tests/test_engine_match_frame.c` (the offside chain, `:4220-4295`)
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: `fifa96_match_run_offside_reception` reading the **code** byte.
 
-- [ ] **Step 1: Write the failing test.** Add to `tests/test_engine_match_frame.c` an assertion that a reception record whose **`code == 0x11`** is **rejected** as ineligible (native `+0x91`), distinct from a `type == 0x11` record (which can never occur — `type` is a 0–7 octant).
+- [ ] **Step 1: Write the failing test.** Add to `port/tests/test_engine_match_frame.c` an assertion that a reception record whose **`code == 0x11`** is **rejected** as ineligible (native `+0x91`), distinct from a `type == 0x11` record (which can never occur — `type` is a 0–7 octant).
 
 ```c
 static void test_offside_l10_reads_code_not_type(void) {
@@ -86,9 +86,9 @@ static void test_offside_l10_reads_code_not_type(void) {
 ### Task 3: Unify the `sp_157821` shadow cell
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c:1724` (the row-0x10 gate), `:832` (the field decl)
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (`:2087`/`:2219` seeds, `:4049` probe)
-- Test: `tests/test_engine_m2.c` (or a focused unit)
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c:1724` (the row-0x10 gate), `:832` (the field decl)
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (`:2087`/`:2219` seeds, `:4049` probe)
+- Test: `port/tests/test_engine_m2.c` (or a focused unit)
 
 **Interfaces:**
 - Consumes: `fifa96_camera.pan_counter` (`fifa96_camera.c:863`/`:893`, the native `[0x157821]`).
@@ -115,8 +115,8 @@ static void test_row10_gate_reads_camera_pan_counter(void) {
 ### Task 4: The contact-gate live proof (Layer 1)
 
 **Files:**
-- Test: `tests/test_engine_match_frame.c` (a granted-frame contact scenario)
-- Read: `src/fifa96_loader/fifa96_outfield.c:598-600` (the row-0x04 duel), the pad `0x7CE38` handler, `src/fifa96_engine/fifa96_match_handlers.c:3329` (the row-0x0C body)
+- Test: `port/tests/test_engine_match_frame.c` (a granted-frame contact scenario)
+- Read: `port/src/fifa96_loader/fifa96_outfield.c:598-600` (the row-0x04 duel), the pad `0x7CE38` handler, `port/src/fifa96_engine/fifa96_match_handlers.c:3329` (the row-0x0C body)
 
 **Interfaces:**
 - Consumes: the ported chain row-`0x04` duel / pad `0x7CE38` → row-`0x0B` → row-`0x0C` → `fifa96_match_run_contact` (already unit-proven).
@@ -144,9 +144,9 @@ static void test_contact_gate_reachable_via_row04_duel(void) {
 ### Task 5: The offside live producer (the `0x7A448` call into the live receive arm)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c:3769` (`fifa96_match_run_ball_receive`), `:6544` (`fifa96_match_run_offside_reception`)
-- Read: `docs/ghidra/FU276_fouls_offside_contact.md` §2.2/§2.4 (the native arm `FUN_0007A084 0x7A448`)
-- Test: `tests/test_engine_match_frame.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c:3769` (`fifa96_match_run_ball_receive`), `:6544` (`fifa96_match_run_offside_reception`)
+- Read: `port/spec/FU276_fouls_offside_contact.md` §2.2/§2.4 (the native arm `FUN_0007A084 0x7A448`)
+- Test: `port/tests/test_engine_match_frame.c`
 
 **Interfaces:**
 - Consumes: `fifa96_ref_offside_check` (ported), `fifa96_match_run_offside_reception` (callerless today).
@@ -175,9 +175,9 @@ static void test_offside_reachable_from_live_receive(void) {
 ### Task 6: The set-piece taker triggers (rows `0x10`/`0x12`/`0x13`)
 
 **Files:**
-- Read: `docs/ghidra/FU274_set_piece_live_arm.md` §3 (the trigger analysis)
-- Modify (only if needed): `src/fifa96_engine/fifa96_match_run.c:3274-3340` (the goal-scan arms)
-- Test: `tests/test_engine_match_frame.c`
+- Read: `port/spec/FU274_set_piece_live_arm.md` §3 (the trigger analysis)
+- Modify (only if needed): `port/src/fifa96_engine/fifa96_match_run.c:3274-3340` (the goal-scan arms)
+- Test: `port/tests/test_engine_match_frame.c`
 
 **Interfaces:**
 - Consumes: the ported scanner (`fifa96_match_run_goal_scan`) + the adjudicator (`match_run_ref_step_restart`) + the `goal_armed` armer (`fifa96_match_goal_arm`).
@@ -207,8 +207,8 @@ static void test_throw_in_taker_reachable(void) {
 ### Task 7: The keeper row-`0x1D` trigger (the goal-scan sit-4)
 
 **Files:**
-- Read: `docs/ghidra/FU277_keeper_restart_trigger.md` §4.1 (the split: `0x1D` ← goal-scan sit-4; `0x1E` ← R11-L4)
-- Test: `tests/test_engine_match_frame.c`
+- Read: `port/spec/FU277_keeper_restart_trigger.md` §4.1 (the split: `0x1D` ← goal-scan sit-4; `0x1E` ← R11-L4)
+- Test: `port/tests/test_engine_match_frame.c`
 
 **Interfaces:**
 - Consumes: `fifa96_match_run_goal_scan` (`run.c:3316`, sit-4-capable) + the goal-kick arm (`|snap_z| > 0xB20`, `goal_zone == 0`).
@@ -236,15 +236,15 @@ static void test_keeper_1d_goal_kick_reachable(void) {
 ### Task 8: The replay/overlay ruling + the close-out
 
 **Files:**
-- Modify: `docs/ENGINE.md` (the known-gaps rows + the census line), `docs/PROGRESS.md`, `README.md` (title), `AGENTS.md:90`, `tests/test_engine_m2.c` (pins — only if the census moved)
-- Test: `tests/test_engine_m2.c`
+- Modify: `port/ENGINE.md` (the known-gaps rows + the census line), `docs/PROGRESS.md`, `README.md` (title), `AGENTS.md:90`, `port/tests/test_engine_m2.c` (pins — only if the census moved)
+- Test: `port/tests/test_engine_m2.c`
 
 **Interfaces:**
 - Consumes: every task's verdict.
 
 - [ ] **Step 1: Record the replay/overlay leg.** Per `FU278` §3.3, `replay.state`/`sub.active`/`overlay.armed` are **LEG** (the whole period/screen-machine caller chain is unported) and `ball_row` is **pinned dormant** — append the honest leg (quoted errata; owner `FUN_0004B100`/`FUN_00052030`). **No port** this phase.
-- [ ] **Step 2: Sync the doc errata the wave filed** (as quoted errata): `docs/ENGINE.md:1754` ("the FU-150 entries have no live producer" → "**producer-wired, unraised**", `FU276`); `docs/ENGINE.md:1489`/`docs/PROGRESS.md:1905` `FU241-L1` (port-closed; a test-coverage residual, `FU279`).
-- [ ] **Step 3: Recompute the census.** Recompute `floor(100 × wired/80)`. If a task wired a NULL row into a live path, update **README title + `AGENTS.md:90` + `docs/ENGINE.md` + `docs/PROGRESS.md` + `tests/test_engine_m2.c` pins in the same commit**. If it held at 59/80, no title change.
+- [ ] **Step 2: Sync the doc errata the wave filed** (as quoted errata): `port/ENGINE.md:1754` ("the FU-150 entries have no live producer" → "**producer-wired, unraised**", `FU276`); `port/ENGINE.md:1489`/`docs/PROGRESS.md:1905` `FU241-L1` (port-closed; a test-coverage residual, `FU279`).
+- [ ] **Step 3: Recompute the census.** Recompute `floor(100 × wired/80)`. If a task wired a NULL row into a live path, update **README title + `AGENTS.md:90` + `port/ENGINE.md` + `docs/PROGRESS.md` + `port/tests/test_engine_m2.c` pins in the same commit**. If it held at 59/80, no title change.
 - [ ] **Step 4: Update the leg register** — append the resolved/forbidden legs as quoted errata (prior sections never rewritten).
 - [ ] **Step 5: `make check` + `cmp` M1/M2.** Green; M1 byte-identical; M2 byte-identical or a written re-pin.
 - [ ] **Step 6: Commit + push.** `git commit -m "docs(fu280): phase-26b close-out — the leg register + the census"` then `git push origin main`.

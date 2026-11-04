@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan (engine + tests, since phase-12 T3), Ghidra MCP read-only, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU153…FU156`; predecessor `docs/superpowers/plans/2026-10-11-fifa96-m2-phase12-live-camera-visible-ball.md` + its final review.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU153…FU156`; predecessor `docs/superpowers/plans/2026-10-11-fifa96-m2-phase12-live-camera-visible-ball.md` + its final review.
 
 ## Global Constraints
 
@@ -23,7 +23,7 @@
 
 ## Wave R — parallel read-only recon (gate: three FU slices + reports, committed)
 
-R5–R7 run **concurrently**. Each is read-only on the repo: it writes ONLY its new `docs/ghidra/FU15N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-157…FU-159 in one `docs(fu157-fu159)` commit after the wave returns.
+R5–R7 run **concurrently**. Each is read-only on the repo: it writes ONLY its new `port/spec/FU15N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-157…FU-159 in one `docs(fu157-fu159)` commit after the wave returns.
 
 ### R5 → FU-157: the live camera producer set (unblocks T1)
 - Question: what is the **minimum honest producer set** that makes the camera move live end-to-end in open play? Derive each piece:
@@ -49,28 +49,28 @@ R5–R7 run **concurrently**. Each is read-only on the repo: it writes ONLY its 
 
 ### Task 1: T1 — live camera wiring (from R5)
 
-**Files:** per R5's recommendation (engine camera/run paths, possibly `fifa96_camera.c`, `fifa96_match_run_reset_render`, the place/reset call sites); tests + FU-157 status + `docs/ENGINE.md`.
+**Files:** per R5's recommendation (engine camera/run paths, possibly `fifa96_camera.c`, `fifa96_match_run_reset_render`, the place/reset call sites); tests + FU-157 status + `port/ENGINE.md`.
 **Produces:** the camera place/pan live in open play → **smoke shows the camera visibly moving/following**.
 **Gate T1:** visible live camera (or the deepest provable step with the next-hop as a numbered leg).
 - [ ] RED test → implement → GREEN → gate (`make check` + golden decision + smoke `p13-t1-*`) → commit `feat(engine,fu157): live camera — place/pan producers`.
 
 ### Task 2: T2 — ball art (from R6)
 
-**Files:** per R6's recommendation (render/scene slot resolver, the ball machine's bank/anim writes, the per-row frame tables); tests + FU-158 status + `docs/ENGINE.md`.
+**Files:** per R6's recommendation (render/scene slot resolver, the ball machine's bank/anim writes, the per-row frame tables); tests + FU-158 status + `port/ENGINE.md`.
 **Produces:** slot 22 resolves to a ball sprite → **smoke shows a ball, not a pose**.
 **Gate T2:** ball art visible (or deepest provable + numbered leg).
 - [ ] RED test → implement → GREEN → gate + smoke `p13-t2-*` → M2 re-pin with reason + frame diff if pixels genuinely change → commit `feat(engine,fu159): ball-slot art — real ball sprites (T2-L1)`.
 
 ### Task 3: T3 — jump/ack residuals (from R7)
 
-**Files:** per R7's recommendation (`fifa96_match_run.c` jump arm/arc, `fifa96_action_handlers.c` byte44, row-select paths); tests + FU-159 status + `docs/ENGINE.md`.
+**Files:** per R7's recommendation (`fifa96_match_run.c` jump arm/arc, `fifa96_action_handlers.c` byte44, row-select paths); tests + FU-159 status + `port/ENGINE.md`.
 **Produces:** the live sequence (long-ball → airborne receive → descending kick → band-2 follow) repeatable across possessions.
 **Gate T3:** the sequence works with repeated kicks (or deepest provable + numbered leg).
 - [ ] RED test → implement → GREEN → gate → commit `feat(engine,fu159): jump/ack residuals — repeatable live sequence`.
 
 ### Task 4: T4 — acceptance v13 + riders + smoke + docs + final review
 
-**Files:** `tests/test_engine_m2.c` (+ golden iff genuinely moved), `tests/test_engine_match_frame.c` (the aux-0x3A regression pin), `CMakeLists.txt` (the ISO-path override one-liner), `docs/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
+**Files:** `port/tests/test_engine_m2.c` (+ golden iff genuinely moved), `port/tests/test_engine_match_frame.c` (the aux-0x3A regression pin), `CMakeLists.txt` (the ISO-path override one-liner), `port/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
 **Produces:** v13 strata; the two cheap riders (aux-`0x3A` pin: `ramp(0x18)=18`, RED without the constant; ISO-path environment override so the no-ISO tape path is CI-covered); the honest smoke record; remaining forcings with legs.
 - [ ] Tests + riders → tape decision → smoke → docs → commit `test(engine): phase-13 acceptance tape v13 and docs` → whole-plan final review (one fix wave max) → close.
 

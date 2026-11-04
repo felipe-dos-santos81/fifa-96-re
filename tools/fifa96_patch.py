@@ -18,7 +18,7 @@ import fifa96_le as le  # noqa: E402
 
 SECTOR = 2048
 CAVE_CAPACITY = 0x103
-DEFAULT_ISO = Path(__file__).resolve().parents[1] / "game" / "FIFAPCCD96.iso"
+DEFAULT_ISO = Path(__file__).resolve().parents[1] / "data" / "game" / "FIFAPCCD96.iso"
 CAVE_TEMPLATE = r"""
 bits 32
 org {cave:#x}

@@ -36,12 +36,12 @@ Static-semantics-first (spike recommendation). Same discipline: every C claim go
 ## 4. Architecture / components
 
 ```
-src/fifa96_loader/
+port/src/fifa96_loader/
   fifa96_script.{h,c}   # new: char reader + keyword dispatch + word-table builder (pure, bytes-in)
   (existing 8 libs — unchanged)
-tests/
+port/tests/
   test_script.c         # golden parse vectors from Task-1-attributed CD files + negative paths
-docs/ghidra/
+port/spec/
   loader_rename_map.md  # += ## Script semantics rows
 ```
 

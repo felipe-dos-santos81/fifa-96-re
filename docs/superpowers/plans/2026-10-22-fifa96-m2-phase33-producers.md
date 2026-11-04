@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-22-fifa96-m2-phase33-live-record-face-design.md` — read its **Plan erratum (wave close)** first; it amends §1/§5/§6/§8 (the P1/P2 sketch is re-shaped into task 1's atomic commit).
 
-**Name decode (used throughout):** **A1–A5** = FU322's replacement-assert set (its §4.1); **H1–H12** = FU322's hazard list (its §6); **FU323 §5's tables** = the measured witness tuples in `docs/ghidra/FU323_r2l7_m2_probe.md` §5 — but the **segment-aware authority is FU322's erratum 2**, because FU323's loose tables mix each pass's first dispatch with its LAST segment's cells (FU323's own erratum); **the golden recipe** = FU323 §6 (normative).
+**Name decode (used throughout):** **A1–A5** = FU322's replacement-assert set (its §4.1); **H1–H12** = FU322's hazard list (its §6); **FU323 §5's tables** = the measured witness tuples in `port/spec/FU323_r2l7_m2_probe.md` §5 — but the **segment-aware authority is FU322's erratum 2**, because FU323's loose tables mix each pass's first dispatch with its LAST segment's cells (FU323's own erratum); **the golden recipe** = FU323 §6 (normative).
 
 ## Decisions carried into this plan (the frozen wave, FU322–FU325, errata included)
 
@@ -19,14 +19,14 @@
 - **The undriven tape does NOT pan — native-faithful.** The band record holds no control slot ⇒ the no-slot seed arm ⇒ `v0 = 0` ⇒ the code-5 event at granted f=1517 is a **silent bind** (FU323-L1): camera `pos` never moves, but the camera **event state engages** from f=1517 — `camera_zero_frames` 1517 / `camera_left_zero` 2081, i.e. the standing `:3722` assert's **measured RED**, the inversion's own evidence. The natural-pan future is **FU316-L1** (the no-slot seed/travel leg), not this phase.
 - **The driven witnesses re-pin with REAL pans — two chained segments each** (the segment-aware authority: FU322's erratum 2). Claim pass: the row-04 `−0x90` one-shot (bind f=1483, `trk=2` window f=1483..1552, stop f=1511) plus a **new code-3 walk camera event** the frozen world did not have (gate f=1552, event f=1553, `trk=1`, stop f=1581); totals 54 changed / 2 116 off-zero frames, stop `(−0x120,0,0)`. Offset pass: gate f=1552 (`lane_x` 129 = bound 129, `cam_dz` −4, Δ=0), 2 segments, stop `(−0x120,0,0)`. **Pin BOTH segments per pass** (FU323's erratum 1) and capture traces segment-aware.
 - **FU324:** the two metric cores are the same computation (4 000 800 pairs, 0 diffs; the mutant also moves 0 frames — the stride clamp absorbs it), so the metric sub-change is a **contract pin GREEN at commit** whose guard is the recorded mutant run, never an invented failing input; FU319-L3's magnitude is falsified (erratum leg FU324-L1); the `>>19` pacing-slack rationale re-bases on measured variance (FU322's erratum 3).
-- **FU322-L11 as re-shaped: one atomic producer commit.** With the engine live the standing `tests/test_engine_m2.c:3722-3724` asserts fire (the measured RED) and the golden moves in the same build — the inversion (A1–A3 bind-anchored; A4/A5 relocated to the driven passes), P7/P8, the golden re-pin and the provenance note cannot be split across commits without a RED intermediate.
+- **FU322-L11 as re-shaped: one atomic producer commit.** With the engine live the standing `port/tests/test_engine_m2.c:3722-3724` asserts fire (the measured RED) and the golden moves in the same build — the inversion (A1–A3 bind-anchored; A4/A5 relocated to the driven passes), P7/P8, the golden re-pin and the provenance note cannot be split across commits without a RED intermediate.
 - **FU325's erratum governs Layer 2:** the "no driven variant" decision is void — the natural clause is NOT-GO-as-measured; the **driven variant (re-pinned per the segment-aware tables)** is the Layer-2 witness, trace-primary, AE-relative, sprite-only-bbox-caveated.
 
 ## Global Constraints
 
 - `make check` green (strict `-Wall -Wextra -Werror`, ASan/UBSan; ~210 s → ≥600 s timeout) before every commit; **no commit may leave the suite RED** — task 1 is atomic for exactly this reason; work on `main`; commit and push per task.
 - M1 `09b726b7…` immutable — `cmp` after every engine-touching task.
-- M2 `8434cfab…` re-pins **only** in task 1's commit, with the written reason in `tests/test_engine_m2.c`'s provenance in the house form ("first differing line frame 852, 5 671 hash lines, `state=` suffixes unchanged"), the frame diff shown, and the register pin in task 4. Normative recipe: FU323 §6. **Tripwires:** any first-diff frame ≠ 852, any `state=` change, or any moved frame FU323's build does not reproduce → **STOP-and-report**, never a re-pin (spec §6/§7; FU325's re-worded tripwires).
+- M2 `8434cfab…` re-pins **only** in task 1's commit, with the written reason in `port/tests/test_engine_m2.c`'s provenance in the house form ("first differing line frame 852, 5 671 hash lines, `state=` suffixes unchanged"), the frame diff shown, and the register pin in task 4. Normative recipe: FU323 §6. **Tripwires:** any first-diff frame ≠ 852, any `state=` change, or any moved frame FU323's build does not reproduce → **STOP-and-report**, never a re-pin (spec §6/§7; FU325's re-worded tripwires).
 - The stratum-set gate: the additivity gate is **replaced** by the stratum-set gate in the same commit (Outcome B — the first diff 852 sits inside the v21 2 522-line prefix); FU323 measured the stratum set unchanged (`state=1` ×951, `state=19` ×2 620, `state=2` ×2 100).
 - The implementation matches FU319 §5 exactly — no extra staging, no `anim_id`-derived `direct_face` (NO-GO), no routed kickoff install, no non-default focus pointers (FU319-L1), and **no metric fold** (task 2's change).
 - The census holds `60/80 = 75%`; the README title is recomputed only if a fresh census says otherwise (task 4 checks).
@@ -46,8 +46,8 @@
 ### Task 1: The atomic producer commit (implementation + pins + inversion + re-pins + golden)
 
 **Files:**
-- Modify: `include/fifa96_engine/fifa96_match_entities.h`, `include/fifa96_engine/fifa96_match_run.h`, `src/fifa96_engine/fifa96_match_run.c`, `src/fifa96_engine/fifa96_match_entities.c`, `src/fifa96_engine/fifa96_match_handlers.c`
-- Modify: `tests/test_engine_match_frame.c` (P-W1/W2/MOV), `tests/test_engine_match_entities.c` (P-W3), `tests/test_engine_match_handlers.c` (P-CLR), `tests/test_action_locomotion.c` (P-TURN), `tests/test_engine_m2.c` (the inversion + the labels + the witness re-pins + the golden provenance)
+- Modify: `port/src/fifa96_engine/fifa96_match_entities.h`, `port/src/fifa96_engine/fifa96_match_run.h`, `port/src/fifa96_engine/fifa96_match_run.c`, `port/src/fifa96_engine/fifa96_match_entities.c`, `port/src/fifa96_engine/fifa96_match_handlers.c`
+- Modify: `port/tests/test_engine_match_frame.c` (P-W1/W2/MOV), `port/tests/test_engine_match_entities.c` (P-W3), `port/tests/test_engine_match_handlers.c` (P-CLR), `port/tests/test_action_locomotion.c` (P-TURN), `port/tests/test_engine_m2.c` (the inversion + the labels + the witness re-pins + the golden provenance)
 - Test: the focused binaries, then the full suite
 
 **Interfaces:**
@@ -55,12 +55,12 @@
 - Produces: the live face; the pinned writers/clear/staging/turn-arm; the re-shaped baseline; the re-pinned witnesses; the re-pinned M2 golden. Everything task 2–4 cite.
 
 - [ ] **Step 1: Declare-first (FU325 §4's two-step RED).** Add the struct fields (`row43` in both structs) and the new sampler cells the inversion needs (`first_left_zero_f`, the delta-run set replayed on the undriven run, the Y/Z counters) **compile-only** — compile green before any assert lands.
-- [ ] **Step 2: RED the unit pins.** P-W1 extend `test_record_anim_install_row44` (`tests/test_engine_match_frame.c:3041`; RED = a row `0x00`/`0x26`/`0x80→0` install leaves the declared-zero `row43` at 0, expected 2). P-W2 extend `test_record_row_successor_chain` (`tests/test_engine_match_frame.c:3081`; RED = `0x0F→0x00` leaves 0, expected 2). P-W3 extend `test_kickoff_place_face_and_selector` (`tests/test_engine_match_entities.c:1055`; RED = every placed record 0, expected 2; the narrow write, no routed install). P-CLR extend `test_action_22_runs_body`'s stage-0 block (`tests/test_engine_match_handlers.c:4057`, the stage-0 block ~`:4068`; RED = a staged 2 stays 2; rider: the shared reset must NOT clear). P-MOV a NEW settled-record fixture in `tests/test_engine_match_frame.c` (`row43=2`, camera `(0,0,0)` → RED = the face frozen at 0x100, GREEN = the first `0x40` step; riders: `row43=0` no-turn, anti-`anim_id`-derivation, clear-freeze, far-target, int16 width). P-TURN extend `test_step_direct_face` (`tests/test_action_locomotion.c:118-149`: the z-only focus arm + the native-value-2 equivalence; may be GREEN-today — its RED is P-MOV). Run the focused tests; the staging REDs fail as designed.
+- [ ] **Step 2: RED the unit pins.** P-W1 extend `test_record_anim_install_row44` (`port/tests/test_engine_match_frame.c:3041`; RED = a row `0x00`/`0x26`/`0x80→0` install leaves the declared-zero `row43` at 0, expected 2). P-W2 extend `test_record_row_successor_chain` (`port/tests/test_engine_match_frame.c:3081`; RED = `0x0F→0x00` leaves 0, expected 2). P-W3 extend `test_kickoff_place_face_and_selector` (`port/tests/test_engine_match_entities.c:1055`; RED = every placed record 0, expected 2; the narrow write, no routed install). P-CLR extend `test_action_22_runs_body`'s stage-0 block (`port/tests/test_engine_match_handlers.c:4057`, the stage-0 block ~`:4068`; RED = a staged 2 stays 2; rider: the shared reset must NOT clear). P-MOV a NEW settled-record fixture in `port/tests/test_engine_match_frame.c` (`row43=2`, camera `(0,0,0)` → RED = the face frozen at 0x100, GREEN = the first `0x40` step; riders: `row43=0` no-turn, anti-`anim_id`-derivation, clear-freeze, far-target, int16 width). P-TURN extend `test_step_direct_face` (`port/tests/test_action_locomotion.c:118-149`: the z-only focus arm + the native-value-2 equivalence; may be GREEN-today — its RED is P-MOV). Run the focused tests; the staging REDs fail as designed.
 - [ ] **Step 3: Implement FU319 §5 verbatim** (the cell, the three writers, the clear, the mover staging; the int16 truncation is the native width). Cross-check against `/tmp/opencode/fu323/fu323.patch` — equivalent or explain.
 - [ ] **Step 4: GREEN the unit pins**; focused tests pass.
 - [ ] **Step 5: The re-shaped inversion (FU322's errata 1–2).** A1 `camera_left_zero >= 1` with the comment re-worded to the measured consequence ("the row-04 gate passes once and binds a record with a zero seed — the FU323-L1 silent-bind baseline"). A2 the identity `camera_zero_frames == first_left_zero_f` (measured 1517 == 1517). A3 `first_left_zero_step > phase2_step` + the LO/HI window anchored to FU323's measured **bind** (granted f=1517 / engine step 5065), the slack re-based on measured pacing variance (FU322's erratum 3 — no metric transient exists to cover); the exact step recorded, never pinned. **A4/A5 relocated to the driven claim/offset passes:** two chained segments each, the per-segment `T(s)` arithmetic asserted from the pass's own recorded seeds (arm-agnostic, zero-seed-proof), `row04_after_event_frames == 0`, the lockout identities (`stop_y == 0`, `y_nonzero_frames == 0`, `goal_armed_any == 0`, `oob_frames == 0` — measured 0 on the driven passes); the undriven bounds stay recorded-only (not in FU323's undriven dump — FU322's erratum 2). Labels: the `:2293` comment and the `:6035-6057` label text state the measured reality; the no-ISO degraded mode stays recorded-only (FU322-L10) — verify `test_engine_m2_noiso` stays honest.
 - [ ] **Step 6: The segment-aware witness re-pins.** Both driven passes' moved tuples asserted from **FU322's erratum 2 tables** (both segments per pass): claim bind f=1483/window/stop 1511 + the code-3 event gate f=1552/event f=1553/stop 1581, totals 54/2 116, stop `(−0x120,0,0)`; offset gate f=1552, `lane_x` 129, Δ=0, 2 segments, stop `(−0x120,0,0)`.
-- [ ] **Step 7: The golden re-pin (FU323 §6's recipe).** Build; run; `diff -u tests/golden/engine/m2-frames.txt <new>`; the first differing frame must be **852** and the moved set must match FU323's measured chain (5 671 hash-only lines, contiguous 852..6522, suffixes unchanged); land the stratum-set gate (the strata 951/2620/2100, replacing the additivity gate); M1 `cmp` byte-identical; re-pin the golden; write the provenance reason in the house form. Any tripwire hit (Global Constraints) → STOP.
+- [ ] **Step 7: The golden re-pin (FU323 §6's recipe).** Build; run; `diff -u port/tests/golden/engine/m2-frames.txt <new>`; the first differing frame must be **852** and the moved set must match FU323's measured chain (5 671 hash-only lines, contiguous 852..6522, suffixes unchanged); land the stratum-set gate (the strata 951/2620/2100, replacing the additivity gate); M1 `cmp` byte-identical; re-pin the golden; write the provenance reason in the house form. Any tripwire hit (Global Constraints) → STOP.
 - [ ] **Step 8: GREEN the suite.** `make check` 111/111; M1/M2 `cmp` (vs the new pins); tree sweep.
 - [ ] **Step 9: Commit and push** `fix(fu314): the live record face — the +0x43 latch, the focus staging, and the measured re-pin` (the controller's call: `fix` — the change repairs the port's staged-zero suppression of a live native behaviour).
 - [ ] **Step 10: Ledger** — `.superpowers/sdd/phase33/progress.md`: the task, the pins, the measured cells, the golden sha (old→new).
@@ -68,7 +68,7 @@
 ### Task 2: The move_attr metric contract pin (measured no-op)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (the mover staging `:521-522` — stage the high word from the block-A `0x8DC68` distance; the `>>19` stride attr = `distance >> 3`), `tests/test_engine_match_frame.c` or `tests/test_action_locomotion.c` (the contract pin)
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (the mover staging `:521-522` — stage the high word from the block-A `0x8DC68` distance; the `>>19` stride attr = `distance >> 3`), `port/tests/test_engine_match_frame.c` or `port/tests/test_action_locomotion.c` (the contract pin)
 
 **Interfaces:**
 - Consumes: FU324 (the census, the 0-diff measurement, the mutant sensitivity run, the clamp analysis), FU319 §4's staging row.
@@ -76,7 +76,7 @@
 
 - [ ] **Step 1: Land the contract pin** — assert the staged `>>16` value equals `fifa96_entity_distance(...)` and the `>>19` equals `distance >> 3` at a measured tuple. Per FU324 §6 this pin is **GREEN at commit** (the port already satisfies it numerically — the two cores compute identically); its guard is FU324's **recorded mutant run** (the sensitivity evidence in the doc), never an invented failing input; if a natural RED input exists, name it — otherwise the pin's RED story is the mutant, stated at the assert site.
 - [ ] **Step 2: Align the staging source** to the native block-A distance (`0x8DC68`) for both `>>16` and `>>19` — the value does not change; the staging source does.
-- [ ] **Step 3: The no-op proof.** `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt` (vs task 1's pin) — byte-identical; M1 `cmp`; `make check` 111/111.
+- [ ] **Step 3: The no-op proof.** `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt` (vs task 1's pin) — byte-identical; M1 `cmp`; `make check` 111/111.
 - [ ] **Step 4: Commit and push** `fix(fu319): the move_attr metric staged from the block-A distance (the contract pin)`.
 - [ ] **Step 5: Ledger** (note FU324-L5: the attr sensitivity returns with `+0x7B` nibble staging — re-measure then).
 
@@ -100,7 +100,7 @@
 ### Task 4: The close-out register
 
 **Files:**
-- Modify: `docs/ENGINE.md` (append the phase-33 register), `docs/PROGRESS.md` (append the narrative), the phase-33 spec (append the close-out erratum if any)
+- Modify: `port/ENGINE.md` (append the phase-33 register), `docs/PROGRESS.md` (append the narrative), the phase-33 spec (append the close-out erratum if any)
 - Test: the final verification commands
 
 **Interfaces:**
@@ -130,13 +130,13 @@ landed tree:
    motion f=1554…1580 / stop f=1581 at (−0x120,0,0). The claim pass's totals
    are 54 changed / 2 116 off-zero with first off-zero f=1482; the offset
    pass's are 54 / 2 114 with first off-zero f=1484. The authoritative,
-   correct record is `docs/ENGINE.md`'s phase-33 "driven witnesses" block
+   correct record is `port/ENGINE.md`'s phase-33 "driven witnesses" block
    (the claim-pass and offset-pass sub-bullets) and the tree's segment-aware
-   asserts in `tests/test_engine_m2.c`. Only the attribution was wrong: the
+   asserts in `port/tests/test_engine_m2.c`. Only the attribution was wrong: the
    numbers themselves are the measured cells.
 
 2. **The P-MOV fixture sketch (Task 1 Step 2).** Quote: "P-MOV a NEW
-   settled-record fixture in `tests/test_engine_match_frame.c` (`row43=2`,
+   settled-record fixture in `port/tests/test_engine_match_frame.c` (`row43=2`,
    camera `(0,0,0)` → RED = the face frozen at 0x100, GREEN = the first
    `0x40` step; …)". **Corrected:** a camera at `(0,0,0)` cannot turn the face
    under the port's raw-point focus guard — `fifa96_action_handlers.c:223`

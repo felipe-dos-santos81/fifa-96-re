@@ -4,7 +4,7 @@
 
 **Goal:** Freeze the eight read-only evidence slices (`FU240…FU247`) that establish, first-hand, which of the 24 NULL action/phase rows can be honestly wired (a live installer+dispatch) and which are permanent ceiling legs — plus the two A-movers (phase `0x13`/`0x14`, phase `0x1E`) — so the phase-23 producer plan can be written without guessing.
 
-**Architecture:** This is the phase-23 **Stage 1** (recon-ahead), exactly the phase-21/phase-22 shape. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase23-census-ceiling-design.md` §4) sequences the recon before the implementation plan; the producer tasks are authored in a **Stage 2** plan off these frozen slices. Each of the 8 agents investigates one frontier cluster, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `docs/ghidra/FU2xx_*.md` in a serialized commit.
+**Architecture:** This is the phase-23 **Stage 1** (recon-ahead), exactly the phase-21/phase-22 shape. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase23-census-ceiling-design.md` §4) sequences the recon before the implementation plan; the producer tasks are authored in a **Stage 2** plan off these frozen slices. Each of the 8 agents investigates one frontier cluster, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `port/spec/FU2xx_*.md` in a serialized commit.
 
 **Tech Stack:** Ghidra MCP (read-only), C11/CMake/CTest, ASan/UBSan, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
@@ -16,7 +16,7 @@
 - **Baseline (HEAD `7982f44`, the spec commit):** `make check` **110/110**; wired **55/80 = 68%** (`33 action + 22 phase`); dispatch `24 UNSUP / 55 OK / 1 NOTF`. M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` (**691 lines, immutable**); M2 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (**v22, 6522 lines**).
 - **Evidence floor (AGENTS.md):** every address/byte claim cites a fresh disassembly output or reconciled raw-byte read. Anything not statically provable becomes a **numbered open leg** with its native owner. LE-image globals at `+0x100000`.
 - **Alias traps:** `dword[addr] >> 16` = the word at `addr+2`, `>> 24` = the byte at `addr+3`; verify CALL bytes (rel32); watch sign/width, inverted gates, gate-index misreads. Any "only/sole/exactly" or caller-count claim needs a **fresh** `get_xrefs_to`.
-- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `docs/ghidra/FU2xx_*.md` and commits.
+- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `port/spec/FU2xx_*.md` and commits.
 - **Census rule:** a row counts only when a **ported path installs AND dispatches** — a `NULL → fn` flip with no live producer is NOT counted (the rows-`27`/`29`/`2C` precedent). Every slice's verdict is **wire-vs-ceiling**; no faked producer.
 - **Scope guard:** the census frontier only. No front-end/competition, no audio, no new subsystem. Double-wire exclusions (phase `01`/`11`/`12`) stand.
 
@@ -26,15 +26,15 @@
 |---|---|
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/progress.md` | The SDD ledger (recovery map) |
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-<n>-*.md` | The 8 recon drafts (git-ignored scratch) |
-| `docs/ghidra/FU240_*.md … FU247_*.md` | The promoted canonical slices (controller, serialized commits) |
-| `docs/ghidra/FU222_census_audit_phase20.md`, `FU-137`, `FU-142f`, `FU192`, `FU212`, `FU177`, `FU178`, `FU186`, `FU201`, `FU195`, `FU193`, `FU189`, `FU185`, `FU146` | Prior slices — appended errata only, never rewritten |
+| `port/spec/FU240_*.md … FU247_*.md` | The promoted canonical slices (controller, serialized commits) |
+| `port/spec/FU222_census_audit_phase20.md`, `FU-137`, `FU-142f`, `FU192`, `FU212`, `FU177`, `FU178`, `FU186`, `FU201`, `FU195`, `FU193`, `FU189`, `FU185`, `FU146` | Prior slices — appended errata only, never rewritten |
 
 ---
 
 ### Task 1: W23-1 / FU240 — the phase-`0x13`/`0x14` scatter producer (A-mover, `+2`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-1-phase-1314-producer.md`
-**Promotes to:** `docs/ghidra/FU240_phase_1314_producer.md`
+**Promotes to:** `port/spec/FU240_phase_1314_producer.md`
 
 **Objective:** Derive the unported `FUN_0008D098` case-`0x13/0x14` PRNG-scatter producer and the tape-inertness ruling for the phase-`0x13`/`0x14` rows (FU192-L2).
 
@@ -48,13 +48,13 @@
 ### Task 2: W23-2 / FU241 — the phase-`0x1E` restart sweep de-compression (A-mover, `+1`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-2-phase-1e-decompression.md`
-**Promotes to:** `docs/ghidra/FU241_phase_1e_decompression.md`
+**Promotes to:** `port/spec/FU241_phase_1e_decompression.md`
 
 **Objective:** Re-derive, first-hand, the render-invisibility + dormancy of the faithful act-8 restart sweep so the deliberate compressed-model pin (FU212-L1 / FU194-L2) can be honestly lifted.
 
 - [ ] **Step 1: The native sweep.** `0x8A798` (the act-8 restart sweep, FU-83): the 22-record walk, the selected-pointer store `[0x1587F0]` and the `word[0x157A68]` clear (FU-212 §6). Fresh `disassemble_bytes`.
-- [ ] **Step 2: The compressed model.** The engine's in-lined stored-situation re-dispatch (`fifa96_match_run_set_piece` BX!=0) and the pin `tests/test_engine_match_frame.c::test_phase_1E_compressed_model_pin`.
-- [ ] **Step 3: The dormancy.** Prove (or refute) that the golden never enters the compressed bx!=0 path and the sweep rewrites no record code; the exact pin-lift terms + which tests/pins must flip.
+- [ ] **Step 2: The compressed model.** The engine's in-lined stored-situation re-dispatch (`fifa96_match_run_set_piece` BX!=0) and the pin `port/tests/test_engine_match_frame.c::test_phase_1E_compressed_model_pin`.
+- [ ] **Step 3: The dormancy.** Prove (or refute) that the golden never enters the compressed bx!=0 path and the sweep rewrites no record code; the exact pin-lift terms + which port/tests/pins must flip.
 - [ ] **Step 4: Verdict + legs.** State the **wire-vs-ceiling** ruling (+1 honest lift) + numbered legs. Hand off.
 
 ---
@@ -62,7 +62,7 @@
 ### Task 3: W23-3 / FU242 — the installer mechanism + the exhaustive per-row census (anchor)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-3-installer-census.md`
-**Promotes to:** `docs/ghidra/FU242_installer_census.md`
+**Promotes to:** `port/spec/FU242_installer_census.md`
 
 **Objective:** Independently re-derive the installer mechanism (`FUN_0007D9A4` + the `[rec+0x1C]` indirect dispatch + the `FUN_000888FC` act invoker) and produce a fresh per-row installer verdict for **all 24 NULL rows** — the frontier's anchor. This slice must NOT trust FU-142f; it re-runs the census.
 
@@ -76,7 +76,7 @@
 ### Task 4: W23-4 / FU243 — the no-installer / dead cluster
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-4-no-installer-cluster.md`
-**Promotes to:** `docs/ghidra/FU243_no_installer_cluster.md`
+**Promotes to:** `port/spec/FU243_no_installer_cluster.md`
 
 **Objective:** Independently re-derive the "no invocation / dead entry / xref-less stub" verdicts for action `27`, `29`, `2C`, `2B`, `25`, `0A`, `15` — confirm or refute FU-142f/OL-48, OL-15, OL-14, FU189-L2.
 
@@ -90,7 +90,7 @@
 ### Task 5: W23-5 / FU244 — action `1A`'s installer + the phase-`0B` writer (the `+2` cluster)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-5-row-1a-ladder.md`
-**Promotes to:** `docs/ghidra/FU244_row_1a_ladder.md`
+**Promotes to:** `port/spec/FU244_row_1a_ladder.md`
 
 **Objective:** Derive the unported `FUN_00077EAC` CPU ladder (action `1A`'s only installer) and the phase-`0B` writer whose owning row `0x1A` this slice disambiguates — the phase's `+2` cluster candidate.
 
@@ -104,7 +104,7 @@
 ### Task 6: W23-6 / FU245 — action `0D` + row-09 arm 1 + the phase-`0D`/`0E` writers
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-6-row-09-arm1.md`
-**Promotes to:** `docs/ghidra/FU245_row_09_arm1.md`
+**Promotes to:** `port/spec/FU245_row_09_arm1.md`
 
 **Objective:** Derive the "installer inside an unported body" cluster: action `0D`'s installer (row-09 `0x80F61` inside arm 1) and the phase-`0D`/`0E` writer chains.
 
@@ -118,7 +118,7 @@
 ### Task 7: W23-7 / FU246 — action `03` + action `17` + the phase act-4/5/6 producers
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-7-blocked-installers.md`
-**Promotes to:** `docs/ghidra/FU246_blocked_installers.md`
+**Promotes to:** `port/spec/FU246_blocked_installers.md`
 
 **Objective:** Derive the blocked-installer + no-producer cluster: action `03` (tape-visible), action `17` (permutation residual), and phase `1A`/`1B`/`1C` (act-4/5/6 producers).
 
@@ -132,7 +132,7 @@
 ### Task 8: W23-8 / FU247 — action `22`/OL-65 + the double-wire trio + the tape terms
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase23-census-ceiling-recon-ahead/w23-8-exclusions-and-tape.md`
-**Promotes to:** `docs/ghidra/FU247_exclusions_and_tape.md`
+**Promotes to:** `port/spec/FU247_exclusions_and_tape.md`
 
 **Objective:** Derive the structurally-ungated row (action `22`/OL-65), the permanent double-wire register (phase `01`/`11`/`12`), and the tape/re-pin term inventory for the Stage-2 producer plan.
 
@@ -164,5 +164,5 @@ dispatch tests + mutation-RED riders); the tape-touch task; the census close-out
 
 Hand this plan to `superpowers:subagent-driven-development`: dispatch a fresh
 read-only subagent per task (all 8 in parallel), then the controller freeze-reviews
-and promotes each draft to a canonical `docs/ghidra/FU2xx_*.md` in a serialized
+and promotes each draft to a canonical `port/spec/FU2xx_*.md` in a serialized
 commit per slice.

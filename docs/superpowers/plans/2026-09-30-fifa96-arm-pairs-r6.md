@@ -8,12 +8,12 @@
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `disassemble_function`, `disassemble_bytes` (Task 1 `dry_run=true`), `read_memory` (hex-vs-data protocol), `search_instructions` (authority — operand + mnemonic+operand runs), `search_byte_patterns` (value-word patterns `06 65`, `75 06`, `94 0b`, cell-disp forms `67 04`/`69 04`/`fc 03`), `find_code_gaps` (full pagination), `get_xrefs_to` (control only), Task 2: real `disassemble_bytes`, `create_function`, `rename_function`, `set_comment`, `save_program` + slice-24/29 census protocol), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-30 (post-slice-29: candidates (a) R6 CODE-band ownership story and (b) `[0x467]/[0x469]` pair-consumer + segment-physicality — merged into one slice because R6's own arm-writer op IS a pair-writer; user "yes") + `docs/ghidra/loader_rename_map.md` (`## orphan family` — R4 create row `restore_ss_sp_and_modify_pic_masks` `6506..6548` + mechanism cites `64d3/64d7` + caveat row (DS-default vs ES arms differ physically) + consumer deferral line; R6 not-created row with the DATA→CODE supersession quote + `0684 = 26c7066704940b` arm bytes + `ES:[0x467],0xb94` value; R5/H9 arm `09fc MOV ES:[0x3fc],0xa35` `26c706fc03350a`; flip rows `80cf..80d5` (R4 head-stub span) and `2245..2266`; head-stub `64ff..6505` left-unowned note; family MIXED answer row), (`## far-return halves` — the six pairing-store regions `042c`/`05bf..05c6`/`06ae..06b2`/`078b..0795`/`09fc`/`0a6a..0a74` + ES←0x38 caveat; H9 relabel; surplus heritage), (`## vector dispatch handlers` — H-family primaries' tails `f4`/`ebfe`/`ebf5` exit forms (who far-RETs INTO a half: the `cb`/`ca` consumers), arg-cells `0675..0696` original DATA claim now superseded), (`## callee arg question` — determinability appendix: the 14 `[BP+-0x5a]` args and where each pair-table word lands — re-scan for `0x675`/`0xb94`-class values), (`## 2811..296c pocket + 9bc vector` — cell-pair forms precedent `CS:[BX-4]/[BX-2]`, `[0x9bc]/[0x9be]`, `0x296d` arm), (`## block head 2978..2a59` — R1 tail `e97fd9`→relay `0337`, `2eff26fa02 JMPF [0x2fa]`-class consumer precedent).
+**Spec:** Approved chat design 2026-09-30 (post-slice-29: candidates (a) R6 CODE-band ownership story and (b) `[0x467]/[0x469]` pair-consumer + segment-physicality — merged into one slice because R6's own arm-writer op IS a pair-writer; user "yes") + `port/spec/loader_rename_map.md` (`## orphan family` — R4 create row `restore_ss_sp_and_modify_pic_masks` `6506..6548` + mechanism cites `64d3/64d7` + caveat row (DS-default vs ES arms differ physically) + consumer deferral line; R6 not-created row with the DATA→CODE supersession quote + `0684 = 26c7066704940b` arm bytes + `ES:[0x467],0xb94` value; R5/H9 arm `09fc MOV ES:[0x3fc],0xa35` `26c706fc03350a`; flip rows `80cf..80d5` (R4 head-stub span) and `2245..2266`; head-stub `64ff..6505` left-unowned note; family MIXED answer row), (`## far-return halves` — the six pairing-store regions `042c`/`05bf..05c6`/`06ae..06b2`/`078b..0795`/`09fc`/`0a6a..0a74` + ES←0x38 caveat; H9 relabel; surplus heritage), (`## vector dispatch handlers` — H-family primaries' tails `f4`/`ebfe`/`ebf5` exit forms (who far-RETs INTO a half: the `cb`/`ca` consumers), arg-cells `0675..0696` original DATA claim now superseded), (`## callee arg question` — determinability appendix: the 14 `[BP+-0x5a]` args and where each pair-table word lands — re-scan for `0x675`/`0xb94`-class values), (`## 2811..296c pocket + 9bc vector` — cell-pair forms precedent `CS:[BX-4]/[BX-2]`, `[0x9bc]/[0x9be]`, `0x296d` arm), (`## block head 2978..2a59` — R1 tail `e97fd9`→relay `0337`, `2eff26fa02 JMPF [0x2fa]`-class consumer precedent).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes; suite stays 10/10 untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` vs `data`; hex-vs-data protocol on every pattern quote.
 - Task 1 writes NOTHING: dry-run only; reads only; tool error on required sub-step → BLOCKED.
 - Census uniformity: every run = pattern + `match_count` + `scope` + `truncated` + "defined-insn-only, at this-slice time" on negatives; controls (`get_xrefs_to`/listing) quoted not relied; segment context per site (DS-default/ES←0x38/ES←0/CS) — the slice-29 segment-physicality rule: same nominal cell offset under different staging segment = DIFFERENT physical cell; every writer/reader row carries its effective segment basis.
@@ -22,7 +22,7 @@
 - Capped write path: real disassembly → ONE nudge → RATIFY, verbatim before/after; stop-short at walls; never over defined/owned; save ⇒ FULL census protocol (count Δ to write-set exact, gaps full pagination + all touched neighborhoods, flips named, overlay spot, scope line).
 - Naming bar: printed-ops mechanism names only (return-class needs cited terminator op; PIC/segment-class words need their literal port/segment ops cited); NOT-CONFIRMED-at-name default stands; plate `C: none — behavioral (<role>)`; direction words banned.
 - Scope guard: `[0x2fa]`/`[0x9ba]`/`[0x9bc]/[0x9be]/[0x9c2]` full stories, `674c/675a`, `2cc5/0e3c`, R1/R2 direction, R3 stub, name-class route, Δ1 — cite-only; runtime values stay OPEN-WINDOW rows; the four H-family pairing-store regions are read as mechanism sources, not re-walked.
-- Append-only map (new section `## arm pairs and R6 band`); prior sections byte-identical; `fifa96.rep/**` churn unstaged; commits exactly per briefs; no new tests.
+- Append-only map (new section `## arm pairs and R6 band`); prior sections byte-identical; `data/fifa96.rep/**` churn unstaged; commits exactly per briefs; no new tests.
 
 ---
 
@@ -32,16 +32,16 @@ Two entangled questions (pair census + R6/head-stub dispositions) sharing the ar
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## arm pairs and R6 band` (Task 1: pair tables + arm→cell→consumer→landing map + R6/head-stub packages + proposals; Task 2: `### Writes` + verdict rows + `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## arm pairs and R6 band` (Task 1: pair tables + arm→cell→consumer→landing map + R6/head-stub packages + proposals; Task 2: `### Writes` + verdict rows + `### Deferrals`).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only: ≤2 capped creates (R6 band, R4 head stub) + bar renames; `save_program` + census.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Pair census + map + region packages (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## arm pairs and R6 band` with census tables + map + proposals)
+- Modify: `port/spec/loader_rename_map.md` (append `## arm pairs and R6 band` with census tables + map + proposals)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -62,14 +62,14 @@ Render pair; gap row; value-word runs (`75 06` classified per hit — operand/ta
 
 - [ ] **Step 4: Map + proposals + append + commit**
 
-Assemble the chains table; proposals + bar pre-tests. Append `## arm pairs and R6 band (verified 2026-09-30, program \`/fifa96.exe\`)` + disposition-so-far line (chains complete count, R6 answer, stub answer). Gate: build + ctest → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: census arm cell pairs, build chains map, package R6 band and head stub" || true`
+Assemble the chains table; proposals + bar pre-tests. Append `## arm pairs and R6 band (verified 2026-09-30, program \`/fifa96.exe\`)` + disposition-so-far line (chains complete count, R6 answer, stub answer). Gate: build + ctest → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: census arm cell pairs, build chains map, package R6 band and head stub" || true`
 
 ---
 
 ### Task 2: Mechanism-gated dispositions (capped)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
 - Modify: Ghidra program `/fifa96.exe` — creates ONLY where Task-1 chain is COMPLETE (≤2), bar renames, `save_program` + census
 
 **Interfaces:**
@@ -80,7 +80,7 @@ Assemble the chains table; proposals + bar pre-tests. Append `## arm pairs and R
 
 - [ ] **Step 2: Executes** — capped creates where chains complete + aligned/defined-safe heads (NEVER over the `2235..2236`/`0665` Alignment precedent respected — R6 head `0675`: if render-stable and aligned, create at cited span with stop-short walls `0674` (owner `FUN_11bd_0667` end) / `0697` owner; head stub: same rule); bar renames per pre-tests.
 
-- [ ] **Step 3: Save + census + append + commit** — `save_program` if any write; full protocol; append rows. Gate. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: dispose R6 band and head stub per chain mechanism" || true`
+- [ ] **Step 3: Save + census + append + commit** — `save_program` if any write; full protocol; append rows. Gate. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: dispose R6 band and head stub per chain mechanism" || true`
 
 ---
 

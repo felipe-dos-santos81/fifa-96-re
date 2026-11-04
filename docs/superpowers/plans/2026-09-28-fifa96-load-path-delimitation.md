@@ -4,7 +4,7 @@
 
 **Goal:** Delimit the FIFA96 load path in the EXE (roles of `5db2`/`5bdb`/`5c8b`/`5992`, driver-loop search) with instruction evidence, and refine the FU-3 breakpoint list for the future trace.
 
-**Architecture:** Read-only Ghidra evidence pass (decompile → callers/callees → rename CONFIRMED + plate + save), map rows appended to `docs/ghidra/loader_rename_map.md`, FU-3 doc gains exact breakpoint targets. No C, no tests, no CMake, no emulator execution.
+**Architecture:** Read-only Ghidra evidence pass (decompile → callers/callees → rename CONFIRMED + plate + save), map rows appended to `port/spec/loader_rename_map.md`, FU-3 doc gains exact breakpoint targets. No C, no tests, no CMake, no emulator execution.
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `decompile_function`, `get_function_callers`, `get_function_callees`, `search_instructions`, `rename_function`, `set_comment`, `save_program`), `grep` (content checks), CTest (regression gate only).
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - No C, test, or CMake changes in this slice; the 9-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/`xxd`/golden citation; disassembly wins over prior descriptions.
 - No `decode_*` name without an observed byte transform; no format attribution without a tag/envelope reference.
 - NOT-CONFIRMED members get no rename and no map row; exhausted caller chains are reported as exhausted.
@@ -28,17 +28,17 @@ Spec slice 3 covers one subsystem (load-path delimitation) with four FUN targets
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## Load-path delimitation` section (Task 1 rows) and driver-loop subsection (Task 2).
-- Modify: `docs/ghidra/FU3_codec_runtime_capture.md` — append refined breakpoint list (Task 2).
+- Modify: `port/spec/loader_rename_map.md` — append `## Load-path delimitation` section (Task 1 rows) and driver-loop subsection (Task 2).
+- Modify: `port/spec/FU3_codec_runtime_capture.md` — append refined breakpoint list (Task 2).
 - Modify: Ghidra program `/fifa96.exe` — evidence-based renames + plate comments, CONFIRMED only (Tasks 1–2).
-- Modify: `include/fifa96_loader/fifa96_{pog,qfs,viv,tgv,tables}.h` — ONLY if format attribution changes (default: untouched; Task 2 decides with evidence).
+- Modify: `port/src/fifa96_loader/fifa96_{pog,qfs,viv,tgv,tables}.h` — ONLY if format attribution changes (default: untouched; Task 2 decides with evidence).
 
 ---
 
 ### Task 1: Delimit 5db2 / 5bdb / 5c8b / 5992 with instruction evidence + renames + map rows
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## Load-path delimitation` section)
+- Modify: `port/spec/loader_rename_map.md` (append `## Load-path delimitation` section)
 - Modify: Ghidra program `/fifa96.exe` (renames + plate comments, CONFIRMED only, then `save_program`)
 
 **Interfaces:**
@@ -60,7 +60,7 @@ For each CONFIRMED member: `rename_function` to an evidence-based name (verb-tie
 
 - [ ] **Step 3: Append the map section**
 
-Append to `docs/ghidra/loader_rename_map.md`:
+Append to `port/spec/loader_rename_map.md`:
 ```markdown
 ## Load-path delimitation (verified 2026-09-28, program `/fifa96.exe`)
 
@@ -78,7 +78,7 @@ Expected: PASS — 9/9 green (this task touches docs/Ghidra only).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/ghidra/loader_rename_map.md
+git add port/spec/loader_rename_map.md
 git commit -m "docs: delimit load path (5db2/5bdb/5c8b/5992) with instruction evidence" || true
 ```
 
@@ -87,9 +87,9 @@ git commit -m "docs: delimit load path (5db2/5bdb/5c8b/5992) with instruction ev
 ### Task 2: Driver-loop search + FU-3 breakpoint list (+ headers only if attribution changes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Driver loop` subsection to the delimitation section)
-- Modify: `docs/ghidra/FU3_codec_runtime_capture.md` (append `## Refined trace targets` section)
-- Modify: `include/fifa96_loader/fifa96_{pog,qfs,viv,tgv,tables}.h` — ONLY if a tag/envelope reference is observed (default: untouched; any edit is comment-only)
+- Modify: `port/spec/loader_rename_map.md` (append `### Driver loop` subsection to the delimitation section)
+- Modify: `port/spec/FU3_codec_runtime_capture.md` (append `## Refined trace targets` section)
+- Modify: `port/src/fifa96_loader/fifa96_{pog,qfs,viv,tgv,tables}.h` — ONLY if a tag/envelope reference is observed (default: untouched; any edit is comment-only)
 - Modify: Ghidra program `/fifa96.exe` (only if the caller walk surfaces a CONFIRMED new member: rename + plate + `save_program`)
 
 **Interfaces:**
@@ -116,7 +116,7 @@ Append to the `## Load-path delimitation` section:
 
 - [ ] **Step 3: Append the refined trace-target list to FU-3**
 
-Append to `docs/ghidra/FU3_codec_runtime_capture.md`:
+Append to `port/spec/FU3_codec_runtime_capture.md`:
 ```markdown
 ## Refined trace targets (2026-09-28 delimitation pass)
 
@@ -131,12 +131,12 @@ Rows for: `5992` word-compare branch, `load_mf_object` entry/return (`11bd:5dd2`
 If and only if a tag (`SHPI`/`PCNX`/`BIGF`/`GIMX`/`kVGT`) or envelope field reference is observed in a delimited member: update that decoder header's `// Ghidra:` line to cite it, comment-only. Default (no observation): touch no header. Then run:
 
 Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build`
-Expected: PASS — 9/9 green. Verify: `grep -c "Refined trace targets" docs/ghidra/FU3_codec_runtime_capture.md` is nonzero.
+Expected: PASS — 9/9 green. Verify: `grep -c "Refined trace targets" port/spec/FU3_codec_runtime_capture.md` is nonzero.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/ghidra/loader_rename_map.md docs/ghidra/FU3_codec_runtime_capture.md include/fifa96_loader/fifa96_pog.h include/fifa96_loader/fifa96_qfs.h include/fifa96_loader/fifa96_viv.h include/fifa96_loader/fifa96_tgv.h include/fifa96_loader/fifa96_tables.h
+git add port/spec/loader_rename_map.md port/spec/FU3_codec_runtime_capture.md port/src/fifa96_loader/fifa96_pog.h port/src/fifa96_loader/fifa96_qfs.h port/src/fifa96_loader/fifa96_viv.h port/src/fifa96_loader/fifa96_tgv.h port/src/fifa96_loader/fifa96_tables.h
 git commit -m "docs: delimit driver loop and refine FU-3 trace targets" || true
 ```
 (Headers in the add list that were untouched simply contribute nothing to the diff.)

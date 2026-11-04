@@ -6,7 +6,7 @@ approach chosen by the user)
 Parent spec: `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`
 Predecessor plan: `docs/superpowers/plans/2026-10-13-fifa96-m2-phase20-sit8-completion.md`
 Recon slices (to be produced by this phase's wave):
-`docs/ghidra/FU223…FU230`.
+`port/spec/FU223…FU230`.
 
 ## 1. Context
 
@@ -138,14 +138,14 @@ One implementer at a time; **never two implementation subagents in parallel**
   completions run end-to-end; the post-period transition.
 - **T6 — tape extension + re-pin + acceptance** (per FU230): extend the tape to
   play half-time + a tied regulation end → ET entry; re-pin M2 with the written
-  reason + frame diff; update `docs/ENGINE.md` / `docs/PROGRESS.md` / `README.md`
+  reason + frame diff; update `port/ENGINE.md` / `docs/PROGRESS.md` / `README.md`
   / `AGENTS.md`; record the smoke.
 
 **Census caveat (stated, not hidden).** This phase likely wires **zero new
 rows** — it activates already-counted rows — so the README percentage may not
 move. If any row's live-dispatched status changes the census (e.g. a phase row
 that is now written by a live source), recompute `floor(100 × wired / 80)` and
-update the README title + `docs/ENGINE.md` (title + the two dispatch `N/80`
+update the README title + `port/ENGINE.md` (title + the two dispatch `N/80`
 lines) + `docs/PROGRESS.md` + `AGENTS.md` **in the same commit**.
 
 ## 6. Acceptance and the tape extension / re-pin
@@ -204,14 +204,14 @@ the diff is documented line-by-line with the reason — never silently. Any
   live at T3.
 - **The chooser** `fifa96_action_phase_period_end` / `phase_drive` — reconciled
   at T4.
-- **The tape scenario** (`tests/test_engine_m2.c`) — extended at T1/T6;
-  **`tests/golden/engine/m2-frames.txt`** — re-pinned at T6.
-- **The recon slices** `docs/ghidra/FU223…FU230` — appended errata only (prior
+- **The tape scenario** (`port/tests/test_engine_m2.c`) — extended at T1/T6;
+  **`port/tests/golden/engine/m2-frames.txt`** — re-pinned at T6.
+- **The recon slices** `port/spec/FU223…FU230` — appended errata only (prior
   sections never rewritten).
 
 ## 10. Errata — phase-21 Stage-1 recon (FU223–FU230), 2026-10-13
 
-The Stage-1 recon (`docs/ghidra/FU223…FU230`, approved and frozen) forces three
+The Stage-1 recon (`port/spec/FU223…FU230`, approved and frozen) forces three
 corrections to §2/§3/§5/§6 above. Prior sections stand as written; these errata
 are the binding authority for the Stage-2 producer plan.
 

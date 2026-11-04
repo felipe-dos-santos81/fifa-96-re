@@ -1,0 +1,40 @@
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+
+static const char *expect[6] = {
+  "port/tests/golden/fnames.dat",
+  "port/tests/golden/lengths.dat",
+  "port/tests/golden/pcindex.pog",
+  "port/tests/golden/fw1.qfs",
+  "port/tests/golden/sfx_game.bnk",
+  "port/tests/golden/vid_game.tgv",
+};
+
+int main(void) {
+  FILE *f = fopen("port/tests/golden/load_order.txt", "rb");
+  assert(f && "load_order.txt manifest missing; run Task 2 probe");
+  char data[4096];
+  size_t len = fread(data, 1, sizeof data - 1, f);
+  fclose(f);
+  assert(len < sizeof data);
+  data[len] = '\0';
+  int count = 0;
+  for (char *p = data; ; ) {
+    char *nl = strchr(p, '\n');
+    size_t ll = nl ? (size_t)(nl - p) : strlen(p);
+    if (ll == 0 && !nl) break;                      // trailing newline artifact, not a line
+    assert(count < 6);
+    char line[512];
+    assert(ll < sizeof line);
+    memcpy(line, p, ll);
+    line[ll] = '\0';
+    assert(strcmp(line, expect[count]) == 0);
+    count++;
+    if (!nl) break;
+    p = nl + 1;
+  }
+  assert(count == 6);                              // exactly 6 lines, in order
+  printf("load_order manifest content and order verified (6 lines)\n");
+  return 0;
+}

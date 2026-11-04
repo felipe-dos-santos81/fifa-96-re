@@ -6,7 +6,7 @@ Predecessor: `2026-09-27-fifa96-file-loader-design.md` (slice 1, shipped, publis
 
 ## 1. Context & verified facts
 
-Slice 1 shipped a golden-tested C library (`src/fifa96_loader/`) for FIFA96 (DOS 16-bit EXE, 291 FUNs, Ghidra program `/fifa96.exe`). Slice 2 targets the asset **container envelope** and locates the **codec** inside the EXE.
+Slice 1 shipped a golden-tested C library (`port/src/fifa96_loader/`) for FIFA96 (DOS 16-bit EXE, 291 FUNs, Ghidra program `/fifa96.exe`). Slice 2 targets the asset **container envelope** and locates the **codec** inside the EXE.
 
 Corrections from earlier passes (recorded so they don't resurface):
 - A hex dump with a broken offset index produced a false "nibble control stream" reading of `fw1.qfs`. Rettracted; re-dumped with `xxd`.
@@ -23,7 +23,7 @@ Corrections from earlier passes (recorded so they don't resurface):
 | 10+ | `40 d4 00 00 12 00 00 00 GIMX ...` | `0d 00 00 00 05 03 d8 01 ...` | `00 04 17 a2 00 00 ...` | format-specific tail |
 
 - `fw1.qfs` contains a **second tag** `GIMX` at 0x12 — the file is a sequence of tagged blocks, not just one header+payload.
-- `lengths[i]` in `soccer/lengths.dat` equals the **on-disk (compressed)** size for the first aligned entries (FW1.QFS → 9951 B); the CHN_*_BNK region is offset-shifted (documented in `docs/ghidra/FU1_FU2_closeout.md`).
+- `lengths[i]` in `soccer/lengths.dat` equals the **on-disk (compressed)** size for the first aligned entries (FW1.QFS → 9951 B); the CHN_*_BNK region is offset-shifted (documented in `port/spec/FU1_FU2_closeout.md`).
 - Existing slice-1 parsers: `fifa96_qfs_parse_hdr` already decodes `{magic, dec_len = LE u32 @2, tag @6}`; `fifa96_pog_parse_hdr` decodes `{magic, w1=u16@2, w2=u32@4}` (note the overlap — see §4).
 
 **Codec funnel (from decompilation, pending confirmation pass in Task 2):**
@@ -36,8 +36,8 @@ Corrections from earlier passes (recorded so they don't resurface):
 
 In-scope (this slice):
 1. **Envelope parser** (`fifa96_envelope`): unified `{magic, word_a, word_b, tag[4], tail_off, tail_len}` for the 3 verified formats + the fw1.qfs second-tag observation (`GIMX` @ 0x12, asserted). A block-chain walker is included ONLY if Task 2's funnel pass proves a deterministic next-tag location; otherwise the chain-walk finding is documented in FU-3. Goldens: `fw1.qfs`, `pcindex.pog`, `gameart0.pvi`.
-2. **Codec funnel evidence pass** (Ghidra): confirm/correct the funnel (§1 last bullet) at instruction level; rename the confirmed functions with evidence-based names + plate comments; extend `docs/ghidra/loader_rename_map.md`; update the 5 decoder headers' citations (partial FU-1 resolution: the file-access + decode-funnel citations become concrete).
-3. **Codec implementation OR documented finding**: if the decompilation yields a fully-deterministic algorithm (exact operand order, table sources, termination), implement `fifa96_codec_expand()` in C with whatever test vectors are provable. Otherwise: a precise `docs/ghidra/FU3_codec_runtime_capture.md` (algorithm pseudocode from decompilation + the exact DOSBox-X/INT21h trace steps needed to verify it), and `FU1_FU2_closeout.md` updated with the new FU-3.
+2. **Codec funnel evidence pass** (Ghidra): confirm/correct the funnel (§1 last bullet) at instruction level; rename the confirmed functions with evidence-based names + plate comments; extend `port/spec/loader_rename_map.md`; update the 5 decoder headers' citations (partial FU-1 resolution: the file-access + decode-funnel citations become concrete).
+3. **Codec implementation OR documented finding**: if the decompilation yields a fully-deterministic algorithm (exact operand order, table sources, termination), implement `fifa96_codec_expand()` in C with whatever test vectors are provable. Otherwise: a precise `port/spec/FU3_codec_runtime_capture.md` (algorithm pseudocode from decompilation + the exact DOSBox-X/INT21h trace steps needed to verify it), and `FU1_FU2_closeout.md` updated with the new FU-3.
 
 Out-of-scope: pixel rendering, audio, match simulation, FU-2 CRC (still blocked on codec output), boot/main-loop (candidate slice 3).
 
@@ -48,14 +48,14 @@ Option A: verifiable-increment + evidence funnel. No brute-forced codecs, no ass
 ## 4. Architecture / components
 
 ```
-src/fifa96_loader/
+port/src/fifa96_loader/
   fifa96_envelope.{h,c}   # new: magic/word-a/word-b/tag + block-chain walk (pure, bytes-in)
   (existing: fifa96_file, fifa96_tables, fifa96_pog, fifa96_qfs, fifa96_viv, fifa96_tgv — unchanged)
   fifa96_codec.{h,c}      # ONLY if Task 3 yields a provable algorithm
-tests/
+port/tests/
   test_envelope.c         # 3-format header goldens + fw1.qfs block chain (SHPI→GIMX→…) + negative paths
   test_codec.c            # ONLY with Task 3 success
-docs/ghidra/
+port/spec/
   loader_rename_map.md    # extended with codec funnel rows
   FU1_FU2_closeout.md     # updated: FU-1 partial (funnel cited), FU-3 added
   FU3_codec_runtime_capture.md  # new: algorithm pseudocode + verification experiment

@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, Ghidra MCP (read-only) for RE; the null backend is the deterministic test host; SDL3 only for the optional `make game` smoke.
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.3 cluster G, §5 acceptance, §6 risks, §7 gates); scope authority `docs/ghidra/FU142_installer_arms_scope.md`; parent `docs/superpowers/plans/2026-10-07-fifa96-m2-match.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.3 cluster G, §5 acceptance, §6 risks, §7 gates); scope authority `port/spec/FU142_installer_arms_scope.md`; parent `docs/superpowers/plans/2026-10-07-fifa96-m2-match.md`.
 
 ## Global Constraints
 
@@ -29,17 +29,17 @@
 
 | Path | Responsibility |
 |---|---|
-| `include/fifa96_engine/fifa96_match_phase_machine.h` / `src/fifa96_engine/fifa96_match_phase_machine.c` (new) | `FUN_0008CEB8` + `FUN_0008D098` state 0x13/0x14 machine and arms |
-| `include/fifa96_engine/fifa96_match_entities.h` / `.c` | Pool record/team fields the arms and bodies need (extend) |
-| `include/fifa96_engine/fifa96_match_run.h` / `.c` | Machine embed/reset, frame-body hook, record staging/repack (extend) |
-| `include/fifa96_loader/fifa96_arm_helpers.h` / `src/fifa96_loader/fifa96_arm_helpers.c` (new) | Helper families `0x8DCD4`, `0x79C50`, `0x6E598`, `0x513EC`, `0x7DAB4` |
-| `include/fifa96_loader/fifa96_arm_bodies.h` / `src/fifa96_loader/fifa96_arm_bodies.c` (new) | The six cluster-G record machines (`fifa96_arm_26_step`..`_2a_step`) |
-| `src/fifa96_engine/fifa96_match_handlers.c` (+ `.h` if the seam grows) | Row binders + table classification/evidence (extend) |
-| `src/fifa96_loader/fifa96_ball_pairing.c`, `fifa96_action_handlers.c`, `fifa96_outfield.c`, `fifa96_entity_update.c`, `fifa96_event_queue.c` | Blocker-leg bodies (extend per owning cluster) |
-| `tests/test_engine_match_phase_machine.c`, `tests/test_arm_helpers.c`, `tests/test_arm_bodies.c` (new) | Machinery/helper/body tests |
-| `tests/test_engine_match_handlers.c`, `test_engine_match_frame.c`, `test_ball_pairing.c`, `test_action_handlers.c`, `test_outfield.c`, `test_entity_update.c` | Expectation/chain updates (extend) |
-| `tests/test_engine_m2.c`, `tests/golden/engine/m2-frames.txt` | Spec §5 acceptance tape + golden (extend/create) |
-| `docs/ghidra/FU142_installer_arms_scope.md` (+ FU137/FU139/FU141 errata), `docs/ENGINE.md` | RE record and status |
+| `port/src/fifa96_engine/fifa96_match_phase_machine.h` / `port/src/fifa96_engine/fifa96_match_phase_machine.c` (new) | `FUN_0008CEB8` + `FUN_0008D098` state 0x13/0x14 machine and arms |
+| `port/src/fifa96_engine/fifa96_match_entities.h` / `.c` | Pool record/team fields the arms and bodies need (extend) |
+| `port/src/fifa96_engine/fifa96_match_run.h` / `.c` | Machine embed/reset, frame-body hook, record staging/repack (extend) |
+| `port/src/fifa96_loader/fifa96_arm_helpers.h` / `port/src/fifa96_loader/fifa96_arm_helpers.c` (new) | Helper families `0x8DCD4`, `0x79C50`, `0x6E598`, `0x513EC`, `0x7DAB4` |
+| `port/src/fifa96_loader/fifa96_arm_bodies.h` / `port/src/fifa96_loader/fifa96_arm_bodies.c` (new) | The six cluster-G record machines (`fifa96_arm_26_step`..`_2a_step`) |
+| `port/src/fifa96_engine/fifa96_match_handlers.c` (+ `.h` if the seam grows) | Row binders + table classification/evidence (extend) |
+| `port/src/fifa96_loader/fifa96_ball_pairing.c`, `fifa96_action_handlers.c`, `fifa96_outfield.c`, `fifa96_entity_update.c`, `fifa96_event_queue.c` | Blocker-leg bodies (extend per owning cluster) |
+| `port/tests/test_engine_match_phase_machine.c`, `port/tests/test_arm_helpers.c`, `port/tests/test_arm_bodies.c` (new) | Machinery/helper/body tests |
+| `port/tests/test_engine_match_handlers.c`, `test_engine_match_frame.c`, `test_ball_pairing.c`, `test_action_handlers.c`, `test_outfield.c`, `test_entity_update.c` | Expectation/chain updates (extend) |
+| `port/tests/test_engine_m2.c`, `port/tests/golden/engine/m2-frames.txt` | Spec §5 acceptance tape + golden (extend/create) |
+| `port/spec/FU142_installer_arms_scope.md` (+ FU137/FU139/FU141 errata), `port/ENGINE.md` | RE record and status |
 | `CMakeLists.txt` | New sources/tests registration |
 
 ---
@@ -49,18 +49,18 @@
 ### Task 1: `FUN_0008CEB8` multi-record arm helper
 
 **Files:**
-- Create: `include/fifa96_engine/fifa96_match_phase_machine.h`, `src/fifa96_engine/fifa96_match_phase_machine.c`, `tests/test_engine_match_phase_machine.c`
-- Modify: `include/fifa96_engine/fifa96_match_entities.h` (team tail fields `+0x830`/`+0x831`), `CMakeLists.txt`
-- Read: `docs/ghidra/FU142_installer_arms_scope.md` §2, `docs/ghidra/FU137_dispatch_mechanics.md` §5.1
+- Create: `port/src/fifa96_engine/fifa96_match_phase_machine.h`, `port/src/fifa96_engine/fifa96_match_phase_machine.c`, `port/tests/test_engine_match_phase_machine.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_entities.h` (team tail fields `+0x830`/`+0x831`), `CMakeLists.txt`
+- Read: `port/spec/FU142_installer_arms_scope.md` §2, `port/spec/FU137_dispatch_mechanics.md` §5.1
 
 **Interfaces:**
 - Produces: `struct fifa96_match_phase_machine { uint8_t state; uint8_t phase; uint8_t side_controlled; uint8_t ac5, ac7; uint8_t arm2a_overflow; int32_t chosen831[FIFA96_MATCH_ENTITY_TEAMS]; };` — `state` is the native `[0x157A4D]` switch value, `phase` the latched `[0x157A4A]>>24`, `side_controlled` the byte `[0x157AAC]>>24`, `ac5`/`ac7` the `[0x157AC5]`/`[0x157AC7]` words' low bytes.
 - Produces: `int fifa96_match_phase_machine_init(struct fifa96_match_phase_machine *pm);` — zeroes and sets `chosen831[0..1] = FIFA96_MATCH_ENTITY_NONE`.
 - Produces: `int fifa96_match_arm_install_multi(struct fifa96_match_entities *pool, uint32_t team, uint8_t first, uint8_t last, uint8_t code, int skip_code);` — `FUN_0008CEB8` (`0x8CEB8..0x8CF5D`, FU-137 §5.1): `for (i = first; i <= min(last,10); i++)`, skip `records[i].skip_9a != 0` and `(int8_t)records[i].code == (int8_t)skip_code`; `i == 0 && code == 3` pre-coerces to `0x19` (the installer would coerce again); stages through `fifa96_match_entities_install(entity, pool->phase, code, 0)`. Returns the number staged (≥0) or `-FIFA96_ERR_INVALID`.
 - Produces: `struct fifa96_match_team` gains `uint8_t flag830; int32_t chosen831;` (native `+0x830` byte and `+0x831` dword; `chosen831` is an encoded entity id or `FIFA96_MATCH_ENTITY_NONE`).
-- Consumes: `fifa96_match_entities_install` (`src/fifa96_engine/fifa96_match_entities.c:54`), `struct fifa96_match_entities`/`struct fifa96_match_team`.
+- Consumes: `fifa96_match_entities_install` (`port/src/fifa96_engine/fifa96_match_entities.c:54`), `struct fifa96_match_entities`/`struct fifa96_match_team`.
 
-- [ ] **Step 1: Failing test** — `tests/test_engine_match_phase_machine.c`: `test_init_defaults` (all-zero, `chosen831` NONE); `test_install_multi_stages` (records 1..3 free → returns 3, code `0x26`); `test_install_multi_skips` (occupied `skip_9a`, and current code equal to `skip_code`, are both skipped); `test_install_multi_record0_coerce` (record 0 active=1 + code 3 → `0x19`; record 5 active=1 + code 3 stays `3`); `test_install_multi_bounds` (first > last → 0; team > 1 → `-FIFA96_ERR_INVALID`).
+- [ ] **Step 1: Failing test** — `port/tests/test_engine_match_phase_machine.c`: `test_init_defaults` (all-zero, `chosen831` NONE); `test_install_multi_stages` (records 1..3 free → returns 3, code `0x26`); `test_install_multi_skips` (occupied `skip_9a`, and current code equal to `skip_code`, are both skipped); `test_install_multi_record0_coerce` (record 0 active=1 + code 3 → `0x19`; record 5 active=1 + code 3 stays `3`); `test_install_multi_bounds` (first > last → 0; team > 1 → `-FIFA96_ERR_INVALID`).
 - [ ] **Step 2: Run to fail** — `make build && ctest --test-dir build -R test_engine_match_phase_machine --output-on-failure`; expected FAIL (module absent).
 - [ ] **Step 3: Implement** — per FU-142 §2 / FU-137 §5.1 exactly as the interfaces state; register the source and test in `CMakeLists.txt`.
 - [ ] **Step 4: Run to pass.**
@@ -70,7 +70,7 @@
 ### Task 2: `FUN_0008D098` state 0x13/0x14 machine and arms 0x26/0x28/0x2A
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_phase_machine.c` / `.h`, `tests/test_engine_match_phase_machine.c`, `include/fifa96_engine/fifa96_match_run.h` (embed `struct fifa96_match_phase_machine phase_machine;`), `src/fifa96_engine/fifa96_match_run.c` (reset in init/begin; frame hook after the FU-141 chain), `tests/test_engine_match_frame.c`, `docs/ghidra/FU142_installer_arms_scope.md` (append the hazard appendix), `docs/ghidra/FU137_dispatch_mechanics.md` (errata note under §5.2)
+- Modify: `port/src/fifa96_engine/fifa96_match_phase_machine.c` / `.h`, `port/tests/test_engine_match_phase_machine.c`, `port/src/fifa96_engine/fifa96_match_run.h` (embed `struct fifa96_match_phase_machine phase_machine;`), `port/src/fifa96_engine/fifa96_match_run.c` (reset in init/begin; frame hook after the FU-141 chain), `port/tests/test_engine_match_frame.c`, `port/spec/FU142_installer_arms_scope.md` (append the hazard appendix), `port/spec/FU137_dispatch_mechanics.md` (errata note under §5.2)
 - Read: FU-142 §2, FU-137 §5.2
 
 **Interfaces:**
@@ -83,7 +83,7 @@
 - Produces (frame hook): in `fifa96_match_run_frame`, after `fifa96_match_entities_update`/`match_run_entity_drain`, call `fifa96_match_phase_machine_step(mr)` when `state` is 0x13/0x14, once per granted frame (the `FUN_0008D098`-order derived subset).
 - Row tables stay unchanged: no action row is wired by this task (bodies land in Gate G2).
 
-- [ ] **Step 1: Failing test** — extend `tests/test_engine_match_phase_machine.c`: non-0x13/0x14 state → no record mutated; non-controlled side → records staged `0x26`; controlled side + phase `0x14` → `0x28` on records and `chosen831` set to the first free record with code `0x2A`; controlled side + phase `0x13` + `ac5 != ac7` → `0x25`; `ac5 == ac7` → `3`; full pool (records 1..10 occupied) → `arm2a_overflow == 1`, no record code `0x2A`, `chosen831 == FIFA96_MATCH_ENTITY_NONE`; `side_controlled = 0x80` + `team->side = 0` → `0x26` installs (zero-extended byte proof). Extend `tests/test_engine_match_frame.c` with a phase-0x13 hook counter (installs happen inside a granted frame; nothing happens at phase 2).
+- [ ] **Step 1: Failing test** — extend `port/tests/test_engine_match_phase_machine.c`: non-0x13/0x14 state → no record mutated; non-controlled side → records staged `0x26`; controlled side + phase `0x14` → `0x28` on records and `chosen831` set to the first free record with code `0x2A`; controlled side + phase `0x13` + `ac5 != ac7` → `0x25`; `ac5 == ac7` → `3`; full pool (records 1..10 occupied) → `arm2a_overflow == 1`, no record code `0x2A`, `chosen831 == FIFA96_MATCH_ENTITY_NONE`; `side_controlled = 0x80` + `team->side = 0` → `0x26` installs (zero-extended byte proof). Extend `port/tests/test_engine_match_frame.c` with a phase-0x13 hook counter (installs happen inside a granted frame; nothing happens at phase 2).
 - [ ] **Step 2: Run to fail.**
 - [ ] **Step 3: Implement** the step/arms/hook exactly as the interfaces state; append the hazard appendix to FU-142 §2.
 - [ ] **Step 4: Run to pass** (engine fixtures under ASan/UBSan).
@@ -96,13 +96,13 @@
 
 ## Gate G2 — Cluster-G bodies and first wiring
 
-Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (instructions, calls, tables, globals) with Ghidra read-only; (2) append the row's port section to `docs/ghidra/FU142_installer_arms_scope.md` (fields, constants, branch table, helper signature); (3) TDD the pure body/helpers; (4) bind and wire the row through `fifa96_match_action_table` only when the arm + body + pool are all bounded; (5) update FU-137 §6.1 class + `tests/test_engine_match_handlers.c` expectations in the same commit. The six helper families FU-142 §1 names are ported by the body task that consumes them: `0x8DCD4` Task 3, `0x79C50`/`0x6E598` Task 4, `0x7DAB4` Task 5, `0x513EC` Task 8; `0x6E1D0`'s pure part is the existing `fifa96_action_phase_cell` (`include/fifa96_loader/fifa96_action_handlers.h:342`).
+Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (instructions, calls, tables, globals) with Ghidra read-only; (2) append the row's port section to `port/spec/FU142_installer_arms_scope.md` (fields, constants, branch table, helper signature); (3) TDD the pure body/helpers; (4) bind and wire the row through `fifa96_match_action_table` only when the arm + body + pool are all bounded; (5) update FU-137 §6.1 class + `port/tests/test_engine_match_handlers.c` expectations in the same commit. The six helper families FU-142 §1 names are ported by the body task that consumes them: `0x8DCD4` Task 3, `0x79C50`/`0x6E598` Task 4, `0x7DAB4` Task 5, `0x513EC` Task 8; `0x6E1D0`'s pure part is the existing `fifa96_action_phase_cell` (`port/src/fifa96_loader/fifa96_action_handlers.h:342`).
 
 ### Task 3: FU-142b — row 26 body + shared helper and first wiring
 
 **Files:**
-- Create: `include/fifa96_loader/fifa96_arm_helpers.h`, `src/fifa96_loader/fifa96_arm_helpers.c`, `include/fifa96_loader/fifa96_arm_bodies.h`, `src/fifa96_loader/fifa96_arm_bodies.c`, `tests/test_arm_helpers.c`, `tests/test_arm_bodies.c`
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c`, `include/fifa96_engine/fifa96_match_run.h` / `src/fifa96_engine/fifa96_match_run.c` (record staging/repack for the body-26 fields), `tests/test_engine_match_handlers.c`, `docs/ghidra/FU142_installer_arms_scope.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 26 + §7 totals + errata), `CMakeLists.txt`
+- Create: `port/src/fifa96_loader/fifa96_arm_helpers.h`, `port/src/fifa96_loader/fifa96_arm_helpers.c`, `port/src/fifa96_loader/fifa96_arm_bodies.h`, `port/src/fifa96_loader/fifa96_arm_bodies.c`, `port/tests/test_arm_helpers.c`, `port/tests/test_arm_bodies.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c`, `port/src/fifa96_engine/fifa96_match_run.h` / `port/src/fifa96_engine/fifa96_match_run.c` (record staging/repack for the body-26 fields), `port/tests/test_engine_match_handlers.c`, `port/spec/FU142_installer_arms_scope.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 26 + §7 totals + errata), `CMakeLists.txt`
 - Read: FU-142 §1 row 26 (`0x866F4..0x8681C`, 90 insns, sole call `0x8DCD4`)
 
 **Interfaces:**
@@ -111,9 +111,9 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 - Produces: `fifa96_err_t fifa96_arm_26_step(struct fifa96_arm_record *rec);` — the full 90-instruction body walk per the appendix; results (target, lane, install request) written back into `rec`.
 - Produces: `fifa96_err_t fifa96_arm_stub_36200(void);` — the native 5-byte stub (`0x36200`), a documented no-op unless the appendix finds an observable state effect; shared with Tasks 7/8.
 - Produces (engine): `static int fifa96_match_action_26(struct fifa96_match_run *mr)` maps `mr->record` ↔ `struct fifa96_arm_record` (staged/repacked in `match_run_dispatch_entity`), calls the step, writes results back; `fifa96_match_action_table[0x26].fn` is set and its evidence names FU-142b/FU-137.
-- Consumes: Task 1/2 arms (the 0x26 installer), `mr->record`, `mr->entities`, existing `fifa96_rng_step` (`include/fifa96_loader/fifa96_rng.h:26`).
+- Consumes: Task 1/2 arms (the 0x26 installer), `mr->record`, `mr->entities`, existing `fifa96_rng_step` (`port/src/fifa96_loader/fifa96_rng.h:26`).
 
-- [ ] **Step 1: Failing test** — `tests/test_arm_helpers.c::test_dist_stage_*` pins the `0x8DCD4` cases from the appendix; `tests/test_arm_bodies.c::test_arm_26_*` drives the body with appendix fixtures; `tests/test_engine_match_handlers.c` flips `action_expect[0x26]` to `FIFA96_OK` and adds `test_action_26_runs_body` (staged record → dispatch → expected record fields).
+- [ ] **Step 1: Failing test** — `port/tests/test_arm_helpers.c::test_dist_stage_*` pins the `0x8DCD4` cases from the appendix; `port/tests/test_arm_bodies.c::test_arm_26_*` drives the body with appendix fixtures; `port/tests/test_engine_match_handlers.c` flips `action_expect[0x26]` to `FIFA96_OK` and adds `test_action_26_runs_body` (staged record → dispatch → expected record fields).
 - [ ] **Step 2: Run to fail.**
 - [ ] **Step 3: Implement** per the appendix; wire row 26; update FU-137 §6.1/§7 + errata; register the new loader sources/tests in `CMakeLists.txt` and link `fifa96_arm_bodies`/`fifa96_arm_helpers` against the libraries they consume (`fifa96_entity_update`, `fifa96_action_handlers`, `fifa96_rng`) as the later tasks add calls.
 - [ ] **Step 4: Run to pass.**
@@ -123,7 +123,7 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 ### Task 4: FU-142b — row 27 body (entry unresolved)
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_arm_helpers.c` / `.h`, `src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `tests/test_arm_helpers.c`, `tests/test_arm_bodies.c`, `src/fifa96_engine/fifa96_match_handlers.c` (row 27 evidence only), `docs/ghidra/FU142_installer_arms_scope.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 27 errata: body ported, no static arm, OL-48)
+- Modify: `port/src/fifa96_loader/fifa96_arm_helpers.c` / `.h`, `port/src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `port/tests/test_arm_helpers.c`, `port/tests/test_arm_bodies.c`, `port/src/fifa96_engine/fifa96_match_handlers.c` (row 27 evidence only), `port/spec/FU142_installer_arms_scope.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 27 errata: body ported, no static arm, OL-48)
 - Read: FU-142 §1 row 27 (`0x86820..0x86A02`, 136 insns; calls `0x8DCD4`, `0x79C50`, `0x6E598`; tables `0x1103CB`, globals `0x158782`, `0x10F372/374`)
 
 **Interfaces:**
@@ -142,7 +142,7 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 ### Task 5: FU-142b — row 2C body (entry unresolved)
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_arm_helpers.c` / `.h`, `src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `tests/test_arm_helpers.c`, `tests/test_arm_bodies.c`, `src/fifa96_engine/fifa96_match_handlers.c` (row 2C evidence), `docs/ghidra/FU142_installer_arms_scope.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 2C errata replacing "prologue-only" per FU-142 §7)
+- Modify: `port/src/fifa96_loader/fifa96_arm_helpers.c` / `.h`, `port/src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `port/tests/test_arm_helpers.c`, `port/tests/test_arm_bodies.c`, `port/src/fifa96_engine/fifa96_match_handlers.c` (row 2C evidence), `port/spec/FU142_installer_arms_scope.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 2C errata replacing "prologue-only" per FU-142 §7)
 - Read: FU-142 §1 row 2C (`0x84598..0x8462D`, 48 insns; calls `0x6E598`, `0x7DAB4`; stage latch `+0x92` 0/1/2, `+0x8D`, `+0x89`, `+0x8B` type)
 
 **Interfaces:**
@@ -161,11 +161,11 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 ### Task 6: FU-142c — row 29 body (entry unresolved)
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `tests/test_arm_bodies.c`, `src/fifa96_engine/fifa96_match_handlers.c` (row 29 evidence), `docs/ghidra/FU142_installer_arms_scope.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 29 errata: body exists, self-installs code 3 at `0x8753C`)
+- Modify: `port/src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `port/tests/test_arm_bodies.c`, `port/src/fifa96_engine/fifa96_match_handlers.c` (row 29 evidence), `port/spec/FU142_installer_arms_scope.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 29 errata: body exists, self-installs code 3 at `0x8753C`)
 - Read: FU-142 §1 row 29 (`0x874E4..0x87738`, 187 insns; calls `0x7DAB4`, `0x7D9A4` self-install 3, `0x8DE8C`, `0x36200`, `0x92AC8`, `0x6E598`, `0x6E1D0`; globals `0x10F36C`, `0x157AA3`, `0x157A9F`)
 
 **Interfaces:**
-- Produces: `fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec);` — the phase-5 stage machine, per appendix: reset via `fifa96_arm_reset`, self-install request code 3 (consumed by the pool installer), nearest selection via `fifa96_entity_find_nearest` (`include/fifa96_loader/fifa96_entity_update.h:13`), phase cell via `fifa96_action_phase_cell` (`include/fifa96_loader/fifa96_action_handlers.h:342`), animation via `fifa96_arm_anim_select`, RNG via `fifa96_rng_step`.
+- Produces: `fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec);` — the phase-5 stage machine, per appendix: reset via `fifa96_arm_reset`, self-install request code 3 (consumed by the pool installer), nearest selection via `fifa96_entity_find_nearest` (`port/src/fifa96_loader/fifa96_entity_update.h:13`), phase cell via `fifa96_action_phase_cell` (`port/src/fifa96_loader/fifa96_action_handlers.h:342`), animation via `fifa96_arm_anim_select`, RNG via `fifa96_rng_step`.
 - `fifa96_match_action_table[0x29].fn` stays **NULL** with the OL-48 evidence.
 - Consumes: Tasks 3-5 record view/helpers, existing nearest/phase-cell/RNG symbols.
 
@@ -179,7 +179,7 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 ### Task 7: FU-142d — row 28 body and wiring
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `tests/test_arm_bodies.c`, `src/fifa96_engine/fifa96_match_handlers.c`, `include/fifa96_engine/fifa96_match_run.h` / `.c` (record staging/repack for the row-28 fields), `tests/test_engine_match_handlers.c`, `docs/ghidra/FU142_installer_arms_scope.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 28 + §7 totals + errata), `CMakeLists.txt` (none if already registered)
+- Modify: `port/src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `port/tests/test_arm_bodies.c`, `port/src/fifa96_engine/fifa96_match_handlers.c`, `port/src/fifa96_engine/fifa96_match_run.h` / `.c` (record staging/repack for the row-28 fields), `port/tests/test_engine_match_handlers.c`, `port/spec/FU142_installer_arms_scope.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 28 + §7 totals + errata), `CMakeLists.txt` (none if already registered)
 - Read: FU-142 §1 row 28 (`0x870E8..0x874E3`, 294 insns; 4-arm jump table `0x870D8`; calls `0x8DCD4`, `0x79C50`, `0x36200`, `0x92AC8`, `0x6E598`, internal `0x87014`; tables `0x7D8B0/C0`, `0x114E04`; globals `0x10F358/35C/364/368/36C`, `0x157AA3`, `0x157AC2`, `team+0x830/831`)
 
 **Interfaces:**
@@ -197,7 +197,7 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 ### Task 8: FU-142e — row 2A body, helper and wiring
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `src/fifa96_loader/fifa96_arm_helpers.c` / `.h`, `tests/test_arm_bodies.c`, `tests/test_arm_helpers.c`, `src/fifa96_engine/fifa96_match_handlers.c`, `include/fifa96_engine/fifa96_match_run.h` / `.c` (record staging/repack), `tests/test_engine_match_handlers.c`, `docs/ghidra/FU142_installer_arms_scope.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 2A + §7 totals + errata), `CMakeLists.txt`
+- Modify: `port/src/fifa96_loader/fifa96_arm_bodies.c` / `.h`, `port/src/fifa96_loader/fifa96_arm_helpers.c` / `.h`, `port/tests/test_arm_bodies.c`, `port/tests/test_arm_helpers.c`, `port/src/fifa96_engine/fifa96_match_handlers.c`, `port/src/fifa96_engine/fifa96_match_run.h` / `.c` (record staging/repack), `port/tests/test_engine_match_handlers.c`, `port/spec/FU142_installer_arms_scope.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 2A + §7 totals + errata), `CMakeLists.txt`
 - Read: FU-142 §1 row 2A (main `0x86A34..0x87010` + helper `0x87014..0x870D5`; 12-arm jump table `0x86A04`; calls `0x79C50`, `0x36200`, `0x513EC`, `0x6E598`, `0x92AC8`; globals `team+0x830/831`, `0x10F358/35C`, `0x157AA3`)
 
 **Interfaces:**
@@ -216,7 +216,7 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 ### Task 9: FU-142f — dynamic entry probe and classification closure (27/29/2C, 2B dead)
 
 **Files:**
-- Modify: `docs/ghidra/FU142_installer_arms_scope.md` (append FU-142f verdict), `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 rows 27/29/2B/2C + §7 totals + errata), `src/fifa96_engine/fifa96_match_handlers.c`, `tests/test_engine_match_handlers.c`, `src/fifa96_engine/fifa96_match_run.h` / `.c` (binders for any resolved row), `.superpowers/sdd/2026-10-07-fifa96-m2-match/progress.md`
+- Modify: `port/spec/FU142_installer_arms_scope.md` (append FU-142f verdict), `port/spec/FU137_dispatch_mechanics.md` (§6.1 rows 27/29/2B/2C + §7 totals + errata), `port/src/fifa96_engine/fifa96_match_handlers.c`, `port/tests/test_engine_match_handlers.c`, `port/src/fifa96_engine/fifa96_match_run.h` / `.c` (binders for any resolved row), `.superpowers/sdd/2026-10-07-fifa96-m2-match/progress.md`
 - Read: FU-142 §1/§1.1/§5.6 (OL-48), FU-137 §5.3
 
 **Interfaces:**
@@ -225,7 +225,7 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 - Produces: the 2B dead verdict — `0x87738` is the row-29 shared epilogue RET (FU-142 §1.1), not a standalone stub; evidence string says dead entry, expectation stays `UNSUP`, FU-137 §6.1 errata records the refinement.
 - Consumes: Tasks 4-6 steps, all existing table machinery.
 
-- [ ] **Step 1: Failing test** — update `tests/test_engine_match_handlers.c`: per-row assertions that the evidence string names the FU-142f verdict (`OL-48` or `ported`), that `action_expect[27/29/2C/2B]` matches the verdict, and a `test_dead_2b_evidence` pin; the test fails until the table/doc agree.
+- [ ] **Step 1: Failing test** — update `port/tests/test_engine_match_handlers.c`: per-row assertions that the evidence string names the FU-142f verdict (`OL-48` or `ported`), that `action_expect[27/29/2C/2B]` matches the verdict, and a `test_dead_2b_evidence` pin; the test fails until the table/doc agree.
 - [ ] **Step 2: Run to fail.**
 - [ ] **Step 3: Implement** the probe/argument, wire resolved rows, update both FU docs + §7 totals + evidence strings.
 - [ ] **Step 4: Run to pass** (if rows were wired, their dispatch fixtures run).
@@ -238,19 +238,19 @@ Each task in this gate: (1) read the FU-142 §1 first-hand window for its row (i
 
 ## Gate G3 — Blocker legs: re-wire clusters A/B/C/D rows
 
-Each task here ports one owning family's legs per FU-142 §3 and wires the rows they block; each updates FU-137 §6.1 class + `tests/test_engine_match_handlers.c` in-commit. The existing tested pure helpers stay the base: possession `fifa96_action_possession_reset/_claim/_timer/_dribble_dir`, receive `fifa96_action_receive_step`, tackle `fifa96_action_tackle_step/_attempt`, duel `fifa96_action_duel_step/_split`, kick `fifa96_action_kick_angle/_apply/_event_row/_event_append/_range_band/_stage_target`, pairing `fifa96_ball_pair_*`, outfield `fifa96_outfield_dispatch_code/_forced_action/_chase_action`, event `fifa96_event_queue_enqueue`.
+Each task here ports one owning family's legs per FU-142 §3 and wires the rows they block; each updates FU-137 §6.1 class + `port/tests/test_engine_match_handlers.c` in-commit. The existing tested pure helpers stay the base: possession `fifa96_action_possession_reset/_claim/_timer/_dribble_dir`, receive `fifa96_action_receive_step`, tackle `fifa96_action_tackle_step/_attempt`, duel `fifa96_action_duel_step/_split`, kick `fifa96_action_kick_angle/_apply/_event_row/_event_append/_range_band/_stage_target`, pairing `fifa96_ball_pair_*`, outfield `fifa96_outfield_dispatch_code/_forced_action/_chase_action`, event `fifa96_event_queue_enqueue`.
 
 ### Task 10: OL-26 + OL-29 — ball staging tail, row-05 carrier arms, wire row 05
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_ball_pairing.c` / `.h`, `src/fifa96_loader/fifa96_action_handlers.c` / `.h`, `src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_05`), `src/fifa96_engine/fifa96_match_run.c` (record fields if the appendix adds them), `tests/test_ball_pairing.c`, `tests/test_action_handlers.c`, `tests/test_engine_match_handlers.c`, `docs/ghidra/FU139_action_cluster_b.md` (append errata), `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 05 + §7 totals + errata)
+- Modify: `port/src/fifa96_loader/fifa96_ball_pairing.c` / `.h`, `port/src/fifa96_loader/fifa96_action_handlers.c` / `.h`, `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_05`), `port/src/fifa96_engine/fifa96_match_run.c` (record fields if the appendix adds them), `port/tests/test_ball_pairing.c`, `port/tests/test_action_handlers.c`, `port/tests/test_engine_match_handlers.c`, `port/spec/FU139_action_cluster_b.md` (append errata), `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 05 + §7 totals + errata)
 - Read: FU-142 §3 OL-26 (`FUN_0007A490` tail `0x7A8D1..0x7AE2F`), OL-29 (row 05 `0x7F194..0x7F7C9`, fallback `FUN_0007F7E0`, stages 1-3 `0x7F57C..0x7F665`), FU-139 §5/§6
 
 **Interfaces:**
 - Produces: `fifa96_err_t fifa96_ball_stage_tail(fifa96_ball_pair_state *state, ...);` — the code-keyed sub-code/animation tail, inactive reset block and `[0x158744/45]` writes; exact signature pinned by the FU-139 appendix.
 - Produces: `fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state, ...);` — stage-0 target algebra, snap/hand-off animation and ball actor/receiver hand-off, per appendix.
 - Produces (engine): `static int fifa96_match_action_05(struct fifa96_match_run *mr)` binding the existing possession helpers + the new arm; table fn set → `FIFA96_OK`.
-- Consumes: `fifa96_ball_pair_state` (`include/fifa96_loader/fifa96_ball_pairing.h`), `fifa96_action_possession_*` (`include/fifa96_loader/fifa96_action_handlers.h:196-208`), `fifa96_action_kick_stage_target` (`:113`).
+- Consumes: `fifa96_ball_pair_state` (`port/src/fifa96_loader/fifa96_ball_pairing.h`), `fifa96_action_possession_*` (`port/src/fifa96_loader/fifa96_action_handlers.h:196-208`), `fifa96_action_kick_stage_target` (`:113`).
 
 - [ ] **Step 1: Failing test** — staging-tail fixtures per appendix; carrier-arm fixture; `action_expect[0x05] = FIFA96_OK` + `test_action_05_runs_carrier`.
 - [ ] **Step 2: Run to fail.**
@@ -262,14 +262,14 @@ Each task here ports one owning family's legs per FU-142 §3 and wires the rows 
 ### Task 11: OL-28 + OL-31 — full kick path, rows 07/0F machines
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_ball_pairing.c` / `.h`, `src/fifa96_loader/fifa96_action_handlers.c` / `.h`, `src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_07`, `_0F`), `tests/test_ball_pairing.c`, `tests/test_action_handlers.c`, `tests/test_engine_match_handlers.c`, `docs/ghidra/FU139_action_cluster_b.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 rows 07/0F)
+- Modify: `port/src/fifa96_loader/fifa96_ball_pairing.c` / `.h`, `port/src/fifa96_loader/fifa96_action_handlers.c` / `.h`, `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_07`, `_0F`), `port/tests/test_ball_pairing.c`, `port/tests/test_action_handlers.c`, `port/tests/test_engine_match_handlers.c`, `port/spec/FU139_action_cluster_b.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 rows 07/0F)
 - Read: FU-142 §3 OL-28 (`FUN_0007B9C4` `0x7BA1E..0x7BBE4`; mode arms `FUN_0007B194`/`FUN_0007B57C`; code-4 RNG/divisor `0x7BE40..0x7BEC0`), OL-31 (`FUN_0007E600` `0x7E600..0x7E7C4`; row 07 `0x814B0`, row 0F `0x82AD0..0x82DD0`)
 
 **Interfaces:**
 - Produces: `fifa96_err_t fifa96_ball_kick_target(..., uint8_t mode);` — target selection + wing/slot + `0x114E04` angle fold per appendix.
 - Produces: `fifa96_err_t fifa96_action_kick_machine(...)` — decision, opponent `0x22` invoke, ball-actor install 4, fun-0F predictor/RNG/timer reload, `FUN_0007DAB4` tail, per appendix.
 - Produces (engine): `static int fifa96_match_action_07(struct fifa96_match_run *mr)`, `..._0F`; rows wired → `FIFA96_OK`.
-- Consumes: `fifa96_action_kick_*` (`include/fifa96_loader/fifa96_action_handlers.h:33-113`), Task 10's staging tail.
+- Consumes: `fifa96_action_kick_*` (`port/src/fifa96_loader/fifa96_action_handlers.h:33-113`), Task 10's staging tail.
 
 - [ ] **Step 1: Failing test** — kick-target mode fixtures (incl. code-4 RNG/divisor); kick-machine decision/install fixtures; `action_expect[0x07]=[0x0F]=FIFA96_OK` + dispatch tests.
 - [ ] **Step 2: Run to fail.**
@@ -281,7 +281,7 @@ Each task here ports one owning family's legs per FU-142 §3 and wires the rows 
 ### Task 12: OL-27 + OL-32 — event append sinks, rows 18/21/23 arms
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_event_queue.c` / `.h` (append sink), `src/fifa96_loader/fifa96_action_handlers.c` / `.h` (NSEARCH/SWAP/`0x4C324`), `src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_18`, `_21`, `_23`), `tests/test_event_queue.c`, `tests/test_action_handlers.c`, `tests/test_engine_match_handlers.c`, `docs/ghidra/FU139_action_cluster_b.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 rows 18/21/23)
+- Modify: `port/src/fifa96_loader/fifa96_event_queue.c` / `.h` (append sink), `port/src/fifa96_loader/fifa96_action_handlers.c` / `.h` (NSEARCH/SWAP/`0x4C324`), `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_18`, `_21`, `_23`), `port/tests/test_event_queue.c`, `port/tests/test_action_handlers.c`, `port/tests/test_engine_match_handlers.c`, `port/spec/FU139_action_cluster_b.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 rows 18/21/23)
 - Read: FU-142 §3 OL-27 (`FUN_000928F0` + `FUN_00092820`; 25-entry ring `0x5B440` stride `0x15`, sink `0x5B650`), OL-32 (`FUN_0007A084` NSEARCH `FUN_0008DB6C`, SWAP `FUN_000786A0`, `FUN_0004C324`; rows 18/21/23 arms)
 
 **Interfaces:**
@@ -300,7 +300,7 @@ Each task here ports one owning family's legs per FU-142 §3 and wires the rows 
 ### Task 13: OL-30 — row 06 pursuit machine
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_action_handlers.c` / `.h` (pursuit body), `src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_06`), `tests/test_action_handlers.c`, `tests/test_engine_match_handlers.c`, `docs/ghidra/FU139_action_cluster_b.md`, `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 06)
+- Modify: `port/src/fifa96_loader/fifa96_action_handlers.c` / `.h` (pursuit body), `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_06`), `port/tests/test_action_handlers.c`, `port/tests/test_engine_match_handlers.c`, `port/spec/FU139_action_cluster_b.md`, `port/spec/FU137_dispatch_mechanics.md` (§6.1 row 06)
 - Read: FU-142 §3 OL-30 (row 06 `0x801B4..0x81067`, 597 insns, FU-139 §2), FU-139 §6
 
 **Interfaces:**
@@ -318,13 +318,13 @@ Each task here ports one owning family's legs per FU-142 §3 and wires the rows 
 ### Task 14: OL-38 + OL-41 — outfield rows 04/08 and interception tail
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_outfield.c` / `.h` (input-row dispatch, no-edge arm, forced decision, chase gate; per-type gate `0x110680`, tables `0x1109D0`/`0x1109E4`), `src/fifa96_loader/fifa96_entity_update.c` / `.h` (interception bind/band), `src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_04`, `_08`), `src/fifa96_engine/fifa96_match_entities.c` (OL-41 `FUN_0008D824`/`FUN_000795B4` call sites → `flag7be`), `tests/test_outfield.c`, `tests/test_entity_update.c`, `tests/test_engine_match_entities.c`, `tests/test_engine_match_handlers.c`, `docs/ghidra/FU141_action_cluster_de.md` / `FU75_outfield_decide.md` (append errata), `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 rows 04/08)
+- Modify: `port/src/fifa96_loader/fifa96_outfield.c` / `.h` (input-row dispatch, no-edge arm, forced decision, chase gate; per-type gate `0x110680`, tables `0x1109D0`/`0x1109E4`), `port/src/fifa96_loader/fifa96_entity_update.c` / `.h` (interception bind/band), `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_04`, `_08`), `port/src/fifa96_engine/fifa96_match_entities.c` (OL-41 `FUN_0008D824`/`FUN_000795B4` call sites → `flag7be`), `port/tests/test_outfield.c`, `port/tests/test_entity_update.c`, `port/tests/test_engine_match_entities.c`, `port/tests/test_engine_match_handlers.c`, `port/spec/FU141_action_cluster_de.md` / `FU75_outfield_decide.md` (append errata), `port/spec/FU137_dispatch_mechanics.md` (§6.1 rows 04/08)
 - Read: FU-142 §3 OL-38 (`FUN_0007DAB4`, `FUN_00079B58`, `FUN_00079C50`, per-type gate `0x110680`, input tables) and OL-41 (`FUN_0008D824` `0x8D824..0x8D8EB` + `FUN_000795B4` `0x795B4..0x795F0`), FU-141 §2.2/§7
 
 **Interfaces:**
 - Produces: `fifa96_err_t fifa96_outfield_input_row(...)` (input-row dispatch + no-edge + forced decision), `fifa96_err_t fifa96_outfield_chase_gate(...)`; engine `fifa96_match_action_04/_08` binding the existing `fifa96_outfield_dispatch_code/_forced_action/_chase_action` + new arms; rows wired → `FIFA96_OK`.
 - Produces: `int fifa96_entity_intercept_bind(...)` (`0x8D824`) and `int fifa96_entity_intercept_band(...)` (`0x795B4`), consumed by `fifa96_match_entities_team_update`'s interception block so `team->flag7be` is fed (replaces the current "flag stays 0" comment with the derived call).
-- Consumes: FU-141 pool, `fifa96_outfield_*` (`include/fifa96_loader/fifa96_outfield.h:33-60`), `fifa96_arm_face` (`0x79C50`, Task 4) where the appendix maps the same helper body.
+- Consumes: FU-141 pool, `fifa96_outfield_*` (`port/src/fifa96_loader/fifa96_outfield.h:33-60`), `fifa96_arm_face` (`0x79C50`, Task 4) where the appendix maps the same helper body.
 
 - [ ] **Step 1: Failing test** — input-row/no-edge/forced-decision/chase-gate fixtures; `test_engine_match_entities.c` pins the interception band flag; `action_expect[0x04]=[0x08]=FIFA96_OK` + dispatch tests.
 - [ ] **Step 2: Run to fail.**
@@ -342,18 +342,18 @@ Each task here ports one owning family's legs per FU-142 §3 and wires the rows 
 ### Task 15: M2 tape extension and ENGINE.md
 
 **Files:**
-- Modify/Create: `tests/test_engine_m2.c`, `tests/golden/engine/m2-frames.txt`, `docs/ENGINE.md`, `CMakeLists.txt`
-- Read: spec §5; parent plan Task 12 (tape contract); `tests/test_engine_m1.c` / `tests/golden/engine/m1-frames.txt` (tape style)
+- Modify/Create: `port/tests/test_engine_m2.c`, `port/tests/golden/engine/m2-frames.txt`, `port/ENGINE.md`, `CMakeLists.txt`
+- Read: spec §5; parent plan Task 12 (tape contract); `port/tests/test_engine_m1.c` / `port/tests/golden/engine/m1-frames.txt` (tape style)
 
 **Interfaces:**
-- Produces: the M2-B acceptance tape (spec §5): boot → skip intro → front-end → start match (selector 0) → kickoff → move → kick → score → period end → exit to front-end, recording `frame=<n> hash=<hex>` and `state=<phase>/<score>` lines; golden byte-exact with the ISO, self-consistency without. The parent plan's Task 12 tape is the base when present; if `tests/test_engine_m2.c` does not exist at task start, create it with the parent C12 contract first and then apply the same steps — one tape only, never a second.
+- Produces: the M2-B acceptance tape (spec §5): boot → skip intro → front-end → start match (selector 0) → kickoff → move → kick → score → period end → exit to front-end, recording `frame=<n> hash=<hex>` and `state=<phase>/<score>` lines; golden byte-exact with the ISO, self-consistency without. The parent plan's Task 12 tape is the base when present; if `port/tests/test_engine_m2.c` does not exist at task start, create it with the parent C12 contract first and then apply the same steps — one tape only, never a second.
 - Produces: kickoff drives `mr.state.phase` and `mr.phase_machine.state` to `0x13`/`0x14` (the parent G1 carry-forward: selector-0/phase-0 never reaches a live period end; the tape declares this forced phase explicitly). The installer arms must fire and at least rows 26/28/2A + the Gate-G3 rows must dispatch `FIFA96_OK` during the tape; the test asserts the dispatched-row set.
 - Produces: the score step. If any Gate-G2/G3 appendix records a `FUN_00093944` score-event writer among the wired bodies, the tape reaches the goal through that dispatch; otherwise it drives `fifa96_match_run_add_goal(mr, side)` directly and the task records the native event-source leg (child C3-OL2) as carried in the FU-142f section.
-- Consumes: all prior tasks; `fifa96_match_run_*` (`include/fifa96_engine/fifa96_match_run.h`).
+- Consumes: all prior tasks; `fifa96_match_run_*` (`port/src/fifa96_engine/fifa96_match_run.h`).
 
-- [ ] **Step 1: Failing test** — extend `tests/test_engine_m2.c` with the kickoff phase forcing, the wired-row dispatch assertion set, and the score source per the interface rule; the existing golden is stale, so the byte-exact comparison fails.
+- [ ] **Step 1: Failing test** — extend `port/tests/test_engine_m2.c` with the kickoff phase forcing, the wired-row dispatch assertion set, and the score source per the interface rule; the existing golden is stale, so the byte-exact comparison fails.
 - [ ] **Step 2: Run to fail** (`ctest --test-dir build -R test_engine_m2 --output-on-failure`).
-- [ ] **Step 3: Implement** the tape steps; re-pin `tests/golden/engine/m2-frames.txt` with the documented reason ("cluster-G + blocker wiring changed entity state along the tape"); update `docs/ENGINE.md` status/run-today/known-gaps to the new wired-row count and the remaining open legs (OL-48 rows if any, carried legs).
+- [ ] **Step 3: Implement** the tape steps; re-pin `port/tests/golden/engine/m2-frames.txt` with the documented reason ("cluster-G + blocker wiring changed entity state along the tape"); update `port/ENGINE.md` status/run-today/known-gaps to the new wired-row count and the remaining open legs (OL-48 rows if any, carried legs).
 - [ ] **Step 4: Run to pass.**
 - [ ] **Step 5: Gate** — `make check` green with all engine tests under ASan/UBSan; optional `make game` smoke on this host.
 - [ ] **Step 6: Commit** — `test(engine): M2 match tape extension and ENGINE.md`.

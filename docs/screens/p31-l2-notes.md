@@ -1,14 +1,14 @@
 # P31-L2 — the visible-pan acceptance (a natural row-04 pan that also produces the claim, live)
 
 **Task:** M2 phase-31 Stage-2 task 3 (`docs/superpowers/plans/2026-10-22-fifa96-m2-phase31-producers.md:50-57`).
-**Procedure:** `docs/ghidra/FU317_r2l6_claim_acceptance.md` §5–§6 (the trace primary, the same-clock pairs,
+**Procedure:** `port/spec/FU317_r2l6_claim_acceptance.md` §5–§6 (the trace primary, the same-clock pairs,
 the relative AE, the bbox caveat) + the phase-30 Layer-2 procedure (`FU313` §6).
 **Scope:** captures + this note only; no production code, no test change, no golden change.
 
 ## The run
 
 `DISPLAY=:1 FIFA96_CAMERA_TRACE=/tmp/opencode/p31-cam-trace2.log make game`
-(`./build/fifa96 game/FIFAPCCD96.iso`, SDL3, 960×720 client at `+66,+69`).
+(`./build/fifa96 data/game/FIFAPCCD96.iso`, SDL3, 960×720 client at `+66,+69`).
 
 Walkthrough: intro RETURN → front-end BACKSPACE → RETURN (match). The live drive replays the
 `M2_KEYS` prefix by the trace's `tick` field (one 100 Hz engine step): RIGHT at tick 7…47 (the
@@ -108,5 +108,5 @@ green (see the task report). The trace sink stayed default-off outside this run.
   `FU310-L5` met/carried contradiction, the `2 084` vs `2 082/33` counter
   split, the Layer-1 fixture name, `FU317-L8`, `FU311-L1`, the acceptance
   labels, the hold-start boundary, the two named minors) are in
-  `docs/ENGINE.md`'s appended `## M2 phase-31 close-out errata (T4 review,
+  `port/ENGINE.md`'s appended `## M2 phase-31 close-out errata (T4 review,
   2026-10-22)`; `docs/PROGRESS.md` carries its own appended erratum.

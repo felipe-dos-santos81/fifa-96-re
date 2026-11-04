@@ -8,12 +8,12 @@
 
 **Tech Stack:** Ghidra-MCP (`find_code_gaps`, `disassemble_bytes` (Task 1 `dry_run=true` only), `disassemble_function`, `read_memory` (hex-vs-data protocol), `search_instructions` (authority), `get_function_by_address`, `get_xrefs_to`/`list_data_items_by_xrefs` (control only — dead channel), `search_byte_patterns`, `create_function`, `create_array_type`/`apply_data_type`/`create_label`/`set_global`/`audit_global`, `rename_function`, `set_comment`, `save_program`), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-29 (byte-run classification with contiguous 226 tiling; reachability re-verify incl. new handler edges and determinability pair-source math resolving into the head; `[0xdfe]` contact sweep; `0x29b8/0x29ba` table role; capped creates/defines on the proven templates; `[0xdfe]` writer and callee trees deferred) + `docs/ghidra/loader_rename_map.md` (`## 296d hook target` — `restore_fs_gs_and_resume` tail `JMP 0x1000:1e85`@`2975` unconditional, `2978` = `CMP byte [0xdfe],0x1`; `## paging block 2978..2ada` — zero static entries from defined insns + fall-in caveat, `CS:[0x2ad9]` tail ownership, Concern-3 shrink note now moot; `## vector dispatch handlers` — carve `2978..2a59` gap row `1000:4548..4629` size 226 + handler `2a5a..2ad8` + tail row `1000:46a9..46aa` size 2; determinability appendix `29b8`→`5a2a602a` words `0x2a5a/0x2a60`; `2820..2823` `mode_vector_source_pair` COMPLETE_80 define template + plate format; `## 2811..296c pocket + 9bc vector` — sweep discipline + quote-protocol note binding; `## callee arg question` — six far-return halves deferred status, `[0x9b4]`/`[0xdfe]` listed as unconsumed-in-scope).
+**Spec:** Approved chat design 2026-09-29 (byte-run classification with contiguous 226 tiling; reachability re-verify incl. new handler edges and determinability pair-source math resolving into the head; `[0xdfe]` contact sweep; `0x29b8/0x29ba` table role; capped creates/defines on the proven templates; `[0xdfe]` writer and callee trees deferred) + `port/spec/loader_rename_map.md` (`## 296d hook target` — `restore_fs_gs_and_resume` tail `JMP 0x1000:1e85`@`2975` unconditional, `2978` = `CMP byte [0xdfe],0x1`; `## paging block 2978..2ada` — zero static entries from defined insns + fall-in caveat, `CS:[0x2ad9]` tail ownership, Concern-3 shrink note now moot; `## vector dispatch handlers` — carve `2978..2a59` gap row `1000:4548..4629` size 226 + handler `2a5a..2ad8` + tail row `1000:46a9..46aa` size 2; determinability appendix `29b8`→`5a2a602a` words `0x2a5a/0x2a60`; `2820..2823` `mode_vector_source_pair` COMPLETE_80 define template + plate format; `## 2811..296c pocket + 9bc vector` — sweep discipline + quote-protocol note binding; `## callee arg question` — six far-return halves deferred status, `[0x9b4]`/`[0xdfe]` listed as unconsumed-in-scope).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` vs `data` before verbatim (slice-17 protocol).
 - Task 1 writes NOTHING in Ghidra: `disassemble_bytes` only `dry_run=true`; reads only via `disassemble_function`/`search_instructions`/`read_memory`/`search_byte_patterns`/`get_function_by_address`/`find_code_gaps`; tool error on a required sub-step → BLOCKED report, never a write. All listing mutations belong to Task 2 at Task-1-cited ranges only.
 - Do NOT invent addresses: every run start/exit cites emitted bytes; reachability claims cite either an instruction operand with recomputed arithmetic (`e9`/`e8` rel16 with next-IP math; `ff16/ff26` cell forms with cell + value source) or the no-entry finding itself.
@@ -21,7 +21,7 @@
 - TABLE defines: `ushort[2]`-style via `create_array_type`+`apply_data_type`+`create_label` on the `mode_vector_source_pair` precedent (same plate format, `audit_global` verify, COMPLETE band quote optional); CODE creates default-named unless walk ops give a mechanism-level role at the naming bar (CR0/LGDT/LIDT-class cite required for mode-flavored words; NOT-CONFIRMED-at-name = no rename/plate beyond behavioral default); no `decode_*`, no direction words.
 - Sweep discipline (slice-16/20): every run lists pattern + `match_count` + scope (`instructions_scanned` uniformity noted "at this-slice time" per slice-21 ruling); `[base+disp]` window arithmetic for the `[0xdfe]` reach class (constant-base census + digit/sign partitions + OPEN-WINDOW holes, never silent rejects); controls (`get_xrefs_to`, `list_data_items_by_xrefs`, raw byte patterns) reported, not relied on; negatives carry the defined-instructions-only caveat + MOVS/STOS/offset-render blind spots.
 - Scope guard: callee trees ONE hop with cites; `[0x9b4]`/`[0x40]` consumer stories, `[0xdfe]` runtime writers, islands' bodies, six far-return halves, twin/band regions — cite-only status lines; the `2a5a` handler's body is read-only context (its bytes are owned; no re-walk beyond cited entry ops).
-- Prior sections read-only (pure append, zero deletions outside new section; own-section fixes allowed per slice-20/21/22 rulings); `save_program` after any write batch; leave `fifa96.rep` churn unstaged; commit messages exactly per the briefs; no new tests.
+- Prior sections read-only (pure append, zero deletions outside new section; own-section fixes allowed per slice-20/21/22 rulings); `save_program` after any write batch; leave `data/fifa96.rep` churn unstaged; commit messages exactly per the briefs; no new tests.
 
 ---
 
@@ -31,16 +31,16 @@ One byte-range disposition plus one cell sweep plus one reachability question, t
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## block head 2978..2a59` (Task 1 edge/gap confirm + classification + reachability + sweep tables; Task 2 `### Writes` + verdict rows + `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## block head 2978..2a59` (Task 1 edge/gap confirm + classification + reachability + sweep tables; Task 2 `### Writes` + verdict rows + `### Deferrals`).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only: real disassembly + creates at cited CODE ranges; `ushort[2]`+label define at cited TABLE range; plates; `save_program`.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Stream classification + reachability + [0xdfe] sweep (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## block head 2978..2a59` with confirmation/classification/reachability/sweep tables)
+- Modify: `port/spec/loader_rename_map.md` (append `## block head 2978..2a59` with confirmation/classification/reachability/sweep tables)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -61,14 +61,14 @@ Re-run the pattern families (`0x1000:29`, `11bd:29`, `0x1000:45`, near forms) wi
 
 - [ ] **Step 4: Append + verify + commit**
 
-Append `## block head 2978..2a59 (verified 2026-09-29, program \`/fifa96.exe\`)` — paragraph + tables + disposition-so-far line (per-class counts, head-entry verdict, `[0xdfe]` reader found/writers open, pair-role claim). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: classify block head, re-verify static entry, sweep 0dfe contacts" || true`
+Append `## block head 2978..2a59 (verified 2026-09-29, program \`/fifa96.exe\`)` — paragraph + tables + disposition-so-far line (per-class counts, head-entry verdict, `[0xdfe]` reader found/writers open, pair-role claim). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: classify block head, re-verify static entry, sweep 0dfe contacts" || true`
 
 ---
 
 ### Task 2: Capped creates + define + dispositions
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
 - Modify: Ghidra program `/fifa96.exe` (real disassembly + `create_function` at cited CODE ranges; `ushort[2]`-style define + label at the cited TABLE range; plates; `save_program`)
 
 **Interfaces:**
@@ -85,7 +85,7 @@ TABLE run (the `29b8..29bb` pair or a wider table region Task 1 evidenced): `cre
 
 - [ ] **Step 3: Append + verify + commit**
 
-Append `### Writes` + verdict rows + `### Deferrals` (+ `### Fix wave` trailer if own-row edits were needed per slice-22 practice). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: create block-head CODE runs and define pair table with dispositions" || true`
+Append `### Writes` + verdict rows + `### Deferrals` (+ `### Fix wave` trailer if own-row edits were needed per slice-22 practice). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: create block-head CODE runs and define pair table with dispositions" || true`
 
 ---
 

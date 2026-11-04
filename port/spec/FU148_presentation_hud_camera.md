@@ -1,0 +1,1860 @@
+# FU-148 — presentation (HUD/camera/formation/palette)
+
+Provenance: recon draft w4, phase-6 wave-1, frozen 2026-10-09; evidence review: PASS with corrections listed inline.
+
+Wave 1 recon for `docs/superpowers/plans/2026-10-08-fifa96-m2-full-gameplay.md` (W4).
+Read-only Ghidra session, authoritative program `/FIFA96.EXE` (Ghidra project path
+`/FIFA96.EXE`, executable `/home/felipe/code/fifa96-reversed/data/game/hdd/FIFA96/FIFA96.EXE`,
+watcom:LE:32:default, image base 0, 2706 functions). The stale flat bin
+`/fifa96_le.bin` was **not** used for any quote. All addresses below are Ghidra
+addresses on `/FIFA96.EXE`.
+
+Address convention: FUs written against `/fifa96_le.bin` use flat addresses; on
+`/FIFA96.EXE` data/globals are `flat + 0x100000` (FU-144 §1 note). This draft
+uses the `/FIFA96.EXE` form exclusively; where a carried doc quotes the flat
+form both are given.
+
+Priority was the HUD (P0.2) — derived first-hand and completely enough to port;
+camera/formation/palette follow.
+
+---
+
+## Scope
+
+1. **HUD OL-T11-7** — the native match score/clock overlay draw, its state,
+   resources, draw order/positions and the engine port contract.
+2. **Camera legs** — FU-96 §6 legs 1/3 (camera mode/angle feed; selector +
+   presets + handlers) and the FU-71 follow writer (who drives the camera
+   velocity/pan during live play); port contract for the engine camera block.
+3. **Formation-id producer** — the writers of `[0x14C1E4]`/`[0x14C1E5]` and the
+   consumer that turns the id into a layout.
+4. **Palette legs** — the base palette `0x14B200` writers (FU-144 §6 leg 1),
+   the per-entity translation tables `0x14BF60 -> 0x114720`
+   (`FUN_00048DC0`/`FUN_000CE980`), shade-cube placement; port contract.
+
+An earlier lead in the plan said "FU-84 leads" for the HUD; FU-84 is the
+animation selector/row-table document and contains no HUD draw. The HUD lead is
+closed by direct discovery below (`FUN_000565BC` -> `FUN_00055C24`); FU-111
+§5/FU-116 are the *replay* HUD button cluster, a different overlay.
+
+---
+
+## 1. HUD (OL-T11-7)
+
+### 1.1 The draw path (first-hand, `/FIFA96.EXE`)
+
+| function | window | role | callers (fresh `get_xrefs_to`) |
+|---|---|---|---|
+| `FUN_00055C24` | `0x55C24..0x560C6` (343 insns, `disassemble_function`) | **the match HUD draw** (bar + team names + score + clock + period) | exactly 1: `FUN_000565BC` call at `0x56677` |
+| `FUN_000565BC` | `0x565BC..0x5668C` (`get_function_by_address` body_end) | the per-frame overlay presenter; owns the HUD visibility gates | 3: `FUN_000495B0` `0x49681`; `FUN_00058BC0` `0x58C9F`/`0x58D32` |
+| `FUN_000495B0` | `0x495B0..0x498xx` | the main draw loop (two buffers, `uVar7`); calls `FUN_000565BC()` once per drawn buffer after `FUN_00049830` | — (indirect entry, FU-126 family) |
+
+Call order inside `FUN_000565BC` (fresh disasm/decompile):
+
+```
+0x565C1  FUN_0004B380();                          ; mode = [0x157A4A]>>24
+0x565C6  if (DAT_0014e538 == 0)                   ; [0x4E538] guard
+0x565D3      if (FUN_00037ae4() == 0)             ; pad probe (FUN_00036BC8(5)/(7))
+0x565DC         if (FUN_0006400C() != 0 && EDX not in {0xC,0x13,0x14}) {
+0x565E8             FUN_000560C8();               ; overlay scaler A (FU-93 §2)
+0x565F2/0x565FB    FUN_0005619C(0); FUN_0005619C(1);  ; overlay scalers
+                }
+0x5660C  if (FUN_00063FD0() != 0) ...             ; replay HUD branch (FU-111 §5)
+0x56636  if (DAT_0014e688 == 0) {                 ; not paused
+0x56641      if ([0x14E674] & 0x8000) { FUN_000542D4(); FUN_000550E4(); }  ; menu overlays
+0x56652      if (DAT_0014e510 == 0) {
+0x5665C          if (FUN_0006400C() != 0) {
+0x56664              if (FUN_0004B5F4() < 4 && DAT_0014e59c == 0)
+0x56677                  FUN_00055C24();       ; <<< THE HUD
+                 }
+             }
+0x5668F      if (DAT_0014e660 != 0) FUN_00056518();
+         }
+```
+
+Gates, with first-hand definitions:
+
+| gate cell | meaning | evidence |
+|---|---|---|
+| `FUN_0006400C()` | `return [0x109A98] == 0` — replay state idle (the FU-108 `[0x9A98]` byte, EXE `0x109A98`) | decompile `0x6400C` |
+| `FUN_0004B5F4()` | `return [0x157AC2]` — the **period byte** (FU-62/FU-142 L; EXE form of flat `0x57AC2`) | decompile `0x4B5F4` |
+| `[0x14E510]` | HUD suppress; written only by `FUN_000537F8` (`0x538F2`); 2 refs total: that write + the read at `0x56652` | fresh `get_xrefs_to 0x14E510` = 2 |
+| `[0x14E59C]` | second suppress; writes `0x5385C` (`FUN_000537F8`) and `0x519A9` (0x51xxx view handler); reads at `0x5666E`/`0x56698` (presenter) + `0x51996` | fresh `get_xrefs_to 0x14E59C` = 5 |
+| `[0x14E688]` | pause/suspend flag; 9 refs (7 writes + 2 reads incl. `0x56636`) | fresh `get_xrefs_to 0x14E688` = 9 |
+| `[0x14E538]` | first guard; 11 refs — 10 instruction (9 writes: `0x5391C` (`FUN_000537F8`), `0x543BC/F2`, `0x529E4/0x52A2C/0x52ADE`, `0x52397`, `0x512FD/0x51356`; + read `0x565C3`) + 1 DATA ref at `0x561B0` | fresh `get_xrefs_to 0x14E538` = 11 |
+| `FUN_0004C2A0` | first line of the HUD body: `FUN_0001D940(6)` = table entry `[0x149290]`; 0 aborts the draw | `0x55C30 CALL 0x4C2A0`; decompile `0x4C2A0` = `FUN_0001D940(6)`; `FUN_0001D940` = `(&0x149278)[i]`; `read_memory 0x149278` = 40 zero bytes (runtime-filled BSS) |
+
+So the HUD is drawn exactly when: the presenter runs (`FUN_000565BC`, called by
+the main draw loop), not in replay (`[0x109A98]==0`), period `< 4`, not
+paused/suppressed (`[0x14E538]==0`, `[0x14E688]==0`, `[0x14E510]==0`,
+`[0x14E59C]==0`), and settings entry 6 non-zero (`FUN_0001D940(6)`).
+
+### 1.2 HUD state (source cells)
+
+| cell (EXE) | read in HUD via | meaning | first-hand writer evidence |
+|---|---|---|---|
+| `0x157AC5` / `0x157AC7` | `FUN_0004B5DC(&a,&b)` (`a=[0x157AC5]`, `b=[0x157AC7]`) at `0x55DAF` | per-side goal words (16-bit) | `FUN_00093944` `0x9394B INC word [EAX*2+0x157AC5]`; zeroed by `FUN_00092E2C` `0x92E7B/E82` (FU-142 L.3) |
+| `0x157AB4` | `FUN_0004B594()` at `0x55C5F`; result -> `ESI` | **total elapsed seconds** (displayed clock) | writers: `FUN_00073EE0` `0x73EF3`, `FUN_0008AF38` `0x8B066`, `FUN_00092E2C` `0x92E66`, `FUN_00073D10` `0x73D48`, goal handlers `0x93CCF/0x93F60/0x940D8/0x9438F/0x94559/0x94763` (fresh `get_xrefs_to 0x157AB4` = 16) |
+| `0x157AB6` | `FUN_0004B588()` at `0x55C4D` (period-half seconds; result unused by the HUD) | per-period seconds (reset on period advance) | fresh `get_xrefs_to 0x157AB6` = 38 (same family + `FUN_00088940` `0x88D2E`) |
+| `0x157AC1` | — | sub-minute accumulator (`+= delta`; on `>=0x3c` minus 0x3c and both clock words `+1`) | `FUN_0008AF38` `0x8B04F/0x8B066/0x8B073` |
+| `0x157AC2` | `FUN_0004B5F4()` at `0x55C3D`; displayed period = value+1 | period byte (0/1/2/3 = halves/pauses) | `FUN_0008AF38` `0x8B583/0x8B590` (`++`), reset writers as FU-62 |
+| `0x108DDC` / `0x108DE0` | `[0x108DDC] < 0x10000` at `0x55CA2/0x55E24` | 16.16 window zoom scale (FU-93 §1, EXE form) | `FUN_00053240` per FU-93; recomputed in-engine |
+| layout block `0x14E514..` | see §1.3 | HUD layout (FU-93 §1) | `FUN_00053240` (`0x532E0..0x5339D`), `FUN_000537F8` (`0x538F7/FC`), `FUN_000550E4` (`0x55169/6E/0x55208..0x55233`) |
+
+Clock split (`disasm 0x55C80..0x55C98`): `EDI = ESI / 0x3C` (minutes),
+`ESI = ESI % 0x3C` (seconds) with `IDIV` (signed, `SAR EDX,0x1F` sign fill), then
+`sprintf("%02d:%02d", minutes, seconds)` (format at `0x101E40`).
+
+### 1.3 HUD layout math (from `FUN_00053240`, FU-93 §1, confirmed in the draw)
+
+```
+[0x14E514] = 0x36
+[0x14E51C] = 9 (zoomed) / 0xC (full)        ; row pitch
+[0x14E520] = x0+3 / x0+6                     ; left column x
+[0x14E524] = x0+0x23 / x0+0x32               ; right column x
+[0x14E528] = x0+1 / x0+2                     ; bar x
+[0x14E52C] = y1 - (h*0xB800>>16) - 1 / y1 - h - 2   ; bar y (bottom anchor)
+[0x14E534] = min(0, y1 - [0x14E52C] - 0x36)  ; zoom clamp (<=0), FUN_000550E4 0x5516E
+[0x14E530] = 2*[0x14E534]
+```
+
+### 1.4 HUD draw order and positions (`FUN_00055C24`, first-hand disasm)
+
+Registers/values established before the draws:
+`EBP = period+1` (`0x55C52`, or `[0x14E5A0]+period` in modes {0xC,0x13,0x14},
+`0x55C57..0x55C5D`); `x0 = [0x14E520]+[0x14E530]` -> `EDI` (`0x55E03..0x55E1B`);
+`clock_x = [0x14E524]+[0x14E530]` (+6 zoomed-wide / +8 full-wide) -> `EBP`
+(`0x55E15..0x55ED8`); `y2 = [0x14E52C]+[0x14E534]+local_24` (`0x55E09/0x55EFD`);
+`local_24 = 2` (both modes), `local_20 = 2` (zoomed) / `3` (full), bar height
+`ESI = 0x12` (zoomed) / `0x18` (full), `+6`/`+8` when wide.
+
+```
+1. bar:  FUN_0009BB20(0xB800, [0x14E658], x=[0x14E528]+[0x14E530], y=[0x14E52C]+[0x14E534])   ; zoomed
+   or FUN_0009AFD0([0x14E658], x, y)                                                          ; full
+   (0x55E80..0x55EEA; FUN_0009BB20 disasm 0x9BB20: rect size = word[dims+4]*0xB800>>16 x
+   word[dims+6]*0xB800>>16, FUN_0009B850(x,y,w,h): first-hand 0x9BB35..0x9BB5A)
+2. colour 6 (outline): FUN_00019E9C(6) then FUN_000A06FC(str, x, y); colour 0: FUN_00019E9C(0), FUN_000A06FC
+   a) name0  at (x0,   y2)                  0x55F10..0x55F44  (shadow at +1,+1)
+   b) name1  at (x0,   y2+[0x14E51C]-2)     0x55F47..0x55F98  (shadow at +1,+1)
+   c) score0 at (clock_x - width(score0), y2)                  0x55F9B..0x55FF1
+   d) score1 at (clock_x - width(score1), y2+[0x14E51C]-2)     0x55FF4..0x56056
+   e) period at cell (x0 .. x0+([0x14E51C]-1), y=2*[0x14E51C]+y2_raw+local_20),
+      centered by FUN_00055BA8(str,x0,y, [0x14E51C]-1, [0x14E51C]-1)   0x56057..0x5608A
+   f) clock  at cell (x0+local_28 .., same y), width ESI, centered by FUN_00055BA8 0x5608A..0x560AA
+3. FUN_0009849C(esp): restore the 16-dword font state   0x560AF
+```
+
+Text strings (`sprintf` = `FUN_00099E9F`, `FUN_000AFD4F` printf engine):
+
+| string | format | source | site |
+|---|---|---|---|
+| team 0 name | `%s` (`0x101E3C`) then `FUN_00017748` charset filter | `FUN_00011BEC(0,0,0)` = `FUN_00010A54(&0x143018+side*0x49, ...)` | `0x55D27..0x55D4B` |
+| team 1 name | `%s` | `FUN_00011BEC(1,0,0)` | `0x55D39..0x55D4B` |
+| (both, when `[0x14C32A]!=0`) | `%s` | string table ids `0x1EA`/`0x1E9` via `FUN_0001771C` | `0x55CCD..0x55D25` |
+| clock | `%02d:%02d` (`0x101E40`) | minutes/seconds of `[0x157AB4]` | `0x55D93..0x55DA4` |
+| score0/1 | `%d` (`0x101DF4`) | `FUN_0004B5DC` out pair | `0x55DB4..0x55DDF` |
+| period | `%d` (`0x101DF4`) | `EBP` = period+1 | `0x55D7D..0x55D90` |
+
+`FUN_000A06FC(str, x, y)` disasm `0xA06FC..0xA071B`: `FUN_00098470(x,y)` (sets the
+cursor `[0x1127E4]/[0x1127E8]`) then `FUN_0009FFF0(str)` (glyph blit).
+`FUN_00055BA8` disasm `0x55BA8..0x55C21`: `x += (cell_w - width(str))/2`,
+`y += max(0,(cell_h-12)/2)`, then the same colour-6 outline + colour-0 main pair.
+`FUN_000986B4` -> `FUN_00098630`: text width = sum over the string of the
+per-char advance (`DAT_001127F6` default or `PTR_DAT_001127FC[ch-first]`).
+
+### 1.5 HUD resources
+
+| resource | slot | evidence |
+|---|---|---|
+| `PALsys.fsh` | 0x32 | FU-144 §2 (`0x107370` index 50 -> `0x101BA4` "PALsys") |
+| `clockfnt.fsh` | 0x35 | `0x107370` index 53 -> `0x101BC0`; bytes at `0x101BBF..`: `69 63 6c 6f 63 6b 66 6e 74 00` ("iclockfnt"), entry pointer is `0x101BC0` = "clockfnt"; `FUN_0004A6BC` appends `.fsh` for slots 39..55 (FU-144 §2) |
+| `playfnt.fsh` | 0x36 | index 54 -> `0x101BCC` = "playfnt" (`0x101BCC`: `70 6c 61 79 66 6e 74 00`) |
+
+`FUN_00055C24` selects **0x36 (playfnt)** when `[0x108DDC] < 0x10000`, else **0x35
+(clockfnt)** (`0x55CB3 MOV EAX,0x36` / `0x55CBA MOV EAX,0x35`, then
+`0x55CBF CALL 0x4AFB8`). Both names resolve in the retail container: first-hand
+`fifa96_play sprite port/tests/golden/gameart0.pvi --name clockfnt.fsh` and
+`--name playfnt.fsh` return "entry ... is not a decodable SHPI sprite bank"
+(the by-name lookup succeeded; only the SHPI decode is refused, as expected for a
+font). `tools/tests/test_play.py::TestAutoIso::test_smoke_pass` also shows the retail
+`/ART/GAMEART0.PVI` carries 60 entries (e.g. `Npost.fsh` entry 35).
+
+Font resource parse = `FUN_000984B4(handle)` (disasm/decompile `0x984B4`), fields
+read into the text renderer state:
+
+```
+[0..3]   magic dword (compared against 0x464E544D byteswapped variants: "MTNF"/"FNTI"/"P..." family)
+[+4]     first char code  -> DAT_001127F4
+[+5]     last char code   -> DAT_001127F5
+[+6]     default glyph width (when [+0x10]>>16 == 0)   -> DAT_001127F6
+[+7]     glyph height      -> DAT_001127F7
+[+8],[+9],[+10]            -> DAT_001127F8/F9/FA
+[+0x10]>>16              -> per-char width table (rel. offset, or 0)
+[+0x14] low word (signed) -> per-char flags/heights table (rel.)
+[+0x14]>>16              -> rel. offset
+[+0x18] low word (signed) -> rel. offset
+[+0x18]>>16              -> rel. offset
+[+0x1C]                  -> glyph bitmap data base
+[+0x20..]                -> per-char dword {low16 = bit offset within row, high16 = row advance}
+depth (bits/pixel) = byte[+3] - '0'   (1/4/8; FUN_0009FFF0 0xA00C7..0xA00F5)
+```
+
+Glyph blit = `FUN_0009FFF0` (`0xA0?` ~large): per char, width from
+`DAT_001127F6`/`PTR_DAT_001127FC`, height `DAT_001127F7`/`DAT_00112800`, data at
+`DAT_00112810 + ((off&0xffff)*depth>>3) + (off>>16)*row_bytes`, pixels written
+through `FUN_000CEF64(x,y,byte)` (`0xCEF64`: clip to `0x1131CC/0x1131D4`, planar
+`[0x1131E4]` path or linear row-table path).
+Colour selection = `FUN_00019E9C(idx)` (`0x19E9C`): loads `(&0x1050A4)[idx]` and
+the byte `[0x1050E4+idx]`; `read_memory 0x1050E4..0x1050F3` =
+`FF 00 00 00 00 00 00 00 FF FF FF FF 00 00 00 00` (idx 0 -> 0xFF, idx 6 -> 0x00,
+idx 8..11 -> 0xFF). The HUD uses indices 6 (outline pass) and 0 (main pass).
+
+### 1.6 HUD-derived semantics (summary)
+
+The native match HUD is a bottom-anchored two-column block:
+
+```
+row 0:  TEAM0-name                          score0   (right-aligned at clock_x)
+row 1:  TEAM1-name                          score1   (right-aligned at clock_x)
+row 2:  period (centered in a [0x14E51C]-1 wide cell at x0)   clock MM:SS (centered in an ESI-wide cell)
+```
+
+drawn with the `playfnt.fsh` font in the zoomed window (`[0x108DDC] < 0x10000`)
+or `clockfnt.fsh` in the full window, outline pass colour 6 then main pass colour
+0, over a scaled background bar. State read: score words, total-seconds clock,
+period byte. Fresh `get_xrefs_to 0x4B5DC` = 7 call sites: `0x55DAF`
+(`FUN_00055C24`, this HUD), `0x54EBE`/`0x54F56`/`0x554C7` (0x54xxx overlay
+draws), `0x51656`, `0x60BF7` (`FUN_00060AA8` result screen), `0x63692`
+(`FUN_00063688` score predicate) — the match HUD is the `0x55DAF` draw.
+
+---
+
+## 2. Camera legs
+
+### 2.1 FU-96 §6 legs 1/3 — verification of `:157-163` and the missing producers
+
+FU-96 `:157-163` (leg 5) says the camera-mode/angle feed "remains carried from
+legs 1/3" and the FU-71 follow writer is unported. Verified: the engine camera
+stays at the kickoff triple (`FUN_000700F4` reset) and `fifa96_camera_update` is
+the ported follow integrator. The missing producers are now located:
+
+**(a) per-frame camera mode/angle feed (first-hand)**
+
+| item | evidence |
+|---|---|
+| mode getter | `FUN_00053D50` = `return [0x14E57C]` (`0x53D50` decompile) |
+| mode writers | `FUN_000537F8` `0x53826`/`0x5387D`; 0x51xxx view handlers `0x5144C/0x514A3/0x51819/0x518F3/0x519A3/0x51AD0/0x51B2D/0x51B56/0x51B99` (fresh `get_xrefs_to 0x14E57C` = 12) |
+| selector/poser | `FUN_000505D0` (`0x505D0..0x50Fxx`), fresh `get_xrefs_to` = 3: `FUN_0004CEF4 0x4CF51`, `FUN_0004CF7C 0x4D009`, `FUN_0004D2D4 0x4D3D9` |
+| per-frame driver | `FUN_0004D2D4` (`0x4D2D4..0x4D3xx`), fresh `get_xrefs_to` = 2: main loop `FUN_000495B0 0x495DF` and `0x49892` (scene assembly `FUN_00049830` region) |
+| presets | `(&0x108B64)[type]` = 6 pointers, `read_memory 0x108B64` = `6C 89 10 00 / C0 89 10 00 / 14 8A 10 00 / 68 8A 10 00 / BC 8A 10 00 / 10 8B 10 00` (0x10896C, 0x1089C0, 0x108A14, 0x108A68, 0x108ABC, 0x108B10); record = 6 dwords `{x,y,z,yaw,pitch,angle}` copied to camera `+0x10/+0x14/+0x18/+0x58/+0x5C/+0x4C` (`FUN_000505D0` decompile, multiple arms) |
+| handlers | `(&0x108B80)[i]` = `read_memory 0x108B80` = `34 E8 04 00 (0x4E834), A8 E3 04 00 (0x4E3A8), 9C EC 04 00 (0x4ECA8), 38 DB 04 00 (0x4DB3C)` — 4 static entries; the `[cam+4]` index is clamped `>=0` with `3 -> 5` only for the *preset* lookup (`FUN_000505D0` decompile head) |
+
+`FUN_000505D0` arms (mode = `FUN_00053D50()`, switch on `local_2c < 0x20`): 1/0x12,
+3, 4, 6/0x10, 7, 8, 9, 0xB, 0x13/0x1C, 0x14, 0x15, 0x1D; each arm writes the
+camera pose (`+0x10/+0x14/+0x18/+0x58/+0x5C/+0x4C`) from a preset record
+(`local_20 = (&0x108B64)[(&(camera+0xC))]`, or `local_20 + k*6` with
+`FUN_000504E0`/`FUN_00050518` for arms 3/4/8) and then calls
+`(*(code*)(&0x108B80)[cam_index])(camera, preset)`.
+
+**(b) camera `+0x4C` (the ratio angle) writers** — fresh instruction search
+`+ 0x4c],` restricted to the camera band:
+
+| site | function | value |
+|---|---|---|
+| `0x4D836` | `FUN_0004D7E8` | camera-type init: `puVar4 = *(*(&0x108B64)[type]+0x48) + arg*0x18`; `camera+0x4C = puVar4[5]` (decompile) |
+| `0x5076F, 0x508C5, 0x509CF, 0x50BC7, 0x50C0C, 0x50CED, 0x50D92, 0x50DBE, 0x50E91, 0x50F18` | `FUN_000505D0` | per-frame pose writes |
+| `0x4D31E` | `FUN_0004D2D4` | replay copy: `camera+0x4C = [0x109A84+0x14]` |
+| `0x4D431, 0x4D43C(c 0x200), 0x4D44D(c 0x3A00)` | `FUN_0004D2D4` | smoothed-angle clamp (`FUN_0004C8D0` output integrated, clamped to [0x200,0x3A00]) |
+| `0x4CA16/0x4CA21/0x4CA33` | `FUN_0004CA08` | view pan keys: `+0x4C = EBX / 0xBB8 / 0x1800` |
+| `0x366A0, 0x36736 (0x1200), 0x367A9 (0x1370), 0x368FA (0x1118)` | `FUN_0003665C/0x366EC/0x3679C/0x368EC` | replay-camera preset writebacks |
+| `0x4DDFE/0x4DE3B/0x4DE91/0x4DE9B/0x4DF2C` | `FUN_0004DDA8` | other view modes |
+| `0x4F91E/0x4FBA3` | `FUN_0004F8C8` | replay camera |
+| `0x4E820/0x4EC87/0x4F1B4` | `FUN_0004E3A8/0x4E834/0x4EC9C` | per-camera handler `ADD [ESI+0x4C], EAX` (the handlers from `0x108B80`) |
+
+**(c) FU-71 follow writer (who drives `vel_x`/`vel_z` in live play)** — fresh
+`get_xrefs_to 0x1577C0` = 91 / `0x1577C2` = 54 sites. Writers (excluding the
+integrator `FUN_000736AC` and resets `FUN_000700F4`):
+
+| function | sites | role |
+|---|---|---|
+| `FUN_00070544` | `0x7065B, 0x706AA, 0x70756` | pan/event setup: writes velocity words |
+| `FUN_000709D0` | `0x70B43` | pan step (called by `FUN_000736AC 0x737DA` when `timer > timer_limit`) |
+| `FUN_00070DE0` | `0x71053, 0x71274` | camera cut/reposition (387 insns, FU-71 §9 leg 4) |
+| `FUN_00071DF4` | `0x71E63, 0x71E84, 0x71E9A` | ball sub-object event rate → velocity ramp |
+| `FUN_0007131C` | `0x7197A` | boundary reflection negation |
+| `FUN_0007A490` | `0x7A92D` | ball staging: **zeros** the velocity words in one arm |
+| unnamed sites | `0x76892, 0x77241/0x772A3/0x772B8/0x772F5, 0x77C92/0x77CE6/0x77CFD, 0x852C4, 0x7F59E, 0x74BF6, 0x77D0A` | further gameplay writers |
+
+The **producer of the pan/event itself** is `FUN_00071C94` (camera cut/event
+setter: `FUN_000700F4()` reset, sets `timer_min`/`event_param`, calls
+`FUN_00070544`), with 11 fresh callers: `0x71B8A`, `0x70DD1` (`FUN_00070DE0`),
+`0x7A219` (`FUN_0007A084`), `0x6FA62`, `0x75DC4`, `0x77423`, `0x7F4E7`,
+`0x82A6C`, `0x77DC6`, `0x7EFCF`, `0x7F0D1`. All are gameplay event bodies
+(ball/kick/shot/goal/keeper rows). So the FU-71 follow writer is the gameplay
+event machine; the reachable subset for the port is whatever the shot/kick paths
+actually invoke.
+
+---
+
+## 3. Formation-id producer
+
+`[0x14C1E4]`/`[0x14C1E5]` = per-side formation index (0..4). First-hand:
+
+| role | function | evidence |
+|---|---|---|
+| direct setter | `FUN_0008EA70(side, value)`: `(&0x14C1E4)[param_1] = param_2; FUN_0007412C();` | decompile `0x8EA70`; callers fresh = 2: `0x3D3F4`, `0x3D519` (containing function `FUN_0003D2DC`, the formation select screen) |
+| match-init producer | `FUN_00011620(side, team, desc)` and `FUN_00011978(side, rec, desc)`: copy the team record byte `(&0x14302A)[side*0x49]` (= team block `0x143018+side*0x49`, offset +0x12) into `(&0x14C1E4)[side]` | decompile `0x11620` (tail `0x1189B MOV [EDX+0x14C1E4],AL`), `0x11978` (`0x11A97`); block written by match init `FUN_00011B7C` (`0x11BB6/0x11BC5 CALL 0x11620`, decompile) and by `0x25Bxx`/`0x25Cxx` (league/practice init) |
+| front-end cycling | `FUN_0003D2DC` cases 0/1 step `[0x14AE38+team*4]` through 0..4 (`0x3D2DC` decompile: `(x+1)%5`, `(x-1)<0 -> 4`), case 2 commits via `FUN_0008EA70` | decompile `0x3D2DC` |
+| consumer | `FUN_0007412C`: `FUN_0008CE78(team0, &0x14C35C, [0x14C1E4])`, `FUN_0008CE78(team1, &0x14C3D7, [0x14C1E5])` (fresh `get_xrefs_to 0x8CE78` = 2, both this function) | decompile `0x7412C` |
+| installer | `FUN_0008CE78(team, desc, id)` -> `team+0x7AA = desc`; `FUN_0006D9C4(team, id)`; then 11x `FUN_0008C758` accumulate into `team+0x827` | decompile `0x8CE78` |
+| layout table | `FUN_0006D9C4`: `team+0x7AE = &0x11033A + id*0x1D`; for 4 blocks of 7 bytes `{role, count, slot..}`: `record[slot]+0x90 = role`, `FUN_0006D920(record)`; then `FUN_0004C384` into `team+0x7DB/0x7DF` | decompile `0x6D9C4`; `read_memory 0x11033A` = formation 0 `00|00 01 00|01 03 01 02 03|02 05 04 05 06 07 08|03 02 09 10`, formation 1 `01|00 01 00|01 04 01 02 03 04|02 04 05 06 07 08|03 02 09 10` (4-4-2) |
+| match readers | `FUN_0008E810` `0x8E81E`, `FUN_0008E910` `0x8E92C` (entity loops), `FUN_00040080`/`FUN_00041494`/`0x3FEF8` | fresh `get_xrefs_to`/`search_instructions 14c1e` = 21 sites |
+
+The engine currently hard-0s the formation id; the native default is also 0
+(EXE image is BSS at `0x14C1E4`), and the id comes from the team record's +0x12
+byte at init or the front-end formation screen.
+
+---
+
+## 4. Palette legs
+
+### 4.1 Base palette `0x14B200` (FU-144 §6 leg 1) — closed
+
+Fresh instruction search `14b200` = 10 sites (only these exist):
+
+| site | function | action |
+|---|---|---|
+| `0x4793C` | `FUN_0004793C` | getter: `EAX = 0x14B200` |
+| `0x4795B` | `FUN_00047944` | push arg |
+| `0x479A8` | `FUN_000479A0` | reads `[EDX+0x14B200]` to build the 8-bit copy (`v<<2`, FU-144 §1) |
+| `0x48C96/0x48CC2/0x48CF1/0x48CFB/0x48D05` | `FUN_00048C8C` | **sole writer**: `memmove(src -> 0x14B200, 0x300)` (copy helper `FUN_000CD390` arg1->arg2), then `FUN_000479A0`, `FUN_00047A70` (near-black key table `0x14BF28`) and the codec hooks |
+| `0x48F1B/0x48F2F` | `FUN_00048ED8` | match build: `EAX=0x14B200` base for `FUN_00048B60`; snapshot to stack; `memmove(local -> 0x14B500, 0x300)` |
+| `0x48Dxx` | `FUN_00048B60` | build-on-args (FU-144 §1) |
+
+`FUN_00048C8C` fresh callers = 3: `FUN_00048D38` (`0x48D76`), `FUN_00048FF4`
+(`0x4901E`), `FUN_00048ED8` (`0x48FD0`). Therefore:
+
+* **base installer** `FUN_00048D38` (`0x48D38` decompile):
+  `FUN_0004AFB8(0x32)` -> `FUN_000A1920(frame)` -> `FUN_00047814` -> preprocessing
+  `FUN_000481EC`/`FUN_00048AB0`/`FUN_00047298(1)`/`FUN_000471EC` ->
+  `FUN_00048C8C(chunk)` (installs PALsys frame as `0x14B200`) ->
+  `FUN_00048B60(chunk)` (rebuild with the FU-98 kit remap/appends).
+  The frame index is passed in EDX; its caller `FUN_0003726C`
+  (`0x3726C..0x372BB`, first-hand) sets `[0x14C2FA] = settings[0xC]`
+  (`FUN_0001D940(0xC)`; when that is 4, a random 0..3 via `FUN_00092AC8()&3`
+  or `FUN_000A16EC()%4`) and calls `FUN_00048D38` at `0x372B4`. The second
+  caller of `FUN_00048D38` is `0x4AE76` (match-load side).
+* **restore** `FUN_00048FF4`: if `[0x1068E0]!=0`, `FUN_00048C8C(&0x14B500, ...)`
+  — reinstalls the saved pre-match palette; then `[0x1068E0]=0` disables the
+  kit-translation branch. Callers `0x384B0`, `0x3BF13` (front-end).
+
+So the native base is **`PALsys.fsh` frame `[0x14C2FA]`** (settings slot 12,
+default 0; 0..3 when 4) installed by `FUN_00048D38`, and the match load
+(`FUN_00048ED8`) appends/remaps on top and snapshots to `0x14B500`. The
+engine's base:=chunk substitution is the correct special case for settings 0
+when the preprocessing passes are identity (leg: the four preprocessing
+functions' full semantics).
+
+### 4.2 Per-entity translation tables `0x14BF60 -> 0x114720` — producers found
+
+| item | evidence |
+|---|---|
+| pool partitioner | `FUN_00046F80(base)` (`0x46F80` decompile): `0x14BF60[i] = base + i*0x100` for 23 slots (0x5C/4), `0x14BF34[i]` 7 slots, `0x14BB00[i]` 8 slots, fixed slots `0x14BF50/0x14BF20/0x14BF54/0x14BF2C/0x14BF28/0x14BF30/0x14BF5C/0x14BF58/0x14BF24` at base+0x2800..base+0x3000, `0x14BB20[0..255] = base+0x2600`, `0x14BFBC = base+0x2600` |
+| sole caller | `FUN_00049138` (`0x49138` decompile, fresh xref = 1): when EAX!=0 allocates `DAT_00107290 = FUN_0004A448()` then `FUN_00046F80([0x7290])`; when EAX==0 frees `[0x7100]/[0x7104]/[0x7290]` (the FU-111 §2 orphan teardown tail calls it with EAX=0 at `0x4AF0A`) |
+| slot consumer | `FUN_00048DC0(param)` (`0x48DC0` decompile): when `[0x1068E0]==1` and param in {0, 0xB}, uses `(&0x14BF60)[param]` (teams A/B kit ranges): builds a 256-byte translation via tables `0x107287`/`0x10727C` with base bands 0x94/0x9B (param 0) or 0x82/0x89 (param 0xB) and local bases 0xA1/0xA3 (param 0) or 0x9C/0x9E (param 0xB) |
+| table install | `FUN_000CE980(src)` (`0xCE980`): copies 0x40 dwords into `0x114720` (the FU-57 §7 indexed translation table). Fresh callers = 11 (`FUN_000490F4 0x490FE`, `FUN_00048DC0 0x48EC1`, `0x4905B/0x49072/0x490AC/0x490BF/0x490D6`, `0x62FCD`, `0x5486E/0x5493B/0x54960`) — identity/copy variants in the 0x490xx sprite-state helpers |
+| per-draw callers | `FUN_00048DC0` fresh = 2: `0x56478` (draw path `0x563xx`, FU-84 §7) and `0x5721A` (`FUN_00057158` per-entity draw) |
+| identity reset | `FUN_000471EC`: fills `0x14BF24` identity 0..255 + team bytes |
+
+So the per-entity translation install is: pool partition
+(`FUN_0004A448` buffer -> `FUN_00046F80`) at match-data load
+(`FUN_00049138(1)`), per-draw rebuild `FUN_00048DC0(entity 0/0xB)` ->
+`FUN_000CE980` -> `0x114720`, and identity copies via the 0x490xx helpers.
+The resource identity of the pool buffer (`FUN_0004A448` -> `FUN_00098C38`/
+`FUN_00098BF8` allocators; pool size needed >= base+0x3100) remains a leg.
+
+**FU-152 pointer (2026-10-09):** FU-152 confirms the partition as corrected in §11.4/§11.5-7 — 23+7+8 slots at `+0x0000`/`+0x1700`/`+0x1E00`, shared `+0x2600`, 9 fixed `+0x2700..+0x2F00`, floor `0x3000`; the w7-b4 draft's contradicting values (`+0x2400`/`+0x2C00`, floor `0x3600`) were corrected in FU-152 §2.10/§4.4.
+
+### 4.3 Shade cube
+
+FU-98 §2 (`FUN_000A0AA0` RGB->index quantisation cube, `2^B` per channel; built
+from the 1024-byte BGRA table via `FUN_000A154C` -> `FUN_000A129C`) is unchanged;
+its only reachable use is the sprite blender (`FUN_000AFBFC` path), not the
+match draw. No new first-hand work needed for the HUD (the HUD text uses the
+indexed colours above, not the cube).
+
+---
+
+## 5. Derived semantics
+
+### 5.1 HUD draw flow
+
+```
+main draw loop FUN_000495B0 (per drawn buffer)
+  -> FUN_00049830 (scene)
+  -> FUN_000565BC (overlay presenter)
+       gates: [0x14E538]==0, not replay [0x109A98]==0, [0x14E688]==0
+       HUD branch: [0x14E510]==0 && FUN_0006400C()!=0 && FUN_0004B5F4()<4 && [0x14E59C]==0
+  -> FUN_00055C24
+       if FUN_0001D940(6)==0 -> return
+       period = [0x157AC2]; displayed = period+1 (or [0x14E5A0]+period in modes 0xC/0x13/0x14)
+       clock  = [0x157AB4] -> minutes/seconds
+       score  = FUN_0004B5DC -> {[0x157AC5], [0x157AC7]}
+       names  = FUN_00011BEC(0/1) upper-cased by FUN_00017748
+       font   = slot 0x36 "playfnt.fsh" (zoomed) | 0x35 "clockfnt.fsh" (full)
+       layout = [0x14E514..0x14E534] (FU-93) + [0x14E658] dims
+       draw: bar -> name0 -> name1 -> score0 -> score1 -> period -> clock
+```
+
+### 5.2 Camera mode/angle feed
+
+```
+main loop FUN_000495B0 -> FUN_0004D2D4 (per-frame view driver)
+    if replay-ish: copy [0x109A84] pose (incl. +0x4C) into the camera
+    else if camera +4 < 4 && [0x107DD8]==0 && pad idle: FUN_000505D0()
+        -> mode = FUN_00053D50() = [0x14E57C]
+        -> pose = (&0x108B64)[camera +0xC] (+ sub-index for modes 3/4/8)
+        -> write +0x10/+0x14/+0x18/+0x58/+0x5C/+0x4C; call (&0x108B80)[cam+4]
+    camera +0x4C also init-written by FUN_0004D7E8 (type entry[5]) and
+    clamped to [0x200,0x3A00] after the FUN_0004C8D0 smoothing.
+Follow integrator FUN_000736AC (ported as fifa96_camera_update) consumes
+    vel_x/vel_z/event_param/timer; producers are the event machine
+    FUN_00071C94 (+ FUN_00070544/0x709D0/0x70DE0/0x71DF4) called from 11
+    gameplay sites; the ball staging FUN_0007A490 zeroes velocity in its arm.
+    T2 landed the producer chain: event_set is complete (bail gate, ramp sign
+    param, the corrected timer cell, the fast/slow paths, the > 0x19 atan
+    walk), pan_step/reposition/rate_table are derived ports, the update calls
+    pan_step at the native site, and row 04's event outputs are wired live
+    (§12).
+```
+
+### 5.3 Palette install graph
+
+```
+boot/front-end/settings: FUN_0003726C -> [0x14C2FA]=settings[0xC] (or rnd 0..3)
+    -> FUN_00048D38 -> PALsys.fsh frame [0x14C2FA] -> preprocess -> FUN_00048C8C -> 0x14B200
+       -> FUN_00048B60 (FU-98 remap + appends) -> FUN_000A154C (register + shade cube)
+match load: FUN_00048ED8 -> build from 0x14B200 -> snapshot 0x14B500 -> FUN_00048C8C -> 0x14B200
+             -> [0x1068E0]=1 enables FUN_00048DC0 kit translation
+restore: FUN_00048FF4 -> FUN_00048C8C(&0x14B500) -> [0x1068E0]=0
+translation: FUN_00049138(1) -> FUN_0004A448 pool -> FUN_00046F80 (23x0x100 @0x14BF60)
+             per draw: FUN_00048DC0(0/0xB) -> FUN_000CE980 -> 0x114720
+```
+
+---
+
+## 6. Port contract
+
+### 6.1 HUD (P0.2) — `fifa96_match_run_render` / new `fifa96_match_hud`
+
+Names to use in the engine; everything below is first-hand evidenced above.
+
+State (already in the run):
+* `mr->score[0]` / `mr->score[1]` <- `[0x157AC5]`/`[0x157AC7]` (existing).
+* `mr->state.total_seconds` <- `[0x157AB4]` (existing field; displayed clock).
+* `mr->state.period_seconds` <- `[0x157AB6]` (not displayed by the HUD).
+* `mr->state.period` <- `[0x157AC2]`; displayed period = `period + 1`.
+* Gate: draw only when `mr->render.enabled` and `!mr->render.display.suspend`
+  (the `[0x14E688]==0` analog) and period < 4 and not replay. The native
+  settings gate `FUN_0001D940(6)` and `[0x14E510]`/`[0x14E538]`/`[0x14E59C]`
+  have no engine producer — treat as "asset readiness" (leg 6).
+* Layout: recompute from FU-93's `fifa96_window_scale` inputs
+  (`render.window_scale_x`, `render.window_zoomed`, window rect
+  `x0,y0,x1,y1`): `row_pitch = 9|0xC`, `x_left = x0+3|x0+6`,
+  `clock_x = x0+0x23|x0+0x32`, `bar_x = x0+1|x0+2`,
+  `bar_y = y1 - bar_h - 1 (zoomed) | y1 - bar_h - 2 (full)`, `y2 = bar_y + 2`.
+* Font: stage `clockfnt.fsh` (slot 0x35) and `playfnt.fsh` (slot 0x36) from the
+  pitch container by BIGF name (the staging path already name-matches
+  `PALsys.fsh`); decode the `FUN_000984B4` header layout and blit glyphs with
+  `FUN_0009FFF0`'s algorithm (depth byte, per-char width/height/offset tables)
+  into `s->indexed`; outline pass colour index 6 then main pass colour 0
+  (`(&0x1050A4)[idx]`; statically zero, the engine may define the two palette
+  indices explicitly — leg 7).
+* Strings: `%d` for scores/period, `%02d:%02d` for the clock; team names via
+  whatever team-name strings the run stages (native `FUN_00011BEC(side)`; the
+  engine has no team block — leg 8).
+* Draw order: bar -> name0 -> name1 -> score0 -> score1 -> period -> clock,
+  with the derived positions (the HUD is bottom-anchored; the zoomed branch is
+  the windowed one).
+* Acceptance: HUD pixels are a render change -> M2 tape re-pin with frame diff
+  (expected by the plan, P0.2).
+
+### 6.2 Camera
+
+* Feed `mr->render.yaw/pitch` and `mr->render.view_ratio` from the
+  `FUN_000505D0` pose model: preset table `(&0x108B64)[type]` (6 dwords
+  `{x,y,z,yaw,pitch,angle}`) selected by `[0x14E57C]` (engine: a `view_mode`
+  field) and sub-index arms 3/4/8; write `+0x10..+0x18`, `+0x58` (yaw), `+0x5C`
+  (pitch), `+0x4C` (ratio angle -> `view_ratio`).
+* Init: `mr->render.view_ratio` may be seeded from `FUN_0004D7E8`'s type entry
+  `[5]` instead of the current static default (closes the FU-96 leg-5 note).
+* Follow: `fifa96_camera_update` stays the integrator; to move the camera during
+  play, the engine needs an event/pan producer — the unported subset of the
+  `FUN_00071C94` callers documented in §2.1(c). Reachable first step: a
+  kickoff/restart pan using `FUN_00070544` semantics is not derivable from this
+  slice alone (leg 9).
+* `fifa96_match_render.c` does not exist in the tree; the render seam is
+  `fifa96_match_run_render` in `port/src/fifa96_engine/fifa96_match_run.c`.
+
+### 6.3 Formation id
+
+* Add `uint8_t formation[2]` to the run (or to the team staging): seed from the
+  team record byte (+0x12 of the native `0x143018+side*0x49` block) exactly as
+  `FUN_00011620` does; default 0 (native image value).
+* Consumer contract: `formation_layout = &0x11033A + id*0x1D` (4 blocks of 7
+  bytes `{role, count, slot..}`; role written to record byte +0x90). The engine
+  can index the same table (it is in the EXE image, not the ISO).
+* The front-end cycle (`FUN_0003D2DC`, 5 values 0..4) is out of scope for the
+  headless port.
+
+### 6.4 Palette
+
+* Base: the engine's `fifa96_match_run_stage` can set `base6` from `PALsys.fsh`
+  frame `[0x14C2FA]` (settings slot 12; default 0) instead of the current
+  base:=chunk, closing FU-144 §6 leg 1 at the contract level. The preprocessing
+  passes (`FUN_000481EC`/`FUN_00048AB0`/`FUN_00047298`/`FUN_000471EC`) are leg 10.
+* Translation: expose `render.remap` writes through a `fifa96_match_translation`
+  seam driven by `FUN_00048DC0(0/0xB)` (kit ranges 0x94..0xA6 / 0x82..0x94,
+  base bands 0xA1/0xA3 and 0x9C/0x9E) when the pool tables are available; the
+  0x490xx identity helpers keep the current identity stand-in. Pool resource
+  identity is leg 11.
+* `0x14B500` snapshot/restore maps onto the engine's staged palette lifetime.
+
+---
+
+## 7. Numbered legs
+
+1. **HUD `FUN_0001D940(6)` gate** (`[0x149290]`): no static writer found
+   (`get_xrefs_to` = 0); the settings table `0x149278` is zero in the image.
+   Engine maps it to asset-readiness.
+2. **`[0x14E658]` bar dims pointer**: only 2 references (both reads in
+   `FUN_00055C24`); no static writer — the writer is indexed (in the
+   `FUN_00053240` layout block). Engine supplies its own bar dims.
+3. **Bar fill colour**: `FUN_0009B850` fills spans via `FUN_000B1730`/
+   `FUN_000CE9D8`/`FUN_000CEB9A`; the colour-index source is not derived.
+4. **Font glyph colour plumbing**: `FUN_00019E9C(idx)` sets
+   `(&0x1050A4)[idx]` (BSS) and `[0x1050E4+idx]`; the exact byte pushed into
+   `FUN_000CEF64` from `FUN_0009FFF0` is hidden in the register/stack argument
+   setup. The two-pass indices (6 outline, 0 main) are certain; the palette
+   bytes they resolve to are runtime-filled.
+5. **HUD when `[0x14C32A]!=0`** (`0x55CCD..0x55D25`): uses string-table ids
+   0x1EA/0x1E9 as team-name substitutes; the mode is not derived (extra-time /
+   penalties display).
+6. **`FUN_00056518`, `FUN_000563D0`, `FUN_000560C8`, `FUN_0005619C`,
+   `FUN_000564A0`, `FUN_00064C34`**: the remaining overlay draws in the
+   presenter; only the match HUD is derived.
+7. **Team-name stage**: the engine has no native team block
+   (`0x143018+side*0x49`); the HUD name source needs a staging decision.
+8. **Camera `[0x14E57C]` writer 0x51xxx**: which view handler sets which mode
+   value (and when) is cited only.
+9. **FU-71 event producers**: the 11 `FUN_00071C94` callers and
+   `FUN_00070544`/`FUN_000709D0`/`FUN_00070DE0` internals are unported
+   gameplay bodies; no reachable kickoff/restart pan was proven from this
+   slice.
+10. **Base palette preprocessing** `FUN_000481EC` (large sprite/palette
+    translation setup), `FUN_00048AB0`, `FUN_00047298` (kit/team colour
+    translation), `FUN_000471EC` (identity resets) — cited, not decomposed.
+11. **Palette pool resource identity**: `FUN_0004A448` -> `FUN_00098C38`/
+    `FUN_00098BF8` allocators; which loaded file fills `[0x7290]` and its exact
+    size (>= base+0x3100) is not derived.
+12. **`FUN_0004A6BC` font slot names**: `clockfnt`/`playfnt` strings verified in
+    the parameter table and present in `gameart0.pvi`; the `.fsh` suffix comes
+    from the FU-144 §2 format loop for slots 39..55 (not re-derived here).
+13. **`FUN_0004C8D0` smoothing/clamp object**: the `+0x4C` clamp at
+    `0x4D431..0x4D44D` writes through a register artifact
+    (`extraout_ECX`); the owning object (camera vs `0x14E4E0` copy) is not
+    proven.
+14. **HUD `[0x14E5A0]`** (mode-dependent period offset, `0x55C57`): runtime
+    writer not located.
+
+---
+
+## 8. Risks
+
+* **HUD text fidelity**: the port depends on the FSH font decode. The header
+  parser is derived, but the glyph tables' exact per-char height/flag semantics
+  (`DAT_00112800`/`DAT_00112804`/`DAT_00112808`) are only partly traced; a
+  minimal implementer may prefer a derived bitmap font and re-pin the tape
+  (risk to the P0.2 acceptance only at the pixel level).
+* **Colour indices**: the HUD's outline/main palette bytes are runtime-filled;
+  the engine must pick two explicit indices (leg 4) — a documented divergence.
+* **Camera**: the mode/preset feed is portable now; the *motion* during play
+  (FU-71 event machine) is the deep part and may remain a leg (matches the
+  plan's honesty clause).
+* **Palette**: base frame/branch is portable; the preprocessing passes are the
+  gate to bit-exactness.
+* **Tape churn**: HUD pixels + camera feed will move the M2 golden; re-pin with
+  a written reason and frame diff (expected by the plan).
+
+## 9. Provenance (Ghidra MCP, read-only, `/FIFA96.EXE`)
+
+`disassemble_function` 0x55C24 (343 insns), 0x55BA8, 0x9BB20, 0x9B850 (window),
+0x736AC (FU-71 re-check window), 0x3726C, 0x372BC, 0x48D38 (site window
+0x372A0/0x4AE60); `disassemble_bytes` 0xA06FC (48 B), 0x372A0 (40 B), 0x4AE60
+(48 B); `decompile_function` 0x4C2A0, 0x4B5F4/0x4B594/0x4B588/0x4B454/0x4B408,
+0x4B5DC, 0x55C24 (incl. 0x58484/0x5849C/0x584B4/0x58630/0x9FFF0/0x9BB20/0x9AFD0
+helpers), 0x565BC, 0x495B0, 0x6400C, 0x63FD0, 0x1D940, 0x37AE4, 0x8AF38, 0x505D0,
+0x4D2D4, 0x4D7E8, 0x53D50, 0x71C94, 0x7A490, 0x3CD30, 0x7412C, 0x8EA70, 0x11620,
+0x11978, 0x8CE78, 0x6D9C4, 0x11B7C, 0x3D2DC, 0x48C8C (via sites), 0x48D38,
+0x48FF4, 0x46F80, 0x49138, 0x48DC0, 0xCE980, 0x471EC, 0x481EC, 0x48AB0,
+0x47298, 0x4A448; `read_memory` 0x101DE0 (128 B), 0x101BB0 (96 B),
+0x107370 (256 B), 0x107490 (32 B), 0x108B64 (64 B), 0x108B80 (read via 0x108B64
+window), 0x1050A4 (80 B), 0x149278
+(40 B), 0x14E650 (32 B), 0x11033A (64 B); fresh `get_xrefs_to` 0x55C24 (1),
+0x565BC (3), 0x14E510 (2), 0x14E59C (5), 0x14E688 (9), 0x14E538 (10),
+0x157AC5 (95), 0x157AB4 (16), 0x157AB6 (38), 0x14C1E4 (10), 0x14C1E5 (2),
+0x14E57C (12), 0x505D0 (3), 0x4D2D4 (2), 0x14BF60 (4), 0x48DC0 (2), 0xCE980 (11),
+0x48C8C (3), 0x48D38 (2), 0x46F80 (1), 0x49138 (2), 0x8CE78 (2), 0x8EA70 (2),
+0x1577C0 (91), 0x1577C2 (54); `get_bulk_xrefs`/`search_instructions` operand
+`14c1e` (21 hits), `14b200` (10 hits), `14e658` (2 hits), `+ 0x4c],` (82 hits,
+camera-band subset tabled); `get_function_by_address` 0x4D836, 0x3D3F4,
+0x11BB6, 0x372B4.
+Retail data: `/ART/GAMEART0.PVI` extracted from `data/game/FIFAPCCD96.iso` (xorriso,
+154387 B, sha not recomputed here) and the by-name lookups via
+`build/fifa96_play sprite` for `clockfnt.fsh`/`playfnt.fsh`; native names read at
+0x101BC0/0x101BCC.
+No Ghidra writes, no project saves, no repo edits; this draft is the only file
+written.
+
+---
+
+## 10. Port errata — OL-T11-7 landed (M2 full-gameplay P0.2, 2026-10-09)
+
+The HUD port (`fifa96_match_run_stage` + `fifa96_match_run_render` +
+`port/src/fifa96_loader/fifa96_font.c`; tests `test_font`,
+`test_engine_match_render::test_hud_*`, `test_engine_match_staging`
+ISO cases) re-verified §1 first-hand. Corrections and closures:
+
+1. **§7 leg 2 CLOSED — the `[0x14E658]`/`[0x14E634]` writer is static.**
+   `FUN_00053930` (single caller `FUN_0004AD4C`) runs
+   `FUN_0004AFB8(0x2F)`, takes the bank's frame count and stores each frame
+   pointer at `(&0x14E624)[i]` (`0x53994/0x539AA` are frame 9/10 stores; the
+   rest are the loop). Resource slot 0x2F resolves through the `0x107370`
+   name table to `0x101B8C` = "Frames" and the slots-39..55 `%s.%s` loop with
+   the constant `fsh` at `0x101C90`, i.e. **Frames.fsh** (GAMEART0 BIGF entry
+   43, 15 frames). The HUD's pointers are therefore Frames.fsh frame
+   descriptors: `[0x14E634]` = frame 4 (layout height 41), `[0x14E658]` =
+   frame 13 (the drawn bar, 60x41; pixel (0,0) = 0x45), `[0x14E638]` =
+   frame 5 (overlay scaler A), `[0x14E648]/[0x14E64C]` = frames 9/10 (then
+   conditionally zeroed by the `FUN_00011BD4` side results). The engine
+   stages the bank by name and draws frame 13 with frame 4's height.
+2. **§1.4 register names**: `ESI` (0x12/0x18, +6/+8 when wide) is the
+   **clock cell width** (`0x55E58/0x55EBA` set it just before the wide check;
+   `0x5609C MOV ECX,ESI` feeds FUN_00055BA8), not the bar height
+   (`local_28` = `[ESP+0x90]` = 0xE/0x11 is the clock cell x offset from x0,
+   `0x5608A/0x560A1`; `local_20` = 2/3 is the cells' y offset). The bar's
+   dimensions come only from the frame-13 descriptor.
+3. **§1.4 cell y**: the period/clock row is
+   `[0x14E52C]+[0x14E534] + 2*[0x14E51C] + local_20` (`0x56068..0x56085`),
+   i.e. `bar_y + 2*row_pitch + 2|3`; `y2 = bar_y + local_24(2)` feeds only
+   the name/score rows. `local_24 = 2` both modes.
+4. **`[0x14E534]/[0x14E530]` are menu-overlay outputs**: `FUN_000550E4`
+   zeroes them on entry (`0x55169/0x5516E`) and recomputes
+   `[0x14E534] = min(0, y1 - [0x14E52C] - 0x36)`, `[0x14E530] = 2*` at
+   `0x55205..0x55233`; live play without the menu leaves 0 (also the reset
+   `FUN_000537F8`). The engine keeps the live-play zero offset.
+5. **§1.5 font layout confirmed and completed**: the `[+0x1C]` block has its
+   own 16-byte header — mode byte `0x79/0x7A/0x7B` (FUN_000AFBFC → 1/4/8
+   bpp; the retail block says 0x7A), u16 pixel width at +4, u16 row count at
+   +6 — and the glyph base is block+0x10. The retail fonts are 4bpp:
+   clockfnt (BIGF entry 53, slot 0x35) 682x13, playfnt (entry 54, slot 0x36)
+   368x7. Per char, the +0x20 dword is {low16 bit column, high16 row} into
+   the shared bitmap; the row stride is `(bitmap_width*depth+7)>>3`; glyph
+   pixels are read at column `bit+gx` (high nibble first) and a zero nibble
+   is transparent. The decode is pixel-verified against the retail '0'
+   (test_font's 32-pixel raster) — §8's "only partly traced" risk is closed
+   at this level.
+6. The native font selection is `FUN_0004AFB8(0x36)` when `[0x108DDC] <
+   0x10000` else `0x35` (playfnt/clockfnt), matching §1.5 — the engine
+   stages both and selects on `render.window_zoomed`.
+
+### Remaining numbered legs (OL-T11-7x)
+
+* **OL-T11-71 (glyph colour ramp / FU-148 leg 4)**: the native 4bpp plot
+  path maps each glyph nibble through the runtime-filled `0x15BBAC` shade
+  table (`FUN_00019E9C` → `FUN_000AFCB0`/`FUN_000B2A90`); the engine draws
+  the two documented flat indices (6 outline, 0 main) for every non-zero
+  nibble, so anti-aliased edge pixels are binary. Documented divergence.
+* **OL-T11-72 (team-name stage / FU-148 leg 7)**: the native name source
+  (`FUN_00011BEC(side,0,0)` → `FUN_00017748` filter over the unported team
+  block `0x143018+side*0x49`) is not wired; the run stages empty names and
+  exposes `render.hud_name[2]` so a future producer can fill them (the name
+  pass, its placement and the wide-name shift are ported and tested).
+* **OL-T11-73 (extra-time period/clock / FU-148 legs 5/14)**: the native
+  branch `FUN_0004B454() != 0` re-labels the names with string-table ids
+  0x1EA/0x1E9 and adjusts the clock via `FUN_0004B4CC`; the mode-dependent
+  period offset `[0x14E5A0]` writer is still unlocated. The engine has no
+  extra-time mode and displays `period+1` with the unadjusted clock.
+* **OL-T11-74 (settings/suppress gate / FU-148 leg 1 + §6.1)**: the
+  `FUN_0001D940(6)` settings cell has no static writer and the
+  `[0x14E510]`/`[0x14E538]`/`[0x14E59C]` suppress writers stay unported; the
+  engine maps the gate to "HUD assets staged" (bar + the window branch's
+  font) and the existing `render.display.suspend` flag.
+* **OL-T11-75 (bar blit exactness / FU-148 leg 3)**: the native zoomed bar
+  scaler is `FUN_0009B850`'s 16.16 span stepper (including its per-pixel
+  colour path); the engine draws the frame-13 indices 1:1 in the full
+  window and nearest-neighbour at the derived `size*0xB800>>16` size in the
+  zoomed one, with source pixel 0 transparent. FU-148 leg 3's "fill colour
+  source" remains the open part.
+
+---
+
+## 11. Port landing (S4 presentation completion, 2026-10-09)
+
+Phase-6 wave-2 S4 (`docs/superpowers/plans/2026-10-08-fifa96-m2-phase7-recon-ahead.md`)
+landed §2–§4 as far as reachable, with the phase-7 w7-B4 draft as a
+verify-only lead. First-hand `/FIFA96.EXE` re-derivation this slice; the
+authoritative corrections to both docs are in the errata below.
+
+### 11.1 Camera pose feed (FU-96 legs 1/3, §2.1(a)/§6.2)
+
+`port/src/fifa96_loader/fifa96_camera.c`:
+
+| landed | native | notes |
+|---|---|---|
+| `fifa96_camera_pose_blocks[6]` | behavior table `0x108B64`, 6 x 0x54 | class `+8`, pose array `+0x4C` (image default), 8 records x 6 dwords `{x,y,z,yaw,pitch,angle}` |
+| `fifa96_camera_pose_apply` | FUN_000505D0 shared arm | writes camera `+0x10/+0x14/+0x18/+0x58/+0x5C/+0x4C` |
+| `fifa96_camera_pose_feed` arms 1/0x12 | record 0 + the selector 1/3 and class 2/4 mirrors (`FUN_0004B818`) | full arm |
+| arms 3/4 | record `{3|4}`/`{1|2}` via FUN_000504E0/FUN_00050518 | record selection + pose writes; the mode-3 replay copy/offset/z clamp and the mode-4 sub mirror are legs |
+| arm 6/0x10 | record 7 + the `sub < 0` mirror | full arm |
+| arm 8 | record 6 when `sub < 1`, else 5 (default selector) | selector 1/3 branch + mirror tails are legs |
+| arm 0x15 | fixed record `0x108714` + yaw fold + z negate | the `camera+0x3c` / `[0x108C38]` clamp is a leg |
+| default | handler call `(&0x108B80)[selector]` | legs (w7-B4 §2.8 leg 9) |
+
+Engine wire: `render.camera_pose` staging, applied once per granted frame
+after `fifa96_camera_update` and before the armer. `view_mode` is the native
+`[0x14E57C]`; the 0x51xxx view-handler writers stay unported (FU-148 leg 8),
+so a fresh match applies no pose (default 0 = the unported handler arm) and
+the tape is unchanged. `fifa96_camera_pose_feed`/`apply` are pure
+loader-level functions (block 0..5 range-checked; the native indexes blindly).
+
+Pose tables first-hand `read_memory` (all `/FIFA96.EXE`): `0x10896C` (504 B
+behavior blocks), `0x107F1C`, `0x1080FC`, `0x1082DC` (the three `+0x4C`
+arrays), `0x108714` (mode-0x15 record), block `+8`/`+0x4C` at
+`0x108A70/0x108AB0/0x108AC4/0x108B04/0x108B18/0x108B58`.
+
+### 11.2 FU-71 event bodies (§2.1(c)/§5.2)
+
+`fifa96_camera_event_set` (the derived FUN_00071C94 + FUN_00070544 subset):
+preserves the target triple (= the engine position; the native 71C94 call
+hands FUN_000700F4 the current target), resets the event state, copies the
+seed step pair (the native 6-byte vector at `0x1577B8`:
+`{bearing, step_x, step_z}`), clamps the height to `[target y, 0x640]`
+(zeroed again when the clamped value is < 1, the native
+`FUN_00070544` `0x705f1`/`0x705fe` cell clear), runs
+the `FUN_000702F8` ramp over the pinned 400-byte `0x10F4EE` table
+(`fifa96_camera_ramp`), computes the signed fast-path velocity
+`seed / timer` (IDIV semantics), the bearing magnitude via
+`fifa96_entity_distance` (= FUN_0008DC68; the engine's `speed` = native
+`0x1577BE`), the step products and the anchor A/B sets (`0x157770/88/94`,
+header A y forced 0 as the native zeroes `0x157774`).
+
+The chain closes the S2 L1 hand-off at the producer level: the rate words the
+FU-71 integrator consumes are now produced by the ported event machine (test
+`test_camera_pan_event_chain`: seed 2000/height 0x30 -> `vel_z = 40`,
+`timer = 50` -> one granted frame lands `z = 0xB50` -> armer -> zone 1 ->
+queued situation 5 -> S3 consumer scores). The *natural* invoker stays
+absent: the 11 `FUN_00071C94` callers are the unported gameplay-row bodies
+(`0x70DD1`, `0x7A219`, `0x6FA62`, `0x75DC4`, `0x77423`, `0x7F4E7`, `0x82A6C`,
+`0x77DC6`, `0x7EFCF`, `0x7F0D1`; `0x71B8A` is the armer's own angle arm,
+which requires pre-existing event state: its `[0x1577EE].hi == 0 &&
+[0x1577BE] == 0` early return gates a cold start). Legs: FUN_000709D0
+(pan step), FUN_00070DE0 (boundary/reposition), FUN_00071DF4 (ball sub-object
+rates), the `> 0x19` atan walk (FUN_000CD474), FUN_000703E8's corner cells,
+the height `> 0x70` `[0x157A6D]` branch, the `0x15780C/0E` smoothing words,
+the tracked-player/event-rate tail ([player+0x20], table 0x10E169) and the
+sound sinks.
+
+### 11.3 Formation id (§3)
+
+Run field `formation[2]` (`[0x14C1E4]/[0x14C1E5]`, BSS 0), writer
+`fifa96_match_run_set_formation` (FUN_0008EA70: `(&0x14C1E4)[side] = id` +
+the FUN_0007412C consumer), layout `fifa96_match_formation_layout` over the
+pinned 0x11033A rows and placement names
+`fifa96_match_formation_fmt_name` (the 0x14BFC0 `6*id` slot built by
+FUN_0004A6BC over the 0x107370 loader table: id 0 `352ko.fmt`, 1 `442ko.fmt`,
+2 `swko.fmt`, 3 `424ko.fmt`, 4 `433ko.fmt`; first-hand strings 0x101A30,
+0x101A64, 0x101A8C, 0x101AB4, 0x101ADC). `match_run_formation_seed` now
+reads the run's derived id instead of the hard-coded 0. Legs: the FUN_00011620
+team-record (+0x12) producer and the FUN_0007412C layout install (no engine
+team+0x7AE/record+0x90 fields).
+
+### 11.4 Palette residual (§4.2)
+
+`port/src/fifa96_loader/fifa96_palette.c`: `fifa96_palette_pool_partition`
+(FUN_00046F80: 23+7+8 slots at `+0x0000`/`+0x1700`/`+0x1E00`, shared
+`+0x2600`, 9 fixed `+0x2700..+0x2F00`; floor 0x3000),
+`fifa96_palette_translate_kit` (FUN_00048DC0 kit bands, tables 0x107287
+`{0,0,0,1,1,1,1}` / 0x10727C `{0,0,0,1,1,1,1,2,2,2,2}`) and
+`fifa96_palette_translate_slot` (FUN_000CE980 0x100-byte copy), plus the
+engine seam `fifa96_match_run_translation_install(entity)` writing
+`render.remap` (the 0x114720 analog) through a caller-staged
+`render.palette_pool`. The install is not wired into the render path: the
+pool content producer is still leg 11, so the identity remap stays the
+stand-in. Shade cube: w7-B4 §2.10's "no static consumer" re-verified (the
+`"inversetbl"` 0x20000 allocation has no static reader), so it stays a leg
+and is not part of the match contract.
+
+### 11.5 Errata (first-hand; corrects FU-148 and/or w7-B4)
+
+1. **Pose-array selection.** The `+0x48` and `+0x4C` block fields are both
+   non-NULL pointer arrays (`0x107E2C`/`0x107F1C` etc.). The head of
+   `FUN_000505D0` uses `+0x48` only when `FUN_0004B7D0() == 0 &&
+   FUN_0004B6FC() == 0`; `FUN_0004B7D0` returns `[0x1590CC + side*0x835] == 0`,
+   which is 1 for the image's zero flags, so **the image default is `+0x4C`**.
+   FU-148 §2.1(a) ("+0x48 array ... NULL in the image") and w7-B4 §2.8
+   ("`+0x4C` when the predicates are nonzero") are both wrong; the engine
+   pins the three distinct `+0x4C` arrays.
+2. **Pose-table shape.** `0x108B64[type]` is not a 6-dword preset record: it
+   is the 0x54-byte behavior block whose `+0x4C` is the pose array pointer.
+   FU-148 §6.2's "preset table (6 dwords) selected by [0x14E57C]" is a
+   shorthand; the record selection is per-arm (1/0x12 record 0, 3/4 the
+   variant records, 6/0x10 record 7, 8 records 5/6, 0x15 fixed).
+3. **Handler table.** `0x108B80` = `{0x4E834, 0x4E3A8, 0x4EC9C, 0x4DB38}`
+   (w7-B4 already corrected FU-148 §2.1(a)'s `0x4ECA8`/`0x4DB3C`).
+4. **`FUN_000504E0`/`FUN_00050518` predicate.** The "left" record (3/1) is
+   selected iff `(class == 2 && x >= 1) || (class != 2 && x < 0)`; the
+   decompiler's conjunction collapses to that (not merely the sign of x).
+5. **Event height cell.** The height is the word at `0x1577F0` (the high
+   word of the dword `0x1577EE`, which also holds the cursor in its low
+   word) — w7-B4 §2.9's "`[0x1577EE].hi` = height" and the FU-71
+   `event_param` mapping agree once the word split is read.
+6. **FUN_00070544 param.** The ramp's EDX/EAX passthrough is the caller's
+   register in `FUN_00071C94` (a decompiler artifact; `FUN_000709D0` passes
+   0). The port fixes param 0 (the NEG F6 path: `F6 = F2 - ramp(h - ty)`).
+7. **Pool floor.** `FUN_00046F80` writes up to `base+0x2FFF` (shared table
+   `+0x2600`, 9 fixed blocks `+0x2700..+0x2F00`), floor **0x3000**; FU-148
+   §4.2's "base+0x2800..base+0x3000" is off by one slot and w7-B4 §2.10's
+   "ends at base+0x3600" is wrong.
+8. **Pose-feed ordering.** The native driver FUN_0004D2D4 runs from the draw
+   loop (FUN_000495B0), after the frame-body armer; the engine applies the
+   staged pose at the frame-body camera site so a fed pose is observable to
+   the same frame's armer (the engine `pos` doubles as the native 0x15774C
+   event target under the accepted FU-71 mapping). The `[0x107DD8]`, pad-idle
+   (FUN_00037AE4) and replay gates stay legs.
+
+### 11.6 Numbered legs (S4 additions)
+
+* **OL-T11-76 (camera handlers / FU-148 leg 8 + w7-B4 leg 9)**: the four
+  `0x108B80` handler bodies (`0x4E834`, `0x4E3A8`, `0x4EC9C`, `0x4DB38`) and
+  the default-arm invocation; the horizon/plane globals
+  `0x14E4D0/D4/D8/DC`.
+* **OL-T11-77 (view-mode writer / FU-148 leg 8)**: the 0x51xxx view handlers
+  that set `[0x14E57C]`; the engine stages `render.camera_pose.view_mode`.
+* **OL-T11-78 (+0x48 alternate pose arrays)**: the `[0x1590CC]` team-flag /
+  `FUN_0004B6FC` predicate and the second pose arrays; the selector-3 preamble
+  pose arrays `0x1083CC`/`0x1084BC` (reached by arms 3/4/6/8 when
+  `[camera+4] == 3`; the degenerate behavior-index read at `[0x108B60]`).
+* **OL-T11-79 (event-machine bodies)**: **narrowed again (T3, §13)** — the
+  FUN_00071C94/FUN_00070544 event setter is complete (bail gate, ramp sign
+  param, corrected timer cell, slow path, > 0x19 atan walk, tails),
+  FUN_000709D0/FUN_00070DE0/FUN_00071DF4 have derived ports, the row-04
+  gameplay caller is wired live and the row-1E stage-5 caller is wired (T3);
+  the `[0x14C1D4]`/`[0x14C1D6]` range-word producer (FUN_0001C9BC) and the
+  every-frame FUN_00071DF4 call site (gates + first arm) landed in T3.
+  Carried: the `> 0x70` anchor branch, the
+  FUN_00065CF8/FUN_000974DC/FUN_000651F0/FUN_000974F0 sound sinks,
+  FUN_000703E8, the 0x15780C/0E smoothing words, the tracked-player tail
+  (0x1577CA/CE + table 0x10E169) and FUN_00071DF4's 0x11042B/0x11042C table
+  lookup; the row-05 tail caller (0x7F4E7; OL-63 `out.tail` algebra) and the
+  remaining callers (0x71B8A, 0x70DD1, 0x7A219, 0x6FA62, 0x77423, 0x82A6C,
+  0x77DC6; §13.4) stay legs.
+* **OL-T11-80 (palette pool identity / leg 11 carried)**: the loaded file
+  that fills `[0x107290]` and the pool's rounded size (request 0x34E8,
+  partition floor 0x3000).
+* **OL-T11-81 (formation team-record producer)**: FUN_00011620's team block
+  `0x143018+side*0x49` +0x12 source and the FUN_0007412C layout install.
+* **OL-T11-82 (shade cube / leg 11)**: no static consumer of the
+  `"inversetbl"` cube (re-verified); stays out of the match contract.
+
+---
+
+## 12. Port landing (T2 camera live feed / pan origin, 2026-10-09)
+
+Phase-8 T2 (`docs/superpowers/plans/2026-10-09-fifa96-m2-phase8-live-loop.md`),
+first-hand `/FIFA96.EXE` re-derivation of the §2.1(c)/§5.2 producer chain.
+
+### 12.1 `fifa96_camera_event_set` completion (FUN_00071C94 + FUN_00070544)
+
+| landed | native | notes |
+|---|---|---|
+| `[0x157A6C] != 0` bail gate | `0x71c99` | `fifa96_camera.event_suspended`; returns 1 with no reset |
+| ramp sign param | FUN_00070544 EAX arg | `ramp_param != 0` -> `F6 = F2 + ramp(h - ty)` (row-04 arm A's ECX=1), else the NEG path |
+| timer cell | `[0x1577FA]` = **F6** | S4 stored `timer = F8`; the first-hand disasm stores F8 at `[0x1577F8].lo` (the fast-path divisor) and F6 at `[0x1577FA]` (the timer). Corrected; `ramp_divisor`/`event_step_x/z` now carry the divisor and the stored 0x1577BA/BC step pair |
+| fast/slow path | `0x70630..0x706d9` | fast (`F8 != 0 && [0x157821] == 0`) = `seed / F8`; slow = each nonzero velocity `* k / 0x20` (k = `[0x15781A]` height arm / `[0x15781B]` idle arm; FUN_000700F4 table 0x1104AB image defaults: decay 10, hi 16, lo = hi + (0x20-hi)/2 = 24) |
+| > 0x19 atan walk | `0x70704..0x70798` | `fifa96_entity_angle` + `fifa96_entity_sine` folds + `FUN_000795A4` products cap the velocity magnitude to 0x19 in the current direction |
+| tails | `0x70996..0x709c1` | event cursor/acc cleared; rate bytes 0x157816/17 zeroed (rate-819/81A/81B staged by the reset) |
+
+### 12.2 Pan producers (FUN_000709D0 / FUN_00070DE0 / FUN_00071DF4)
+
+* `fifa96_camera_pan_step` = FUN_000709D0: the height band (returned for the
+  FUN_00065CF8 sink), the `[0x157821]` counter (cap 100), the
+  `event_param * [0x157819] / 0x20` decay, the `([0x14C1D4]|[0x14C1D6]) & 4`
+  random walk (atan direction + `rng_low - 0x80` jitter; T3 landed the
+  producer: `fifa96_input_range_words` = FUN_0001C9BC builds the words at
+  match init and `fifa96_camera_update_walk` threads the `& 4` gate from the
+  engine frame path — see §12.5), then FUN_00070544(0) over the stored step
+  pair. `fifa96_camera_update` now calls it in-line when
+  `timer > timer_limit` (`0x737b9..0x737da`, signed word compare; the native
+  call site).
+* `fifa96_camera_reposition` = FUN_00070DE0 derived core: the
+  FUN_00070074 flag compare (AND != 0 -> no-op), the FUN_0008DC50(delta, 1)
+  walk from the previous triple toward the current one while the previous
+  class holds, the mask bit effects (3 -> vel_x negate-quarter, 4 -> vel_z = 0,
+  0x10 -> y jitter) and the bearing recompute. The bit-0x8 boundary arm
+  (target z ±0xB11/±0xB0F, 0x8ED40/0x8F188 corner events) and the sound sinks
+  are legs.
+* `fifa96_camera_rate_table` = FUN_00071DF4 table/keeper arm (derived): the
+  signed rate-byte and timer <= 0x1E gates, the caller-resolved rate write,
+  and the keeper 0x1D/0x1E gate (event byte 2, height >= 0xC1, |anchor_x| <=
+  0x23F, rate_z non-zero with the pos_z/vel_z sign cases). The 0x10E169 +
+  0x11042B/0x11042C lookup is a leg (the caller stages the pair).
+
+### 12.3 Live wire (reachable row callers)
+
+Row 04's ported body (`fifa96_outfield_row04_step`) already produced the
+native 0x7EFCF/0x7F0D1 event outputs; `fifa96_match_action_04` now consumes
+them: `out.events` -> `fifa96_camera_event_set(camera, event_x, event_z, 0,
+event_track_reload)` (+ the arm-A `[0x1577FA] = h + h/4` tail) and binds the
+event record as the camera-tracked entity (`[0x1577CA] = rec`, 0x71D27)
+through `fifa96_camera_set_tracked`. This is the
+first *reachable gameplay-row* pan origin (the other callers' dispositions are
+in §12.5.4). The armer chain then fires from the real row:
+`test_engine_match_frame::test_row04_live_pan_arms_camera` installs a live
+action-04 record, lets the frame dispatch produce the event (no fixture poke),
+parks the camera at z 0xB00 and observes armed -> zone 1 -> queued situation 5
+-> S3 score 1-0.
+
+T3 adds the second reachable row caller: row 1E's stage-5 release (0x75DC4),
+wired in `match_keeper_claim_apply` (`out.released && out.scenario`): the
+camera cuts to the machine-staged release triple (`pos + offset<<6`, y 0x50),
+`fifa96_camera_event_set(camera, 0, 0, 0x50, 0)` runs (the native
+`FUN_00071C94(rec, zero-vec, EBX = word[0x157750] = 0x50, ECX = 0)`, ECX
+cleared at 0x75D7E and preserved by FUN_00092820) and the tracked record binds
+to the releasing keeper. Fixtured by
+`test_engine_match_handlers::test_action_1E_machine_release_chain`.
+
+### 12.4 Errata (T2, first-hand)
+
+1. **Timer cell (S4 §11.2).** FUN_00070544 stores the fast-path divisor at
+   `[0x1577F8].lo` (=F8 = F4-F6) and the timer at `[0x1577FA]` (=F6); S4's
+   "timer = F8" read the wrong word. The FU-152 §2.9 cell map's
+   "`0x1577F8.hi` = timer" was right; the code was not.
+2. **Slow path constants.** `[0x15781A]`/`[0x15781B]` are the slow-path
+   velocity scale bytes (image 16 and lo = hi + (0x20-hi)/2 = 24), not event-rate words; they come from
+   FUN_000700F4's 0x1104AB table. `[0x157819]` = 10 is the height decay rate.
+3. **Pan-step call site.** FUN_000736AC calls FUN_000709D0 when
+   `(short)[0x1577FA] > (short)[0x1577F4]` (`0x737b9..0x737da`, JG) before the
+   same frame's integration; the engine port follows that order.
+4. **`FUN_00070544` C6/F6 base.** `F6 = [0x1577F2] ± ramp([0x1577F0] -
+   [0x157768])` — the decompiled `EDX = [0x1577F0] >> 16` is the high word
+   = F2 (the dword alias at 0x1577F0/0x1577F2), not event_param. S4's
+   `F6 = F2 - ramp(h - ty)` was already correct.
+
+---
+
+## 13. Port landing (T3 pan origin / auto-camera / walk gate, 2026-10-09)
+
+M2 phase-9 T3, first-hand `/FIFA96.EXE` re-derivation of the remaining
+producer chain; the tape stayed dormant (M2 golden byte-identical, see §13.5).
+
+### 13.1 `FUN_0001C9BC` — the per-side input/range words (walk gate)
+
+Fresh `disassemble_bytes 0x1C9BC` (54 insns) + `search_instructions`:
+
+* entry gate `CALL 0x6D1B2` (returns 1 iff `[0x15753C] == 0`) / `CMP EAX,1` /
+  `JNZ RET` (`0x1C9C2..0x1C9C5`); the `[0x15753C]` producers are the
+  unported screen-state FUN_0006D5D5/FUN_0006D7AE;
+* both words zeroed (`0x1C9CD/0x1C9D4`), then the config arms:
+  `[0x105278] == 1 -> word[0x14C1D4] = 2`; `== 2 -> |= 4` (bit 2 = the
+  FUN_000709D0 walk gate); `[0x10527C] != 0 -> |= 1` (the FUN-145 reflect
+  bit); `[0x105288] == 1 -> byte[0x14C1D5] |= 2` (0x200);
+  `[0x10528C] 1/2/3/4 -> byte[0x14C1D4] |= 0x20/0x80/0x40/0x8`;
+  `[0x105290] == 1 -> |= 0x10`; side 1 mirrors via
+  `[0x10529C] -> byte[0x14C1D7] |= 2`, `[0x1052A0]` (same nibble map on
+  `0x14C1D6`) and `[0x1052A4] -> |= 0x10`;
+* `get_xrefs_to 0x105278` = 2 READ (both in FUN_0001C9BC, no static writer)
+  and `read_memory 0x105278` = 48 zero bytes: the image words are always zero.
+  Callers: `FUN_00011B7C 0x11BA6` (match init) and `FUN_000115A0`.
+
+Ported as `fifa96_input_range_words` (`port/src/fifa96_loader/fifa96_input.c`,
+fixtures in `port/tests/test_input.c::test_range_words_builder`); the engine's run
+stages the eight config cells (`input_cfg`, BSS 0) and builds the words in
+`begin` (the FUN_00011B7C call), then derives the frame walk gate
+`(input_range[0] | input_range[1]) & 4` in `fifa96_match_run_frame`. The
+`[0x15753C]` gate is the builder's `gate` argument (engine 0 = the image
+default).
+
+**Phase-10 T2 producer landing (2026-10-10).** The census's "no static writer"
+resolved first-hand: the block at `0x105274..0x1052A4` is the **13-dword
+front-end options block**, written by the options editor FUN_0001C728
+(`0x1C728..0x1C965`; `0x1C934..0x1C94B`: `value = (&0x105274)[i] + 1`, wrap to
+0 when the new value reaches the row max `*(int*)(&0x105108 + i*0x1C)`; fresh
+`read_memory 0x105108` (364 B) = a 13-entry descriptor table, stride `0x1C`,
+maxes `{4,3,2,3,5,2,5,2,3,5,2,5,2}`) and read back by FUN_0001CAEC
+(`0x1CAEC..0x1CBBD`, the team/kit screens' input-mode/option queries). The
+eight cells FUN_0001C9BC consumes are option indices 1/2/5/6/7/10/11/12.
+Ported: `fifa96_input_option_max` / `fifa96_input_option_step` /
+`fifa96_input_options_to_cells` (`port/tests/test_input.c::test_option_producer_*`)
+and the engine producer `fifa96_match_run_set_input_options` (stages the eight
+cells, rebuilds `input_range`). The two derived consumer bits are wired in
+`match_run_input_bits_update`: `render.input_bit0 = range & 1` (the FU-145 §3
+boundary-reflect producer, closing that follow-up) and `render.input_bit2 =
+range & 2` (the FUN_000736AC interpolation arm, first-hand
+`0x73A03..0x73A18`: `MOV DX,[0x14C1D4]; MOV AX,[0x14C1D6]; OR EAX,EDX; TEST
+AL,2; JNZ`); the frame's walk gate stays `range & 4`. Fixture:
+`test_engine_match_frame::test_input_options_producer_sets_range_bits` (the
+image default remains all-zero, so the tape is unchanged).
+
+### 13.2 `FUN_00071DF4` — the every-frame auto-camera call site
+
+Fresh `disassemble_bytes 0x739C0..0x73A0F` + `0x73B50..0x73B9F` pins the
+call-site gates the FU-71 §2 table lists at steps 18-25:
+
+* `0x739BB/0x739C6`: `DL = byte[0x157821]` (pan counter); nonzero -> 0x73B70;
+* `0x739CE`: `word[0x1577BE]` (bearing) zero -> 0x73B70;
+* `0x739DC`: `[0x1577EE].hi <= 0x10` -> 0x73B70;
+* `0x739ED..0x739FD`: both rate bytes `[0x157816]/[0x157817]` zero -> **0x73B5B**
+  (the FUN_00071DF4 call); any nonzero rate takes the interpolation arm
+  (0x73A03) whose tail (`0x73B54 CALL 0x703E8; 0x73B59 JMP 0x73B70`) skips the
+  call;
+* `0x73B5B..0x73B69`: `[0x1577CA] != 0` and `[[rec]+0x20] != 0` -> `CALL
+  0x71DF4`.
+
+So FUN-71's "step 25 call" is exactly the zero-rate path. Ported as
+`fifa96_match_run_camera_follow` (gates + the pool-record slot lookup) calling
+the existing `fifa96_camera_rate_event` (FUN_00071DF4's first arm:
+`[[rec+4]][0] == 0x18D8`, height > 0xF0, slot dirs x0xF clamped +-15). The
+camera struct carries `tracked` ([0x1577CA], freshly re-censused: 88 refs,
+**three writes** — `0x71D27` (`FUN_00071C94`, the event actor store),
+`FUN_000700F4 0x70258` (clear) and `FUN_0006FFC0 0x70054` (the `XOR EAX,EAX`
+store; FUN_0006FFC0 is called from `FUN_00073D90 0x73D9B` and
+`FUN_00088860 0x88883`, both clears)) and `follow_speed` (the `[0x1577BE]`
+value at the
+0x739CE gate point: the pan-step speed when the step ran, else the frame-entry
+speed). Fixtures: `test_engine_match_frame::test_auto_camera_follows_tracked_slot`.
+The record-class gate reduces to the pool-record identity: all three
+`[0x1577CA]`
+writers store pool records (or clear), and the `+4` descriptor is built at
+runtime (no static bytes match outside code), so the engine cannot model it
+separately. The second arm (the `0x10E169`/`0x11042B/C` rate lookup and the
+0x1D/0x1E keeper ring) stays the OL-T11-79 leg.
+
+### 13.3 Tracked-side pick (`FUN_00092D8C`)
+
+Fresh decompile/disasm of `FUN_00092D8C` and `FUN_00078824`:
+`FUN_00078824` (called first, 0x92D92) zeroes `[0x1590CC]`/`[0x159901]`
+(`0x7882A/0x78830`) and they have no other writers (`get_xrefs_to 0x1590CC` =
+12: one WRITE; `0x159901` = 6: one WRITE). The pick at `0x92DD3..0x92E08` is
+therefore: `[0x15B684] != 0 -> tracked = side`; else flags zero -> 1; the
+`else` arms (one flag nonzero -> 0, both -> -1) are dead in the image. Ported
+into `fifa96_match_run_screen_install` with run cells `tracked_flag[2]` (zeroed
+by install) and `screen_record_mode` ([0x15B684], front-end FUN_00038630
+producers unported, engine 0), completing the OL-87 tracked-side residual.
+
+### 13.4 Remaining `FUN_00071C94` caller dispositions (fresh `get_xrefs_to 0x71C94` = 11)
+
+| site | containing body | disposition |
+|---|---|---|
+| `0x7EFCF`, `0x7F0D1` | row 04 (`fifa96_outfield_row04_step`) | wired (T2), record bound (T3) |
+| `0x75DC4` | row 1E stage 5 (`0x75D17..0x75DD1`) | **wired (T3)** |
+| `0x7F4E7` | row 05 stage-0 tail (`0x7F3A1..0x7F57B`) | leg: the tail algebra is the OL-63 `out.tail` request (the target/local staging at `0x7F3A1..0x7F4E7` is unported) |
+| `0x71B8A` | the armer's angle arm (`0x71B60..0x71B98`, caller 0x718A9) | leg (FU-71 leg 9.6) |
+| `0x70DD1` | `FUN_00070C08` (the reposition sub-body, `0x70C08..0x70DDD`) | leg (OL-T11-79; `fifa96_camera_reposition` carries the derived core only) |
+| `0x7A219` | ball staging `FUN_0007A084` | leg (ball staging unported) |
+| `0x6FA62` | `FUN_0006E8E8` (`0x6E8E8..0x6FE83`) | leg (body unported) |
+| `0x77423` | row 1B (`0x76D28..`, FU-140 OL-34) | leg (row partial) |
+| `0x77DC6` | row 1C (entry `0x77728`, FU-140 OL-35) | leg (row partial) |
+| `0x82A6C` | row 0D (entry `0x8251C`, FU-138 OL-22) | leg (row partial) |
+
+The nine callers outside row 04 are therefore: one wired (row 1E, `0x75DC4`)
+and eight ledgered with their containing bodies named first-hand (the row-05
+tail algebra, the armer angle arm, the reposition sub-body, the ball staging,
+`FUN_0006E8E8`, and rows 1B/1C/0D).
+
+**Phase-10 T2 update (2026-10-10).** Fresh `get_xrefs_to 0x71C94` = **11**,
+the same set (no new/removed sites). Disposition refresh:
+
+* `0x7A219` (ball staging) is **wired** (T1, FU-148 §14: the receive arm).
+* `0x70DD1` (`FUN_00070C08`, the per-record camera event) is **ported and
+  wired** (T2): the body is derived first-hand (`0x70C08..0x70DDD`,
+  `fifa96_camera_record_event`) and its caller `FUN_0007BF20`'s tail gate
+  (`0x7C7D3..0x7C8FC`, previously FU-147 §3.3 leg 7 "not decomposed") is
+  derived and run after the BF20 lane block in `match_run_dispatch_entity`
+  (`match_run_record_camera_event`). The gate is live but dormant while the
+  `0x157750` ball-height producer is 0/unreachable (L14.7), so it is
+  fixture-pinned (`test_engine_match_frame::test_record_event_tail_gate_fires_in_frame`,
+  `port/tests/test_camera.c::test_record_event_*`).
+* The remaining six stay legs with their containing bodies unchanged:
+  `0x7F4E7` (row 05 stage-0 tail, OL-63 algebra), `0x71B8A` (the armer angle
+  arm, FU-71 leg 9.6 / the 0x10E169 table), `0x6FA62` (`FUN_0006E8E8`
+  `0x6E8E8..0x6FE83`), `0x77423`/`0x77DC6`/`0x82A6C` (rows 1B/1C/0D).
+
+### 13.5 Tape / goldens
+
+The M2 tape stays dormant: the m41-staged code-4 rows dispatch with lane
+~1460+ (the half-line gate `lane <= 0x40 - timer81` fails), no row-1E record
+reaches stage 5 (the release gates sit on `timer89` windows the tape does not
+reach), the range words are zero (the config cells are BSS) and no event sets
+`camera.tracked`; `cmp` on `port/tests/golden/engine/m2-frames.txt` and
+`m1-frames.txt` is byte-identical (no re-pin). Live smoke: the T1 UP hold
+reproduces scene AE 28535 (`p9-t3-hold-up.png`); the auto-camera's high-ball
+producer (height > 0xF0 with zero rates) is not reachable from the ported
+rows, so the visible follow-cam remains the ball-staging leg.
+
+**Phase-10 T1 update (2026-10-10, §14):** the ball-staging leg is ported and
+wired — `FUN_0007A084`'s receive arm now runs on the live kick path (the
+staging tail's code-keyed receive gate), so its camera event/tracked bind and
+receiver scan are live. The follow arm's `height > 0xF0` step is
+fixture-proven through the producer; the *visible* follow still needs a kick
+row whose staged trajectory exceeds 0xF0 (the wired pad's reachable rows cap
+at 205/0) — ledgered in §14.
+
+### 12.4 Errata (T2, first-hand)
+
+1. **Timer cell (S4 §11.2).** FUN_00070544 stores the fast-path divisor at
+   `[0x1577F8].lo` (=F8 = F4-F6) and the timer at `[0x1577FA]` (=F6); S4's
+   "timer = F8" read the wrong word. The FU-152 §2.9 cell map's
+   "`0x1577F8.hi` = timer" was right; the code was not.
+2. **Slow path constants.** `[0x15781A]`/`[0x15781B]` are the slow-path
+   velocity scale bytes (image 16 and lo = hi + (0x20-hi)/2 = 24), not event-rate words; they come from
+   FUN_000700F4's 0x1104AB table. `[0x157819]` = 10 is the height decay rate.
+3. **Pan-step call site.** FUN_000736AC calls FUN_000709D0 when
+   `(short)[0x1577FA] > (short)[0x1577F4]` (`0x737b9..0x737da`, JG) before the
+   same frame's integration; the engine port follows that order.
+4. **`FUN_00070544` C6/F6 base.** `F6 = [0x1577F2] ± ramp([0x1577F0] -
+   [0x157768])` — the decompiled `EDX = [0x1577F0] >> 16` is the high word
+   = F2 (the dword alias at 0x1577F0/0x1577F2), not event_param. S4's
+   `F6 = F2 - ramp(h - ty)` was already correct.
+
+---
+
+## 14. Port landing (phase-10 T1: the `FUN_0007A084` receive arm, 2026-10-10)
+
+M2 phase-10 T1, first-hand `/FIFA96.EXE` re-derivation of the ball-staging
+producer chain the phase-9 T3 slice named as the remaining high-ball gate
+source (FU-142 OL-88: "the high-ball producer (height > 0xF0 with a zero-rate
+camera) is not reachable from the ported rows yet"). The M1/M2 goldens are
+byte-identical (no re-pin; §14.4).
+
+### 14.1 The `FUN_0007A084` call path (fresh `disassemble_function 0x7A084`, 269 insns)
+
+`FUN_0007A490`'s tail calls the ball-event setter twice: `0x7A8C7`
+(`[0x158744] < 0`, the signed sub-code arm, dead for every kick row — the row
+sub-codes `row[9]` are all positive) and `0x7A8EF` (the code-keyed arm: code
+outside `[0, 0xF)` or `[0x1104BB+code] == 0`). The second arm is exactly the
+engine's `fifa96_ball_pair_stage_tail` `out->receive` flag (FU-139 §8; the
+same `0x1104BB` recompute table). `FUN_0007A084` then runs, first-hand:
+
+```
+0x7A08D  EBP = [0x158730]                  ; the staging actor
+0x7A0A4  code = [0x158740]>>24; if [0x1104BB+code] != 0 && [EBP+0x69]>>16 > 0x48
+           && ([EBP+0x8D]==0 || lane > 0x70) -> exit
+           ; for every receive code [0x1104BB+code] == 0 (the 0x7A8EF gate),
+           ; so this entry gate is provably a pass-through on the receive path
+0x7A0D6  if [[EBP]+4][0] == 0x18E2 -> the ball-class vector rebuild (0x7A0E5..0x7A201:
+           FUN_000795B4 polar from [EBP+0x59] to a random 0x79970-template target,
+           [0x15873E] = 0x80, the 0x114E04 sine fold into 0x15873A/3C, the
+           angle+0x5A0 speed word into 0x158738)
+0x7A207  EDX = 0x158738; EBX = dword[0x15873C] >> 16 = (int16)[0x15873E] = traj;
+         EAX = EBP; ECX = 0; CALL 0x71C94
+0x7A21E  anim id = byte[[EBP+0x28]]; [0x157A83] = 0 (controlled release)
+0x7A22D  the id/code/ball-x sound selection -> CALL 0x974DC
+0x7A2E6  EAX = [0x157A49]>>24 (phase)
+0x7A2F0  byte[0x158746] = 1 (ack)
+0x7A2F6  phase == 1 -> exit
+0x7A2FF  base = [0x157770..0x157778]; x += (dword[0x1577BE] >> 16) << 5;
+         z += (dword[0x1577C0] >> 16) << 5   ; the high halves = [0x1577C0]/C2]
+0x7A335  MOV EAX,dword[EBP+0x8E]; SAR EAX,0x18
+           ; the dword alias's HIGH byte = +0x91 (little-endian; the same idiom
+           ; as dword[+0x69]>>16 = +0x6B). The gate is action-based:
+           ; skip = ((int8)[EBP+0x91] == 1 || (int8)[EBP+0x91] in
+           ;         {0x10,0x11,0x12}) ? (int16)(int8)[EBP+0x8D] : 0
+           ; +0x8E is the facing octant (FUN_00079C50), not read here.
+0x7A376  CALL 0x8DE8C(target, [EBP] team block, skip, out dist)
+0x7A37F  [0x158734] = ret; [EDX+0x7B2] = ret; [EDX+0x7B6] = 0
+0x7A38E  [[EBP]+0x7A6][+0x7B2] = 0; [+0x7B6] = 0
+0x7A3AC  code == 3 -> [EDX+0x7E7] = 0
+0x7A3C0  both teams' records 1..10: word[rec+0x81] = byte[0x157A3C][descriptor] |
+           byte[rec+0x9D] + 0xF   (unmodeled inputs)
+0x7A40A  EBP == [0x158724] -> [0x15872D] = 0x14 (carrier release)
+0x7A419  type not in {0x11,0x10,0x1D,0x1E} -> CALL 0x79D5C(EBP, 0x158738)
+           (the offside/foul nearest-pick body, FU-150 E-chain; unported)
+```
+
+The `FUN_0008DE8C` scan (fresh `disassemble_function 0x8DE8C`, 42 insns) walks
+11 records at stride `0xB2` from the EDX base, skips `+0x9A`/`+0x98`, compares
+the low words `+0x59`/`+0x61` against the target (`EDI[0]`/`EDI[8]`), and
+returns the nearest record (or 0) with the distance word — the already-ported
+`fifa96_entity_find_nearest`/`fifa96_ball_pair_receive` pair (FU-139 tests).
+
+The camera call maps byte-for-byte onto `fifa96_camera_event_set`: `FUN_00071C94`
+copies the 6-byte vector `0x158738` into `0x1577B8..0x1577BD` and
+`FUN_00070544` seeds the fast-path dividend from `0x1577BA`/`0x1577BC` = the
+vector's **middle (height) and z words**; EBX is the event height
+(`[0x1577F0]`) and ECX the ramp param (0). So
+`fifa96_camera_event_set(cam, vector.height, vector.z, traj, 0)` +
+`fifa96_camera_set_tracked(cam, actor)` is the exact arm, and the `0x739DC`
+call-site gate plus `fifa96_match_run_camera_follow`'s first arm complete the
+visible-follow chain (FU-148 §13.2).
+
+### 14.2 Ported subset (engine)
+
+`fifa96_match_run_ball_receive` (`port/src/fifa96_engine/fifa96_match_run.c`; header
+contract in `fifa96_match_run.h`), wired in `match_kick_run`
+(`fifa96_match_handlers.c`) whenever `fifa96_ball_kick_target` reports
+`out->receive` — i.e. from rows 07/0F and the shared set-piece taker
+deliveries (`match_sp_kick`), exactly the native `FUN_0007A490` tail callers:
+
+1. the camera event + tracked bind (the high-ball follow producer); the
+   `0x71C99` `[0x157A6C]` bail (setter return 1) skips the reset/tracked
+   store but the arm continues;
+2. `controlled = NONE` (`[0x157A83] = 0`);
+3. `pair.ack = 1` (`[0x158746]`);
+4. the phase-1 exit;
+5. the `0x157770` base + camera-velocity leads through the ported
+   `fifa96_ball_pair_receive_target` (the engine's 0x157770 stand-in is its
+   camera triple, FU-67 §4.1 / FU-149 L13);
+6. the own-team nearest scan through `fifa96_ball_pair_receive` (the
+   `+0x91` action skip rule included);
+7. the receiver/team-target/opponent-clear writes;
+8. the carrier release `pos_release = 0x14`.
+
+**Legs (numbered):** L14.1 the `0x18E2` ball-class vector rebuild (the pool
+models no record class; every pool record is the `0x18D8` player class the
+follow arm gates on); L14.2 the `0x7A21E..0x7A2E1` anim-id/code sound-id
+selection and its `0x974DC` stoppage-push sink; L14.3 the
+`0x7A3C0..0x7A408` timer81 loop (the `+0x9D` byte and `[0x157A3C]` descriptor
+table are unmodeled); L14.4 the code-3 `[team+0x7E7]` clear (the cell is
+unmodeled, OL-72); L14.5 the `0x7A419..0x7A448` `FUN_00079D5C` foul/offside
+body.
+
+### 14.3 Live reachability (the follow's visible step)
+
+The wired pad maps KICK `0x10` and PASS `0x20` only. First-hand + live probes
+(ISO `make game` path, `test_live_pass_kick_runs_receive_arm`):
+
+* KICK release -> row 07 stage 1 `si = slot_word6` = 0x10 -> the active-table
+  rows 0/1 (class 0) -> **code 1, traj = add + x/divisor = 0xA0 + 0x2D0/0x10
+  = 205** (recompute arm: no receive, no camera event);
+* PASS release -> the same row with `si` 0x20 -> the carry-table rows
+  (`has_slot && active && phase 2 && class 1 && counter < 7`) -> **code 13
+  (receive), traj 0** (add and divisor are 0) -> the receive arm runs live.
+
+So the T1 producer fires live on the PASS kick (camera event/tracked, receiver
+bind, ack, controlled release, carrier countdown), but neither pad row stages
+a trajectory above 0xF0: the follow arm's visible step remains gated. The
+> 0xF0 producers are the mode-`0x40` long-ball arm (`0x7B194`: traj up to
+0x11F + the row add), the `flags == 0x40` code-4 arm (traj `0x90 + (rng&7) *
+(0x10 - desc_15)`, up to 0x100) and the band/height rows (`ball_height -
+pos_y >= 0x20`, unreachable while the derived `0x157750` ball height stand-in
+is 0). The `0x40` input key is not mapped in the engine; that and the
+`0x157750` ball-height producer are the remaining legs to a *visible* live
+follow (legs L14.6/L14.7).
+
+### 14.4 Tests, goldens, smoke
+
+Tests (all `make check`, 108/108 before/after; no new executables):
+
+* `test_engine_match_frame::test_ball_receive_arm_high_ball_chain` — the
+  staged pair (traj 0x100) -> the receive arm (event height, tracked,
+  controlled release, ack, receiver pick, team writes) -> the every-frame
+  camera update -> `fifa96_match_run_camera_follow == 1` with the velocity
+  from the tracked slot dirs;
+* `test_ball_receive_low_ball_no_follow` — the discriminating boundary: traj
+  0x50 (the row-1E release height) and the phase-1 gate; the arm refuses
+  (velocities untouched);
+* `test_ball_receive_skip_rule` — the `+0x91` action-skip rule (the `+0x8E`
+  octant==1 case must not skip; action 1/0x10 must) and the carrier release;
+  the low-ball twin also pins the `0x71C99` bail continuation;
+* `test_live_pass_kick_runs_receive_arm` (ISO) — the live carrier chain ->
+  PASS release -> row 07 -> code 13 -> the receive fields live (`ack` 1,
+  `receiver` a real teammate, `camera.tracked` = the actor, `controlled`
+  NONE, `pos_release` 0x14);
+* `test_engine_match_render::test_ball_record_draws_ball_slot` — the FU-85 §4
+  scene staging copies the ball record into slot 22 and the FU-89/85 renderer
+  draws it (the window-centre pixel is the ball slot's colour; culling the
+  slot or parking the record behind the camera returns the background).
+
+Goldens: `cmp` on `port/tests/golden/engine/m2-frames.txt` and `m1-frames.txt`
+byte-identical (the tape never stages a receive-coded kick: the kick edges sit
+outside phase 2 with the pair zeroed, §13.5). M1 untouched.
+
+Smoke (`DISPLAY=:1`, fresh session): `p10-t1-frontend.png` (byte-identical to
+the v9 front-end), `p10-t1-hud.png`, `p10-t1-clock.png`, `p10-t1-hold-up.png`
+(scene AE 28535 vs clock — the phase-9 T1 movement reproduced),
+`p10-t1-pass.png` and `p10-t1-kick.png` (scene AE 0 vs each other; the full
+delta is the clock band only). **Honest result: no visible follow-cam and no
+ball sprite during live play with the wired pad** — the receive arm is live
+(the smoke capture cannot show the internal fields) but the visible step is
+gated exactly as §14.3 records. The ball record's open-play position producer
+(the native ball-record machine: the reset/teleport `FUN_000886D4`/`0x8B6EB`,
+the kickoff `FUN_0008C24C`, the phase-0x1C `0x84BBB..0x84BDD` placement and
+the code-`16` vector-pop sequence `0x84630` — FU-82 §3.6, whose only static
+installer is the phase-0x19 foul sequence `0x89FA4`) stays leg **L14.8**.
+
+**Phase-10 T3 addendum (2026-10-10, §13.4/§14): the band-reachable natural
+goal on the acceptance tape.** The T3 acceptance (the first M2 re-pin since
+the S1 v5.1) drove the natural chain on the tape through the wired row-04
+pan origin: the m 42 scenario (declared in `port/tests/test_engine_m2.c`) stages
+the camera park at the goal-mouth edge and the record placement at the
+camera (the f-up8 T4 fixture's staged inputs), plus two additional declared
+forcings the fixture does not stage (the claim-record isolation via the
+native `+0x9A` exclusion and the act-1 timeline flag), and everything from
+there is natural — the
+row-04 slot-dir event (the held LEFT's live slot dir `(0, +1)` → the
+`0x7F035` arm's `(0, +64)` seed → `fifa96_camera_event_set` vel_z +5) → the
+pan integrator → the boundary armer (zone 1, snapshot 0xB28) → the scan →
+the table-1 queue (id 5) → the scheduler → the leg-0 handler post → the
+writer (1-0, the untracked arm's 0xD3). Two §13.4-adjacent derivations land
+from the measurement (first-hand, the tape's own m 41 state):
+
+- **The claim machine's mid-walk slot steal (measured, m 41 row-1E).** The
+  L4.1 walk order puts the claim record's 1E dispatch before the team
+  target's 04; the claim's per-dispatch helper request makes the per-record
+  entity drain merge the slot onto the claimant before the target record's
+  row-04 handler runs, so the handler's `has_slot` is always 0 and the
+  `0x7EFEE` event arm degenerates to the `0x7F056` velocity-words seed. On
+  this tape the seed is `(0, ±4)` (the stride nibble `+0x7B` is 0 — its
+  `+0x79` producer has no writer, so every install resets it), and the
+  `/12` divisor zeroes it: no pan. The T3 scenario isolates the claim
+  record with the native `+0x9A` exclusion (the walk's own mechanism);
+  the steal itself stays unported-leg territory (the claim machine's
+  per-dispatch helper emission is part of the FU-151 stage ladder).
+- **The mouth co-migration (measured).** With a live slot-dir pan (vel ±5,
+  i.e. ±10 per granted body at delta 2), the camera would reach the
+  `|camZ| > 0xB20` arming bound only through a record-bound burst/coast
+  cycle averaging ~2 units per granted frame (the record chases at ~2
+  units/frame; the pan decays 5→3→2→1→0 over ~24 bodies once the record
+  leaves the 0x40 band) — ~4400 steps from the claim place to the mouth.
+  The scenario parks the camera at the goal-mouth edge instead (the
+  f-up8 T4 fixture's own staged input).
+
+The tape effect is recorded in the M2 v10 provenance
+(`port/tests/test_engine_m2.c`, the m 42/m 58/m 61/m 72 blocks) and the
+`port/ENGINE.md` "score a goal" row: the pan origin, the
+armer, the scanner and the consumer chain all fire on the tape now (the
+phase-9 T3 "tape dormant" note is superseded by the phase-10 T3 re-pin);
+the remaining §13.4 callers stay legs as §13.4 lists them.
+
+---
+
+## 15. Port landing (phase-11 T1: the `0x157750` camera-height producer + the `0x40` long-ball key, 2026-10-11)
+
+M2 phase-11 T1, first-hand `/FIFA96.EXE` re-derivation of the two §14.3/§14.4
+named legs: **L14.7** (the `0x157750` ball-height producer) and **L14.6** (the
+`0x40` long-ball key). Goldens `cmp` byte-identical — M1 `09b726b7…` untouched
+and M2 `5524cf40…` unchanged (the tape stages no camera event height and no
+long-ball input) — and `make check` **108/108** (no new executables).
+
+### 15.1 L14.7 — FUN_00070B94, the native `word[0x157750]` producer
+
+First-hand windows this task (`disassemble_bytes 0x73783..0x737e7`,
+`0x70B94..0x70C05`, `read_memory 0x10F3C4` 296 B, `0x10F744`
+x86-64 `get_xrefs_to`):
+
+```
+0x73783  BX = word[0x157A64]                   ; the frame delta
+0x7378a  DX = word[0x1577FA]; ADD EDX,EBX      ; the running timer += delta
+0x7379a  word[0x1577FA] = DX
+0x737a1  CX = word[0x1577F0]                   ; the event height
+0x737a4  JZ 0x737b9                            ; no height -> no Y store
+0x737a6  EAX = dword[0x1577F8]; SAR EAX,0x10   ; = word[0x1577FA] (timer)
+0x737ae  CALL 0x70B94                          ; the height arc
+0x737b4  dword[0x157750] = EAX                 ; the camera Y (= engine pos_y)
+0x737b9  AX = word[0x1577FA]; CMP AX,word[0x1577F4]  ; the pan-step check (T2)
+```
+
+FUN_00070B94 (`0x70B94..0x70C05`):
+
+```
+BX = word[0x1577F4]
+if ((int16)timer >= (int16)BX) return 0
+if ((int16)word[0x1577F0] <= 0) return 0
+ECX = (dword[0x1577F0] >> 16) - timer          ; word[0x1577F2] = F2
+EBX = 0x94 - (int16)word[0x1577F2]
+EAX = |ECX|; EDX = 0x94 - EAX
+AX  = word[[0x157744] + 2*EDX]
+AX -= word[[0x157744] + 2*EBX]
+if (AX < 0) AX = 0
+```
+
+`[0x157744] = 0x10F3C4` (store at 0x6FFE9 in FUN_0006FFC0), a 149-entry 16-bit
+ramp table (first-hand; 0,21,43,64,85,…,1600 at index 146..148). The engine
+ports it as `fifa96_camera_height` (`camera_height_arc`) and stores
+`event_peak` (= word[0x1577F2] = `fifa96_camera_ramp(event height)`) at the
+event set; `fifa96_camera_update_walk` writes `pos_y` at the native site and
+order (after the timer accumulation, before the pan-step check). Unit-pinned
+arc (event height 0x100: F2 59, F4 118, F6 0): pos_y = 17, 33, 49, 64, 79, 93
+at t = 2..12, the crest 253 at t 58, 17 at t 116, and the `timer >= limit`
+guard 0 at t 118; the idle arm leaves pos_y 0.
+
+Consumer corrections to the exact native cell (`word[0x157750]`):
+
+* the FUN_0007BF20 tail gate (`0x7C81B dword[0x157750] == 0 -> skip`) now reads
+  `camera.pos_y` in `match_run_record_camera_event` — the T2-phase-10 pan caller
+  `0x70DD1`'s wake condition;
+* FUN_0007AE70's event ball height (`0x7AEFD MOV DX,[0x157750]`) in
+  `match_kick_from_record`'s `ball_height`, so the kick band `d = ball_height -
+  pos_y` (the 0x81526/0x81531 gates) sees the live camera Y.
+
+The remaining `[0x157750]` gameplay stand-ins (row 04/05/06/1E `ball_height`,
+the chase `camera` word) keep the FU-75 §1.6 ball-record proxy until the
+code-16 ball machine (L14.8 / phase-11 T2) makes the ball's height live — leg
+15.3.
+
+### 15.2 L14.6 — the `0x40` long-ball key
+
+First-hand this task:
+
+* code-7 stage 1 (`0x815CD..0x81646`): `SI = 0x40` when
+  `CMP EBP,[EAX+0x7CB]` (0x815D0, EAX = `[rec]` = the team block) holds, else
+  the live `word[slot+6]` (0x815E6), else `[0x158743] == 3 -> 0x40` (0x815EC),
+  else -1; the `[0x14C32A]`/`[0x15B680] == 4` downgrade is unchanged.
+* FUN_0007CD60 (`0x7CD60..0x7CDD5`, the input-row handler at **pressed code-3 /
+  released code-0 want 0x40**): `[...+0x7CB] != 0` exits; `EBX = [team+0x7B2]`;
+  `rec == EBX -> [team+0x7CB] = rec, [team+0x820] = 0x3C`; else `rec ==
+  [0x1577CA]` and `[EBX+0x20] == 0` -> `FUN_000786A0(rec, EBX)` (the slot swap)
+  + `[team+0x7CB] = EBX`, `+0x820 = 0x3C`; returns 1 always.
+* FUN_0008D8EC `0x8DAF3..0x8DB2C`: `limit = dword[team+0x81E] >> 16` =
+  **word[team+0x820]** (the alias); `timer > delta -> timer -= delta; else
+  timer = 0, [team+0x7CB] = 0`.
+* FUN_0007B194 `0x7B28F..0x7B315` **errata**: (1) the dir_z side flip
+  (`[0x157A49]>>24 == 1 || [rec]->[0x826] == 0` keeps `slot[+0x21]`, else the
+  value NEGs; the 0x7B2D9 `dir_z == 1` test reads the flipped word); (2) the
+  mode-6 traj is `(dir_z + 1) * 0x3C + 0x10 + (r & 0xF)` (0x7B2E8 `INC EDX;
+  IMUL EDX,EDX,0x3C`). The pre-T1 port dropped both; fixed and unit-pinned
+  (`test_kick_target_mode40_slot_traj`).
+
+Ports: `FIFA96_ENGINE_KEY_LONG_BALL` (SDL3 **V**, gamepad **WEST**) ->
+`match_run_map_key` ORs the native word 0x40; the `0x7CD60` body replaces the
+L4.4 stub in `match_input_handler` (the first arm + the gates + the swap);
+`match_kick_from_record` stages `is_team_cb = (id == team[team+0x7CB])`; the
+team `+0x820` countdown semantics corrected (the pre-T1 port read the separate
+zero `timer81e` cell and cleared the arm on its first frame).
+
+Live reachability (probe + tests): the request fires pre-claim while the
+record's dispatch code is 0/3 and `rec == [team+0x7B2]` (the walk state), arms
+`timer7cb = rec`/`timer820 = 0x3C`, and the post-claim KICK release runs code 7
+-> stage 1 mode 0x40. The band-2 (code-4 receive) row needs `d = ball_height -
+pos_y == 0x70` exactly: the stage-0 gate `pos_y + 0x70 >= ball_height` (0x81531
+JGE) advances only for band <= 0x70 and waits/cancels above (`d > 0x70` ->
+0x81538: `timer89 <= 0x3C` wait, else the tail). With the camera Y at the
+boundary the live chain completes end-to-end (15.3); a **live** camera Y
+reaching the boundary (and the > 0x70 bootstrap event that raises it) is leg
+15.3.
+
+### 15.3 Tests, goldens, smoke, legs
+
+Tests (`make check` 108/108):
+
+* `test_camera.c::test_camera_height_producer` — the FUN_00070B94 arc, its
+  guards and the idle discriminator (first-hand pinned values).
+* `test_engine_match_frame.c::test_record_event_gate_live_from_height_producer`
+  — the ported event setter raises `camera.pos_y` and the record event's
+  reflect arm re-seeds `event_param` to that live height (the tail gate live
+  from the producer); `test_record_event_tail_gate_fires_in_frame` updated to
+  the `pos_y` staging.
+* `test_engine_match_frame.c::test_live_long_ball_mode40_band2_follow` (ISO) —
+  kickoff -> walk -> the producer ramp -> the live **V** request
+  (`timer7cb = 9`, `timer820 = 0x3C`) -> the walk claim -> the pinned band
+  boundary -> the **Z** kick -> `pair.flags == 0x40`, `pair.code == 4`,
+  `pair.traj == 0x100` (the RNG-0 seeded draw), ack/tracked/`event_param`
+  0x100 -> `fifa96_match_run_camera_follow == 1` with the tracked slot dirs in
+  the camera velocity (15, 0) — the visible follow's motion source.
+* `test_ball_pairing.c::test_kick_target_mode40_slot_traj` — the mode-0x40
+  slot-arm traj (side-0 formula, the side-1 flip clamp, the mode-6 `+1`),
+  twin-RNG pinned.
+
+Goldens: `cmp` byte-identical on `m1-frames.txt` and `m2-frames.txt`.
+
+Smoke (`DISPLAY=:1`, fresh session, client-area 960x720): the front-end and
+HUD captures are byte-identical to the phase-10 twins (`p11-t1-frontend.png`
+vs `p10-t1-frontend.png`, `p11-t1-hud.png` vs `p10-t1-hud.png`); the
+long-ball walkthrough (walk UP ~1.2 s -> V -> walk UP ~0.6 s -> eight Z
+presses over ~4 s) reaches live play (clock 00:12 -> 00:17,
+`p11-t1-long-ball.png` -> `p11-t1-after-kicks.png`), the walked record and the
+live roll clearly move (scene-band AE 14894/24230 across the kick bursts) and
+— honestly — **no visible follow-cam and no ball sprite**: the camera stays the
+static stand-in. The live camera Y cannot bootstrap to the band boundary from
+a cold start (no wired live event carries height >= 0x74; the live receive arm
+stages traj 0/0x88..0x97 rows and the keepers 0x38/0x50 < 0x70), so the
+visible follow remains the fixture chain above.
+
+Numbered legs:
+
+* **15.a the live band-2 bootstrap.** The pad long-ball can only stage the
+  code-4 receive row with `d == 0x70` exactly; a wired live producer of a
+  camera height above the boundary (the ball machine's ball height via L14.8,
+  or a lofted set-piece delivery) is what makes the band-2 pad kick, and with
+  it a visible live follow, reachable without the fixture staging.
+* **15.b the remaining `[0x157750]` gameplay stand-ins** (row 04/05/06/1E
+  `ball_height`, the chase `camera`) stay on the FU-75 §1.6 ball-record proxy
+  until L14.8 (phase-11 T2) lands the ball's live height.
+* **15.c the `0x7CD60` swap arm's slot-block field clears** (OL-68) and the
+  second arm's tracked-side producer (`camera.tracked` is the engine surface).
+
+---
+
+## 16. Port landing (phase-11 T2: the `FUN_0008BAF0` ball machine, L14.8, 2026-10-11)
+
+M2 phase-11 T2, first-hand `/FIFA96.EXE` re-derivation of the L14.8 leg the
+phase-10 T1 report named ("the ball record's open-play position producer").
+Goldens `cmp` byte-identical — M1 `09b726b7…` untouched and M2 `5524cf40…`
+unchanged (the tape's live window keeps the ball outside the 320-wide canvas;
+§16.4) — and `make check` **108/108** (three new tests, one updated fixture).
+
+### 16.1 First-hand windows this task
+
+* `disassemble_function 0x8BAF0` (379 insns; the 0x8BDEC..0x8C065 tail
+  re-read), the `FUN_0008AF38` gate `0x8B65B..0x8B669` (fresh
+  `disassemble_bytes`), `0x4B180..0x4B1BF` (the every-frame call order),
+  `0x8C24C..0x8C2C3` (`FUN_0008C24C`), `0x8C068..0x8C08F` + the decompile of
+  `FUN_0008C068`, the decompiles of `FUN_0006E724` (the row install) and
+  `FUN_0006FE84` (the appearance machine), `FUN_0008B688`
+  (`0x8B688..0x8B8B7`, the kickoff reset).
+* Writer census this task (`search_instructions`): `15880c` (22 sites: the
+  0x84BDD penalty `ADD`, the reset/teleport stores, the 0x8B6EB kickoff
+  store, `FUN_0008C24C`'s copy and the machine's tail `ADD`s — **no
+  kick/possession machine writes the ball record**), `158830` (23), `15884a`
+  (6), `158848` (10), `15885e` (7), `158881` (2 reads, no static writer),
+  `158862` (11, all in `FUN_0008C068`).
+* Table reads: `read_memory 0x110492` (32 B), `0x1104AE` (40 B),
+  `0x1104D2` (68 B and 128 B); `search_byte_patterns
+  00000001010101020202020303030304040404` confirms the 0x1104D2 anchor (one
+  of the wide reads returns the 0x11048E-shifted bytes — the pattern search
+  settles it).
+
+### 16.2 The machine (L14.8) — the ball record's per-frame producer
+
+`FUN_0008AF38` (the clock body the engine mirrors as the FU-143 phase funnel)
+calls `FUN_0008BAF0` at `0x8B664` whenever `[0x14C32A] == 0`, after the
+entity chain. `FUN_0008BAF0` is the only per-frame writer of the ball record
+position `0x15880C/14`; the FU-120 census's other writers are the
+reset/teleport `FUN_000886D4` (`x = ∓0x720/0x1560`), the kickoff machine
+`FUN_0008B688` (`x = 0x960`, target `0x1E0`), the commit `FUN_0008C24C`
+(target triple → the record) and the penalty `0x84BDD` placement — all
+already ported.
+
+Machine body, first-hand:
+
+```
+0x8BAF6  EBP = 0x1587EC              ; the ball block base
+0x8BB08  [0x15884E] = 5              ; max speed (word)
+phase = [0x157A4A]>>24
+  phase 2 (0x8BB55): if period [0x157AC2] > 3 -> target := the record
+     (0x8BB74); else the camera-derived lead:
+        three_q = camZ - (camZ>>2) = 3*camZ/4
+        tx = (-three_q)>>1 = -3*camZ/8     ; ECX
+        tz = three_q                        ; EBX
+        dx = -3*camZ/8 - camX               ; EDI (sign of the 32-bit value)
+        dz = -camZ/4                        ; ESI
+        target.y = 0
+        if metric(dx,dz) < 0x120: tx ± 0x120, tz ± 0x120; [0x15884E] = 7
+        target = (tx, 0, tz)
+  phase 6 (0x8BB13): target = (±0x4B0, ?, ±0x930) by the camZ/ball sign   [leg]
+  phase 0x0C (0x8BC01) / 0x13 / 0x14: fixed leads + the match-over words   [leg]
+tail (0x8BDEC..0x8C052), every phase:
+  FUN_0008DCD4(ball, target) -> 0x15883C distance, 0x15883E dx, 0x158840 dz
+  if distance == 0: target_heading := heading; else
+     target_heading 0x15885E := angle(dx,dz)  (0x8DD70 = FUN_000CD474)
+  if byte[0x158881] != 0:                          ; the FUN_0006E724 gate
+     if distance <= 0x60: aim at [0x157A73] (default the camera triple
+        0x15774C; word[+0], word[+8]) — the foul override 0x1587C0 is the
+        unported foul machine's
+     steer 0x15885A toward target_heading: delta wrapped 10-bit
+        (delta & 0x3FF, fold over 0x200), clamped ±((0x10 - speed) << 2),
+        sum wrapped again; visual byte 0x158852 := ((int32_t*)0x1104CF)
+        [(uint16)heading & 0x3FF) >> 5] >> 24
+  speed = distance >> 3
+  if speed == 0: 0x158848/4A/4C := 0 (no integration)
+  else: max = [0x15884E]; if prev speed > max/2: max >>= head_error>>6
+        (0x158862, the FUN_0008C068 producer; image default 0)
+        speed = min(speed, max)
+        vx = round16(speed * sine(target_heading));        0x114E04
+        vz = round16(speed * sine(target_heading + 0x100))
+        ramp_timer 0x158856 += delta; when > speed/2: timer = 0,
+        vel_x 0x15884A and vel_z 0x15884C step ±1 toward (vx,vz)
+        speed word 0x158848 := metric(vel_x, vel_z)
+        ball.x += vel_x * delta; ball.z += vel_z * delta   ; y untouched
+  FUN_0006FE84(0x1587EC)                              ; appearance machine [leg]
+```
+
+`0x158881` is written by `FUN_0006E724(0x1587EC, row, param)` as
+`byte[0x157588 + row*9 + 2] & 2` (the `[0x157588] = 0x10EF00` FU-84 row
+table, installed at 0x73D91); the reset's `FUN_0006E724(0x1587EC, 3, 0)`
+(0x887D5) installs row 3 and the gate reads `2` (row 3 flags `07` at
+0x10EF1B). The reset's row-3 install is the native ball *appearance* (the
+0x158866 pointer the composer reads at 0x36E20).
+
+**Erratum (first-hand).** The phase-10 T1 report (§14.4) named the L14.8
+producer "the code-16 vector-pop sequence `0x84630`". First-hand this task:
+`FUN_00084630` is a 3-stage *pool-record* action (stage 0 copies `+0x59 →
++0x4D`; the advance gate is `byte[[0x158866]] == 0x48`; stage 1 polar
+`FUN_000795B4(rec+0x59, 0x15880C)` and the `0x6A/0x55` animation; stage 2
+copies and runs the `+0x44` reset) — the fouled player's face-the-ball
+sequence, whose only static installer is the phase-0x19 foul sequence
+`0x89FA4` (`0x7D9A4(0x16, [0x15888F])`). It *reads* the ball record; it does
+not produce its position. The producer is `FUN_0008BAF0` as above.
+
+### 16.3 Ported subset (engine)
+
+`match_run_ball_machine` (`port/src/fifa96_engine/fifa96_match_run.c`) runs once
+per granted frame after `fifa96_match_run_goal_scan`, before the scene
+staging (the native 0x8B664 site), and implements the phase-2 lead and the
+common tail exactly (the metric/angle/sine primitives are the ported
+`fifa96_entity_distance`/`fifa96_entity_angle`/`fifa96_entity_sine`). The
+state lives on the pool ball (`fifa96_match_ball`: `target_*`, `speed`,
+`vel_x/z`, `max_speed`, `target_heading`, `ramp_timer`, `metric*`,
+`head_gate`, `head_error`, `visual_dir`, `appear_row`, `machine_ran`);
+`fifa96_match_entities_init`/`kickoff_place` seed the reset/commit posture
+(`head_gate = 2`, `appear_row = 3`, target := record). The scene staging
+passes `appear_row` as the ball slot's `anim_id` (the reset's row 3; the
+earlier zeroed stand-in resolved row 0), and the FU-85 resolver draws the
+ball from PLAYART bank 3.
+
+### 16.4 Tests, goldens, smoke
+
+Tests (`make check` 108/108; RED-verified by disabling the machine call):
+
+* `test_engine_match_frame.c::test_ball_machine_phase2_open_play_lead` — the
+  phase-2 lead (0x120/0x120 from the fresh camera triple), the metric
+  (0x18C)/target-heading (0x80)/steer-clamp (0x40)/visual (2) frame-1 pins,
+  the ±1 ramp and the integration (2+4+6 = 12 on both axes by frame 3).
+* `test_engine_match_frame.c::test_live_ball_record_produced_in_open_play`
+  (ISO) — the kickoff phases hold the spawn (the last pre-flip frame observes
+  `(0x1E0, 0)`), the machine runs live and moves the record at phase 2, the
+  staged slot 22 tracks it.
+* `test_engine_match_render.c::test_ball_machine_moves_ball_slot_pixels` —
+  parked vs rolling: the staged slot's position tracks the record, the ball
+  stays drawn (the fixture's bank 3 mirrors bank 0; the canvas hash and the
+  drawn-pixel count change with the motion).
+* Fixture updates: `test_scene_stages_pool_entities` (park target := record;
+  the no-steer gate), `test_ball_record_draws_ball_slot` (park + the row-3
+  staging), the scene fixture now carries 4 banks.
+
+Goldens: `cmp` byte-identical on `m1-frames.txt` and `m2-frames.txt`. The
+tape's live window ends before the ball's projection enters the 320-wide
+canvas (its world x stays ≈0x1E0..0x120 while the stand-in camera place is
+`(0,0,0)`, so the projected x' stays > 320), and FU-89 culls the slot before
+the resolver; the tape posture is unchanged.
+
+Smoke (`DISPLAY=:1`, fresh session, window 960x720 + mutter frame):
+`docs/screens/p11-t2-{frontend,hud,walk,live,after-kicks}.png` — the
+front-end → X (decline → panel) → Return (confirm) start, a KICK burst
+reaches live play (clock ticking), the walked record moves, and an
+instrumented trace of the live run (temporary debug print at the FU-89 slot
+loop, reverted after the run) pins the ball slot moving with the record —
+`T2DBG slot22 pos=(296,0,244) … anim=3 bank=3 frame=8 dir=6 vis=1 draw=1
+sprite=yes off=32 err=0` through `(264,0,264)`, `sprite=yes` throughout.
+**Honest result: no ball is visible in the smoke captures** — with the
+engine's static stand-in camera place `(0,0,0)` the camera-derived lead
+parks the ball near `(0x120,0x120)`, whose projection (`x' = 160 +
+x*320/z ≈ 480`) lands outside the 320-wide canvas while the camera place
+never pans (the native camera place pans with the action; the engine's pan
+chain is event-gated, §12/§13). The visible ball therefore waits on the
+camera-place feed, not on the ball machine.
+
+Numbered legs (L14.8 additions):
+
+* **L14.8.a** the phase-6 goal-area and phase-0xC/0x13/0x14 leads and their
+  match-over words `0x158822` (the engine lifecycle owns exits).
+* **L14.8.b** the `FUN_0006FE84`/`FUN_0006E518` appearance/animation machine
+  (the `+0x84` timer, the `0x11052A` row successor, the `0x15887B` frame
+  byte); the port stages the row-3 appearance and the heading only.
+* **L14.8.c** the `FUN_0008C068` `0x158862` head-error producer (modeled as
+  the image-default field; the max-speed shift degenerates at 0).
+* **L14.8.d** the native `[0x14C32A] == 0` run gate (the engine
+  `session_gate_14c32a` is the FU-146 scheduler proxy seeded 1 for live
+  matches, so the machine runs each granted frame).
+* **L14.8.e** the visible-ball camera feed: the phase-2 lead is
+  camera-derived; with the stand-in place `(0,0,0)` the lead (and with it the
+  ball) projects off the right edge — a live camera place/pan is what puts
+  the ball on screen (the T4/S5-era pan chain is event-gated).
+* **15.a/15.b status:** the ball machine does **not** produce the ball
+  *height* — `y` (0x158810) is untouched by the machine and stays 0 in open
+  play, so the `d == 0x70` band bootstrap (15.a) is not reachable from this
+  machine; the row 04/05/06/1E `ball_height` stand-ins (15.b) read the
+  engine's `ball.y`, which the native also keeps 0 in open play — the
+  stand-ins are not superseded by L14.8 and 15.b stays open for a genuine
+  height producer.
+
+### 16.5 Fix round 1 errata (T2 review, 2026-10-11)
+
+Quoted errata against §16.2/§16.3/§16.4, first-hand re-checked this round:
+
+* §16.2's `visual byte 0x158852 := ((int32_t*)0x1104CF)[((uint16)heading &
+  0x3FF) >> 5] >> 24` and §16.3's "the `0x1104CF` dword-top-byte visual
+  byte" are **wrong on the stride**. The native read `0x8BF01` (and the
+  identical `0x8C236` in `FUN_0008C068`) is bytes `8b 80 cf 04 11 00` =
+  `MOV EAX,dword ptr [EAX + 0x1104CF]` — ModRM `0x80`, **no SIB**, scale 1
+  (contrast the sine at `0x8BF66`: `8b 04 85 ...` = `[EAX*4 + 0x114E04]`,
+  which does carry the scale). The `SAR EAX,0x18` then selects the byte at
+  `0x1104CF + idx + 3` = **`0x1104D2 + idx`**, i.e. the lookup is the
+  single byte table at `0x1104D2` (first-hand `read_memory 0x1104D2` 32 B:
+  `00 00 00 01 01 01 01 02 02 02 02 03 03 03 03 04 04 04 04 05 05 05 05 06
+  06 06 06 07 07 07 07 00` — the symmetric octant wrap 0×3 / 1..7 ×4 /
+  0). The port had gathered the top bytes of stride-4 dwords (`1,2,…,7,48,
+  0,0,−48,…`) — a fourth instance of the AGENTS `dword>>16/24` alias-trap
+  class, pinned by a wrong test value.
+* §16.2's index note stands: `0x8BEF2 AND BH,3` clears the sign before
+  `0x8BEFA MOVSX EAX,BX; SAR 5`, so the index is the unsigned
+  `((uint16)heading & 0x3FF) >> 5` (0..31) on every path; the stored
+  heading `0x15885A` is the signed wrapped value (checks ok, no signed
+  table base). `FUN_0008C068`'s `0x8C22E SAR EAX,5` reads the same
+  unsigned index.
+* §16.4's test bullet "the metric (0x18C)/target-heading (0x80)/steer-clamp
+  (0x40)/visual (2) frame-1 pins" — the visual pin is **0** (idx
+  `(0x40)>>5 = 2` → byte `0x1104D4 = 0`); the "visual (2)" was the
+  misread's product.
+* §16.2's phase-2 `dz` is `three_q - camZ` (`0x8BBAD SUB ESI,EAX` with
+  `ESI = three_q`, `EAX = camZ`), **not** `(-camZ) >> 2`; the two differ
+  whenever `camZ % 4 != 0` (and the `|camZ| ∈ 1..3` sign test), affecting
+  the `< 0x120` compare.
+* The `0e19173` commit subject "8086 CL width" is inverted: the 8086 uses
+  the full CL; the 186+ (and the 386 the 32-bit LE image requires) mask CL
+  to 5 bits. The `& 0x1F` code is exact for this platform and is now
+  exercised by a synthetic `head_error = 0xFFFF` pin (L14.8.c).
+
+No golden moved (the visual byte is write-only in the engine; M1/M2
+byte-identical re-verified after the fixes).
+
+### 16.6 Fix round 2 (T2 re-review, 2026-10-11)
+
+The re-review found the L14.8.c `& 0x1F` pin non-discriminating: the
+`fifa96_engine` target builds without sanitizers (`-g -std=gnu11 -Wall
+-Wextra -Werror`; sanitizers are test-TU-only) and both x86 `SAR r,CL` and
+the host's aarch64 `ASR w,w` mask the count in hardware, so a machine-level
+frame test cannot RED for the mask's removal. Resolution:
+
+* `fifa96_match_run_ball_head_error_shift(head_error)` (declared in
+  `fifa96_engine_internal.h`) now carries the `0x8BF41..47` expression
+  `(head_error >> 6) & 0x1F`; the machine calls it, and
+  `test_ball_head_error_shift_mask` pins it directly (`0 → 0`, `0x3F → 0`,
+  `0x40 → 1`, `0x80 → 2`, `0xFFFF → 31`; scratch-removing the mask returns
+  1023 → RED).
+* The 0x1104D2 octant table is deduplicated: the port now reuses the
+  already-landed `fifa96_match_heading_table` (the FU-77 §4 read of the same
+  flat data; the native consumers `0x8BF01`/`0x8C236` and the locomotion
+  heading fold read one table), deleting the round-1 duplicate.
+
+---
+
+## 17. T3 minors-sweep errata (phase-11 T3, 2026-10-11)
+
+Quoted errata against §14/§15, first-hand re-checked this task (the phase-10
+final-review triage items; no behavior claim in the port changes):
+
+* **§14.1 entry gate inverted.** The `0x7A0A4` pseudocode's
+  `([EBP+0x8D]==0 || lane > 0x70) -> exit` is wrong on the first term.
+  First-hand `disassemble_bytes 0x7A084..0x7A0F1`: `0x7A0C0 CMP byte ptr
+  [EBP+0x8D],0` / `0x7A0C7 JNZ 0x7A44D` (exit), then `0x7A0CD CMP EAX,0x70` /
+  `0x7A0D0 JG 0x7A44D`. The gate exits on `[EBP+0x8D] != 0 || lane > 0x70`.
+  The §14.1 pass-through conclusion for receive codes stands unchanged: the
+  arm runs only when `[0x1104BB+code] != 0` (`0x7A0AC CMP byte ptr
+  [EAX+0x1104BB],0` / `0x7A0B3 JZ 0x7A0D6`).
+* **§14.1 timer81 loop is one team, not both.** `0x7A3C0 both teams' records
+  1..10` is wrong: the loop base is `[ESP+0x1C]` = `[[EBP]+0x7A6]` (the
+  `[team+0x7A6]` **opponent-team** pointer, saved at `0x7A093`/`0x7A0A0` from
+  the acting record's team), and the counter `EDX` walks 1..0xA over that one
+  block (`0x7A3C4 MOV EDX,1`; `0x7A3FD ADD EAX,0xB2`; `0x7A402 MOVSX
+  EBX,DX` / `0x7A405 CMP EBX,0xB` / `0x7A408 JL`). The `word[rec+0x81]` store
+  is the acting record's **opponent team's** records 1..10.
+* **§15.1 read window and pointer cite.** The arc table window is **298 B**
+  (149 16-bit entries, index 148: `EBX = 0x94 - F2` and the read
+  `word[[0x157744] + 2*EDX]`), not 296 B; and the `get_xrefs_to` target is
+  **`0x157744`** (the pointer cell holding the flat `0x10F3C4` table base —
+  the §15.1 pseudocode below already used it), not `0x10F744`.
+* **§15.1 load address.** The pseudocode line `0x737a1 CX = word[0x1577F0]`
+  is mis-addressed: the load is at **`0x73793`** (`668b0df0771500` =
+  `MOV CX, word ptr [0x1577F0]`); `0x737a1` (`6685c9` = `TEST CX,CX`) is the
+  height gate the pseudocode's own `0x737a4 JZ` then reads.
+* **§15.2 JGE cite.** The stage-0 gate's `(0x81531 JGE)` is wrong: `0x81531`
+  is `MOVSX EAX,DX` and the JGE is at **`0x81536`** (`7d 14`, after
+  `0x81534 CMP EAX,EBX`). The reachability conclusion stands (the band
+  advances for `d = ball_height - pos_y <= 0x70`; `d > 0x70` waits and the
+  tail cancels at `timer89 > 0x3C`).
+* **§15.3 leg 15.a wording.** "A wired live producer of a camera height
+  **above the boundary**" is loose: the band-2 (code-4) row needs the exact
+  `d == 0x70` crossing presented at the dispatching kick — the stage-0 gate
+  admits `d <= 0x70` and only the boundary is band 2, while a held kick above
+  it waits and then cancels (`timer89 > 0x3C`, `0x8153F JG 0x81702`). The
+  parenthetical "the ball machine's ball height via L14.8" is superseded by
+  §16's status: `FUN_0008BAF0` never writes `y`, so the live height producer
+  remains a separate leg. The in-code `ball_height` stand-in comments
+  (`fifa96_match_handlers.c` rows 04/05/06/1E, `fifa96_match_run.c`'s chase
+  `camera`) now name this leg 15.b explicitly.
+
+### 17.1 Final-review errata (phase-11, 2026-10-11)
+
+Quoted errata against §15.3/§16, first-hand re-checked in this fix wave:
+
+* **§15.3 leg 15.b promise superseded.** The bullet's "stay on the FU-75 §1.6
+  ball-record proxy until L14.8 (phase-11 T2) lands the ball's live height"
+  is superseded by §16: L14.8 landed the position machine and `FUN_0008BAF0`
+  never writes `y` (0x158810), so the height producer did not arrive with it;
+  leg 15.b stays open for a genuine height producer.
+* **§16.4 L14.8.d rationale inverted.** The bullet's "(the engine
+  `session_gate_14c32a` is the FU-146 scheduler proxy seeded 1 for live
+  matches, so the machine runs each granted frame)" reads the gate backwards.
+  First-hand `disassemble_bytes`: `0x8B65B 80 3d 2a c3 14 00 00` = `CMP byte
+  [0x14C32A],0`, `7505` = `JNZ +5`, `0x8B664 e8 87 04 00 00` = `CALL
+  0x8BAF0` — the **native ball machine runs iff the byte is 0**, the opposite
+  polarity of the scheduler site `0x4B198` (same `CMP` bytes, `7405` = `JZ
+  +5`, `0x4B1A1 e8 06 97 04 00` = `CALL 0x948AC`, runs iff the byte is
+  **nonzero**). Seed 1 would close the ball-machine gate; the engine instead
+  deliberately ignores it (`match_run_ball_machine` runs every granted frame)
+  because the gate's writer is unmodeled — FU-146 leg 2; a fresh
+  `get_xrefs_to 0x14C32A` gives three write refs, all session/front-end
+  entries (`0x1B7C8`/`0x1B7D5` in `FUN_0001B7B8`: mode 4 -> 1 else 0, and
+  `0x32DFF` in `FUN_00032DE0` -> 1), none in the match frame path. **Open
+  question (recorded, not resolved):** one byte cannot satisfy both
+  polarities; if a writer toggles it between the `0x4B198` read and the
+  `0x8B65B` read, both calls run (scheduler then machine), otherwise a live
+  match (byte 1) runs the scheduler and skips the ball machine — that decides
+  whether the engine's run-every-frame approximation is benign.
+* **§16.2/§16.4 tape off-canvas mechanism (carried by §16.2's opener).**
+  "the tape's live window keeps the ball outside the 320-wide canvas ...
+  while the stand-in camera place is (0,0,0), so the projected x' stays >
+  320" misattributes the T2 **smoke**'s stand-in camera to the tape.
+  First-hand trace of the tape's three samples
+  (instrumented `m2_slot_clean_visible`, reverted after the run): m 58
+  `cam=(0,0,0xB28) staged=(456,0,28) rot.z=-2828`, m 61 `cam=(0,0,0xB32)
+  staged=(450,0,36) rot.z=-2830`, m 72 `cam=(0,0,0xB48) staged=(432,0,60)
+  rot.z=-2828` — the goal-chain camera is parked at the goal mouth, the ball
+  is **behind** the camera, and `FIFA96_PROJECTION_NEAR` (5) rejects it
+  before any x-clip. The x'≈480 story belongs to the T2 smoke's live session
+  (the `(0,0,0)` stand-in), not the tape.
+
+## 18. Erratum (phase-13 T3, 2026-10-11): L14.8.d resolved — the `[0x14C32A]` session pair
+
+Quoted from §16.4 (the prior section is not rewritten):
+
+> **Open question (recorded, not resolved):** one byte cannot satisfy both
+> polarities; if a writer toggles it between the `0x4B198` read and the
+> `0x8B65B` read, both calls run (scheduler then machine), otherwise a live
+> match (byte 1) runs the scheduler and skips the ball machine — that decides
+> whether the engine's run-every-frame approximation is benign.
+
+**Answer (FU-166/R14, phase-13 T3).** `[0x14C32A] = ([0x14C1D0] == 4)` is a
+**per-GAME-SELECT-item session flag**, not a per-frame toggle: every ordinary
+played match (Friendly/Leagues/Tournaments/Playoffs/Modem/demo — the six
+`FUN_0001B7B8` callers pass modes `{5,0,1,2,3,4}`; only mode 4, the Practise
+launcher `FUN_00032DE0`, yields byte 1) carries **byte 0**; byte 1 is the
+single-team **Practise** session. The two consumers are therefore
+**consistent per session**:
+
+* byte 0 (every ordinary match): the ball machine runs (`0x8B65B == 0`) and
+  the scheduler is skipped (`0x4B198 != 0` is false);
+* byte 1 (Practise): the scheduler runs and the ball machine is natively dead.
+
+No value runs both, and no writer toggles the byte inside a match (the three
+writers are the front-end session entries). The engine followed this in T3:
+`fifa96_match_run_begin` seeds the settled **0**, so
+`match_run_ball_machine`'s unconditional per-frame run plus the gated
+scheduler are **byte-0-exact** (the earlier seed 1 was the disclosed
+composite, L14.8.d's old rationale, now superseded). **Residual leg:** the
+machine's call site is still unconditional — under a byte-1 session the native
+machine is dead, so a future Practise-session model must gate it on
+`session_gate_14c32a == 0`.
+

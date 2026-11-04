@@ -22,7 +22,7 @@
 
 **Tech Stack:** C11 / CMake / CTest; ASan/UBSan (`-fno-sanitize-recover=all`); the null backend as determinism source of truth; SDL3 smoke (`make game`, `DISPLAY=:1`); Ghidra MCP (read-only) for re-checks.
 
-**Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase26b-remaining-chains-r11l4-design.md` §4 (the 26b-i/26b-ii split — binding). Frozen authority: `docs/ghidra/FU273_r11l4_keeper_cpu_chain.md` + the wave `FU281`–`FU289` (already-promoted; `FU289` corrects the contact cell).
+**Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase26b-remaining-chains-r11l4-design.md` §4 (the 26b-i/26b-ii split — binding). Frozen authority: `port/spec/FU273_r11l4_keeper_cpu_chain.md` + the wave `FU281`–`FU289` (already-promoted; `FU289` corrects the contact cell).
 
 ## Global Constraints
 
@@ -30,19 +30,19 @@
 - **M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` never moves** (691 lines, immutable).
 - **M2 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (v22):** a **live** producer on a traversed path forces a re-pin — only with a **written reason + frame diff**, per-task, after the reach test is green; else keep it byte-identical.
 - **The live-chain rule (binding):** a chain is **live** only when a ported producer raiser raises its gate on a real engine path; a fixture that stages the gate is a **fake**; an unreachable surface stays a **numbered leg** with its native owner. Staging a producer's *input* (e.g. the camera pose) is legitimate.
-- **Census `59/80 = 73%`.** FU288: the wave wires nothing, so it **stays 59/80** unless a task proves a live install+dispatch. Any change updates README title + `docs/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + `tests/test_engine_m2.c` pins **in the same commit** (`floor(100 × wired/80)`).
+- **Census `59/80 = 73%`.** FU288: the wave wires nothing, so it **stays 59/80** unless a task proves a live install+dispatch. Any change updates README title + `port/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + `port/tests/test_engine_m2.c` pins **in the same commit** (`floor(100 × wired/80)`).
 - **Ghidra stays read-only** (`/FIFA96.EXE`; alias traps; fresh `get_xrefs_to`). No fakes. ISO-gated tests skip without the ISO.
 
 ## File Structure
 
 | Path | Responsibility |
 |---|---|
-| `src/fifa96_engine/fifa96_match_run.c` | the FU289 cell swap; the per-frame walk (the pre-pass reconciliation); the phase arms `:2834-2861`; `ref_step_restart` `:5956-6013` |
-| `src/fifa96_loader/fifa96_keeper.c` | the keeper machines — the **R11-L1** bridge + R11-L2/L3 |
-| `src/fifa96_engine/fifa96_match_handlers.c` | the action table (`:5512-5528`), rows `0x1B`/`0x1E`, `match_keeper_claim_apply` `:476-533` |
-| `src/fifa96_loader/fifa96_keeper_cpu.c` *(new)* | the ported CPU chain (pre-pass / record-0 machine / ladder) — **only if** T6–T8 land |
-| `tests/test_engine_match_frame.c`, `tests/test_keeper_cpu.c` *(new)* | the reach tests + mutation-RED riders |
-| `docs/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md`, `tests/test_engine_m2.c` | the census + leg register + the (expected) M2 re-pin (close-out) |
+| `port/src/fifa96_engine/fifa96_match_run.c` | the FU289 cell swap; the per-frame walk (the pre-pass reconciliation); the phase arms `:2834-2861`; `ref_step_restart` `:5956-6013` |
+| `port/src/fifa96_loader/fifa96_keeper.c` | the keeper machines — the **R11-L1** bridge + R11-L2/L3 |
+| `port/src/fifa96_engine/fifa96_match_handlers.c` | the action table (`:5512-5528`), rows `0x1B`/`0x1E`, `match_keeper_claim_apply` `:476-533` |
+| `port/src/fifa96_loader/fifa96_keeper_cpu.c` *(new)* | the ported CPU chain (pre-pass / record-0 machine / ladder) — **only if** T6–T8 land |
+| `port/tests/test_engine_match_frame.c`, `port/tests/test_keeper_cpu.c` *(new)* | the reach tests + mutation-RED riders |
+| `port/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md`, `port/tests/test_engine_m2.c` | the census + leg register + the (expected) M2 re-pin (close-out) |
 
 **Order:** T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10 (bounded wins first, then the chain bottom-up).
 
@@ -50,7 +50,7 @@
 
 ### Task 1: The determinism + reachability gate
 
-**Files:** Test: `tests/test_engine_m2.c` (read)
+**Files:** Test: `port/tests/test_engine_m2.c` (read)
 
 - [ ] **Step 1:** `make check` → 110/110; census `action_wired == 36u && phase_wired == 23u`; if moved STOP + report.
 - [ ] **Step 2:** M1/M2 `cmp` ×3 — confirm the hashes byte-identical; record the baseline `camera.pos_y == 0`.
@@ -61,7 +61,7 @@
 
 ### Task 2: The FU289 contact-kind cell swap (bounded win)
 
-**Files:** Modify `src/fifa96_engine/fifa96_match_run.c:~6002/6009`; Test `tests/test_engine_match_frame.c`
+**Files:** Modify `port/src/fifa96_engine/fifa96_match_run.c:~6002/6009`; Test `port/tests/test_engine_match_frame.c`
 
 **Interfaces:** Consumes FU289 (cell = `[0x15888C]`; the `0x894AD MOV AL,[0x15888c]; CMP EAX,3` phase-`0x18` lock).
 
@@ -74,7 +74,7 @@
 
 ### Task 3: The R11-L1 claim anim bridge (`FUN_0006E598` → `record.anim_id`)
 
-**Files:** Modify `src/fifa96_loader/fifa96_keeper.c`; `src/fifa96_engine/fifa96_match_handlers.c:476-533`; Test `tests/test_engine_match_frame.c`
+**Files:** Modify `port/src/fifa96_loader/fifa96_keeper.c`; `port/src/fifa96_engine/fifa96_match_handlers.c:476-533`; Test `port/tests/test_engine_match_frame.c`
 
 **Interfaces:** FU286 — the store core is ported (`fifa96_match_run_record_anim_install`, `match_run.c:1002-1027`); the gap is that `out->event` (`0x44`/`0x2F`/`0x45`, `keeper.c:698-700`) is written but never read.
 
@@ -87,7 +87,7 @@
 
 ### Task 4: R11-L2 + R11-L3 (the claim place pause + the offset tables)
 
-**Files:** Modify `src/fifa96_loader/fifa96_keeper.c`; Test `tests/test_engine_match_frame.c`
+**Files:** Modify `port/src/fifa96_loader/fifa96_keeper.c`; Test `port/tests/test_engine_match_frame.c`
 
 **Interfaces:** FU286 — R11-L2 = two `PUSH 1` (`0x7559E`/`0x7595F`, bytes `6a01`); R11-L3 = the adjacent tables `0x10F334 = {0,1,1,1,0,-1,-1,-1}` / `0x10F33C = {1,1,0,-1,-1,-1,0,1}`.
 
@@ -100,7 +100,7 @@
 
 ### Task 5: The row-`0x1B` wide/steer + the reachability (the load-bearing win)
 
-**Files:** Modify `src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_1B` `:3688`); Test `tests/test_engine_match_handlers.c`
+**Files:** Modify `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_1B` `:3688`); Test `port/tests/test_engine_match_handlers.c`
 
 **Interfaces:** FU285 — the stage-2 wide `0x76FC7..0x77636` (band `[0x34,0x3A]`, pan cells `0x1577BE/C0/C2`, `0x77423 CALL 0x71C94`), the `0x774DD` re-place with the **ungated self-actor** `0x77568`, and the `FUN_00076B28` steering (refs 2).
 
@@ -113,7 +113,7 @@
 
 ### Task 6: The pre-pass reconciliation (`FUN_0008D8EC` vs FU-141)
 
-**Files:** Read/modify `src/fifa96_engine/fifa96_match_run.c` (the per-frame walk); `src/fifa96_loader/fifa96_keeper_cpu.c`
+**Files:** Read/modify `port/src/fifa96_engine/fifa96_match_run.c` (the per-frame walk); `port/src/fifa96_loader/fifa96_keeper_cpu.c`
 
 **Interfaces:** FU281 — the pre-pass **is** the native per-record dispatch (`FUN_000782D0` + `FUN_0007CA54` → `CALL dword[rec+0x18]`) already modelled by FU-141. Decide **replace vs augment**; wiring alone double-dispatches.
 
@@ -126,7 +126,7 @@
 
 ### Task 7: The `FUN_000782D0` record-0 machine (skeleton)
 
-**Files:** `src/fifa96_loader/fifa96_keeper_cpu.c`; `src/fifa96_engine/fifa96_match_entities.c:698`; Test `tests/test_keeper_cpu.c`
+**Files:** `port/src/fifa96_loader/fifa96_keeper_cpu.c`; `port/src/fifa96_engine/fifa96_match_entities.c:698`; Test `port/tests/test_keeper_cpu.c`
 
 **Interfaces:** FU282 — the head per-actor counter (gated `[0x157823]!=0 && rec==[0x157A83] && phase!=5`), the **deferred** install (`0x19`/`0x4`, EBX=0/ECX=0, `[0x157AB2]:=1` on mismatch), and the ladder gate `phase==2 && [rec+0x20]==0 && [0x157C5D]!=0` → `0x78599`.
 
@@ -139,7 +139,7 @@
 
 ### Task 8: The `FUN_00077EAC` ladder (+ the shared predicates) — or legs
 
-**Files:** `src/fifa96_loader/fifa96_keeper_cpu.c`; Test `tests/test_keeper_cpu.c`
+**Files:** `port/src/fifa96_loader/fifa96_keeper_cpu.c`; Test `port/tests/test_keeper_cpu.c`
 
 **Interfaces:** FU283 — the head gates, the five arms (`0x1A`×3 / `0x1B` / `0x1C`, `ECX=1` invoke-now), the `FUN_000765C4 != 0` code-`4` fall-through (`0x781FB MOV EDX,0x4` → tail `0x782BB`); helpers `FUN_000765C4`/`FUN_00076B28`/`0x795B4`/the `0x114E04` **ramp table**.
 
@@ -152,7 +152,7 @@
 
 ### Task 9: The RED-first reach test green + the visible camera acceptance
 
-**Files:** Test `tests/test_engine_match_frame.c`; `tools/fifa96_play.c`
+**Files:** Test `port/tests/test_engine_match_frame.c`; `port/tools/fifa96_play.c`
 
 - [ ] **Step 1:** The T1 reach test now PASSES end-to-end: sit-5 → phase 9 → row `0x1E` → stage 5 → the release → `camera.pos_y == 0x50`, `tracked != 0`, and the row-0E window admits (`0x20 < pos_y < 0x70`) next granted frame.
 - [ ] **Step 2: Mutation-RED rider** — stubbing the CPU step / the sit-5 emit / the `FUN_0006E598` bridge must break it. Record each.
@@ -163,7 +163,7 @@
 
 ### Task 10: The close-out (the census + the M2 re-pin + the leg register)
 
-**Files:** `docs/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md:90`, `tests/test_engine_m2.c`; `tests/golden/engine/m2-frames.txt` (only if re-pinning)
+**Files:** `port/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md:90`, `port/tests/test_engine_m2.c`; `port/tests/golden/engine/m2-frames.txt` (only if re-pinning)
 
 - [ ] **Step 1: Census** — if T3–T8 landed a live install+dispatch, recompute + update all four docs + pins in one commit; else hold `59/80` (FU288).
 - [ ] **Step 2: M2** — re-pin (v23) with a written reason + diff if a live path changed; else byte-identical.

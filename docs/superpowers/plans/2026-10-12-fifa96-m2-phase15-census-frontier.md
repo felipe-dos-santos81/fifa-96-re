@@ -10,7 +10,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan (engine + tests), Ghidra MCP read-only (`/FIFA96.EXE`; the authoritative recon tool — rea MCP only as a secondary read-only view, context7 only if SDL3/CMake docs are needed), SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU175…FU182`; predecessor `docs/superpowers/plans/2026-10-12-fifa96-m2-phase14-live-continuity.md` + its final review; frontier map `docs/ghidra/FU174_frontier_audit.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU175…FU182`; predecessor `docs/superpowers/plans/2026-10-12-fifa96-m2-phase14-live-continuity.md` + its final review; frontier map `port/spec/FU174_frontier_audit.md`.
 
 ## Global Constraints
 
@@ -19,14 +19,14 @@
 - Evidence floor: first-hand bytes/addresses; **fresh `get_xrefs_to` for census claims**; `/FIFA96.EXE` (case-sensitive); +0x100000 rule; **alias traps** (`dword[addr]>>16` = word at `addr+2`; `>>24` = byte at `addr+3`) — **five strikes across the project**; verify CALL bytes.
 - Determinism: null backend source of truth; **M1 never moves**; **T1 is the one tape risk** (a new phase-dispatch call site in the frame body) — M2 stays v14 if byte-identical, else additive re-pin v15 with a written reason + frame diff. T2/T3 are expected tape-dormant (install-live, not tape-dispatched) → no re-pin.
 - No fakes; unreachable → numbered legs; single situation entry; ISO-gated tests skip without the ISO.
-- **Wired census rule:** if a task changes the wired count, recompute the README title percentage in the same commit per AGENTS.md; keep it consistent with the `docs/ENGINE.md` census line. Status narrative → `docs/PROGRESS.md`.
+- **Wired census rule:** if a task changes the wired count, recompute the README title percentage in the same commit per AGENTS.md; keep it consistent with the `port/ENGINE.md` census line. Status narrative → `docs/PROGRESS.md`.
 - Commits `feat/fix/docs/test`; implementers commit and push per dispatch; controller verifies (`make check` + tape `cmp` + tree clean).
 
 ---
 
 ## Wave R — parallel read-only recon, eight agents (gate: eight FU slices + reports, committed)
 
-R23–R30 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `docs/ghidra/FU17N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-175…FU-182 in one `docs(fu175-fu182)` commit after the wave returns.
+R23–R30 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `port/spec/FU17N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-175…FU-182 in one `docs(fu175-fu182)` commit after the wave returns.
 
 ### R23 → FU-175: the native act/phase dispatch seam (the enabler) (unblocks T1)
 - Question: derive `FUN_000888FC` + the `0x8B669..0x8B672` clock-tail tick + `[0x158808]` + how an act invokes a phase handler (`[0x1C]` per-record, `FUN_0008D098`'s walk) — the act-slot lifecycle, the situation→act map, and the exact engine wiring that gives `fifa96_match_dispatch_phase` a live caller. Rank which phase rows become honestly live-reachable once the seam lands.
@@ -72,28 +72,28 @@ R23–R30 run **concurrently** (the user-directed speed-up surface). Each is rea
 
 ### Task 1: T1 — native act/phase dispatch seam + row 0x17 (from R23/R29)
 
-**Files:** per the recs (`src/fifa96_engine/fifa96_match_run.c` and/or a new `fifa96_match_act.{c,h}`; `include/fifa96_engine/fifa96_match_handlers.h` + `src/fifa96_engine/fifa96_match_handlers.c` row 0x17; the phase table rows R23 proves live); tests + FU-175/FU-181 status + `docs/ENGINE.md` + README title.
+**Files:** per the recs (`port/src/fifa96_engine/fifa96_match_run.c` and/or a new `fifa96_match_act.{c,h}`; `port/src/fifa96_engine/fifa96_match_handlers.h` + `port/src/fifa96_engine/fifa96_match_handlers.c` row 0x17; the phase table rows R23 proves live); tests + FU-175/FU-181 status + `port/ENGINE.md` + README title.
 **Produces:** the act machine runs in the live frame body; `fifa96_match_dispatch_phase` has a live caller; action row 0x17 dispatches.
 **Gate T1:** the act seam + row 0x17 covered by RED/GREEN + mutation-RED tests; the phase-row census claim only if R23 proves a live-reachable phase handler (else numbered leg, keep the table honest). **Tape decision:** replay M2 — byte-identical → no re-pin (record the check), else additive v15 with reason + frame diff. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate (`make check` + tape `cmp` + smoke `p15-t1-*`) → census/README update → commit `feat(engine,fu175): act/phase dispatch seam + row 0x17`.
 
 ### Task 2: T2 — keeper cluster: 0x1F + 0x1B + 0x19 (from R24/R27/R28)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (rows 0x1F/0x1B/0x19 bodies), `include/fifa96_engine/fifa96_match_handlers.h` (table slots), helper gaps in `fifa96_action_handlers.c`/`fifa96_outfield.c`; tests + FU-176/FU-179/FU-180 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (rows 0x1F/0x1B/0x19 bodies), `port/src/fifa96_engine/fifa96_match_handlers.h` (table slots), helper gaps in `fifa96_action_handlers.c`/`fifa96_outfield.c`; tests + FU-176/FU-179/FU-180 status + `port/ENGINE.md` + README title.
 **Produces:** rows 0x1F, 0x1B and 0x19 execute end-to-end in the live chain; the 0x1F→0x1B install chain runs.
 **Gate T2:** each body RED/GREEN + mutation-RED; the 0x1F→0x1B install proven; ISO-gated live chain where the penalty/keeper route is reachable, else unit fixture + tape-dormancy pin. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p15-t2-*` → census/README update → commit `feat(engine,fu176): keeper cluster — rows 0x1F/0x1B/0x19`.
 
 ### Task 3: T3 — outfield cluster: 03 + 09 + 0x0D (from R25/R26)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (rows 03/0x0D bodies; row 09 bounded stage-0), `fifa96_outfield.c`/`fifa96_action_handlers.c` helper gaps; tests + FU-177/FU-178 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (rows 03/0x0D bodies; row 09 bounded stage-0), `fifa96_outfield.c`/`fifa96_action_handlers.c` helper gaps; tests + FU-177/FU-178 status + `port/ENGINE.md` + README title.
 **Produces:** rows 03 and 0x0D execute end-to-end; row 09 lands its deepest provable stage-0 with the arm table as numbered legs if it cannot bound in one task.
 **Gate T3:** each row RED/GREEN + mutation-RED; row 09's bounded landing + leg register. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p15-t3-*` → census/README update → commit `feat(engine,fu177): outfield cluster — rows 03/0x0D + row 09 stage-0`.
 
 ### Task 4: T4 — acceptance v15 + riders + smoke + docs + final review
 
-**Files:** `tests/test_engine_m2.c` (+ golden iff genuinely moved), `docs/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
+**Files:** `port/tests/test_engine_m2.c` (+ golden iff genuinely moved), `port/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
 **Produces:** the v15 strata (or v14-held with recorded reason); the cheap regression pins the T1–T3 reviews surface; the honest smoke record; the remaining legs with owners; the census recomputed against R30's audit.
 - [ ] Tests + riders → tape decision → smoke → docs → commit `test(engine): phase-15 acceptance tape v15 and docs` → whole-plan final review (one fix wave max) → close.
 

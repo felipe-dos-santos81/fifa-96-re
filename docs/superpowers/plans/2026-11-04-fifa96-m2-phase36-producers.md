@@ -34,7 +34,7 @@
 ## T4 — the port-coverage census
 
 - Add `fifa96_match_port_table[80]` + accessors (FU-337).
-- Add `tests/test_engine_match_port_census.c`; assert 78 `BODY`, 2
+- Add `port/tests/test_engine_match_port_census.c`; assert 78 `BODY`, 2
   `NO_BODY`, dispatch/port `fn` equality, and the canonical counts.
 - **Accept:** `port-census: bodies 78/78 no-body 2 ...` prints; the test is in
   CTest.

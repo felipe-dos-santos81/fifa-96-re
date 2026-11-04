@@ -1,6 +1,6 @@
 # FIFA 96 M2 phase-20 — the sit-8 completion + the two census rows
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. The phase-20 recon wave (R63–R70 → `docs/ghidra/FU215…FU222`) has **already run** as eight parallel READ-ONLY subagents and is committed at `268516b`/`4ef1c32`; do NOT re-recon. Implementation tasks stay serialized (one implementer at a time; never two implementation subagents in parallel).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. The phase-20 recon wave (R63–R70 → `port/spec/FU215…FU222`) has **already run** as eight parallel READ-ONLY subagents and is committed at `268516b`/`4ef1c32`; do NOT re-recon. Implementation tasks stay serialized (one implementer at a time; never two implementation subagents in parallel).
 
 **Goal:** Land the two attainable dispatch rows the phase-20 recon proved producer-live — **phase `0x10`** (→ 54) and **action `0x20`** (→ 55 = **68%**) — fix the **act-7 invoke-now cadence** (a native-fidelity bug, FU-219), and register the sit-8 tail's honest residual legs — **without synthesizing the structurally dead bit-8 gate** (FU-215) or the unported audio subsystem (FU-221).
 
@@ -8,14 +8,14 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan (`-fno-sanitize-recover=all`, engine + tests), Ghidra MCP **read-only** (`/FIFA96.EXE`, case-sensitive), SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-13-fifa96-m2-phase20-sit8-completion-design.md` (approved for planning). Recon slices: `docs/ghidra/FU215_sit8_arming_writer.md`, `FU216_fun_4b02c_rangeword.md`, `FU217_actor_cell_producer.md`, `FU218_act7_bit8_arm_gate.md`, `FU219_act7_cadence_downstream.md`, `FU220_row20_body_downstream.md`, `FU221_phase22_downstream.md`, `FU222_census_audit_phase20.md`. Predecessor plan: `docs/superpowers/plans/2026-10-13-fifa96-m2-phase19-period-end-spine.md`. Parent spec: `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`.
+**Spec:** `docs/superpowers/specs/2026-10-13-fifa96-m2-phase20-sit8-completion-design.md` (approved for planning). Recon slices: `port/spec/FU215_sit8_arming_writer.md`, `FU216_fun_4b02c_rangeword.md`, `FU217_actor_cell_producer.md`, `FU218_act7_bit8_arm_gate.md`, `FU219_act7_cadence_downstream.md`, `FU220_row20_body_downstream.md`, `FU221_phase22_downstream.md`, `FU222_census_audit_phase20.md`. Predecessor plan: `docs/superpowers/plans/2026-10-13-fifa96-m2-phase19-period-end-spine.md`. Parent spec: `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`.
 
 ## Global Constraints
 
 - **Baseline (verified at plan time, HEAD `4ef1c32`):** `make check` **110/110** (sanitized); wired **53/80 = 66%** (`32 action + 21 phase`; dispatch `26 UNSUP / 53 OK / 1 NOTF`, the `0x16` INT3 slot the one NOTF); README title **66%**; M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` (**691 lines**); M2 `441415fc423b05b2957f0a0bd51efa44f7f4651b4f8c07fcd6fb5ed6a8da9506` (**792 lines**, v19 strata).
 - **Census target (this phase):** `55/80 = 68%` = **`33 action + 22 phase`**; dispatch `24 UNSUP / 55 OK / 1 NOTF` (sum 80). Arithmetic: baseline `32 action + 21 phase`; **T2** registers phase slot `0x10` (producer live) → `32 action + 22 phase = 54/80 = 67%`; **T3** wires action row `0x20` (producer live) → `33 action + 22 phase = 55/80 = 68%`. **No hand-set number** — each task recomputes `floor(100 × wired / 80)` *when its count moves*, and lands the count in its **own** commit.
   - *Ruling (spec vs recon arithmetic):* the spec §6 renders the target as "`34 action + 21 phase`". The spec §3.1 and FU-222 §3 are explicit that the two movers are **phase `0x10` (+1 phase → 22)** and **action `0x20` (+1 action → 33)**; `33 + 22 = 55`. The "34 action + 21 phase" is a transposition typo; the plan uses **`33 action + 22 phase`** (the recon-authoritative split).
-- **Wired census rule (AGENTS.md:88–92):** a row counts **only when a ported path installs AND dispatches** it. Registering a slot whose producer never fires does **not** count. Keep README title + `docs/ENGINE.md` (title + the two dispatch `N/80` lines, sum-to-80) + `docs/PROGRESS.md` + `AGENTS.md:90` consistent **in the same commit** as the count move.
+- **Wired census rule (AGENTS.md:88–92):** a row counts **only when a ported path installs AND dispatches** it. Registering a slot whose producer never fires does **not** count. Keep README title + `port/ENGINE.md` (title + the two dispatch `N/80` lines, sum-to-80) + `docs/PROGRESS.md` + `AGENTS.md:90` consistent **in the same commit** as the count move.
 - **Evidence floor:** first-hand bytes/addresses; **fresh `get_xrefs_to`/`read_memory`/`disassemble_bytes` for any census/reachability claim**; `/FIFA96.EXE` case-sensitive; LE-image globals at `+0x100000`; **alias traps** (`dword[addr]>>16` = word at `addr+2`; `>>24` = byte at `addr+3`); verify CALL rel32 before trusting a target. Ghidra stays **read-only** (no rename/comment/label/function/script/project save).
 - **Determinism — the spine:** null backend is source of truth; **M1 never moves**; M2 starts at the v19 bytes `441415fc…` and ends **byte-identical** (a **strata-only v20 label**, the phase-15/19 precedent — **no re-pin**). Every phase-20 landing is render-invisible and/or dormant on the scripted tape (the tape stages no period-end completion and reaches neither sit-8 producer). **Any *unexplained* presented-frame move is a regression to investigate, never a re-pin.**
 - **No fakes.** The dead bit-8 gate is documented, never synthesized (FU-215: no instruction sets bit 8 of `[0x14C1D4]`/`[0x14C1D6]`). The audio ring (`0x974DC` → `0x155C8C`) is out of scope (FU-221). Every unreachable native is a numbered leg with its native owner. ISO-gated tests skip cleanly without the ISO.
@@ -27,22 +27,22 @@
 
 | File | Responsibility (phase-20 touch) |
 |---|---|
-| `src/fifa96_engine/fifa96_match_run.c` | T1 the act-7 invoke expression (`:2890`); T3 `match_run_free_record` helper (near `match_run_phase_pick`, `:2696`) + the sit-8 re-init block in `set_piece` direct path (before `:3133`); T4 the arm-0 ball place inside the phase-`0x1D` arm-0 (or the row-`0x20` body). |
-| `src/fifa96_engine/fifa96_match_handlers.c` | T2 phase slot `0x10` (`:5210` NULL → `fifa96_match_phase_10`, fix stale comment `:5211`); T3 action slot `0x20` (`:5149` NULL → `fifa96_match_action_20`); T4 the arm-0 ball place in `fifa96_match_action_20` (`:5001..5084`). |
-| `include/fifa96_engine/fifa96_match_run.h` | T3 the per-side `actor_1587cc[2]` cells; T4 any ball-record cell (only if chosen). |
-| `tests/test_engine_m2.c` | T1 rewrite `run_phase19_riders` blocks 3/4 (`:3613`, `:3645`); T2/T3 census pins (`:3020`, `:3045`, `:3310`, `:3366`, `:3387`) + new dispatch riders; T6 the v20 label + riders. |
-| `tests/test_engine_match_handlers.c` | T2 phase-`0x10` dispatch test; T4 row-`0x20` ball-place test. |
-| `docs/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md:90` | census sync (T2, T3) + the leg register (T5) + acceptance narrative (T6). |
-| `docs/ghidra/FU215…FU222` | T5 appended errata (prior sections never rewritten). |
+| `port/src/fifa96_engine/fifa96_match_run.c` | T1 the act-7 invoke expression (`:2890`); T3 `match_run_free_record` helper (near `match_run_phase_pick`, `:2696`) + the sit-8 re-init block in `set_piece` direct path (before `:3133`); T4 the arm-0 ball place inside the phase-`0x1D` arm-0 (or the row-`0x20` body). |
+| `port/src/fifa96_engine/fifa96_match_handlers.c` | T2 phase slot `0x10` (`:5210` NULL → `fifa96_match_phase_10`, fix stale comment `:5211`); T3 action slot `0x20` (`:5149` NULL → `fifa96_match_action_20`); T4 the arm-0 ball place in `fifa96_match_action_20` (`:5001..5084`). |
+| `port/src/fifa96_engine/fifa96_match_run.h` | T3 the per-side `actor_1587cc[2]` cells; T4 any ball-record cell (only if chosen). |
+| `port/tests/test_engine_m2.c` | T1 rewrite `run_phase19_riders` blocks 3/4 (`:3613`, `:3645`); T2/T3 census pins (`:3020`, `:3045`, `:3310`, `:3366`, `:3387`) + new dispatch riders; T6 the v20 label + riders. |
+| `port/tests/test_engine_match_handlers.c` | T2 phase-`0x10` dispatch test; T4 row-`0x20` ball-place test. |
+| `port/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md:90` | census sync (T2, T3) + the leg register (T5) + acceptance narrative (T6). |
+| `port/spec/FU215…FU222` | T5 appended errata (prior sections never rewritten). |
 
 ---
 
 ### Task 1: T1 — the act-7 invoke-now cadence fix + the stale phase-`0x10` evidence-string audit
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c:2875-2891` (the invoke expression + comment)
-- Modify: `tests/test_engine_m2.c:3539-3667` (`run_phase19_riders` blocks 3 and 4)
-- Test: `tests/test_engine_m2.c` (same file)
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c:2875-2891` (the invoke expression + comment)
+- Modify: `port/tests/test_engine_m2.c:3539-3667` (`run_phase19_riders` blocks 3 and 4)
+- Test: `port/tests/test_engine_m2.c` (same file)
 
 **Interfaces:**
 - Consumes: the existing `fifa96_match_act_dispatch(mr, act, stage, invoke)` seam (`fifa96_match_act.c:38`) and `fifa96_match_act_tick` (`:55`), both unchanged.
@@ -50,7 +50,7 @@
 
 **Why (FU-219, byte-confirmed):** native `0x8AEAE MOV EBX,1` / `0x8AEB3 MOV EAX,7` / `0x8AEBA CALL 0x888FC` — the sit-8 arm installs act 7 and forces **invoke-now**; the seam `0x8892E TEST BX,BX` / `0x88937 CALL dword[0x158808]` then runs the phase-`0x1D` body immediately. The port passes `invoke = 0` (`match_run.c:2890`, `out.act == 2u ? 1 : 0`), deferring it one granted frame (FU208-L4 = FU219-L1). The fix is that one expression.
 
-- [ ] **Step 1: Write the failing assertion (RED).** In `tests/test_engine_m2.c`, in `run_phase19_riders` **block 3** (the SELECTOR SLIP block), change the two post-`phase_drive` assertions that encode the deferred model:
+- [ ] **Step 1: Write the failing assertion (RED).** In `port/tests/test_engine_m2.c`, in `run_phase19_riders` **block 3** (the SELECTOR SLIP block), change the two post-`phase_drive` assertions that encode the deferred model:
 
   - `assert(mr.state.phase == 0x0Cu);        /* the completed 3 < 4 no-ET arm */` → `assert(mr.state.phase == 0x10u);        /* arm 0 wrote phase 0x10 (0x898DD) */`
   - `assert(mr.act.stage == 0u);             /* the deferred sit-8 install */` → `assert(mr.act.stage == 1u);             /* invoke-now: arm 0 ran on the dispatch (FU-219) */`
@@ -64,7 +64,7 @@
 
 - [ ] **Step 3: Implement the one-expression fix.**
 
-  In `src/fifa96_engine/fifa96_match_run.c`, replace the dispatch at `:2889-2890`:
+  In `port/src/fifa96_engine/fifa96_match_run.c`, replace the dispatch at `:2889-2890`:
 
   ```c
       rc = (fifa96_err_t)fifa96_match_act_dispatch(
@@ -76,7 +76,7 @@
 
 - [ ] **Step 4: Rewrite `run_phase19_riders` block 4 for the invoke-now cadence.**
 
-  In `tests/test_engine_m2.c`, the PHASE-SLOT dereference block currently reads (around `:3643-3657`):
+  In `port/tests/test_engine_m2.c`, the PHASE-SLOT dereference block currently reads (around `:3643-3657`):
 
   ```c
       assert(fifa96_match_run_phase_drive(&mr) == 1);
@@ -121,7 +121,7 @@
 
 - [ ] **Step 5: Audit (record, do not fix) the stale phase-`0x10` evidence strings.**
 
-  Record — in the implementer report — the exact stale strings to be corrected by **T2** (per FU-222-L6, "same commit that flips the slot"): the phase-`0x10` evidence comment at `src/fifa96_engine/fifa96_match_handlers.c:5211` ("phase 0x10 is never written … the sole writer sits inside the unwired row 0x1D body") and the three `assert(fifa96_match_phase_table[0x10].fn == NULL); /* never written (body ported) */` pins at `tests/test_engine_m2.c:3045`, `:3310`, `:3366`. Do **not** edit them here.
+  Record — in the implementer report — the exact stale strings to be corrected by **T2** (per FU-222-L6, "same commit that flips the slot"): the phase-`0x10` evidence comment at `port/src/fifa96_engine/fifa96_match_handlers.c:5211` ("phase 0x10 is never written … the sole writer sits inside the unwired row 0x1D body") and the three `assert(fifa96_match_phase_table[0x10].fn == NULL); /* never written (body ported) */` pins at `port/tests/test_engine_m2.c:3045`, `:3310`, `:3366`. Do **not** edit them here.
 
 - [ ] **Step 6: Run the full gate.**
 
@@ -130,13 +130,13 @@
 
 - [ ] **Step 7: Replay the tape (expect byte-identical).**
 
-  Run: `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and `./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt && echo M1-IDENTICAL`
+  Run: `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and `./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt && echo M1-IDENTICAL`
   Expected: both `…-IDENTICAL`. The sit-8 route is tape-dormant (no period-end completion), so the cadence fix moves no presented frame. If M2 differs, STOP — that is a regression to investigate (the spec's T1 rule), not a re-pin.
 
 - [ ] **Step 8: Commit.**
 
   ```bash
-  git add src/fifa96_engine/fifa96_match_run.c tests/test_engine_m2.c
+  git add port/src/fifa96_engine/fifa96_match_run.c port/tests/test_engine_m2.c
   git commit -m "fix(engine,fu219): act-7 invoke-now cadence (arm 0 on the dispatch frame)"
   git push origin main
   ```
@@ -148,10 +148,10 @@
 ### Task 2: T2 — register phase slot `0x10` (53 → 54)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c:5210-5211` (slot `0x10` NULL → `fifa96_match_phase_10` + corrected evidence string)
-- Modify: `tests/test_engine_m2.c:3020`, `:3045`, `:3310`, `:3366`, `:3387` (census pins + the phase-`0x10` NULL pins)
-- Modify: `README.md:1`, `docs/ENGINE.md:8`, `docs/ENGINE.md:268`, `docs/PROGRESS.md` (census), `AGENTS.md:90`
-- Test: `tests/test_engine_m2.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c:5210-5211` (slot `0x10` NULL → `fifa96_match_phase_10` + corrected evidence string)
+- Modify: `port/tests/test_engine_m2.c:3020`, `:3045`, `:3310`, `:3366`, `:3387` (census pins + the phase-`0x10` NULL pins)
+- Modify: `README.md:1`, `port/ENGINE.md:8`, `port/ENGINE.md:268`, `docs/PROGRESS.md` (census), `AGENTS.md:90`
+- Test: `port/tests/test_engine_m2.c`
 
 **Interfaces:**
 - Consumes: T1's invoke-now cadence (the phase-`0x1D` arm 0 writes phase `0x10` on the sit-8 dispatch frame via `match_run_write_phase(mr, 0x10)` at `match_run.c:6090-6091`).
@@ -161,7 +161,7 @@
 
 - [ ] **Step 1: Write the failing assertions (RED).**
 
-  In `tests/test_engine_m2.c`:
+  In `port/tests/test_engine_m2.c`:
   - `run_census_riders` (`:3020`): `assert(action_wired == 32u && phase_wired == 21u);  /* 53/80 = 66% … */` → `assert(action_wired == 32u && phase_wired == 22u);  /* 54/80 = 67% (T2: +phase 0x10) */`
   - `run_census_riders` (`:3045`): `assert(fifa96_match_phase_table[0x10].fn == NULL);  /* never written (body ported) */` → `assert(fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10);  /* T2: write live via row 0x1D arm 0 (FU-222) */`
   - `run_phase17_riders` (`:3387`): `assert(action_wired == 32u && phase_wired == 21u);    /* 53/80 = 66% … */` → `assert(action_wired == 32u && phase_wired == 22u);    /* 54/80 = 67% */`
@@ -176,7 +176,7 @@
       assert(fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10);
   ```
 
-  (A deeper value assertion is optional; the census pin + slot identity is the mutation-RED gate. If a value check is added, drive it via a dedicated fixture in `tests/test_engine_match_handlers.c` calling `fifa96_match_dispatch_phase_record(&mr, 0x10u, e, -1)` with `e->active == 0` and asserting `e->target_x == 0x3C0 && e->target_y == 0 && e->target_z == 0x840`.)
+  (A deeper value assertion is optional; the census pin + slot identity is the mutation-RED gate. If a value check is added, drive it via a dedicated fixture in `port/tests/test_engine_match_handlers.c` calling `fifa96_match_dispatch_phase_record(&mr, 0x10u, e, -1)` with `e->active == 0` and asserting `e->target_x == 0x3C0 && e->target_y == 0 && e->target_z == 0x840`.)
 
 - [ ] **Step 2: Run to verify RED.**
 
@@ -185,7 +185,7 @@
 
 - [ ] **Step 3: Flip the slot + correct the stale evidence.**
 
-  In `src/fifa96_engine/fifa96_match_handlers.c`, replace the `{0x10, NULL, "…"}` entry at `:5210-5211` with:
+  In `port/src/fifa96_engine/fifa96_match_handlers.c`, replace the `{0x10, NULL, "…"}` entry at `:5210-5211` with:
 
   ```c
       {0x10, fifa96_match_phase_10,
@@ -199,22 +199,22 @@
 
 - [ ] **Step 5: Replay the tape.**
 
-  Run: `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and the M1 `cmp`
+  Run: `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and the M1 `cmp`
   Expected: both identical.
 
 - [ ] **Step 6: Sync the four census surfaces (`54/80 = 67%`).**
 
   Update in the same commit:
   - `README.md:1` → `# FIFA 96 (DOS, 1995) — Reverse Engineering (67%)`
-  - `docs/ENGINE.md:8` (status line) → `54/80 dispatch rows wired (32 action + the wired phase rows … 0x10, …)`
-  - `docs/ENGINE.md:268` (Action-dispatch bullet) → `**54/80 rows wired**`
+  - `port/ENGINE.md:8` (status line) → `54/80 dispatch rows wired (32 action + the wired phase rows … 0x10, …)`
+  - `port/ENGINE.md:268` (Action-dispatch bullet) → `**54/80 rows wired**`
   - `docs/PROGRESS.md` (the phase-20 close-out / census line) → `54/80 = 67%` (`32 action + 22 phase`; dispatch `25 UNSUP / 54 OK / 1 NOTF`, sum 80)
   - `AGENTS.md:90` → `(currently 54/80 → 67%)`
 
 - [ ] **Step 7: Commit.**
 
   ```bash
-  git add src/fifa96_engine/fifa96_match_handlers.c tests/test_engine_m2.c README.md docs/ENGINE.md docs/PROGRESS.md AGENTS.md
+  git add port/src/fifa96_engine/fifa96_match_handlers.c port/tests/test_engine_m2.c README.md port/ENGINE.md docs/PROGRESS.md AGENTS.md
   git commit -m "feat(engine,fu222): register phase 0x10 (row 0x1D arm-0 writer live) — 54/80 = 67%"
   git push origin main
   ```
@@ -226,12 +226,12 @@
 ### Task 3: T3 — the `[0x1587D4]` actor-cell bind + flip action row `0x20` (54 → 55 = 68%)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (new `match_run_free_record` helper near `:2696`; the sit-8 re-init block in `set_piece` immediately before the terminal `return match_run_situation_side(mr, situation, side, 1);` at `:3133`)
-- Modify: `include/fifa96_engine/fifa96_match_run.h` (the per-side `actor_1587cc[2]` cells + reset/begin zeroing note)
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c:5149` (`{0x20, NULL}` → `fifa96_match_action_20` + corrected FU-210 note)
-- Modify: `tests/test_engine_m2.c:3020`, `:3387` (census pins → `33u`/`22u`) + a new bind/install rider
-- Modify: `README.md:1`, `docs/ENGINE.md:8`, `:268`, `docs/PROGRESS.md`, `AGENTS.md:90` (census)
-- Test: `tests/test_engine_m2.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (new `match_run_free_record` helper near `:2696`; the sit-8 re-init block in `set_piece` immediately before the terminal `return match_run_situation_side(mr, situation, side, 1);` at `:3133`)
+- Modify: `port/src/fifa96_engine/fifa96_match_run.h` (the per-side `actor_1587cc[2]` cells + reset/begin zeroing note)
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c:5149` (`{0x20, NULL}` → `fifa96_match_action_20` + corrected FU-210 note)
+- Modify: `port/tests/test_engine_m2.c:3020`, `:3387` (census pins → `33u`/`22u`) + a new bind/install rider
+- Modify: `README.md:1`, `port/ENGINE.md:8`, `:268`, `docs/PROGRESS.md`, `AGENTS.md:90` (census)
+- Test: `port/tests/test_engine_m2.c`
 
 **Interfaces:**
 - Consumes: T1's invoke-now cadence (the phase-`0x1D` arm 0, and its gated row-`0x20` install, now run on the sit-8 dispatch frame — so the bind must set `actor_1587d4` *before* the act dispatch); the existing gated install at `match_run.c:6110-6118` (`if (mr->actor_1587d4 >= 0 …) fifa96_match_entities_install(actor, phase, 0x20u, 0u)`).
@@ -241,7 +241,7 @@
 
 - [ ] **Step 1: Write the failing `match_run_free_record` unit test (RED).**
 
-  Add a test (in `tests/test_engine_m2.c`, near the other pure-state riders) — but first expose the helper: since it is `static` in `match_run.c` it is not linkable; test it through the `set_piece` bind instead (Step 5's rider). For the RED gate, add the census pin change from Step 6 first: `assert(action_wired == 32u && phase_wired == 22u);` → `assert(action_wired == 33u && phase_wired == 22u);  /* 55/80 = 68% (T3: +action 0x20) */` in both `run_census_riders` (`:3020`) and `run_phase17_riders` (`:3387`). Run to confirm FAIL (`action_wired` is 32).
+  Add a test (in `port/tests/test_engine_m2.c`, near the other pure-state riders) — but first expose the helper: since it is `static` in `match_run.c` it is not linkable; test it through the `set_piece` bind instead (Step 5's rider). For the RED gate, add the census pin change from Step 6 first: `assert(action_wired == 32u && phase_wired == 22u);` → `assert(action_wired == 33u && phase_wired == 22u);  /* 55/80 = 68% (T3: +action 0x20) */` in both `run_census_riders` (`:3020`) and `run_phase17_riders` (`:3387`). Run to confirm FAIL (`action_wired` is 32).
 
 - [ ] **Step 2: Run to verify RED.**
 
@@ -250,7 +250,7 @@
 
 - [ ] **Step 3: Add the per-side cells to the run struct.**
 
-  In `include/fifa96_engine/fifa96_match_run.h`, next to `int32_t actor_1587d4;` (`:633`), add:
+  In `port/src/fifa96_engine/fifa96_match_run.h`, next to `int32_t actor_1587d4;` (`:633`), add:
 
   ```c
     /* FU-217 §3.2/§8 (M2 phase-20 T3): the per-side source table
@@ -266,7 +266,7 @@
 
 - [ ] **Step 4: Add `match_run_free_record` + the re-init block.**
 
-  In `src/fifa96_engine/fifa96_match_run.c`, immediately **after** `match_run_phase_pick` (ends `:2701`), add:
+  In `port/src/fifa96_engine/fifa96_match_run.c`, immediately **after** `match_run_phase_pick` (ends `:2701`), add:
 
   ```c
   /* FU-217 §3.2/§8 (M2 phase-20 T3): the native FUN_000897F4 free-record
@@ -310,7 +310,7 @@
 
 - [ ] **Step 5: Flip the row-`0x20` slot + correct the FU-210 note.**
 
-  In `src/fifa96_engine/fifa96_match_handlers.c:5149`, replace `{0x20, NULL, "FU-210 §2/§3/§4/§7.3 …"}` with:
+  In `port/src/fifa96_engine/fifa96_match_handlers.c:5149`, replace `{0x20, NULL, "FU-210 §2/§3/§4/§7.3 …"}` with:
 
   ```c
       {0x20, fifa96_match_action_20,
@@ -321,7 +321,7 @@
 
 - [ ] **Step 6: Add the bind/install rider (the behavioural gate).**
 
-  In `tests/test_engine_m2.c`, add a new block to `run_phase19_riders` (or a dedicated `run_phase20_riders`) that drives a real period-4 completion and asserts the bind + install. It must be mutation-RED (removing the re-init block → `actor_1587d4` stays NONE, `global_157a4c` stays 0, no code 0x20). Shape:
+  In `port/tests/test_engine_m2.c`, add a new block to `run_phase19_riders` (or a dedicated `run_phase20_riders`) that drives a real period-4 completion and asserts the bind + install. It must be mutation-RED (removing the re-init block → `actor_1587d4` stays NONE, `global_157a4c` stays 0, no code 0x20). Shape:
 
   ```c
     struct fifa96_match_run mr;
@@ -353,21 +353,21 @@
 
 - [ ] **Step 8: Replay the tape.**
 
-  Run: `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and the M1 `cmp`
+  Run: `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and the M1 `cmp`
   Expected: both identical (the tape reaches no period-4 completion; the cell never moves).
 
 - [ ] **Step 9: Sync the four census surfaces (`55/80 = 68%`).**
 
   - `README.md:1` → `… (68%)`
-  - `docs/ENGINE.md:8` → `55/80 dispatch rows wired (33 action + …)`
-  - `docs/ENGINE.md:268` → `**55/80 rows wired** (33 action + …)`
+  - `port/ENGINE.md:8` → `55/80 dispatch rows wired (33 action + …)`
+  - `port/ENGINE.md:268` → `**55/80 rows wired** (33 action + …)`
   - `docs/PROGRESS.md` → `55/80 = 68%` (`33 action + 22 phase`; dispatch `24 UNSUP / 55 OK / 1 NOTF`, sum 80)
   - `AGENTS.md:90` → `(currently 55/80 → 68%)`
 
 - [ ] **Step 10: Commit.**
 
   ```bash
-  git add src/fifa96_engine/fifa96_match_run.c include/fifa96_engine/fifa96_match_run.h src/fifa96_engine/fifa96_match_handlers.c tests/test_engine_m2.c README.md docs/ENGINE.md docs/PROGRESS.md AGENTS.md
+  git add port/src/fifa96_engine/fifa96_match_run.c port/src/fifa96_engine/fifa96_match_run.h port/src/fifa96_engine/fifa96_match_handlers.c port/tests/test_engine_m2.c README.md port/ENGINE.md docs/PROGRESS.md AGENTS.md
   git commit -m "feat(engine,fu217): the sit-8 actor-cell bind + action row 0x20 — 55/80 = 68%"
   git push origin main
   ```
@@ -379,18 +379,18 @@
 ### Task 4: T4 — row-`0x20` body parity: the arm-0 ball-record place (FU-220/FU210-L2)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` (the `fifa96_match_action_20` arm 0, `:5015-5034`)
-- Test: `tests/test_engine_match_handlers.c` (`test_action_20_body_arms`, `:968-1061`)
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` (the `fifa96_match_action_20` arm 0, `:5015-5034`)
+- Test: `port/tests/test_engine_match_handlers.c` (`test_action_20_body_arms`, `:968-1061`)
 
 **Interfaces:**
-- Consumes: the ported body `fifa96_match_action_20` (now dispatched via T3) and the ball surface `struct fifa96_match_ball` (`mr->entities.ball`, fields `x/y/z` — `include/fifa96_engine/fifa96_match_entities.h`).
+- Consumes: the ported body `fifa96_match_action_20` (now dispatched via T3) and the ball surface `struct fifa96_match_ball` (`mr->entities.ball`, fields `x/y/z` — `port/src/fifa96_engine/fifa96_match_entities.h`).
 - Produces: arm 0 additionally writes the **reachable ball place** — the native `[[actor]+0x7A6]` ball-record place (`0x84FBC..0x84FDB`): `[ball+0x4D]=0`, `[ball+0x55]=0xB10`, then `0x79B6C` → `ball pos (0, 0, 0xB10)`. The port maps the reachable subset onto `mr->entities.ball.{x,y,z} = (0, 0, 0xB10)`.
 
 **Why (FU-220 §3.2 arm 0 / §4(a) / §7):** native arm 0 places the actor team's ball record at `(0, 0, 0xB10)` (a genuine record write). The port's `fifa96_match_action_20` arm 0 currently does only the actor `match_sp_anchor` (`handlers.c:5024`). FU-220 §7 is explicit: **assert only the genuine writes the port performs — never a write it does not.** The unportable subset — the ball-record anim/frame (`ball+0x28`/`0x3D`), the two `0x8CFAC` 11-stride walks, arm-4's `0x7A490` record write-back, the `0x73E08` block commit, the `0x73DC4`/`0x700F4` camera cells — stays numbered legs (FU220-L1/L2/L3/L4/L5).
 
 - [ ] **Step 1: Write the failing test (RED).**
 
-  In `tests/test_engine_match_handlers.c::test_action_20_body_arms`, after the arm-0 stage/anim asserts, add:
+  In `port/tests/test_engine_match_handlers.c::test_action_20_body_arms`, after the arm-0 stage/anim asserts, add:
 
   ```c
     /* T4 (FU-220 §3.2 arm 0 / §4(a)): the arm-0 ball-record place maps onto the
@@ -429,13 +429,13 @@
 
 - [ ] **Step 5: Replay the tape.**
 
-  Run: `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and the M1 `cmp`
+  Run: `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and the M1 `cmp`
   Expected: both identical (the row-`0x20` body dispatches 0 times on the tape).
 
 - [ ] **Step 6: Commit.**
 
   ```bash
-  git add src/fifa96_engine/fifa96_match_handlers.c tests/test_engine_match_handlers.c
+  git add port/src/fifa96_engine/fifa96_match_handlers.c port/tests/test_engine_match_handlers.c
   git commit -m "feat(engine,fu220): row-0x20 arm-0 ball-record place parity"
   git push origin main
   ```
@@ -447,15 +447,15 @@
 ### Task 5: T5 — the residual legs + the appended errata (docs)
 
 **Files:**
-- Modify: `docs/ENGINE.md` (the phase-20 frontier / leg register)
+- Modify: `port/ENGINE.md` (the phase-20 frontier / leg register)
 - Modify: `docs/PROGRESS.md` (the leg register + the FU211-L2 dissolution narrative)
-- Modify: `docs/ghidra/FU216_fun_4b02c_rangeword.md`, `docs/ghidra/FU217_actor_cell_producer.md`, `docs/ghidra/FU221_phase22_downstream.md` (append errata only — **prior sections are never rewritten**)
+- Modify: `port/spec/FU216_fun_4b02c_rangeword.md`, `port/spec/FU217_actor_cell_producer.md`, `port/spec/FU221_phase22_downstream.md` (append errata only — **prior sections are never rewritten**)
 
 **Interfaces:**
 - Consumes: the recon slices FU215–FU222 (already committed) and the T1–T4 landings.
 - Produces: an honest phase-20 leg register with native owners, and appended errata — no code.
 
-- [ ] **Step 1: Register the phase-20 residual legs in `docs/ENGINE.md`.**
+- [ ] **Step 1: Register the phase-20 residual legs in `port/ENGINE.md`.**
 
   Add the phase-20 leg block naming each with its native owner: **FU215-L1…L5** (the dead bit-8 gate + the front-end producer chain), **FU216-L1/L3** (the `0x74312` unnamed blob + the engine's missing analog), **FU217-L1/L2/L3/L5** (the scan exactness, the arm-8 no-winner rebind `0x89DCF`, the per-side cells' consumer, the `[0x157AAF]` side store), **FU219-L1…L6** (the invoke-now superset now landed at L1 but the seam latch, arm-0 per-record writes, frame-boundary gate, arm-9 `[0x157AC0]` write-back, fall-through-vs-switch remain), **FU220-L1…L6** (the ball place remainder, the anim walks, the arm-4 integral, the block commit, the camera sinks, the prologue signedness), **FU221-L1** (the audio subsystem — parked). State for each: no fake producer; the dead bit-8 gate (FU-215) is documented, not synthesized.
 
@@ -474,7 +474,7 @@
 - [ ] **Step 4: Commit.**
 
   ```bash
-  git add docs/ENGINE.md docs/PROGRESS.md docs/ghidra/FU216_fun_4b02c_rangeword.md docs/ghidra/FU217_actor_cell_producer.md docs/ghidra/FU221_phase22_downstream.md
+  git add port/ENGINE.md docs/PROGRESS.md port/spec/FU216_fun_4b02c_rangeword.md port/spec/FU217_actor_cell_producer.md port/spec/FU221_phase22_downstream.md
   git commit -m "docs(fu215-fu222): phase-20 leg register + appended errata"
   git push origin main
   ```
@@ -486,10 +486,10 @@
 ### Task 6: T6 — acceptance: the v20 strata label + the riders + smoke + final review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (the version-strata label header; a `run_phase20_riders` if T1/T3 did not already add one; the acceptance doc comment)
-- Modify: `tests/golden/engine/m2-frames.txt` **only if** a byte move is genuinely earned (the plan's verdict: it is **not** — strata label only)
+- Modify: `port/tests/test_engine_m2.c` (the version-strata label header; a `run_phase20_riders` if T1/T3 did not already add one; the acceptance doc comment)
+- Modify: `port/tests/golden/engine/m2-frames.txt` **only if** a byte move is genuinely earned (the plan's verdict: it is **not** — strata label only)
 - Modify: `docs/screens/*` only if the SDL3 smoke frames move
-- Modify: `docs/PROGRESS.md`, `docs/ENGINE.md` (acceptance narrative)
+- Modify: `docs/PROGRESS.md`, `port/ENGINE.md` (acceptance narrative)
 
 **Interfaces:**
 - Consumes: T1–T5 landings.
@@ -497,7 +497,7 @@
 
 - [ ] **Step 1: Bump the acceptance strata label to v20 (no re-pin).**
 
-  In `tests/test_engine_m2.c`, locate the current strata label (the v19 header — `<…> v19 …`, the phase-19 acceptance comment near `:1467` / the file header). Add the v20 label describing the phase-20 cohort (phase `0x10`, action `0x20`, the FU-219 cadence fix, the sit-8 bind, the ball place) with the explicit statement that the golden **stays `441415fc…` (strata-only, no re-pin)** — the phase-15 v14→v15 / phase-19 v18→v19 precedent.
+  In `port/tests/test_engine_m2.c`, locate the current strata label (the v19 header — `<…> v19 …`, the phase-19 acceptance comment near `:1467` / the file header). Add the v20 label describing the phase-20 cohort (phase `0x10`, action `0x20`, the FU-219 cadence fix, the sit-8 bind, the ball place) with the explicit statement that the golden **stays `441415fc…` (strata-only, no re-pin)** — the phase-15 v14→v15 / phase-19 v18→v19 precedent.
 
 - [ ] **Step 2: Verify the riders exist and are mutation-RED.**
 
@@ -515,7 +515,7 @@
 
 - [ ] **Step 4: Replay both tapes (the honest no-re-pin).**
 
-  Run: `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and the M1 `cmp`
+  Run: `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt && echo M2-IDENTICAL` and the M1 `cmp`
   Expected: both identical. If M2 differs and the move is native-faithful *and* explained, re-pin with the written reason + frame diff (the AGENTS.md golden rule); otherwise it is a regression — STOP and report. The plan's verdict (FU-215/FU-222): **no phase-20 landing moves M2.**
 
 - [ ] **Step 5: SDL3 smoke (honest record).**
@@ -524,12 +524,12 @@
 
 - [ ] **Step 6: Finalise the acceptance docs.**
 
-  In `docs/PROGRESS.md` / `docs/ENGINE.md`, record: `55/80 = 68%` (`33 action + 22 phase`; dispatch `24 UNSUP / 55 OK / 1 NOTF`), M1 `09b726b7…` unmoved, M2 `441415fc…` byte-identical (v20 strata label), `make check` **110/110+** (sanitized), and the remaining legs.
+  In `docs/PROGRESS.md` / `port/ENGINE.md`, record: `55/80 = 68%` (`33 action + 22 phase`; dispatch `24 UNSUP / 55 OK / 1 NOTF`), M1 `09b726b7…` unmoved, M2 `441415fc…` byte-identical (v20 strata label), `make check` **110/110+** (sanitized), and the remaining legs.
 
 - [ ] **Step 7: Commit.**
 
   ```bash
-  git add tests/test_engine_m2.c docs/PROGRESS.md docs/ENGINE.md
+  git add port/tests/test_engine_m2.c docs/PROGRESS.md port/ENGINE.md
   git commit -m "test(engine): phase-20 acceptance tape v20 and docs"
   git push origin main
   ```

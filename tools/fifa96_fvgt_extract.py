@@ -398,7 +398,7 @@ def main(argv=None):
     ap.add_argument("--dump", required=True, help="guest RAM dump (guest.bin)")
     ap.add_argument("--trace", help="session trace (recorded in provenance)")
     ap.add_argument("--session", help="session id (recorded in provenance)")
-    ap.add_argument("--out-dir", default=str(ROOT / "tests" / "golden" / "vgt"))
+    ap.add_argument("--out-dir", default=str(ROOT / "port" / "tests" / "golden" / "vgt"))
     ap.add_argument("--stem", default="fvgt-01")
     ap.add_argument("--delta-load", type=lambda s: int(s, 0),
                     default=DEFAULT_DELTA_LOAD,

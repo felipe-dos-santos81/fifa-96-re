@@ -4,7 +4,7 @@ Date: 2026-10-13
 Status: approved for planning (user chose the "sit-8 / extra-time tail" cohort, then approach B — the full completion)
 Parent spec: `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`
 Predecessor plan: `docs/superpowers/plans/2026-10-13-fifa96-m2-phase19-period-end-spine.md` (closed; `53/80 = 66%`)
-Recon: `docs/ghidra/FU215…FU222` (phase-20 wave R63–R70, committed `268516b`)
+Recon: `port/spec/FU215…FU222` (phase-20 wave R63–R70, committed `268516b`)
 
 ## 1. Context
 
@@ -14,9 +14,9 @@ Phase-19's close-out left a frontier of **10 named residual legs**. The phase-20
 
 1. **The bit-8 arming route is structurally dead** (FU-215, FU-216). Native situation `8` has two producers: the range-word test (**bit 8 = `0x100`** of `[0x14C1D4]|[0x14C1D6]`, `FUN_0004B02C` `0x4B0CB TEST AH,1`) and the period-end test (`[0x157AC2]==4`, `FUN_00088860` `0x888C8`). An exhaustive `search_instructions` over all 235 017 instructions found **no instruction anywhere writes bit 8** of either word (the only high-byte writers set bit 9). The bit-8 branch is unreachable by construction; situation 8 arms **only** through `[0x157AC2]==4`, the path phase-19 T1 already wired. A **third** reader+dispatch site (`0x74312`) exists inside an unnamed blob `0x741C4..0x744CE` with **no static reference** (FU216-L1) — unported, and out of scope here.
 2. **Two census rows are attainable, not one** (FU-222). The phase-19 phase-`0x1D` landing made **two** sit-8-tail rows reachable: **phase `0x10`** — its body `fifa96_match_phase_10` is already ported (`fifa96_match_handlers.c:4806`) but the slot is `NULL` (`:5210`, under a now-stale "never written" comment at `:5211`), and its writer — the phase-`0x1D` arm-0 phase-`0x10` write (`0x898DD FUN_000740A0(0x10)`, port `match_run.c:6091`) — became live when phase-19 T3 wired row `0x1D` (**registration only**, the cheapest +1); and **action `0x20`** — its body (`0x84EEC`) and its phase-`0x1D` arm-0 installer are already ported, blocked only on the missing actor-cell bind. Honest ceiling **`55/80 = 68%`**. Every other frontier leg yields **zero**.
-3. **A real port bug** (FU-219). The port dispatches act 7 with `invoke = 0` (`src/fifa96_engine/fifa96_match_run.c:2890`) where native passes `invoke = 1` (`0x8AEAE MOV EBX,1`): native runs the act-7 arm 0 **synchronously on the dispatch frame**; the port defers it one granted frame. FU208-L4 stands, confirmed at byte level.
+3. **A real port bug** (FU-219). The port dispatches act 7 with `invoke = 0` (`port/src/fifa96_engine/fifa96_match_run.c:2890`) where native passes `invoke = 1` (`0x8AEAE MOV EBX,1`): native runs the act-7 arm 0 **synchronously on the dispatch frame**; the port defers it one granted frame. FU208-L4 stands, confirmed at byte level.
 
-Two further findings are corrections, not code: **FU211-L2 is dissolved** (FU-221 — the "`[0x15881A]` cell" was a re-propagation of the FU-165 alias error: by the repo alias rule `dword[0x158816]>>16` is `word[0x158818]`, the act timer, not `word[0x15881A]`; the port's `mr->act.timer >= 0x3C` is already faithful), and the phase-`0x10` evidence strings are **stale** (FU-222 — comments at `fifa96_match_handlers.c:5211` and pins at `tests/test_engine_m2.c:3045/3310/3366` still say "never written … unwired row 0x1D body").
+Two further findings are corrections, not code: **FU211-L2 is dissolved** (FU-221 — the "`[0x15881A]` cell" was a re-propagation of the FU-165 alias error: by the repo alias rule `dword[0x158816]>>16` is `word[0x158818]`, the act timer, not `word[0x15881A]`; the port's `mr->act.timer >= 0x3C` is already faithful), and the phase-`0x10` evidence strings are **stale** (FU-222 — comments at `fifa96_match_handlers.c:5211` and pins at `port/tests/test_engine_m2.c:3045/3310/3366` still say "never written … unwired row 0x1D body").
 
 ## 2. Goal
 
@@ -36,7 +36,7 @@ Two further findings are corrections, not code: **FU211-L2 is dissolved** (FU-22
 - Start: **`53/80`** (`32 action + 21 phase`).
 - **T2** registers phase slot `0x10` (producer live) → **`54/80`**.
 - **T3** binds `[0x1587D4]` + flips `{0x20, NULL}` (producer live) → **`55/80 = 68%`**.
-- No other task moves a row. The number is **whatever the tasks prove producer-live** — never hand-set; each task recomputes `floor(100 × wired/80)` when its count moves, keeping README title + `docs/ENGINE.md` (title + the dispatch sum-to-80 line) + `docs/PROGRESS.md` + `AGENTS.md:90` consistent **in the same commit**.
+- No other task moves a row. The number is **whatever the tasks prove producer-live** — never hand-set; each task recomputes `floor(100 × wired/80)` when its count moves, keeping README title + `port/ENGINE.md` (title + the dispatch sum-to-80 line) + `docs/PROGRESS.md` + `AGENTS.md:90` consistent **in the same commit**.
 
 ### 3.2 The sit-8 completion (T1, T3, T4, T5)
 
@@ -79,7 +79,7 @@ Subagent-driven development, exactly as phases 17–19: one plan + this spec; `.
 
 ## 6. Acceptance criteria
 
-- **Census:** `55/80 = 68%` (`34 action + 21 phase`; dispatch `24 UNSUP / 55 OK / 1 NOTF`), recomputed + consistent across README title, `docs/ENGINE.md`, `docs/PROGRESS.md`, `AGENTS.md:90`.
+- **Census:** `55/80 = 68%` (`34 action + 21 phase`; dispatch `24 UNSUP / 55 OK / 1 NOTF`), recomputed + consistent across README title, `port/ENGINE.md`, `docs/PROGRESS.md`, `AGENTS.md:90`.
 - **Determinism:** M1 `09b726b7…` unmoved; M2 `441415fc…` byte-identical (strata-only v20 label); `make check` **110/110+** (sanitized).
 - **Fidelity:** the bind + the cadence fix reproduce native byte-for-byte on their covered paths; the dead bit-8 gate is documented, not synthesized; every unreachable native is a numbered leg.
 - **Honesty:** no row counted without a live dispatch; no fake write asserted.

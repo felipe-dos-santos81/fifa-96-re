@@ -101,8 +101,8 @@
 ### Task 1: The atomic producer commit
 
 **Files:**
-- Modify: `include/fifa96_engine/fifa96_match_entities.h` (the `desc_d`/`byte9d` staging bytes), `src/fifa96_engine/fifa96_match_entities.c` (the producer at `reset_lane` + `entities_init`), `src/fifa96_engine/fifa96_match_handlers.c` (the row-09 `+0x7B` correction at `:5034` + any needed read), `src/fifa96_engine/fifa96_match_run.c` (the init seam/pool staging if needed)
-- Modify: `tests/test_engine_match_entities.c` (P1), `tests/test_engine_match_handlers.c` (P2/P3), `tests/test_engine_m2.c` (the A3 re-pin + the survival pins + the provenance), `tests/test_engine_match_frame.c` (the mover pin if the stride changes)
+- Modify: `port/src/fifa96_engine/fifa96_match_entities.h` (the `desc_d`/`byte9d` staging bytes), `port/src/fifa96_engine/fifa96_match_entities.c` (the producer at `reset_lane` + `entities_init`), `port/src/fifa96_engine/fifa96_match_handlers.c` (the row-09 `+0x7B` correction at `:5034` + any needed read), `port/src/fifa96_engine/fifa96_match_run.c` (the init seam/pool staging if needed)
+- Modify: `port/tests/test_engine_match_entities.c` (P1), `port/tests/test_engine_match_handlers.c` (P2/P3), `port/tests/test_engine_m2.c` (the A3 re-pin + the survival pins + the provenance), `port/tests/test_engine_match_frame.c` (the mover pin if the stride changes)
 - Test: the focused binaries, then the full suite
 
 **Interfaces:**
@@ -113,9 +113,9 @@
 - [ ] **Step 2: RED the unit pins** (FU331's P1/P2/P3): P1 the producer (`init → timer79 == 6`, `timer7b == 6`; the index cases 22→0x0C, 16|0x10→0x1F, 0|0x80→0x86; RED: first assert 0); P2 the counter (`desc_d = 22 → install → timer7b == 0x0C`, nibble ≥ 3; RED: 0); P3 the row-09 consumer (face 0x100, speed 0 → `timer7b == 12`, `vel73 == 12`, `speed71 == 12`, `target_x == 0x160`; RED: 0/0/0/0x100). The known mover pin (`test_action_09_stage0_set_branch`'s `target_x`) must be re-derived (`vel<<3`).
 - [ ] **Step 3: Implement the producer** (the two writers, the table reuse, the `0x20` boundary, no zeroing fallback) + **the row-09 correction** (`+0x7B = +0x79*2`; the OL-82 literal retired at `:5034` only).
 - [ ] **Step 4: GREEN the unit pins.**
-- [ ] **Step 5: The A3 re-pin** (in this commit — a green gate): the `tests/test_engine_m2.c:3972-3979` window constants with the measured pacing (the exact measured first-left-zero step; the alignment-only slack per FU333); the phase-33 inversion's semantics preserved.
+- [ ] **Step 5: The A3 re-pin** (in this commit — a green gate): the `port/tests/test_engine_m2.c:3972-3979` window constants with the measured pacing (the exact measured first-left-zero step; the alignment-only slack per FU333); the phase-33 inversion's semantics preserved.
 - [ ] **Step 6: The survival/driven re-pins:** the driven claim/offset passes and the survival pins S1–S9 (FU333); the changed cells from FU332's measured tables; the drive cells where the producer moves them.
-- [ ] **Step 7: The M2 re-pin** (the faithful-move): `./build/test_engine_m2 > /tmp/opencode/p35-m2.new`; `diff -u tests/golden/engine/m2-frames.txt <new>`; the first differing frame must be **852**; the moved set must match FU332 (5 671 lines, one contiguous tail 852..6522, the 10-tag stratum set intact, the 6 522-line invariant); M1 `cmp` byte-identical; re-pin the golden; the provenance reason in the house form; FU324-L5's re-measure clause recorded (the `+0x7B` nibble now moves).
+- [ ] **Step 7: The M2 re-pin** (the faithful-move): `./build/test_engine_m2 > /tmp/opencode/p35-m2.new`; `diff -u port/tests/golden/engine/m2-frames.txt <new>`; the first differing frame must be **852**; the moved set must match FU332 (5 671 lines, one contiguous tail 852..6522, the 10-tag stratum set intact, the 6 522-line invariant); M1 `cmp` byte-identical; re-pin the golden; the provenance reason in the house form; FU324-L5's re-measure clause recorded (the `+0x7B` nibble now moves).
 - [ ] **Step 8: GREEN the suite.** `make check` 111/111; M1/M2 `cmp` (the new pins).
 - [ ] **Step 9: Commit and push** `fix(fu328): the +0x79 placement tier producer (the natural pan's root fix)`.
 - [ ] **Step 10: Ledger.**
@@ -123,7 +123,7 @@
 ### Task 2: The natural witness (test-side only)
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (the natural-pass witness per FU333 C1–C6)
+- Modify: `port/tests/test_engine_m2.c` (the natural-pass witness per FU333 C1–C6)
 
 **Interfaces:**
 - Consumes: the measured tuple (FU332), FU333's C1–C6 + FU329 Branch A.
@@ -153,7 +153,7 @@
 ### Task 4: The close-out register
 
 **Files:**
-- Modify: `docs/ENGINE.md` (the phase-35 register), `docs/PROGRESS.md` (the narrative), the phase-35 spec (the close-out erratum if any)
+- Modify: `port/ENGINE.md` (the phase-35 register), `docs/PROGRESS.md` (the narrative), the phase-35 spec (the close-out erratum if any)
 - Test: the final commands
 
 **Interfaces:**

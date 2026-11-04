@@ -9,7 +9,7 @@ Supersedes: none (extends the port's progression: loader spine → container/cod
 The repository is a clean-room reverse-engineering project for FIFA 96
 (PC/DOS CD-ROM, 1995). It currently contains:
 
-- **56 C11 libraries** (`src/fifa96_loader/`, `include/fifa96_loader/`)
+- **56 C11 libraries** (`port/src/fifa96_loader/`, `port/src/fifa96_loader/`)
   covering the ISO9660 reader, the container/codec chain (envelope, QFS, POG,
   TGV/VIV, refpack/huff/tree/kVGT/fVGT), the audio chain (EACS, BNK, VIV,
   SFX, voice allocation, mixer, settings, CRD music), the presentation chain
@@ -19,7 +19,7 @@ The repository is a clean-room reverse-engineering project for FIFA 96
   settings hand-off).
 - **A deterministic 80-test CTest suite** (`make check`) over captured golden
   fixtures, with no external dependencies whatsoever.
-- **An offline asset runner** (`tools/fifa96_play.c`, `make run`): sniffs any
+- **An offline asset runner** (`port/tools/fifa96_play.c`, `make run`): sniffs any
   input and writes decoded PPM/WAV files to `build/`; it is a development
   decoder, not a game.
 
@@ -29,7 +29,7 @@ no real-time loop. A large body of subsystem derivation is validated in
 isolation but has never run as a game. That engine layer is the critical path
 to the project's goal.
 
-The original assets are supplied by the user at `game/FIFAPCCD96.iso`
+The original assets are supplied by the user at `data/game/FIFAPCCD96.iso`
 (git-ignored, read-only). No original game code or assets are committed; the
 clean-room constraint stands.
 
@@ -102,13 +102,13 @@ Approved decisions:
 
 ### New tree
 
-- `include/fifa96_engine/fifa96_platform.h` — the platform ABI (§5).
-- `include/fifa96_engine/fifa96_engine.h` — engine state + entry points.
-- `src/fifa96_engine/` — engine core, runtime asset manager, mode dispatch,
+- `port/src/fifa96_engine/fifa96_platform.h` — the platform ABI (§5).
+- `port/src/fifa96_engine/fifa96_engine.h` — engine state + entry points.
+- `port/src/fifa96_engine/` — engine core, runtime asset manager, mode dispatch,
   M1 front-end wiring, M2 match wiring, backends (`platform_null.c`,
   `platform_sdl3.c`).
-- `tests/` — headless engine tests (null backend), CTest-registered.
-- `tests/golden/engine/` — pinned engine frame/audio hashes.
+- `port/tests/` — headless engine tests (null backend), CTest-registered.
+- `port/tests/golden/engine/` — pinned engine frame/audio hashes.
 
 ### Build
 
@@ -237,7 +237,7 @@ hashes.
 
 - `make check` stays green and gains **headless engine tests** (null
   backend): boot→front-end tape, intro frame hashes, menu navigation, and M2
-  kickoff/score tapes. Hashes pinned under `tests/golden/engine/`.
+  kickoff/score tapes. Hashes pinned under `port/tests/golden/engine/`.
 - Null-backend tests build under **ASan/UBSan** (same practice as
   `test_iso9660`).
 - The live SDL run is the human acceptance gate for M1/M2.
@@ -269,7 +269,7 @@ hashes.
   analysis and an FU doc for any newly derived behaviour. `context7` is used
   for SDL API facts when a workstream needs them.
 - **Serialization**: read-only Ghidra operations run in parallel across
-  workstreams; **all Ghidra writes (renames, comments, `fifa96.rep` commits)
+  workstreams; **all Ghidra writes (renames, comments, `data/fifa96.rep` commits)
   and all git commits are serialized by the controller**. `tmp*.ps` hygiene
   rules apply. Final whole-branch review after each gate.
 

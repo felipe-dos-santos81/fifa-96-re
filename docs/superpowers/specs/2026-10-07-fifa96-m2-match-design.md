@@ -11,7 +11,7 @@ and the M2 foundation: match lifecycle, 30 Hz frame body, input → `fifa96_cont
 per granted frame, and the deterministic camera/scene/sprite render chain. `make check`
 is 94/94.
 
-The scope probe (`docs/ghidra/FU136_action_handler_port_scope.md`) measured the
+The scope probe (`port/spec/FU136_action_handler_port_scope.md`) measured the
 remaining surface: **80 dispatch rows** — action table `0x1106E0[45]` (sole reader
 `FUN_0007D9A4@0x7DA77`) and phase table `0x110794[35]` (sole reader
 `FUN_0006D920@0x6D9B3`) — of which **0 wired / 3 unwired / 77 not ported** (43 with
@@ -73,7 +73,7 @@ New FU documents use the next free numbers (FU137+), one per RE cluster.
   moves players, kicks, and scores; the match reaches half/end and returns to the
   front-end.
 - **M2-B (headless):** a scripted input tape replays the same sequence to identical
-  frame/state hashes, pinned in `tests/golden/engine/m2-frames.txt`.
+  frame/state hashes, pinned in `port/tests/golden/engine/m2-frames.txt`.
 - `make check` green (94 + new tests) with all engine tests under ASan/UBSan.
 
 ## 6. Risks

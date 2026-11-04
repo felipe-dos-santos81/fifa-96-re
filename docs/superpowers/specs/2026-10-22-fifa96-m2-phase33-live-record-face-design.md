@@ -17,12 +17,12 @@ phase-30 NO-GO baseline inverts by design (FU321-L11).
   the plateau-riding witness drive, and deferred it on the spec §8.1 condition:
   a universal producer flips `38/111` rows' worth of M2/AI state and
   **FU319-L7's actual M2 diff was unmeasured** (the primary condition; see the
-  code-review errata, `docs/ENGINE.md` phase-32 close-out errata item 4).
+  code-review errata, `port/ENGINE.md` phase-32 close-out errata item 4).
 - The producer itself is **frozen authority**: FU319 §2 (the census: three
   writers, two readers, no other site), §5 (the minimal faithful staging),
   §8 (GO on staging the live `+0x43` and the focus point).
 - The phase-30 natural-pass baseline asserts stand at
-  `tests/test_engine_m2.c:3722-3724` (`camera_left_zero == 0`,
+  `port/tests/test_engine_m2.c:3722-3724` (`camera_left_zero == 0`,
   `camera_zero_frames == granted_frames`, `first_left_zero_step == 0`) with the
   site's own note block `:3717-3721` ("the bootstrap producer will flip it and
   the P7/P8 window/lockout assertions land with it"); P6–P8 are RED by design
@@ -82,7 +82,7 @@ phase-30 NO-GO baseline inverts by design (FU321-L11).
 Two stages, the phase-32 shape:
 
 - **Stage 1 (recon-ahead wave):** four read-only slices → FU322–FU325, one
-  agent each, drafts under `docs/ghidra/`, whole-wave review + quoted errata,
+  agent each, drafts under `port/spec/`, whole-wave review + quoted errata,
   promoted one-per-commit. Probes are out-of-tree (`/tmp/opencode/`); the repo
   receives only the four draft docs.
 - **Stage 2 (SDD execution, after the wave review):** the producer plan then
@@ -239,8 +239,8 @@ f=1511). The landed **CLAIM** pass's seg[0] is gate f=1480, bind/event f=1481
 stop f=1581 at (−0x120,0,0). The claim pass's totals are 54 changed / 2 116
 off-zero with first off-zero f=1482; the offset pass is 54 / 2 114 / 1484.
 Only the attribution was wrong — the numbers are the measured cells. The
-authoritative correct record is `docs/ENGINE.md`'s phase-33 "driven
+authoritative correct record is `port/ENGINE.md`'s phase-33 "driven
 witnesses" block (the claim-pass and offset-pass sub-bullets) and the tree's
-segment-aware asserts in `tests/test_engine_m2.c`. (The plan's P-MOV sketch
+segment-aware asserts in `port/tests/test_engine_m2.c`. (The plan's P-MOV sketch
 correction and the new FU319-L8 leg are appended to the plan erratum and the
 ENGINE register respectively.)

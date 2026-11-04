@@ -2,7 +2,7 @@
 
 > **Scope:** Stage-1 of phase-27 (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase27-keeper-installer-design.md` §3/§4). Eight bounded, **read-only** Ghidra derivations that freeze the port shape of the surfaces the phase-26c close-out routed here (FU283/FU285/FU281 legs + the installer seam). One draft slice per task; the controller reviews + promotes one-per-commit; **no production code**.
 
-**Authority:** `docs/ghidra/FU273_r11l4_keeper_cpu_chain.md` (the inventory) + the frozen wave `FU283`/`FU285`/`FU281`/`FU288` (the leg definitions).
+**Authority:** `port/spec/FU273_r11l4_keeper_cpu_chain.md` (the inventory) + the frozen wave `FU283`/`FU285`/`FU281`/`FU288` (the leg definitions).
 
 ## Global constraints (every task)
 
@@ -10,7 +10,7 @@
 - **Read-only.** No rename/comment/label/create_function/set_global/apply_data_type/create_struct/script/save. `/FIFA96.EXE` untouched; ISO untouched; **no git** from the agent.
 - **Evidence:** every address/byte a *fresh* `disassemble_bytes`/`disassemble_function`/`decompile_function`/`read_memory`/`get_xrefs_to` this session, or marked *carried* (source named). Alias traps: `dword[x]>>16` = word at `x+2`; `>>24` = byte at `x+3`; verify CALL rel32; caller counts need a fresh `get_xrefs_to`; LE globals at `+0x100000`.
 - **Unprovable ⇒ a numbered leg** with a native owner — never asserted or faked.
-- **Output:** one draft `docs/ghidra/FU29N_<slug>.md` — a single H1, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, numbered legs. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
+- **Output:** one draft `port/spec/FU29N_<slug>.md` — a single H1, a `**Phase/Provenance:**` line naming this wave + task, the port shape, an evidence table, numbered legs. Return to the controller only a **short summary** (path + ≤10-line port shape + GO/NO-GO + legs).
 
 ## Tasks
 

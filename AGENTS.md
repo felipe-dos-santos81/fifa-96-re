@@ -3,15 +3,15 @@
 Clean-room reverse engineering + port of FIFA 96 (DOS, 1995). Three layers, all
 derived from one binary (`FIFA96.EXE`):
 
-1. **16-bit real-mode loader** analysis → `docs/ghidra/loader_rename_map.md`
+1. **16-bit real-mode loader** analysis → `port/spec/loader_rename_map.md`
    (the loader spine; analysed as `x86:LE:16:Real Mode`, entry `11bd:2382`).
 2. **32-bit protected-mode LE image** appended to the same file → derivations in
-   `docs/ghidra/FU*.md`, C port in `src/fifa96_loader/` + `include/fifa96_loader/`.
-3. **Native engine layer** on top → `src/fifa96_engine/` + `include/fifa96_engine/`
-   (status, gates and open legs: `docs/ENGINE.md`).
+   `port/spec/FU*.md`, C port and headers in `port/src/fifa96_loader/`.
+3. **Native engine layer** on top → `port/src/fifa96_engine/`
+   (status, gates and open legs: `port/ENGINE.md`).
 
-`tools/fifa96_play.c` is the single `make run` host runner
-([docs/HOST_RUNNER.md](docs/HOST_RUNNER.md)).
+`port/tools/fifa96_play.c` is the single `make run` host runner
+([port/HOST_RUNNER.md](port/HOST_RUNNER.md)).
 
 ## Commands
 
@@ -23,20 +23,20 @@ derived from one binary (`FIFA96.EXE`):
   exception is `test_engine_m2_noiso`, which CTest runs from the build dir
   to exercise the no-ISO skip.
 - `make game` — windowed SDL3 engine; needs SDL3 (the build silently degrades to
-  headless-only without it) and `game/FIFAPCCD96.iso`. Smoke runs use `DISPLAY=:1`.
+  headless-only without it) and `data/game/FIFAPCCD96.iso`. Smoke runs use `DISPLAY=:1`.
 - `make run FILE=…` — host runner (`auto` sniffs the container; see README for modes).
-  `make trace TRACE=captures/…/trace.bin`; `make tsr` / `make capture` need nasm,
+  `make trace TRACE=data/captures/…/trace.bin`; `make tsr` / `make capture` need nasm,
   the ISO and DOSBox-X.
 
 ## The ISO and the goldens
 
-- `game/FIFAPCCD96.iso` and `game/hdd/` are git-ignored and **never committed**;
+- `data/game/FIFAPCCD96.iso` and `data/game/hdd/` are git-ignored and **never committed**;
   the ISO is read-only by convention — no tool or test may write to it.
   ISO-gated tests skip cleanly when it is absent.
-- `tests/golden/engine/m1-frames.txt` is **immutable** (sha `09b726b7…`). If it
+- `port/tests/golden/engine/m1-frames.txt` is **immutable** (sha `09b726b7…`). If it
   moves, stop and report — that is a regression, never an upgrade.
   `m2-frames.txt` re-pins only with a written reason + frame diff; verify
-  byte-exactness with `./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt`
+  byte-exactness with `./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt`
   (same pattern for m2).
 - Determinism source of truth is the **null backend** (`platform_null.c`); the
   SDL3 backend must stay consistent with it, not the other way round.
@@ -73,9 +73,9 @@ derived from one binary (`FIFA96.EXE`):
 - Work happens directly on `main`; commit per task/fix round and
   `git push origin main`. Commit types: `feat`, `fix`, `docs(fuNNN)`, `test`,
   `chore`.
-- Ghidra DB churn under `fifa96.rep/` is swept as its own commit
-  (`chore(ghidra): sweep project-DB state (…)`, `git add -A fifa96.rep`);
-  `tmp*.ps` / `*.grf` under it are git-ignored.
+- The Ghidra project is `data/fifa96.rep/` (git-ignored, like the rest of
+  `data/`); DB churn is never committed. The project is reproducible from the
+  original `/FIFA96.EXE`.
 - Engine tests build under ASan/UBSan with `-fno-sanitize-recover=all`; the
   Python rig tests are conditional on a Python3 interpreter.
 - Implementation work runs as SDD: one plan/spec per slice under
@@ -88,7 +88,7 @@ derived from one binary (`FIFA96.EXE`):
 - The README title percentage is **derived, never hand-tuned**:
   `floor(100 × ported_native_bodies / native_body_slots)` over the
   **port-coverage** census — `fifa96_match_port_table[80]` and
-  `tests/test_engine_match_port_census.c` (currently 78/78 → 100%).
+  `port/tests/test_engine_match_port_census.c` (currently 78/78 → 100%).
 - The denominator excludes the two body-less slots by design: phase `0x16`
   (the loader INT3 sentinel, native `0`) and action `0x2B` (`0x87738`, the
   shared row-29 epilogue `RET`). A body-less slot is never counted; a ported
@@ -102,5 +102,5 @@ derived from one binary (`FIFA96.EXE`):
   task adds a body or wires a row, recompute all three numbers and update the
   README title + the ENGINE.md headline **in the same commit**.
 - The status narrative lives in `docs/PROGRESS.md` (moved out of the README);
-  update it when a slice closes, and keep `docs/ENGINE.md` as the
+  update it when a slice closes, and keep `port/ENGINE.md` as the
   engine-level gates/legs record.

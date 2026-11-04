@@ -12,15 +12,15 @@ if [ "${CAPTURE_EAX:-0}" = "1" ]; then
     CAPTURE_ARG="--capture-eax"
 fi
 ISO="$DIR/build/fifa96-trace-$SITE.iso"
-OW=$(python3 "$DIR/tools/fifa96_patch.py" --iso "$DIR/game/FIFAPCCD96.iso" \
+OW=$(python3 "$DIR/tools/fifa96_patch.py" --iso "$DIR/data/game/FIFAPCCD96.iso" \
     --target "$TARGET" --print-overwrite)
-python3 "$DIR/tools/fifa96_patch.py" --iso "$DIR/game/FIFAPCCD96.iso" \
+python3 "$DIR/tools/fifa96_patch.py" --iso "$DIR/data/game/FIFAPCCD96.iso" \
     --out "$ISO" --target "$TARGET" --cave 0x6728D --site-id "$SITE" \
     $CAPTURE_ARG
-rm -f "$DIR/captures/session-$SESSION/trace.bin"
+rm -f "$DIR/data/captures/session-$SESSION/trace.bin"
 ISO="$ISO" SESSION="$SESSION" HEADLESS=1 TIMEOUT="${TIMEOUT:-120}" \
-    "$DIR/run-fifa96-capture.sh"
+    "$DIR/tools/run-fifa96-capture.sh"
 python3 "$DIR/tools/fifa96_probe.py" \
-    "$DIR/captures/session-$SESSION/trace.bin" \
+    "$DIR/data/captures/session-$SESSION/trace.bin" \
     --target-link "$TARGET" --overwrite "$OW" --expect-site "$SITE" \
     $CAPTURE_ARG

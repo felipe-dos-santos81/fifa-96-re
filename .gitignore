@@ -1,15 +1,22 @@
-# fifa96-reversed ignores
-.DS_Store
+# Build output
+build/
+build-cov/
+*.o
+*.a
+
+# Game install, captures, Ghidra project and other local data
+data/
+frames/
+extracted/
+coverage/
+
+# Tooling state
+_tools/ghidra_proj/
+.superpowers/
+.pytest_cache/
+__pycache__/
 *.lock
 *.lock~
-game/*.iso
-game/hdd/
-build/
-.superpowers/
-captures/
 
-# Ghidra transient project files
-fifa96.rep/**/tmp*.ps
-fifa96.rep/**/*.grf
-
-__pycache__/
+# macOS
+.DS_Store

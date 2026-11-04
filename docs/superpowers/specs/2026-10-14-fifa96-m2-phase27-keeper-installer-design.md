@@ -37,7 +37,7 @@ Make the keeper-CPU install path live so the row-`0x1B`→sit-5→phase 9→row-
 
 - **Layer-1 (required):** a reach test in which a **real (non-staged) producer** raises the ladder install on a live frame, the row-`0x1B` emit reaches phase 9, row `0x1E` dispatches, the claim reaches stage 5, and the release sets `camera.pos_y == 0x50` — with a mutation-RED rider on each new producer. The test must fail on the phase-26c baseline.
 - **Layer-2 (best-effort, honest-stop pre-authorized):** the visible follow/pan camera moves on the `make game` smoke — or an honest waiver with the Layer-1 proof as the landing (as in 26a/26c).
-- **Invariants:** M1 immutable; M2 re-pinned **only** with a written reason + frame diff; the census moves **only** when a row is proven live (a `NULL→fn` flip with no live producer is NOT counted — the rows-27/29/2C precedent), and any move updates README title + `docs/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + `tests/test_engine_m2.c` pins **in the same commit**.
+- **Invariants:** M1 immutable; M2 re-pinned **only** with a written reason + frame diff; the census moves **only** when a row is proven live (a `NULL→fn` flip with no live producer is NOT counted — the rows-27/29/2C precedent), and any move updates README title + `port/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + `port/tests/test_engine_m2.c` pins **in the same commit**.
 
 ## 6. Honest-stop rule
 

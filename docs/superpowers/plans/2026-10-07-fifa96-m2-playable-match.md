@@ -8,12 +8,12 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, Ghidra MCP (read-only), SDL3 for `make game`; null backend = deterministic regression source of truth.
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.4-3.5, §5, §6); scope authority: `docs/ghidra/FU143_phase_rows.md` (§8/§10 — corrected census `2f9957d`), `docs/ghidra/FU142_installer_arms_scope.md` (OL-T11-6/-7, App. I.10/L goal chain, App. J/K rows), `docs/ghidra/FU137_dispatch_mechanics.md` (§4 code 1 at `0x8D200`; §7 totals), `docs/ghidra/FU89_scene_assembly.md` (§11), `docs/ghidra/FU96_camera_objects.md`; predecessor plans: all four M2 plans incl. `2026-10-07-fifa96-m2-visible-match.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.4-3.5, §5, §6); scope authority: `port/spec/FU143_phase_rows.md` (§8/§10 — corrected census `2f9957d`), `port/spec/FU142_installer_arms_scope.md` (OL-T11-6/-7, App. I.10/L goal chain, App. J/K rows), `port/spec/FU137_dispatch_mechanics.md` (§4 code 1 at `0x8D200`; §7 totals), `port/spec/FU89_scene_assembly.md` (§11), `port/spec/FU96_camera_objects.md`; predecessor plans: all four M2 plans incl. `2026-10-07-fifa96-m2-visible-match.md`.
 
 ## Global Constraints
 
 - Baseline at plan start: `make check` **104/104**; wired **13/80** `{00,04,06,07,08,0F,18,1E,21,23,26,28,2A}`; dispatch 13 OK / 66 UNSUP / 1 NOTF; tree at `6cbe1bb` or later.
-- C11, `-Wall -Wextra -Werror`; ASan/UBSan engine tests; ISO-gated tests skip without `game/FIFAPCCD96.iso`.
+- C11, `-Wall -Wextra -Werror`; ASan/UBSan engine tests; ISO-gated tests skip without `data/game/FIFAPCCD96.iso`.
 - Evidence-gated: first-hand bytes/addresses only; unprovable → numbered leg; errata append. Authoritative program `/FIFA96.EXE`; `+0x100000` rule; never objdump the stale flat bin; diff CALL bytes; word-pair/sign/gate traps.
 - Ghidra read-only for implementers; commits + Ghidra writes serialized by the controller.
 - Determinism: null backend source of truth. **M1 golden never moves.** M2 golden re-pins only for intended upgrades (palette visibility if it changes present hashes, forcing removal if frame-for-frame) with written reason + frame diff.
@@ -25,12 +25,12 @@
 
 | Path | Responsibility |
 |---|---|
-| `src/fifa96_engine/fifa96_match_render.c` / `.h` | Palette install for the match canvas (extend) |
-| `src/fifa96_engine/fifa96_match_run.c` / `.h` | Action-row dispatch wiring, begin/frame integration (extend) |
-| `src/fifa96_engine/fifa96_match_handlers.c` / `.h` | Newly ported action rows (extend) |
-| `src/fifa96_engine/fifa96_match_entities.c` / `.h` | Row-visible record fields if any (extend) |
-| `tests/test_engine_match_render.c`, `test_engine_match_handlers.c`, `test_engine_match_frame.c`, `test_engine_m2.c` + `tests/golden/engine/m2-frames.txt` | Fixtures + tape v4 |
-| `docs/ghidra/FU*.md` (new FU or appendices in FU-84/96/137/142/143), `docs/ENGINE.md`, `README.md` | RE record + status |
+| `port/src/fifa96_engine/fifa96_match_render.c` / `.h` | Palette install for the match canvas (extend) |
+| `port/src/fifa96_engine/fifa96_match_run.c` / `.h` | Action-row dispatch wiring, begin/frame integration (extend) |
+| `port/src/fifa96_engine/fifa96_match_handlers.c` / `.h` | Newly ported action rows (extend) |
+| `port/src/fifa96_engine/fifa96_match_entities.c` / `.h` | Row-visible record fields if any (extend) |
+| `port/tests/test_engine_match_render.c`, `test_engine_match_handlers.c`, `test_engine_match_frame.c`, `test_engine_m2.c` + `port/tests/golden/engine/m2-frames.txt` | Fixtures + tape v4 |
+| `port/spec/FU*.md` (new FU or appendices in FU-84/96/137/142/143), `port/ENGINE.md`, `README.md` | RE record + status |
 | `CMakeLists.txt` | Registration if new sources/tests |
 
 ---
@@ -40,7 +40,7 @@
 ### Task 1: OL-T11-6 — match palette install
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_render.c` / `.h`, `tests/test_engine_match_render.c`, `tests/test_engine_m2.c` (palette assertions), `tests/golden/engine/m2-frames.txt` (only if present hashes move — expected if palette planes now change), `docs/ghidra/FU*.md`, `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_render.c` / `.h`, `port/tests/test_engine_match_render.c`, `port/tests/test_engine_m2.c` (palette assertions), `port/tests/golden/engine/m2-frames.txt` (only if present hashes move — expected if palette planes now change), `port/spec/FU*.md`, `port/ENGINE.md`
 - Read: FU-96 (camera/slot; palette leads), FU-84 (HUD/overlays), FU-137 §7, T1's report §6.1 (RGB black diagnosis), `src/fifo96_engine/platform_null.c` palette hashing
 
 **Interfaces:**
@@ -64,7 +64,7 @@
 ### Task 2: OL-84 residual — phase-1 record-action rows
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` / `.h`, `src/fifa96_engine/fifa96_match_run.c` / `.h`, `tests/test_engine_match_handlers.c`, `tests/test_engine_match_frame.c`, `tests/test_engine_m2.c` (+ golden iff forcing droppable), `docs/ghidra/FU143_phase_rows.md` (§8/§10), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` / `.h`, `port/src/fifa96_engine/fifa96_match_run.c` / `.h`, `port/tests/test_engine_match_handlers.c`, `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_m2.c` (+ golden iff forcing droppable), `port/spec/FU143_phase_rows.md` (§8/§10), `port/ENGINE.md`
 - Read: FU-143 §10 corrected census (situation-0xB producers `0x7DF90` etc.; arm chain `0x8D1B1`/`0x8D200`/`0x8D238`), FU-137 §4 (code 1 at `0x8D200`), the row bodies `0x7DBC0` (gate `phase==1`), rows 0x10..0x13
 
 **Interfaces:**
@@ -88,7 +88,7 @@
 ### Task 3: OL-87/88/89 — goal invokers
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` / `.h`, `src/fifa96_engine/fifa96_match_run.c`, `tests/test_engine_match_handlers.c`, `tests/test_engine_m2.c` (+ golden iff natural goals enter the tape), `docs/ghidra/FU142_installer_arms_scope.md` (App. I.10/L), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` / `.h`, `port/src/fifa96_engine/fifa96_match_run.c`, `port/tests/test_engine_match_handlers.c`, `port/tests/test_engine_m2.c` (+ golden iff natural goals enter the tape), `port/spec/FU142_installer_arms_scope.md` (App. I.10/L), `port/ENGINE.md`
 - Read: FU-142 App. I.10/L (the 11 `FUN_00093944` call sites `0x93D98..0x9486E` and their period-indexed handlers), T4 (follow-up 2) score-source port, Task 2's action rows (which row(s) are reachable from ported gameplay)
 
 **Interfaces:**
@@ -112,7 +112,7 @@
 ### Task 4: Playable-match acceptance — tape v4, smoke, docs, final review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c`, `tests/golden/engine/m2-frames.txt` (only if moved by T1–T3 and not yet committed), `docs/ENGINE.md`, `README.md`, `docs/screens/*` (fresh smoke shots)
+- Modify: `port/tests/test_engine_m2.c`, `port/tests/golden/engine/m2-frames.txt` (only if moved by T1–T3 and not yet committed), `port/ENGINE.md`, `README.md`, `docs/screens/*` (fresh smoke shots)
 - Read: spec §5; the T3 (follow-up 3) tape provenance
 
 **Interfaces:**

@@ -9,12 +9,12 @@ Make the follow/pan camera move in **natural** play: find and land the first hon
 
 ## 2. What phase 29 left (the binding starting state)
 
-- The follow chain is live and fixture-proven: `fifa96_match_run_camera_follow` (`src/fifa96_engine/fifa96_match_run.c:3924`, the gates at `0x739C6..0x73B65`) + `fifa96_camera_rate_event` (the `> 0xF0` height gate) + the 54-frame window at camY `0x50` + the pan lockout/re-open (FU309; seven mutation riders).
+- The follow chain is live and fixture-proven: `fifa96_match_run_camera_follow` (`port/src/fifa96_engine/fifa96_match_run.c:3924`, the gates at `0x739C6..0x73B65`) + `fifa96_camera_rate_event` (the `> 0xF0` height gate) + the 54-frame window at camY `0x50` + the pan lockout/re-open (FU309; seven mutation riders).
 - The camera-Y cell is single and live (`render.camera.pos_y`); the keeper-band raw stores (`0x75A0F` = `0x38`, `0x75EEA` = `0x10`, `0x75F86` = `0x80`) reach it (FU307-L3 closed).
 - The chaser is corrected (`ramp_param = 1`, the live `+0x5D`, the int16 wrap; FU306-L2/L3/L4 closed) and the one-shot re-arm shape is pinned.
 - The four `[0x157750]` stand-ins and the `follow_speed` seam are live (FU308; L2 closed).
 - **The live camera never leaves `(0,0,0)`** in natural play: the phase-29 acceptance's 10-sample `gdb` trace and the second open-play burst keep every camera cell at zero; the tape probe measured `stage_select ran=0 cx1=0 cx4=0 table4=0` over 165 frames (FU307-L1).
-- The AX prepass gate: `0x77F9A`/`0x77FA5` → `|cam_x| < 0x420 && |cam_z| > 0x7B0` (+ the sign/side arm), engine `fifa96_keeper_cpu_stage_select` (`src/fifa96_loader/fifa96_keeper_cpu.c:165`). With `(0,0,0)` the `|cam_z| > 0x7B0` term fails.
+- The AX prepass gate: `0x77F9A`/`0x77FA5` → `|cam_x| < 0x420 && |cam_z| > 0x7B0` (+ the sign/side arm), engine `fifa96_keeper_cpu_stage_select` (`port/src/fifa96_loader/fifa96_keeper_cpu.c:165`). With `(0,0,0)` the `|cam_z| > 0x7B0` term fails.
 - The native kickoff reset is `(0,0,0)` too (FU157 §1: `0x88E4B..0x88E6A` pushes the static triple `[0x10F328/2C/30]` = 0 and `CALL 0x700F4` with flag 0) — the zero start is native, not a port bug.
 - The restart cuts that place the camera are ported: the goal-kick/restart cut (`fifa96_match_handlers.c:1690`, `0x856CB`, `goal_snap`), the throw-in stage-3 (`handlers.c:1752`, `0x85919` Y = `0x80`, Y preserved), the corner cut (`handlers.c:1837`, `0x85E98`, ±`0x710`/0/±`0xB00`), the free-kick cut (`handlers.c:1983`, `0x83E72`, the incident triple, y = 0), the penalty cut (`handlers.c:2107`, `0x84B6B`, 0/0/±`0x8D0`). Their dispatch reach in the port is the open question (FU163: the throw-in row `0x10` needs situation 2 → phase 3; the queue consumer is unported).
 - The airborne kick route: FU153 §5 (the height-table code-4 receive, `d = camY − rec.pos_y >= 0x38`, no band precondition; the mode-`0x40` draw `0x90..0xE0`/`0x100`); its live selector is T1-L1 (the jump row) — unported.
@@ -34,7 +34,7 @@ Make the follow/pan camera move in **natural** play: find and land the first hon
 
 ## 4. Structure
 
-**Stage-1 (recon-ahead):** a four-slice read-only wave, FU310–FU313, one agent per slice (the up-to-4 cap), each a draft `docs/ghidra/FU31N_r2l5_<slug>.md` (single H1, Phase/Provenance line, port shape, evidence table, numbered legs, GO/NO-GO verdict); promoted one-per-commit; read-only Ghidra discipline (fresh reads, the alias traps, LE globals `+0x100000`, unprovable ⇒ a numbered leg with its native owner). No production code. A whole-wave review + errata before Stage-2.
+**Stage-1 (recon-ahead):** a four-slice read-only wave, FU310–FU313, one agent per slice (the up-to-4 cap), each a draft `port/spec/FU31N_r2l5_<slug>.md` (single H1, Phase/Provenance line, port shape, evidence table, numbered legs, GO/NO-GO verdict); promoted one-per-commit; read-only Ghidra discipline (fresh reads, the alias traps, LE globals `+0x100000`, unprovable ⇒ a numbered leg with its native owner). No production code. A whole-wave review + errata before Stage-2.
 **Stage-2:** a producer plan written after the wave promotes (task text from the FU310–FU313 verdicts), executed via subagent-driven development — the bootstrap first, then the event route, then the keeper route (if it is the chosen one), then the acceptance + close-out.
 
 ## 5. Acceptance

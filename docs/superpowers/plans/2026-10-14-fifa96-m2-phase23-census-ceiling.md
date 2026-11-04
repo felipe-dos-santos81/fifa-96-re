@@ -11,30 +11,30 @@
 **Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase23-census-ceiling-design.md` (argue from it; it travels with this plan).
 
 **Design authority (frozen recon — read before touching code):**
-- `docs/ghidra/FU243_no_installer_cluster.md` — **rows `25`/`15` (T2/T3 authority)**: the ECX-path installer refutation.
-- `docs/ghidra/FU241_phase_1e_decompression.md` — **phase `0x1E` (T4 authority)**: the all-terms lift + the exact pin flips.
-- `docs/ghidra/FU242_installer_census.md` (the exhaustive census + `FUN_0008CEB8` ECX path), `FU240_phase_1314_producer.md` (T6: the `0x13`/`0x14` RNG gate), `FU244…FU247` (the ceiling legs).
+- `port/spec/FU243_no_installer_cluster.md` — **rows `25`/`15` (T2/T3 authority)**: the ECX-path installer refutation.
+- `port/spec/FU241_phase_1e_decompression.md` — **phase `0x1E` (T4 authority)**: the all-terms lift + the exact pin flips.
+- `port/spec/FU242_installer_census.md` (the exhaustive census + `FUN_0008CEB8` ECX path), `FU240_phase_1314_producer.md` (T6: the `0x13`/`0x14` RNG gate), `FU244…FU247` (the ceiling legs).
 
 ## Global Constraints
 
 - Every address/byte claim cites a disassembly or a reconciled raw-byte read; unprovables become numbered legs, never asserted. (AGENTS.md evidence rules.)
-- The M1 golden `tests/golden/engine/m1-frames.txt` (`09b726b7…`, 691 lines) is **immutable** — stop and report if it moves.
-- The M2 golden `tests/golden/engine/m2-frames.txt` (`b281a9b2…`, v22, 6522 lines) **must stay byte-identical** in this phase: all three movers are tape-dormant or render-invisible (FU241 §6.2, FU242). Any drift is a regression to investigate, never a re-pin.
-- Determinism source of truth is the null backend (`src/fifa96_engine/platform_null.c`).
+- The M1 golden `port/tests/golden/engine/m1-frames.txt` (`09b726b7…`, 691 lines) is **immutable** — stop and report if it moves.
+- The M2 golden `port/tests/golden/engine/m2-frames.txt` (`b281a9b2…`, v22, 6522 lines) **must stay byte-identical** in this phase: all three movers are tape-dormant or render-invisible (FU241 §6.2, FU242). Any drift is a regression to investigate, never a re-pin.
+- Determinism source of truth is the null backend (`port/src/fifa96_engine/platform_null.c`).
 - **No faked producers.** A row counts only when a ported path installs AND dispatches (AGENTS.md). Wire the slot only after its live dispatch is proven by a test.
 - Build/test gate: `make check` (strict `-Wall -Wextra -Werror` + full CTest). Single: `ctest --test-dir build -R <name> --output-on-failure`; binaries run from the repo root.
-- Census is **derived**: after T2/T3/T4 the count is `35 action + 23 phase = 58/80`; recompute and update the README title + `docs/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md` **in the same commit** as the moving task.
+- Census is **derived**: after T2/T3/T4 the count is `35 action + 23 phase = 58/80`; recompute and update the README title + `port/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md` **in the same commit** as the moving task.
 - Commit types `feat|fix|docs(fuNNN)|test|chore`; work on `main`; `git push origin main` per task.
 
 ## File Structure
 
-- `src/fifa96_engine/fifa96_match_handlers.c` — the action table (`:5097..5186`) + phase table (`:5188..5259`): register `25`/`15`/`0x1E`, port the bodies, correct the stale evidence strings.
-- `include/fifa96_engine/fifa96_match_handlers.h` — the new body prototypes (`fifa96_match_action_25`, `fifa96_match_action_15`) if exported.
-- `src/fifa96_engine/fifa96_match_run.c` — the phase-`0x1E` de-compression re-route (T4).
-- `tests/test_engine_match_act.c` — the per-row dispatch home (T2/T3/T4).
-- `tests/test_engine_match_frame.c` — the phase-`0x1E` pin flip (T4).
-- `tests/test_engine_m2.c` — the census pins (`:3666`, `:4041`) + the mutation-RED riders (T5).
-- `docs/ghidra/FU2xx_*.md` — appended errata only, never rewritten (T5).
+- `port/src/fifa96_engine/fifa96_match_handlers.c` — the action table (`:5097..5186`) + phase table (`:5188..5259`): register `25`/`15`/`0x1E`, port the bodies, correct the stale evidence strings.
+- `port/src/fifa96_engine/fifa96_match_handlers.h` — the new body prototypes (`fifa96_match_action_25`, `fifa96_match_action_15`) if exported.
+- `port/src/fifa96_engine/fifa96_match_run.c` — the phase-`0x1E` de-compression re-route (T4).
+- `port/tests/test_engine_match_act.c` — the per-row dispatch home (T2/T3/T4).
+- `port/tests/test_engine_match_frame.c` — the phase-`0x1E` pin flip (T4).
+- `port/tests/test_engine_m2.c` — the census pins (`:3666`, `:4041`) + the mutation-RED riders (T5).
+- `port/spec/FU2xx_*.md` — appended errata only, never rewritten (T5).
 
 ---
 
@@ -43,7 +43,7 @@
 **Authority:** spec §5 T1. Prove the baseline is byte-stable and the three movers are tape-neutral before any edit.
 
 **Files:**
-- Test: `tests/test_engine_m2.c` (run only; no edit).
+- Test: `port/tests/test_engine_m2.c` (run only; no edit).
 
 - [ ] **Step 1: Recompute the census against the native tables.**
 
@@ -53,7 +53,7 @@ Expected: `action_wired == 33u && phase_wired == 22u` (55/80 = 68%) — the base
 - [ ] **Step 2: Prove ≥3-replay byte-stability.**
 
 Run: `for i in 1 2 3; do ./build/test_engine_m2 | sha256sum; done`
-Expected: all three hashes equal `b281a9b2…`; M1 `./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt` clean.
+Expected: all three hashes equal `b281a9b2…`; M1 `./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt` clean.
 
 - [ ] **Step 3: Gate.** If any replay diverges → STOP and report (a fixture-only proof is the fallback). Otherwise proceed; no commit.
 
@@ -64,9 +64,9 @@ Expected: all three hashes equal `b281a9b2…`; M1 `./build/test_engine_m1 | cmp
 **Authority:** FU-243 §4.2/§6 (`0x880CC` body, slot `0x110774`; installer `0x8D79F MOV ECX,0x25 → 0x8D7AD CALL 0x8CEB8`) + FU-242 §2 (`FUN_0008CEB8`; the ECX code path) + FU-82 (the 7-arm table `0x880B0`). The installer is **already modelled** in `fifa96_match_phase_machine_step` (`code = ac5!=ac7 ? 0x25 : 3`) — only the body is unported.
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` (port `fifa96_match_action_25` from the FU-243 §4.2 byte listing; register `:5170` `{0x25, NULL, …}` → `{0x25, fifa96_match_action_25, …}`; correct the `:5171` evidence string).
-- Modify: `include/fifa96_engine/fifa96_match_handlers.h` (declare the body if not `static`).
-- Test: `tests/test_engine_match_act.c`.
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` (port `fifa96_match_action_25` from the FU-243 §4.2 byte listing; register `:5170` `{0x25, NULL, …}` → `{0x25, fifa96_match_action_25, …}`; correct the `:5171` evidence string).
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.h` (declare the body if not `static`).
+- Test: `port/tests/test_engine_match_act.c`.
 
 **Interfaces:**
 - Consumes: the FU-138 entity pool helpers, the FU-82 `0x880B0` arm table.
@@ -74,7 +74,7 @@ Expected: all three hashes equal `b281a9b2…`; M1 `./build/test_engine_m1 | cmp
 
 - [ ] **Step 1: Write the failing dispatch test.**
 
-In `tests/test_engine_match_act.c`, mirror the row-`20` dispatch test:
+In `port/tests/test_engine_match_act.c`, mirror the row-`20` dispatch test:
 
 ```c
 /* FU-243: row 25 dispatches on a live phase-machine install (was wrongly
@@ -112,12 +112,12 @@ In `fifa96_match_handlers.c`, the action table entry:
 - [ ] **Step 5: Run the tests — expect pass; bump the pin.**
 
 Run: `ctest --test-dir build -R 'test_engine_match_act|test_engine_m2' --output-on-failure`
-Then update `tests/test_engine_m2.c:3666` and `:4041` `action_wired == 33u` → `34u`. Re-run; expected PASS, M2 `b281a9b2…` unmoved (row 25 is tape-dormant).
+Then update `port/tests/test_engine_m2.c:3666` and `:4041` `action_wired == 33u` → `34u`. Re-run; expected PASS, M2 `b281a9b2…` unmoved (row 25 is tape-dormant).
 
 - [ ] **Step 6: Commit.**
 
 ```bash
-git add src/fifa96_engine/fifa96_match_handlers.c include/fifa96_engine/fifa96_match_handlers.h tests/test_engine_match_act.c tests/test_engine_m2.c
+git add port/src/fifa96_engine/fifa96_match_handlers.c port/src/fifa96_engine/fifa96_match_handlers.h port/tests/test_engine_match_act.c port/tests/test_engine_m2.c
 git commit -m "feat(engine): wire action row 25 (the ECX-path installer refutation, FU-243)"
 ```
 
@@ -128,9 +128,9 @@ git commit -m "feat(engine): wire action row 25 (the ECX-path installer refutati
 **Authority:** FU-243 §4.3/§6 (`0x87CD0` body, slot `0x110734`; installer = the phase-5 arm `0x8D433`/`0x8D44B MOV ECX,0x15 → 0x8D45C CALL 0x8CEB8`, the row-14 celebration sibling, FU-184-L8) + FU-243-L2 (the arm is **not yet ported**).
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` (port `fifa96_match_action_15` from the FU-243 §4.3 byte listing; register `:5139` `{0x15, NULL, …}` → `{0x15, fifa96_match_action_15, …}`; correct the `:5139` "stub bucket" string).
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (port the phase-5 install arm `0x8D433` that installs code `0x15` — FU-243-L2).
-- Test: `tests/test_engine_match_act.c`.
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` (port `fifa96_match_action_15` from the FU-243 §4.3 byte listing; register `:5139` `{0x15, NULL, …}` → `{0x15, fifa96_match_action_15, …}`; correct the `:5139` "stub bucket" string).
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (port the phase-5 install arm `0x8D433` that installs code `0x15` — FU-243-L2).
+- Test: `port/tests/test_engine_match_act.c`.
 
 **Interfaces:**
 - Consumes: the FU-184 celebration-scatter cluster (row-14's sibling machinery).
@@ -153,15 +153,15 @@ git commit -m "feat(engine): wire action row 25 (the ECX-path installer refutati
 **Authority:** FU-241 §6.3 (the exact lift terms) + §6.1/§6.2 (render-invisible, golden never enters `bx != 0`). **No golden re-pin.**
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` (`:5249` `{0x1E, NULL, …}` → `{0x1E, fifa96_match_action_phase_1E, …}`; the evidence string).
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (re-route the compressed `bx != 0` path to `fifa96_match_act_dispatch(8, 0, 1)`).
-- Test: `tests/test_engine_match_frame.c` (the pin flip), `tests/test_engine_match_act.c`, `tests/test_engine_m2.c` (the census rider).
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` (`:5249` `{0x1E, NULL, …}` → `{0x1E, fifa96_match_action_phase_1E, …}`; the evidence string).
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (re-route the compressed `bx != 0` path to `fifa96_match_act_dispatch(8, 0, 1)`).
+- Test: `port/tests/test_engine_match_frame.c` (the pin flip), `port/tests/test_engine_match_act.c`, `port/tests/test_engine_m2.c` (the census rider).
 
 **Interfaces:**
 - Consumes: `fifa96_match_action_phase_1E` (already ported), `fifa96_match_run_set_piece`.
 - Produces: the phase-`0x1E` row registered + dispatched via act 8.
 
-- [ ] **Step 1: Flip the pins to the failing state.** In `tests/test_engine_match_frame.c::test_phase_1E_compressed_model_pin` and the `fifa96_match_dispatch_phase(&mr, 0x1E) == FIFA96_ERR_UNSUPPORTED` assertion, invert to expect the row to be registered/dispatched (FU-241 §6.3 items 3-4).
+- [ ] **Step 1: Flip the pins to the failing state.** In `port/tests/test_engine_match_frame.c::test_phase_1E_compressed_model_pin` and the `fifa96_match_dispatch_phase(&mr, 0x1E) == FIFA96_ERR_UNSUPPORTED` assertion, invert to expect the row to be registered/dispatched (FU-241 §6.3 items 3-4).
 
 - [ ] **Step 2: Run — expect failure** (slot still NULL).
 
@@ -178,10 +178,10 @@ git commit -m "feat(engine): wire action row 25 (the ECX-path installer refutati
 **Authority:** spec §5 T-closeout; FU-243 §1 (the refuted strings), FU-247 §3 (the stale tape counts + the FU185-L6 erratum), FU-241 §7.
 
 **Files:**
-- Modify: `README.md` (title `68%` → `72%`), `docs/ENGINE.md` (the status line + the census bullets), `docs/PROGRESS.md` (a phase-23 entry), `AGENTS.md:90` (`55/80 → 68%` → `58/80 → 72%`).
-- Modify: `docs/ghidra/FU-189*` / `FU-185*` / `FU-192*` — **appended errata only** (never rewritten): the row-25 installer refutation, the `word[+0x6B]/[+0x6D]/[+0x7D]` angle-input erratum, and the fresh v22 tape counts (`0x01` 953, `0x13` 2640, `0x14` 20).
+- Modify: `README.md` (title `68%` → `72%`), `port/ENGINE.md` (the status line + the census bullets), `docs/PROGRESS.md` (a phase-23 entry), `AGENTS.md:90` (`55/80 → 68%` → `58/80 → 72%`).
+- Modify: `port/spec/FU-189*` / `FU-185*` / `FU-192*` — **appended errata only** (never rewritten): the row-25 installer refutation, the `word[+0x6B]/[+0x6D]/[+0x7D]` angle-input erratum, and the fresh v22 tape counts (`0x01` 953, `0x13` 2640, `0x14` 20).
 
-- [ ] **Step 1: Add the mutation-RED riders** to `tests/test_engine_m2.c` (`run_phase23_riders`): (a) disable the row-25 body → `dispatch_action(0x25)` aborts; (b) the row-15 body; (c) the phase-`0x1E` re-route → the `dispatch_phase(0x1E)` aborts. Each must be verified mutation-RED (guarded code disabled → the assert aborts).
+- [ ] **Step 1: Add the mutation-RED riders** to `port/tests/test_engine_m2.c` (`run_phase23_riders`): (a) disable the row-25 body → `dispatch_action(0x25)` aborts; (b) the row-15 body; (c) the phase-`0x1E` re-route → the `dispatch_phase(0x1E)` aborts. Each must be verified mutation-RED (guarded code disabled → the assert aborts).
 
 - [ ] **Step 2: Recompute the census.** `floor(100 × 58/80) = floor(72.5) = 72`; update every surface in one commit; `make check` **green** (sanitized); M1/M2 unmoved.
 
@@ -194,7 +194,7 @@ git commit -m "feat(engine): wire action row 25 (the ECX-path installer refutati
 **Authority:** FU-240 §2/§4 (FU240-L2: dispatching `0x13`/`0x14` injects shared-`0x92AC8` RNG draws into `0x6E244`, which the live FU-239 ET chooser would reach on the v21 golden tail).
 
 **Files:**
-- Test: `tests/test_engine_match_completion.c` (a characterization probe; no wire).
+- Test: `port/tests/test_engine_match_completion.c` (a characterization probe; no wire).
 
 - [ ] **Step 1: Characterize the injection.** Drive the ET chooser on a fixture and assert whether the `0x6E244` walk consumes the shared RNG stream on the frames the golden reaches (FU-240 §2). If it does → the rows stay **gated** (a leg); if it provably does not touch the tape → record it as a Stage-2 follow-up candidate (+2).
 

@@ -4,7 +4,7 @@
 
 **Goal:** Delimit the FIFA96 boot/entry preamble (six small helpers + entry setup + bounded `3ed8` role) with instruction evidence and map rows.
 
-**Architecture:** Read-only Ghidra evidence pass (decompile → callees → rename CONFIRMED + plate + save), rows appended to `docs/ghidra/loader_rename_map.md` under `## Boot preamble`. `3ed8` gets a role bound with a scope guard, not a full pass. No C, no tests, no CMake.
+**Architecture:** Read-only Ghidra evidence pass (decompile → callees → rename CONFIRMED + plate + save), rows appended to `port/spec/loader_rename_map.md` under `## Boot preamble`. `3ed8` gets a role bound with a scope guard, not a full pass. No C, no tests, no CMake.
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `decompile_function`, `get_function_callees`, `rename_function`, `set_comment`, `save_program`), `grep` (content checks), CTest (regression gate only).
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - No C, test, or CMake changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/`xxd`/golden citation; disassembly wins over prior descriptions.
 - No `decode_*` name without an observed byte transform; NOT-CONFIRMED members get no rename and no map row.
 - `3ed8` scope guard: role bound only; if bounding exceeds half the pass effort, record "needs own slice" and finish the rest.
@@ -27,16 +27,16 @@ Spec slice 5 covers one subsystem (boot preamble) in two gates: six small roles 
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## Boot preamble` section (Task 1 rows, Task 2 `3ed8` bound row).
+- Modify: `port/spec/loader_rename_map.md` — append `## Boot preamble` section (Task 1 rows, Task 2 `3ed8` bound row).
 - Modify: Ghidra program `/fifa96.exe` — evidence-based renames + plate comments, CONFIRMED only (Tasks 1–2).
-- `src/`, `tests/`, `CMakeLists.txt`, headers — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, headers — UNTOUCHED.
 
 ---
 
 ### Task 1: Six small roles + entry header + renames + map rows
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## Boot preamble` section)
+- Modify: `port/spec/loader_rename_map.md` (append `## Boot preamble` section)
 - Modify: Ghidra program `/fifa96.exe` (renames + plate comments, CONFIRMED only, then `save_program`)
 
 **Interfaces:**
@@ -58,7 +58,7 @@ For each CONFIRMED member: `rename_function` to an evidence-based name (verb-tie
 
 - [ ] **Step 3: Append the map section**
 
-Append to `docs/ghidra/loader_rename_map.md`:
+Append to `port/spec/loader_rename_map.md`:
 ```markdown
 ## Boot preamble (verified 2026-09-28, program `/fifa96.exe`)
 
@@ -78,7 +78,7 @@ Expected: PASS — 10/10 green (docs/Ghidra only).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/ghidra/loader_rename_map.md
+git add port/spec/loader_rename_map.md
 git commit -m "docs: delimit boot preamble helpers with instruction evidence" || true
 ```
 
@@ -87,7 +87,7 @@ git commit -m "docs: delimit boot preamble helpers with instruction evidence" ||
 ### Task 2: Bound 3ed8 role + regression closeout
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `3ed8` bound row + verdict to the `## Boot preamble` section)
+- Modify: `port/spec/loader_rename_map.md` (append `3ed8` bound row + verdict to the `## Boot preamble` section)
 - Modify: Ghidra program `/fifa96.exe` (rename + plate ONLY if `3ed8` role is CONFIRMED, then `save_program`)
 
 **Interfaces:**
@@ -108,10 +108,10 @@ BOUNDED: append row `| FUN_11bd_3ed8 | 11bd:3ed8 | <entry/exit/callee evidence> 
 - [ ] **Step 3: Verify suite + content and commit**
 
 Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build`
-Expected: PASS — 10/10 green. Verify: `grep -c "Boot preamble" docs/ghidra/loader_rename_map.md` is nonzero.
+Expected: PASS — 10/10 green. Verify: `grep -c "Boot preamble" port/spec/loader_rename_map.md` is nonzero.
 
 ```bash
-git add docs/ghidra/loader_rename_map.md
+git add port/spec/loader_rename_map.md
 git commit -m "docs: bound 3ed8 role and close preamble regression" || true
 ```
 

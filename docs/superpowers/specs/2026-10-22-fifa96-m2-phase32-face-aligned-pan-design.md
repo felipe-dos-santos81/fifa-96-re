@@ -28,7 +28,7 @@ Prove a **natural non-zero-delta** row-04 pan: a code-4 record inside the `0x40`
 
 ## 4. Structure
 
-**Stage-1 (recon-ahead):** a four-slice read-only wave, FU318–FU321, one agent per slice (the up-to-4 cap), each a draft `docs/ghidra/FU31N_r2l6_<slug>.md` (single H1, Phase/Provenance line, port shape, evidence table, numbered legs, GO/NO-GO verdict); promoted one-per-commit; read-only Ghidra discipline (fresh reads, the alias traps, LE globals `+0x100000`, unprovable ⇒ a numbered leg with its native owner). No production code. A whole-wave review + errata before Stage-2.
+**Stage-1 (recon-ahead):** a four-slice read-only wave, FU318–FU321, one agent per slice (the up-to-4 cap), each a draft `port/spec/FU31N_r2l6_<slug>.md` (single H1, Phase/Provenance line, port shape, evidence table, numbered legs, GO/NO-GO verdict); promoted one-per-commit; read-only Ghidra discipline (fresh reads, the alias traps, LE globals `+0x100000`, unprovable ⇒ a numbered leg with its native owner). No production code. A whole-wave review + errata before Stage-2.
 **Stage-2:** a producer plan written after the wave promotes (task text from the FU318–FU321 verdicts), executed via SDD — the minimal producer slice first (only if the wave proves it necessary), then the witness, then the acceptance + close-out. If FU320 proves R2, the plan lands a **drive-only witness** and the producers become the robustness/fidelity slice with their own pins.
 
 ## 5. Acceptance
@@ -75,7 +75,7 @@ the phase-32 execution.
   producer — the locomotion turn, `+0x43 = row_flags & 2`, 38/111 rows, with
   the staging shape FU319 §5 — but its M2 move is a **universal fidelity
   change**: the undriven tape would pan and the natural-pass zero-camera
-  baseline (`tests/test_engine_m2.c:3722-3724`) flips by design, broader than
+  baseline (`port/tests/test_engine_m2.c:3722-3724`) flips by design, broader than
   this phase's pan scope. The plan therefore landed the **drive-only** FU320
   R2 witness (Layer 1 `run_natural_offset_pass`, Layer 2
   `docs/screens/p32-l2-notes.md`) and deferred the producer. **The live face

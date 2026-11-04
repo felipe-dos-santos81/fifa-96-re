@@ -14,7 +14,7 @@ Two subcommands:
     frames (descriptor liveness before trusting a dump), walk the golden
     slot chain from the scratch cell (link 0x6728D) — one block per distinct
     record method byte, copy-once — verify every success bar and write
-    ``tests/golden/vgt/record-<method>.{in,out}.bin`` (``--method`` selects).
+    ``port/tests/golden/vgt/record-<method>.{in,out}.bin`` (``--method`` selects).
     FU-20 single-block dumps (record-10) remain extractable.
 
 The guest-RAM dump is only readable while DOSBox-X runs; the earlier FU-4/FU-7
@@ -369,9 +369,9 @@ def _keys_lines(keys_file):
 
 
 def cmd_run(args):
-    cap_dir = ROOT / "captures" / f"session-{args.session}"
+    cap_dir = ROOT / "data" / "captures" / f"session-{args.session}"
     cap_dir.mkdir(parents=True, exist_ok=True)
-    hdd = ROOT / "game" / "hdd"
+    hdd = ROOT / "data" / "game" / "hdd"
     hdd.mkdir(parents=True, exist_ok=True)
     tsr = ROOT / "build" / "FIFACAP.COM"
     if not tsr.exists():
@@ -482,7 +482,7 @@ def main(argv=None):
     e = sub.add_parser("extract", help="extract golden vectors from a dump")
     e.add_argument("--dump", required=True)
     e.add_argument("--trace", required=True)
-    e.add_argument("--out-dir", default=str(ROOT / "tests" / "golden" / "vgt"))
+    e.add_argument("--out-dir", default=str(ROOT / "port" / "tests" / "golden" / "vgt"))
     e.add_argument("--session")
     e.add_argument("--scratch-link", type=lambda s: int(s, 0),
                    default=SCRATCH_LINK)

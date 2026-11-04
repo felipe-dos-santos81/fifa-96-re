@@ -4,7 +4,7 @@
 
 **Goal:** Freeze the eight read-only evidence slices (`FU248…FU255`) that establish, first-hand, each unported native producer behind the wired match rows — its exact body, its consumers, and whether porting it yields **fidelity** or also un-dormants a still-NULL row (**census**) — so the phase-24 producer plan can be written without guessing.
 
-**Architecture:** This is the phase-24 **Stage 1** (recon-ahead), exactly the phase-21/22/23 shape. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-design.md` §4) sequences the recon before the implementation plan; the Stage-2 producer tasks are authored off these frozen slices. Each of the 8 agents investigates one producer cluster, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `docs/ghidra/FU2xx_*.md` in a serialized commit.
+**Architecture:** This is the phase-24 **Stage 1** (recon-ahead), exactly the phase-21/22/23 shape. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-design.md` §4) sequences the recon before the implementation plan; the Stage-2 producer tasks are authored off these frozen slices. Each of the 8 agents investigates one producer cluster, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `port/spec/FU2xx_*.md` in a serialized commit.
 
 **Tech Stack:** Ghidra MCP (read-only), C11/CMake/CTest, ASan/UBSan, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
@@ -16,7 +16,7 @@
 - **Baseline (HEAD `c83883f`, the spec commit):** `make check` **110/110**; wired **58/80 = 72%** (`35 action + 23 phase`); dispatch `21 UNSUP / 58 OK / 1 NOTF`. M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` (**691 lines, immutable**); M2 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (**v22, 6522 lines**).
 - **Evidence floor (AGENTS.md):** every address/byte claim cites a fresh disassembly output or reconciled raw-byte read. Anything not statically provable becomes a **numbered open leg** with its native owner. LE-image globals at `+0x100000`.
 - **Alias traps:** `dword[addr] >> 16` = the word at `addr+2`, `>> 24` = the byte at `addr+3`; verify CALL bytes (rel32); watch sign/width, inverted gates, gate-index misreads. Any "only/sole/exactly" or caller-count claim needs a **fresh** `get_xrefs_to`.
-- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `docs/ghidra/FU2xx_*.md` and commits.
+- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `port/spec/FU2xx_*.md` and commits.
 - **No fakes.** A producer that would compute a residual 0 / copy desired→current is a no-op or a fake (R45/R49/R15); it must be ruled a leg, never invented as a wire.
 - **Scope guard:** the unported native **producers** of the match rows only. No front-end *visual* work, no audio, no new subsystem.
 
@@ -26,7 +26,7 @@
 |---|---|
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/progress.md` | The SDD ledger (recovery map) |
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-<n>-*.md` | The 8 recon drafts (git-ignored scratch) |
-| `docs/ghidra/FU248_*.md … FU255_*.md` | The promoted canonical slices (controller, serialized commits) |
+| `port/spec/FU248_*.md … FU255_*.md` | The promoted canonical slices (controller, serialized commits) |
 | Prior slices `FU137`, `FU142`, `FU175`, `FU185`, `FU192`, `FU197`, `FU201`, `FU241`, `FU243`, `FU247`, `ENGINE.md` leg register | Prior evidence — appended errata only, never rewritten |
 
 ---
@@ -34,7 +34,7 @@
 ### Task 1: W24-1 / FU248 — the desired-order matrices / line-up setup (the headline)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-1-formation-setup.md`
-**Promotes to:** `docs/ghidra/FU248_formation_setup.md`
+**Promotes to:** `port/spec/FU248_formation_setup.md`
 
 **Objective:** Derive the unported line-up setup `FUN_00011620`/`FUN_00012010` (the `0x14C360` desired-order producer; **5 front-end callers**) and settle the **runtime non-permutation** question (FU201-L1) that decides whether the act-4 arm can ever go live.
 
@@ -48,7 +48,7 @@
 ### Task 2: W24-2 / FU249 — OL-13 / FU192-L1: the per-record metadata + the `[rec+0x1C]` seam
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-2-ol13-metadata.md`
-**Promotes to:** `docs/ghidra/FU249_ol13_metadata.md`
+**Promotes to:** `port/spec/FU249_ol13_metadata.md`
 
 **Objective:** Derive the `[rec+0xC]`/`[rec+0x10]`/`[rec+0x14]` metadata source (FU192-L1) and the `[rec+0x1C]` seam, which gate the phase-`0x02`/`0x15` bodies and the row-03 rewrite.
 
@@ -62,7 +62,7 @@
 ### Task 3: W24-3 / FU250 — OL-65: the row-07/`22` angle inputs
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-3-ol65-angle-inputs.md`
-**Promotes to:** `docs/ghidra/FU250_ol65_angle_inputs.md`
+**Promotes to:** `port/spec/FU250_ol65_angle_inputs.md`
 
 **Objective:** Derive the `word[+0x6B]`/`word[+0x6D]`/`word[+0x7D]` angle inputs whose absence keeps the row-07 `0x816DF` `opponent_invoke` dead (FU185-L6 / FU247-L1) — the gate for action `22`.
 
@@ -76,7 +76,7 @@
 ### Task 4: W24-4 / FU251 — OL-63: the row-05 stage-0 tail
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-4-ol63-row05-tail.md`
-**Promotes to:** `docs/ghidra/FU251_ol63_row05_tail.md`
+**Promotes to:** `port/spec/FU251_ol63_row05_tail.md`
 
 **Objective:** Derive the row-05 stage-0 target algebra `0x7F3A1..0x7F57B` + the `FUN_0007F7E0` fallback (the OL-63 residual).
 
@@ -90,7 +90,7 @@
 ### Task 5: W24-5 / FU252 — OL-67/OL-72 (row `04`) + OL-68/OL-69 (rows `18`/`23`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-5-row04-18-23.md`
-**Promotes to:** `docs/ghidra/FU252_row04_18_23.md`
+**Promotes to:** `port/spec/FU252_row04_18_23.md`
 
 **Objective:** Derive the unmodeled record/descriptor bytes + track words for the outfield rows `04`/`18`/`23`.
 
@@ -104,7 +104,7 @@
 ### Task 6: W24-6 / FU253 — OL-82/OL-83 (row `08` + the field wrinkle) + OL-19/OL-22/OL-34
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-6-row08-fields.md`
-**Promotes to:** `docs/ghidra/FU253_row08_fields.md`
+**Promotes to:** `port/spec/FU253_row08_fields.md`
 
 **Objective:** Derive the row-08 `0x81068..0x814AF` unmodeled inputs/sinks (OL-82), the `+0x8E` `act_type`/`actor_type` field-sharing wrinkle (OL-83), and the OL-19/OL-22/OL-34 metadata legs.
 
@@ -118,7 +118,7 @@
 ### Task 7: W24-7 / FU254 — the anim/sink producers: OL-27/OL-52 + OL-42
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-7-anim-sink-producers.md`
-**Promotes to:** `docs/ghidra/FU254_anim_sink_producers.md`
+**Promotes to:** `port/spec/FU254_anim_sink_producers.md`
 
 **Objective:** Derive the `0x92820`/`0x6E598` sinks (OL-27/OL-52) and the installer anim arm (OL-42) that produce non-zero `anim_id`s outside the wired bodies.
 
@@ -132,7 +132,7 @@
 ### Task 8: W24-8 / FU255 — the phase-23 residuals: FU241-L1, FU243-L4, FU241-L2
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase24-match-fidelity-producer-closure-recon-ahead/w24-8-phase23-residuals.md`
-**Promotes to:** `docs/ghidra/FU255_phase23_residuals.md`
+**Promotes to:** `port/spec/FU255_phase23_residuals.md`
 
 **Objective:** Derive the residuals left by phase-23: the non-tape compression equivalence (FU241-L1), the row-25/15 scatter/id tables (FU243-L4), and FU241-L2.
 
@@ -164,5 +164,5 @@ leg-register close-out.
 
 Hand this plan to `superpowers:subagent-driven-development`: dispatch a fresh
 read-only subagent per task (all 8 in parallel), then the controller freeze-reviews
-and promotes each draft to a canonical `docs/ghidra/FU2xx_*.md` in a serialized
+and promotes each draft to a canonical `port/spec/FU2xx_*.md` in a serialized
 commit per slice.

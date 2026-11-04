@@ -38,7 +38,7 @@ remaining legs.
   the seed word(s) and packing, the `v0` derivation, the `T(s)` travel table,
   and the boundary/edge cases (sign, width, the 0x730 armer reach).
 - The port audit: `fifa96_outfield_row04_step`'s seed staging
-  (`src/fifa96_loader/fifa96_outfield.c:685-720`) and every consumer of the
+  (`port/src/fifa96_loader/fifa96_outfield.c:685-720`) and every consumer of the
   seed/`v0`, against the native bytes — a fidelity verdict, not a rewrite.
 - The **measured distribution** over the natural window and the driven passes:
   every row-04 gate pass's slot state, seed arm, seed word, `v0`, event, place
@@ -82,7 +82,7 @@ remaining legs.
 Two stages, the phase-33 shape:
 
 - **Stage 1 (recon-ahead wave):** four read-only slices → FU326–FU329, one
-  agent each, drafts under `docs/ghidra/`, whole-wave review + quoted errata,
+  agent each, drafts under `port/spec/`, whole-wave review + quoted errata,
   promoted one-per-commit. Probes are out-of-tree (`/tmp/opencode/`); the repo
   receives only the four draft docs.
 - **Stage 2 (SDD execution, after the wave review):** the producer plan.

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - C11 only, flags `-Wall -Wextra -Werror`.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`; goldens are copies under `tests/golden/`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`; goldens are copies under `port/tests/golden/`.
 - No byte offset, byte value, or algorithm step enters code without a golden/`xxd`/instruction citation.
 - All byte assertions in tests must be derivable by `xxd -s OFF -l N` on the committed golden (cite the command in the test comment); synthetic mechanism vectors cite the motivating instruction address instead.
 - No keyword meaning enters C without an instruction or golden pair proving it; unproven branches stay out of C and in the report.
@@ -29,18 +29,18 @@ Spec slice 4 covers one subsystem (script text/word-table) in three gates: attri
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## Script semantics` section (Tasks 1, 3).
-- Create: `include/fifa96_loader/fifa96_script.h`, `src/fifa96_loader/fifa96_script.c` (Task 2, ONLY if the Task-1 gate below passes).
-- Create: `tests/test_script.c` (Task 2, same gate).
+- Modify: `port/spec/loader_rename_map.md` — append `## Script semantics` section (Tasks 1, 3).
+- Create: `port/src/fifa96_loader/fifa96_script.h`, `port/src/fifa96_loader/fifa96_script.c` (Task 2, ONLY if the Task-1 gate below passes).
+- Create: `port/tests/test_script.c` (Task 2, same gate).
 - Modify: `CMakeLists.txt` — append `fifa96_script` lib + `test_script` (Task 2, same gate).
-- Modify: `include/fifa96_loader/fifa96_{pog,qfs,viv,tgv,tables}.h` — comment lines only, ONLY on observed attribution (Task 3).
+- Modify: `port/src/fifa96_loader/fifa96_{pog,qfs,viv,tgv,tables}.h` — comment lines only, ONLY on observed attribution (Task 3).
 
 ---
 
 ### Task 1: Filename attribution + keyword/branch evidence pass
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## Script semantics` evidence section)
+- Modify: `port/spec/loader_rename_map.md` (append `## Script semantics` evidence section)
 - Modify: Ghidra program `/fifa96.exe` (evidence-based renames + plate comments, CONFIRMED only, then `save_program`)
 
 **Interfaces:**
@@ -73,7 +73,7 @@ Acceptance: each filename recorded as `"<bytes>" @ <address> via <call site>` wi
 
 - [ ] **Step 4: Append the map evidence section**
 
-Append to `docs/ghidra/loader_rename_map.md`:
+Append to `port/spec/loader_rename_map.md`:
 ```markdown
 ## Script semantics (verified 2026-09-28, program `/fifa96.exe`)
 
@@ -97,7 +97,7 @@ Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build`
 Expected: PASS — 9/9 green (docs/Ghidra only).
 
 ```bash
-git add docs/ghidra/loader_rename_map.md
+git add port/spec/loader_rename_map.md
 git commit -m "docs: attribute script inputs and pin keyword semantics with evidence" || true
 ```
 
@@ -106,9 +106,9 @@ git commit -m "docs: attribute script inputs and pin keyword semantics with evid
 ### Task 2: fifa96_script mechanics port + tests (gate: Task-1 PASS)
 
 **Files:**
-- Create: `include/fifa96_loader/fifa96_script.h`
-- Create: `src/fifa96_loader/fifa96_script.c`
-- Create: `tests/test_script.c`
+- Create: `port/src/fifa96_loader/fifa96_script.h`
+- Create: `port/src/fifa96_loader/fifa96_script.c`
+- Create: `port/tests/test_script.c`
 - Modify: `CMakeLists.txt` (append only)
 
 **Interfaces:**
@@ -118,12 +118,12 @@ git commit -m "docs: attribute script inputs and pin keyword semantics with evid
   - `fifa96_err_t fifa96_script_table_append(fifa96_script_table_t *t, uint16_t v);` — `FIFA96_OK` on append; `FIFA96_ERR_TRUNCATED` on NULL table/words or full cap. (Fixed-cap by design: the DOS grow idiom is allocator business; callers grow. Documented in header.)
   - `fifa96_err_t fifa96_script_table_terminated(const uint16_t *w, size_t n, size_t *term_at);` — `FIFA96_OK` + index of first `0xffff` (instr `MOV word ptr [SI],0xffff` at `11bd:5d18`); `FIFA96_ERR_TRUNCATED` on NULL, or no terminator in `n`.
   - `size_t fifa96_script_comment_len(const uint8_t *b, size_t n);` — bytes from a leading `;` through the newline inclusive (or `n` if none); 0 unless `n > 0 && b[0] == 0x3b` (instr `SUB AX,0x3c` at `11bd:5be9`). **Implement + test ONLY if Task-1 `;` row is CONFIRMED-skip; otherwise omit entirely and record OPEN.**
-- Gate: if Task-1 gate line is FAIL, create NO lib/test/CMake entries; instead append the FAIL reason to the map section and commit docs-only (`git add docs/ghidra/loader_rename_map.md && git commit -m "docs: record script-lib gate FAIL (no attributable inputs)"`). All steps below assume PASS.
+- Gate: if Task-1 gate line is FAIL, create NO lib/test/CMake entries; instead append the FAIL reason to the map section and commit docs-only (`git add port/spec/loader_rename_map.md && git commit -m "docs: record script-lib gate FAIL (no attributable inputs)"`). All steps below assume PASS.
 
 - [ ] **Step 1: Write the failing test**
 
 ```c
-// tests/test_script.c — synthetic mechanism vectors cite motivating instructions; golden vectors (if any) cite xxd + Task-1 attribution
+// port/tests/test_script.c — synthetic mechanism vectors cite motivating instructions; golden vectors (if any) cite xxd + Task-1 attribution
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -163,21 +163,21 @@ Expected: FAIL — `fifa96_loader/fifa96_script.h: No such file or directory`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```c
-// include/fifa96_loader/fifa96_script.h
+// port/src/fifa96_loader/fifa96_script.h
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
 #include "fifa96_loader/fifa96_err.h"
 #define FIFA96_SCRIPT_TERM 0xffffu
 typedef struct { uint16_t *words; size_t len; size_t cap; } fifa96_script_table_t;
-// Ghidra: else-branch parse_script_text@11bd:5bdb + build_word_table@11bd:5c8b (verified; see docs/ghidra/loader_rename_map.md#script-semantics). Mechanics mirrored here: append (store at 11bd:5d44), full-cap TRUNCATED (limit idiom CMP AX,SI at 11bd:5d4d; DOS grow via mem_grow_relocate at 11bd:5d55 is allocator business — fixed-cap by design, callers grow), 0xffff terminator (store at 11bd:5d18), ;-comment skip (SUB AX,0x3c at 11bd:5be9; present only if Task-1 CONFIRMED-skip). Keyword branch semantics (C/E/M/E/R) stay out of C until proven — see map.
+// Ghidra: else-branch parse_script_text@11bd:5bdb + build_word_table@11bd:5c8b (verified; see port/spec/loader_rename_map.md#script-semantics). Mechanics mirrored here: append (store at 11bd:5d44), full-cap TRUNCATED (limit idiom CMP AX,SI at 11bd:5d4d; DOS grow via mem_grow_relocate at 11bd:5d55 is allocator business — fixed-cap by design, callers grow), 0xffff terminator (store at 11bd:5d18), ;-comment skip (SUB AX,0x3c at 11bd:5be9; present only if Task-1 CONFIRMED-skip). Keyword branch semantics (C/E/M/E/R) stay out of C until proven — see map.
 fifa96_err_t fifa96_script_table_append(fifa96_script_table_t *t, uint16_t v);
 fifa96_err_t fifa96_script_table_terminated(const uint16_t *w, size_t n, size_t *term_at);
 size_t fifa96_script_comment_len(const uint8_t *b, size_t n);
 ```
 
 ```c
-// src/fifa96_loader/fifa96_script.c
+// port/src/fifa96_loader/fifa96_script.c
 #include "fifa96_loader/fifa96_script.h"
 fifa96_err_t fifa96_script_table_append(fifa96_script_table_t *t, uint16_t v) {
   if (!t || !t->words || t->len >= t->cap) return FIFA96_ERR_TRUNCATED;
@@ -204,8 +204,8 @@ size_t fifa96_script_comment_len(const uint8_t *b, size_t n) {
 
 ```cmake
 # append to CMakeLists.txt
-add_library(fifa96_script src/fifa96_loader/fifa96_script.c)
-add_executable(test_script tests/test_script.c)
+add_library(fifa96_script port/src/fifa96_loader/fifa96_script.c)
+add_executable(test_script port/tests/test_script.c)
 target_link_libraries(test_script PRIVATE fifa96_script fifa96_file)
 add_test(NAME test_script COMMAND test_script WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 ```
@@ -220,7 +220,7 @@ Expected: PASS — `test_script OK`, full suite green (10/10 with the lib path; 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add include/fifa96_loader/fifa96_script.h src/fifa96_loader/fifa96_script.c tests/test_script.c CMakeLists.txt
+git add port/src/fifa96_loader/fifa96_script.h port/src/fifa96_loader/fifa96_script.c port/tests/test_script.c CMakeLists.txt
 git commit -m "feat: add fifa96_script word-table mechanics with instruction-cited vectors" || true
 ```
 
@@ -229,8 +229,8 @@ git commit -m "feat: add fifa96_script word-table mechanics with instruction-cit
 ### Task 3: Header citations + regression closeout
 
 **Files:**
-- Modify: `include/fifa96_loader/fifa96_{pog,qfs,viv,tgv,tables}.h` — comment lines only, ONLY on Task-1-observed attribution (default: untouched).
-- Modify: `docs/ghidra/loader_rename_map.md` — one-line closeout pointer if headers were touched (else untouched).
+- Modify: `port/src/fifa96_loader/fifa96_{pog,qfs,viv,tgv,tables}.h` — comment lines only, ONLY on Task-1-observed attribution (default: untouched).
+- Modify: `port/spec/loader_rename_map.md` — one-line closeout pointer if headers were touched (else untouched).
 
 **Interfaces:**
 - Consumes: Task-1 attribution verdicts; Task-2 lib/tests (or gate-FAIL record).
@@ -243,10 +243,10 @@ For each decoder header: if Task 1 attributed an input file to that format's pat
 - [ ] **Step 2: Verify suite + content and commit**
 
 Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build`
-Expected: PASS — full suite green (10/10 lib path, 9/9 gate-FAIL path). Verify: `grep -c "Script semantics" docs/ghidra/loader_rename_map.md` is nonzero.
+Expected: PASS — full suite green (10/10 lib path, 9/9 gate-FAIL path). Verify: `grep -c "Script semantics" port/spec/loader_rename_map.md` is nonzero.
 
 ```bash
-git add docs/ghidra/loader_rename_map.md include/fifa96_loader/fifa96_pog.h include/fifa96_loader/fifa96_qfs.h include/fifa96_loader/fifa96_viv.h include/fifa96_loader/fifa96_tgv.h include/fifa96_loader/fifa96_tables.h
+git add port/spec/loader_rename_map.md port/src/fifa96_loader/fifa96_pog.h port/src/fifa96_loader/fifa96_qfs.h port/src/fifa96_loader/fifa96_viv.h port/src/fifa96_loader/fifa96_tgv.h port/src/fifa96_loader/fifa96_tables.h
 git commit -m "docs: cite script input attribution in decoder headers" || true
 ```
 (Headers untouched by Step 1 contribute nothing to the diff.)

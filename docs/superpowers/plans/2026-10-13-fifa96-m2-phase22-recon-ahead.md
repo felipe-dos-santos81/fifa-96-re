@@ -4,7 +4,7 @@
 
 **Goal:** Freeze the eight read-only evidence slices (`FU231…FU238`) that establish, first-hand, exactly how the native ends a match — the end machine, the frame-loop lifecycle, the extra-time halves, the terminal, the match-over screen, and the front-end return — so the phase-22 producer plan can be written without guessing.
 
-**Architecture:** This is the phase-22 **Stage 1** (recon-ahead), exactly the phase-21 shape. The approved design (`docs/superpowers/specs/2026-10-13-fifa96-m2-phase22-end-spine-design.md` §4) sequences the recon before the implementation plan; the producer tasks (spec §5 T1–T6) are authored in a **Stage 2** plan off these frozen slices. Each of the 8 agents investigates one end-spine concern, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `docs/ghidra/FU2xx_*.md` in a serialized commit.
+**Architecture:** This is the phase-22 **Stage 1** (recon-ahead), exactly the phase-21 shape. The approved design (`docs/superpowers/specs/2026-10-13-fifa96-m2-phase22-end-spine-design.md` §4) sequences the recon before the implementation plan; the producer tasks (spec §5 T1–T6) are authored in a **Stage 2** plan off these frozen slices. Each of the 8 agents investigates one end-spine concern, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `port/spec/FU2xx_*.md` in a serialized commit.
 
 **Tech Stack:** Ghidra MCP (read-only), C11/CMake/CTest, ASan/UBSan, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
@@ -16,7 +16,7 @@
 - **Baseline (HEAD `aba4fbc`):** `make check` **110/110**; wired **55/80 = 68%**; M1 `09b726b7…` (691 lines, immutable); M2 `0b87fd18…` (**2522 lines**, v21).
 - **Evidence floor (AGENTS.md):** every address/byte claim cites a fresh disassembly output or reconciled raw-byte read. Anything not statically provable becomes a **numbered open leg** with its native owner. LE-image globals at `+0x100000`.
 - **Alias traps:** `dword[addr] >> 16` = the word at `addr+2`, `>> 24` = the byte at `addr+3`; verify CALL bytes (rel32); watch sign/width, inverted gates, gate-index misreads. Any "only/sole/exactly" or caller-count claim needs a **fresh** `get_xrefs_to`.
-- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `docs/ghidra/FU2xx_*.md` and commits.
+- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `port/spec/FU2xx_*.md` and commits.
 - **Scope guard:** one spine (extra time → match over → front-end). The penalty shootout and the front-end/competition layer are out of scope except where a slice must give a definitive in/out verdict (FU237 owns the shootout-entry leg).
 
 ## File Structure
@@ -25,15 +25,15 @@
 |---|---|
 | `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/progress.md` | The SDD ledger (recovery map) |
 | `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-<n>-*.md` | The 8 recon drafts (git-ignored scratch) |
-| `docs/ghidra/FU231_*.md … FU238_*.md` | The promoted canonical slices (controller, serialized commits) |
-| `docs/ghidra/FU228_post_period_lifecycle.md`, `FU213_*.md`, `FU-64` | Prior slices — appended errata only, never rewritten |
+| `port/spec/FU231_*.md … FU238_*.md` | The promoted canonical slices (controller, serialized commits) |
+| `port/spec/FU228_post_period_lifecycle.md`, `FU213_*.md`, `FU-64` | Prior slices — appended errata only, never rewritten |
 
 ---
 
 ### Task 1: W22-1 / FU231 — the `FUN_0008BAF0` end machine
 
 **Draft:** `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-1-end-machine.md`
-**Promotes to:** `docs/ghidra/FU231_end_machine.md`
+**Promotes to:** `port/spec/FU231_end_machine.md`
 
 **Objective:** Map `FUN_0008BAF0`'s whole body and the exact gated terminal decision.
 
@@ -47,7 +47,7 @@
 ### Task 2: W22-2 / FU232 — the `FUN_0004B100` frame-loop lifecycle
 
 **Draft:** `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-2-frame-loop-lifecycle.md`
-**Promotes to:** `docs/ghidra/FU232_frame_loop_lifecycle.md`
+**Promotes to:** `port/spec/FU232_frame_loop_lifecycle.md`
 
 **Objective:** Decompose the `FUN_0004B100` match-state branch (FU228-L1) — the full end-word consumer.
 
@@ -61,7 +61,7 @@
 ### Task 3: W22-3 / FU233 — the extra-time-half clock + the phase-`0x13`/`0x14` rows
 
 **Draft:** `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-3-extra-time-halves.md`
-**Promotes to:** `docs/ghidra/FU233_extra_time_halves.md`
+**Promotes to:** `port/spec/FU233_extra_time_halves.md`
 
 **Objective:** Derive the ET halves (periods 2/3) and the phase-`0x13`/`0x14` handler rows.
 
@@ -75,7 +75,7 @@
 ### Task 4: W22-4 / FU234 — the end-word harness return + the front-end transition
 
 **Draft:** `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-4-front-end-return.md`
-**Promotes to:** `docs/ghidra/FU234_front_end_return.md`
+**Promotes to:** `port/spec/FU234_front_end_return.md`
 
 **Objective:** Derive the clock harness's end-word return and the run's return to the front-end.
 
@@ -88,7 +88,7 @@
 ### Task 5: W22-5 / FU235 — the match-over screen timing + camera
 
 **Draft:** `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-5-match-over-screen.md`
-**Promotes to:** `docs/ghidra/FU235_match_over_screen.md`
+**Promotes to:** `port/spec/FU235_match_over_screen.md`
 
 **Objective:** Derive the match-over screen's timing/hold and the camera work (the D1 fidelity verdict).
 
@@ -102,7 +102,7 @@
 ### Task 6: W22-6 / FU236 — the regulation-end (word `1`) path
 
 **Draft:** `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-6-regulation-end-route.md`
-**Promotes to:** `docs/ghidra/FU236_regulation_end_route.md`
+**Promotes to:** `port/spec/FU236_regulation_end_route.md`
 
 **Objective:** Derive the regulation-end route (end word `1` on the flag-clear phase-`0xC` terminal) and how it differs from the ET end.
 
@@ -116,7 +116,7 @@
 ### Task 7: W22-7 / FU237 — the extra-time terminal + the shootout entry
 
 **Draft:** `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-7-extra-time-terminal.md`
-**Promotes to:** `docs/ghidra/FU237_extra_time_terminal.md`
+**Promotes to:** `port/spec/FU237_extra_time_terminal.md`
 
 **Objective:** Derive the ET terminal's winner/loser decision and pin the (phase-23) penalty-shootout entry point.
 
@@ -129,11 +129,11 @@
 ### Task 8: W22-8 / FU238 — the tape-extension design
 
 **Draft:** `.superpowers/sdd/2026-10-13-fifa96-m2-phase22-recon-ahead/w22-8-tape-extension.md`
-**Promotes to:** `docs/ghidra/FU238_tape_extension_v22.md`
+**Promotes to:** `port/spec/FU238_tape_extension_v22.md`
 
 **Objective:** Pre-specify the M2 tape extension (v21 → v22) and the re-pin.
 
-- [ ] **Step 1: Read the tape generator.** `tests/test_engine_m2.c`: the scenario staging + directive replay (the v21 shape); the current `M2_M_*` directives and caps; the `M2_M_ET_ENTRY` anchor.
+- [ ] **Step 1: Read the tape generator.** `port/tests/test_engine_m2.c`: the scenario staging + directive replay (the v21 shape); the current `M2_M_*` directives and caps; the `M2_M_ET_ENTRY` anchor.
 - [ ] **Step 2: Design the extension.** The exact directives/frames to play the **ET halves** + the **end terminal** + the **match-over screen** + (D2) the **return**; the expected new length range; whether the v21 2522-line prefix can stay byte-identical (additive).
 - [ ] **Step 3: Specify the re-pin.** The written-reason wording, the frame-diff methodology (`cmp`, first differing line, hash-only vs `state=`), and the mutation-RED rider classes the T6 acceptance must add.
 - [ ] **Step 4: Hand off.** Direct input to the Stage-2 producer plan's T6.
@@ -158,5 +158,5 @@ tests, mutation-RED discriminators, the T1 determinism gate, and the T6 tape re-
 
 Hand this plan to `superpowers:subagent-driven-development`: dispatch a fresh
 read-only subagent per task (all 8 in parallel), then the controller freeze-reviews
-and promotes each draft to a canonical `docs/ghidra/FU2xx_*.md` in a serialized
+and promotes each draft to a canonical `port/spec/FU2xx_*.md` in a serialized
 commit per slice.

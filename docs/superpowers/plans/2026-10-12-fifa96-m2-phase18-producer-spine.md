@@ -6,11 +6,11 @@
 
 **Baseline (this plan's, verified at HEAD `357d80b`):** wired **48/80 = 60%** (31 action + 17 phase); `make check` **110/110** (sanitized, `-Wall -Wextra -Werror`); README title **60%**; M1 `09b726b7…` (691 lines); M2 `7b4b241a…` (v17 strata label, 792 lines, byte-identical). `FU198 §3/§4` is the authoritative phase-17 census (`31 UNSUP / 48 OK / 1 NOTF`, sum 80) and its envelope is the projection baseline (the producer spine could reach **~66/80 = 82%**; `0x1B` never fires).
 
-**Architecture:** the engine has **bodies everywhere, producers nowhere**. The per-record phase family (`0x00–0x15`) and the act-tail family (`0x17–0x22`) are ported, but their producer machines are not — so 7 per-record rows are **dispatched-but-gated no-ops** (their `[rec+0xC]`/`[rec+0x10]`/`[rec+0x14]` metadata is NULL) and the act-tail production rows (`0x17`/`0x1A`/`0x1C`/`0x1D`/`0x1E`/`0x20`/`0x22`) sit behind unported producers. Three clusters supply them: **Cluster 1** the formation/line-up setup (the keystone — writes the per-record metadata **and** the desired-order matrices); **Cluster 2** the situation machine's live arm + the extra-time flag; **Cluster 3** the act-tail sit-1/contact producers. Capture order **1 → 2 → 3** (keystone-first): each cluster closes fully (bodies live, census moved, tape verdict recorded) before the next. Consumers: `src/fifa96_engine/fifa96_match_run.c` (the producer seam + the frame body), `fifa96_match_handlers.c` (the per-record bodies + the tables), `fifa96_match_act.{c,h}` (the act seam), the loader helpers (the formation/roster parser, extending `fifa96_match_entities_seed_formation`). Serialized implementers; parallel read-only recon is the only parallel surface.
+**Architecture:** the engine has **bodies everywhere, producers nowhere**. The per-record phase family (`0x00–0x15`) and the act-tail family (`0x17–0x22`) are ported, but their producer machines are not — so 7 per-record rows are **dispatched-but-gated no-ops** (their `[rec+0xC]`/`[rec+0x10]`/`[rec+0x14]` metadata is NULL) and the act-tail production rows (`0x17`/`0x1A`/`0x1C`/`0x1D`/`0x1E`/`0x20`/`0x22`) sit behind unported producers. Three clusters supply them: **Cluster 1** the formation/line-up setup (the keystone — writes the per-record metadata **and** the desired-order matrices); **Cluster 2** the situation machine's live arm + the extra-time flag; **Cluster 3** the act-tail sit-1/contact producers. Capture order **1 → 2 → 3** (keystone-first): each cluster closes fully (bodies live, census moved, tape verdict recorded) before the next. Consumers: `port/src/fifa96_engine/fifa96_match_run.c` (the producer seam + the frame body), `fifa96_match_handlers.c` (the per-record bodies + the tables), `fifa96_match_act.{c,h}` (the act seam), the loader helpers (the formation/roster parser, extending `fifa96_match_entities_seed_formation`). Serialized implementers; parallel read-only recon is the only parallel surface.
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan (engine + tests), Ghidra MCP read-only (`/FIFA96.EXE`; the authoritative recon tool — rea MCP only as a secondary read-only view, context7 only if SDL3/CMake docs are needed), SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU199…FU206`; predecessor `docs/superpowers/plans/2026-10-12-fifa96-m2-phase17-phase-act-seam.md` + its final review; frontier map `docs/ghidra/FU198_census_audit_phase17.md` (§4 the ranked cohort) and `docs/ghidra/FU190_census_audit_phase16.md` (§3/§4/§6).
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU199…FU206`; predecessor `docs/superpowers/plans/2026-10-12-fifa96-m2-phase17-phase-act-seam.md` + its final review; frontier map `port/spec/FU198_census_audit_phase17.md` (§4 the ranked cohort) and `port/spec/FU190_census_audit_phase16.md` (§3/§4/§6).
 
 ## Global Constraints
 
@@ -19,14 +19,14 @@
 - Evidence floor: first-hand bytes/addresses; **fresh `get_xrefs_to` for census claims**; `/FIFA96.EXE` (case-sensitive); +0x100000 rule; **alias traps** (`dword[addr]>>16` = word at `addr+2`; `>>24` = byte at `addr+3`); verify CALL bytes before trusting a call target.
 - **Determinism — the spine:** null backend source of truth; **M1 never moves**; M2 starts at the v17 bytes `7b4b241a…`. **Tape posture is case-by-case:** each task classifies its producer's tape-reachability first-hand and records the verdict; a landing that provably moves a presented frame *and* is native-faithful re-pins M2 with the written reason + frame diff; otherwise the producer lands gated/dormant and M2 stays byte-identical. **Any unexplained presented-frame move is a regression to investigate, not a re-pin.**
 - No fakes; unreachable → numbered legs; single situation entry; ISO-gated tests skip without the ISO.
-- **Wired census rule:** if a task changes the wired count, recompute the README title percentage in the same commit per AGENTS.md; keep it consistent with the `docs/ENGINE.md` census line (title + the dispatch sum-to-80 line). Status narrative → `docs/PROGRESS.md`.
+- **Wired census rule:** if a task changes the wired count, recompute the README title percentage in the same commit per AGENTS.md; keep it consistent with the `port/ENGINE.md` census line (title + the dispatch sum-to-80 line). Status narrative → `docs/PROGRESS.md`.
 - Commits `feat/fix/docs/test`; implementers commit and push per dispatch; controller verifies (`make check` + tape `cmp` + tree clean).
 
 ---
 
 ## Wave R — parallel read-only recon, eight agents (gate: eight FU slices + reports, committed)
 
-R47–R54 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `docs/ghidra/FU20N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-199…FU-206 in one `docs(fu199-fu206)` commit after the wave returns.
+R47–R54 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `port/spec/FU20N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-199…FU-206 in one `docs(fu199-fu206)` commit after the wave returns.
 
 ### R47 → FU-199: the formation/line-up setup (the keystone) (unblocks T1)
 - Question: derive `FUN_00011620`/`FUN_00012010` (the line-up/formation setup) byte-level — what it reads (the formation-file family `352ko.fmt` + the `[0x14C1E4]`/`[0x14C1E5]` id + the roster), **what per-record metadata it writes** (`[rec+0xC]`/`[rec+0x10]`/`[rec+0x14]` — the OL-13 source, FU192-L1) and the `0x14C360`/`0x157BD2` desired-order matrices (FU197-L4). Fresh xref/caller census: exactly which engine/native call reaches it (the match begin? a new setup step?), and where its outputs must land in the engine's record/team model.
@@ -72,42 +72,42 @@ R47–R54 run **concurrently** (the user-directed speed-up surface). Each is rea
 
 ### Task 1: T1 — the formation/line-up setup + OL-13 metadata (from R47/R48)
 
-**Files:** `src/fifa96_engine/fifa96_match_run.c` (the setup seam / the frame body) and/or a new loader helper (the formation/roster parser), extending `fifa96_match_entities_seed_formation`; `src/fifa96_engine/fifa96_match_handlers.c` + `include/fifa96_engine/fifa96_match_handlers.h` (the per-record bodies' metadata reads) ; tests + FU-199/FU-200 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_run.c` (the setup seam / the frame body) and/or a new loader helper (the formation/roster parser), extending `fifa96_match_entities_seed_formation`; `port/src/fifa96_engine/fifa96_match_handlers.c` + `port/src/fifa96_engine/fifa96_match_handlers.h` (the per-record bodies' metadata reads) ; tests + FU-199/FU-200 status + `port/ENGINE.md` + README title.
 **Produces:** the formation/line-up setup runs on the live begin path and writes the per-record metadata (`[rec+0xC]`/`[rec+0x10]`/`[rec+0x14]`) + the desired-order matrices, so the 7 dispatched-but-gated per-record rows (and phase `0x02`) perform the native work. Rows whose metadata R47/R48 proves live flip to genuinely-live; rows still gated stay honest numbered legs. **Tape posture case-by-case:** R47/R48's verdict decides — land live if its writes are render-invisible on the tape, else gate and leg.
 **Gate T1:** the setup + the metadata reads covered by RED/GREEN + mutation-RED; **tape decision:** replay M2 — byte-identical, OR a re-pin with the written reason + frame diff iff the move is proven native-faithful (the controller rules on R47/R48's verdict); M1 never moves. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate (`make check` + tape `cmp`) → census/README update → commit `feat(engine,fu199): the formation/line-up setup + OL-13 metadata`.
 
 ### Task 2: T2 — the order matrix + the act-4 formation arm (rows `0x17`/`0x1A`) (from R49/R52)
 
-**Files:** `src/fifa96_engine/fifa96_match_run.c` (the act-4 arm + the `FUN_0008C974` sorts over the order matrices), the loader helpers for the matrix fill; `fifa96_match_handlers.c` (the row-`0x17`/`0x1A` slots); tests + FU-201/FU-204 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_run.c` (the act-4 arm + the `FUN_0008C974` sorts over the order matrices), the loader helpers for the matrix fill; `fifa96_match_handlers.c` (the row-`0x17`/`0x1A` slots); tests + FU-201/FU-204 status + `port/ENGINE.md` + README title.
 **Produces:** the desired-order matrices are filled by T1's setup, the act-4 sit-2..4 formation arm runs (`formation_order_ok` un-gated), and rows `0x17`/`0x1A` install and dispatch — counted iff R49/R52 proves the arm live; else honest legs (no fake producer).
 **Gate T2:** the arm + the sorts RED/GREEN + mutation-RED; the row install route proven or leg'd; tape posture case-by-case (per R49/R52). Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p18-t2-*` → census/README update → commit `feat(engine,fu201): the order matrix + the act-4 formation arm (rows 0x17/0x1A)`.
 
 ### Task 3: T3 — the situation-machine live wiring + the extra-time flag (from R50/R52/R53)
 
-**Files:** `src/fifa96_engine/fifa96_match_run.c` (the situation-machine live arm + `period_setup_live` + the extra-time flag), the act seam (`fifa96_match_act.{c,h}`); `fifa96_match_handlers.c` (the Tier-B phase-table rows `0x1D`/`0x1E`/`0x20` + the coupled row-`0x20` installer); tests + FU-202/FU-205 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_run.c` (the situation-machine live arm + `period_setup_live` + the extra-time flag), the act seam (`fifa96_match_act.{c,h}`); `fifa96_match_handlers.c` (the Tier-B phase-table rows `0x1D`/`0x1E`/`0x20` + the coupled row-`0x20` installer); tests + FU-202/FU-205 status + `port/ENGINE.md` + README title.
 **Produces:** situations `0`/`1`/`8` are drivable on the live path and the Tier-B act-tail rows (`0x1D`/`0x1E`/`0x20`) + the coupled row `0x20` become reachable — each counted iff R50/R53 proves its producer live. The extra-time flag (OL-85) is either produced (if R50 finds the writer live) or recorded as a numbered leg.
 **Gate T3:** each body RED/GREEN + mutation-RED; the situation selector + the extra-time writer fixtured; the per-producer tape verdict applied (R50); ISO-gated live chain where reachable, else fixture + dormancy pin. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p18-t3-*` → census/README update → commit `feat(engine,fu202): situation-machine live wiring + extra-time`.
 
 ### Task 4: T4 — the act-tail Tier-A producers (rows `0x17`/`0x1C`) (from R51)
 
-**Files:** the act seam (`fifa96_match_act.{c,h}`) + `fifa96_match_run.c` (the sit-1 / contact producer wiring); `fifa96_match_handlers.c` (the rows' install); tests + FU-203 status + `docs/ENGINE.md` + README title.
+**Files:** the act seam (`fifa96_match_act.{c,h}`) + `fifa96_match_run.c` (the sit-1 / contact producer wiring); `fifa96_match_handlers.c` (the rows' install); tests + FU-203 status + `port/ENGINE.md` + README title.
 **Produces:** the act-1 sit-1 producer (row `0x17`) and the act-6 contact chain (row `0x1C`) reach the rows live — each counted iff R51 proves its producer live and the double-run is resolved (the ad-hoc `fifa96_match_run_kickoff_entry` / the offside-machine conflict retired or leg'd).
 **Gate T4:** each producer route RED/GREEN + mutation-RED; the double-run verdict pinned (R51); tape posture case-by-case. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p18-t4-*` → census/README update → commit `feat(engine,fu203): act-tail Tier-A producers (0x17/0x1C)`.
 
 ### Task 5: T5 — the remaining producer-gated bound + the gated-no-op deep verification (from R48/R52/R53)
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (the remaining body slots), helper gaps in the loader; tests + FU-200/FU-204/FU-205 status + `docs/ENGINE.md` + README title.
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (the remaining body slots), helper gaps in the loader; tests + FU-200/FU-204/FU-205 status + `port/ENGINE.md` + README title.
 **Produces:** every row R48/R52/R53 proves live is wired/counted; every row still frozen is recorded as an honest numbered leg with its owner (row `0x0D` row-09 arm 1 FU178-L1; row `0x24`/phase `0x20` FU188-L1; the `0x1A` ladder FU186-L5; the gated-no-op gates FU192). No fake producer.
 **Gate T5:** each body RED/GREEN + mutation-RED; the gated-row gate truth-table pinned; tape-dormancy pinned per row. Census recompute in the same commit.
 - [ ] RED test → implement → GREEN → gate + smoke `p18-t5-*` → census/README update → commit `feat(engine,fu205): remaining producer-gated bound + gated-no-op verification`.
 
 ### Task 6: T6 — acceptance v18 + riders + smoke + docs + final review
 
-**Files:** `tests/test_engine_m2.c` (+ golden iff genuinely moved — per the case-by-case verdict), `docs/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
+**Files:** `port/tests/test_engine_m2.c` (+ golden iff genuinely moved — per the case-by-case verdict), `port/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
 **Produces:** the v18 strata (a re-pin iff earned with the written reason + frame diff, else the strata-only label — the phase-15 v14→v15 precedent); the producer riders (mutation-RED: a silent producer re-gate / double-run / metadata slip aborts the tape); the cheap regression pins the T1–T5 reviews surface; the honest smoke record; the remaining legs with owners; the census recomputed against R54's audit.
 - [ ] Tests + riders → tape decision (byte-identical or an earned re-pin; record it) → smoke → docs → commit `test(engine): phase-18 acceptance tape v18 and docs` → whole-plan final review (one fix wave max) → close.
 
@@ -131,7 +131,7 @@ literal producers — see the R14/R15 deviations). Census **`48/80 = 60%` →
 `51/80 = 63%`** (`+3`: action row `0x24` + phase rows `0x20` and `0x17`); the
 FU-198 §4 absolute ceiling (`66/80 = 82%`) was not reached and is not asserted
 (the plan's "no hand-set number" rule). `make check` **110/110** (ASan/UBSan,
-`-Wall -Wextra -Werror`); README title + `docs/ENGINE.md` title + the dispatch
+`-Wall -Wextra -Werror`); README title + `port/ENGINE.md` title + the dispatch
 sum-to-80 line + `docs/PROGRESS.md` + `AGENTS.md:90` all consistent at `51/80 =
 63%` (`28 UNSUP / 51 OK / 1 NOTF`, sum 80).
 
@@ -232,7 +232,7 @@ A Standards+Spec review of the phase-18 diff (base `2a29245`, HEAD `fbec920`)
 landed five fixes; the disclosed legs and rulings stand.
 
 - **F1 (test seam).** The `mr.act.id = 0` isolation idiom (63 sites in
-  `tests/test_engine_match_frame.c`) collapses to one fixture helper
+  `port/tests/test_engine_match_frame.c`) collapses to one fixture helper
   `begin_isolated(mr, eng)` (begin + clear the armed act); the redundant second
   assignment in `test_kickoff_enters_phase2_when_cutscene_isolated` is deleted.
   Behaviour identical; M2 unmoved.
@@ -259,6 +259,6 @@ landed five fixes; the disclosed legs and rulings stand.
   the old all-or-nothing behaviour aborts it (mutation-RED).
 - **Rulings left.** Spec-a (the desired-order matrices / `FUN_00011620` / the
   situation-8 pair), Spec-b (the dormant act-4 arm), and Standards-1 (the
-  `docs/ENGINE.md` in-place narrative edits — false current-state corrections)
+  `port/ENGINE.md` in-place narrative edits — false current-state corrections)
   stand. **Census unchanged `51/80 = 63%`; M1 `09b726b7…` and M2 `441415fc…`
   byte-identical; `make check` 110/110.**

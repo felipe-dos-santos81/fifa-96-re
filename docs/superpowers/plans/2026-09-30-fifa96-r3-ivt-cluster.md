@@ -8,12 +8,12 @@
 
 **Tech Stack:** Ghidra-MCP (`disassemble_function`, `disassemble_bytes` (Task 1 `dry_run=true`), `get_function_by_address`, `read_memory` (hex-vs-data protocol), `search_instructions` (authority for operand/contact runs), `analyze_dataflow` (PCode backward walk per site), `get_function_xrefs`/`get_xrefs_to` (controls only), `find_code_gaps` (full pagination), Task 2: real `disassemble_bytes`, `create_function`, `rename_function`, `set_comment`, `save_program`), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-30 ("R3 `INT 0x67`/`JMP BX` IVT cluster — smaller, new surface"; freebies folded per slice-25 final-review triage: `0929..092b` "promote to first-class walk candidate", `023a/0242` WAIT-gate "freebie since the 60-insn context is now dumped", wording nits "fold next save") + `docs/ghidra/loader_rename_map.md` (`## block head 2978..2a59` — R1 `enable_paging_and_load_tss`, TABLE `mode_29bc_source_pair` (`29b8..29bb` = words `0x2a5a/0x2a60`), R3 `FUN_11bd_29bc` created, internal edges incl `2a58→2a26`, `2a60 = CLI fa` byte verified inside `clear_msw_and_callfar`; `## callee arg question` — arg `0x29bc` = data-only at `[0x9ba]`, stored by `2f18@2ec9`, pair-sourcing math `CS:[BX-4]/[BX-2]`; `## vector selection logic` — DS-clamp storm ledger, `016c` patch legs `0216/021b/0229/022f` heads-`90`, selection rows, deferral bullet "R3 IVT cluster (slice 26 queued)"; `## sweep-aftermath ratification` — census protocol).
+**Spec:** Approved chat design 2026-09-30 ("R3 `INT 0x67`/`JMP BX` IVT cluster — smaller, new surface"; freebies folded per slice-25 final-review triage: `0929..092b` "promote to first-class walk candidate", `023a/0242` WAIT-gate "freebie since the 60-insn context is now dumped", wording nits "fold next save") + `port/spec/loader_rename_map.md` (`## block head 2978..2a59` — R1 `enable_paging_and_load_tss`, TABLE `mode_29bc_source_pair` (`29b8..29bb` = words `0x2a5a/0x2a60`), R3 `FUN_11bd_29bc` created, internal edges incl `2a58→2a26`, `2a60 = CLI fa` byte verified inside `clear_msw_and_callfar`; `## callee arg question` — arg `0x29bc` = data-only at `[0x9ba]`, stored by `2f18@2ec9`, pair-sourcing math `CS:[BX-4]/[BX-2]`; `## vector selection logic` — DS-clamp storm ledger, `016c` patch legs `0216/021b/0229/022f` heads-`90`, selection rows, deferral bullet "R3 IVT cluster (slice 26 queued)"; `## sweep-aftermath ratification` — census protocol).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes; the 10-test suite stays green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` vs `data` before verbatim.
 - Task 1 writes NOTHING in Ghidra: `disassemble_bytes` dry-run only; `analyze_dataflow` is a read tool (no cache-mutating claims — quote outputs verbatim); tool error on a required sub-step → BLOCKED.
 - Every contact/operand run: pattern + `match_count` + scope (`instructions_scanned`, "at this-slice time" uniformity note) + pagination where applicable (full-paging protocol); controls quoted not relied on; negatives = "not attributable from enumerated sweeps, defined-insn-only" never "doesn't exist"; OPEN-WINDOW rows for dynamic bases with the missing leg named.
@@ -22,7 +22,7 @@
 - Capped write path inherited: real disassembly → ONE nudge → RATIFY with verbatim outputs; never create over owned bytes (R3/H13/stub walls: cite last-owned + first-foreign); analyzer side effects disclosed never deleted; `save_program` only after writes, with slice-24 census protocol (count, full gap total, side-effect ledger with `1991:` overlay pagination check).
 - Naming bar: verb-led snake_case, mechanism-only from THIS slice's cited ops; IVT-flavored words ("install"/"hook" class) require cited staging writes or a cited `INT`/`IRET` pairing pattern inside the named body — `INT 0x67` alone is a CALL, not an install claim; NOT-CONFIRMED-at-name = default name stands, no plate beyond behavioral.
 - Scope guard: handler callee trees stay deferred; `[0x2fa]`/`[0x9ba]` runtime legs stay FU-blocked; `296d`/`02b5` landing-pad family cite-only; the `2a5a` H13 body beyond boundary questions is read-only context.
-- Leave `fifa96.rep/**` churn unstaged; prior sections byte-identical (append-only); commit messages exactly per briefs; no new tests.
+- Leave `data/fifa96.rep/**` churn unstaged; prior sections byte-identical (append-only); commit messages exactly per briefs; no new tests.
 
 ---
 
@@ -32,16 +32,16 @@ One function walk + two bounded freebies + one image-sweep question. Task 2's wr
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## R3 IVT cluster` (Task 1: flow/exits + INT/BX tables + staging sweep + freebie rows; Task 2: `### Writes` + verdicts + `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## R3 IVT cluster` (Task 1: flow/exits + INT/BX tables + staging sweep + freebie rows; Task 2: `### Writes` + verdicts + `### Deferrals`).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only if bar passes (rename + plate) or exposed bodies (none expected); `save_program` after writes.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Walk, trace, staging sweep, freebies (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## R3 IVT cluster` with flow/BX/INT/staging/freebie tables)
+- Modify: `port/spec/loader_rename_map.md` (append `## R3 IVT cluster` with flow/BX/INT/staging/freebie tables)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -62,14 +62,14 @@ Collect `INT 0x67` (`cd67`) sites with bytes + one-cited-insn context; each `JMP
 
 - [ ] **Step 4: Freebies + append + commit**
 
-`0929..092b` live `disassemble_function`/listing quote + disposition row; `016c` gate-tail cite row. Append `## R3 IVT cluster (verified 2026-09-30, program \`/fifa96.exe\`)` — tables + disposition-so-far (exit classes, INT site count, BX outcome classes, staging answer or OPEN-WINDOW named). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: walk R3 to exits, trace BX chain, sweep IVT-19c staging" || true`
+`0929..092b` live `disassemble_function`/listing quote + disposition row; `016c` gate-tail cite row. Append `## R3 IVT cluster (verified 2026-09-30, program \`/fifa96.exe\`)` — tables + disposition-so-far (exit classes, INT site count, BX outcome classes, staging answer or OPEN-WINDOW named). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: walk R3 to exits, trace BX chain, sweep IVT-19c staging" || true`
 
 ---
 
 ### Task 2: Bar verdict + capped writes if any
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
 - Modify: Ghidra program `/fifa96.exe` — ONLY if the bar passes (rename + plate) or Task 1 exposed an unowned CODE run (none expected — the tiling is owned); `save_program` after writes
 
 **Interfaces:**
@@ -86,7 +86,7 @@ Only if Task 1 found unowned contiguous CODE: capped create path (real disasm �
 
 - [ ] **Step 3: Append + verify + commit**
 
-Append `### Writes` + verdicts + `### Deferrals` (+ `### Fix wave` trailer if own-row edits). Gate: full build + `ctest` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: R3 verdict with IVT staging disposition" || true`
+Append `### Writes` + verdicts + `### Deferrals` (+ `### Fix wave` trailer if own-row edits). Gate: full build + `ctest` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: R3 verdict with IVT staging disposition" || true`
 
 ---
 

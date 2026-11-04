@@ -8,12 +8,12 @@
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `disassemble_function`, `disassemble_bytes` (Task 1 `dry_run=true`), `read_memory` (hex-vs-data protocol), `search_instructions` (authority), `search_byte_patterns`, `find_code_gaps` (full pagination), `audit_data_region`/`analyze_data_region`, `get_xrefs_to` (control), Task 2: real `disassemble_bytes`, `create_function`, `clear_flow_and_repair` (single capped attempt, see Constraints), `clear_instruction_flow_override`, `rename_function`, `set_comment`, `save_program` + slice-24 census protocol), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-30 (final-review slice-28 triage, verbatim: "the orphan-FAMILY (`02da..02f8`/`0976..099a`/`6328..634e`) + foreign `64ff..6548` + H9 `DAT_11bd_0a35` listing decision + H3-surplus `0675..0696` arg-cells belong together (all are flip-carve/arg-cell artifacts of the slice-23 sweep); carry `674c/675a`, `2cc5/0e3c`, `[0x56]/[0x58]`, runtime writers/RETF-consumer, name-class route, Δ1 unchanged") + `docs/ghidra/loader_rename_map.md` (`## 02b7 twin` — orphan tail `02da..02f8` RATIFIED record incl. the direction-UNDECIDED both-bodies-set-only-`OR [0x40]` note; `## vector dispatch handlers` — H7 `0938..0973` + `f3f0`@`0974` split + `0976..099a` remainder deferral row, H9 relabel row + row `2605..262d`, H3 relabel + surplus finding; `## 2811..296c pocket + 9bc vector`; `## block head 2978..2a59` — R1 `enable_paging_and_load_tss` tail `29b5 e97fd9` → relay `0337` (`caseD_0`, `0337..033b`, `2eff26fa02` cell-`[0x2fa]`), DYNAMIC-ONLY precedent (`2a5a` created with cited pair-table mechanism); `## sweep-aftermath ratification` — flip row `80cf..8118` original state; `## IVT loose ends` — strip full evidence package (`0929`-adjacent, `62f8` writer pair, JNZ→`1000:7f0d`=internal `633d` loop-back, zero static entries); `## far-return halves` — surplus flip RATIFY row `false→true`, `0675` bytes, six verdict rows, merged rulings list incl. "create needs mechanism" principle).
+**Spec:** Approved chat design 2026-09-30 (final-review slice-28 triage, verbatim: "the orphan-FAMILY (`02da..02f8`/`0976..099a`/`6328..634e`) + foreign `64ff..6548` + H9 `DAT_11bd_0a35` listing decision + H3-surplus `0675..0696` arg-cells belong together (all are flip-carve/arg-cell artifacts of the slice-23 sweep); carry `674c/675a`, `2cc5/0e3c`, `[0x56]/[0x58]`, runtime writers/RETF-consumer, name-class route, Δ1 unchanged") + `port/spec/loader_rename_map.md` (`## 02b7 twin` — orphan tail `02da..02f8` RATIFIED record incl. the direction-UNDECIDED both-bodies-set-only-`OR [0x40]` note; `## vector dispatch handlers` — H7 `0938..0973` + `f3f0`@`0974` split + `0976..099a` remainder deferral row, H9 relabel row + row `2605..262d`, H3 relabel + surplus finding; `## 2811..296c pocket + 9bc vector`; `## block head 2978..2a59` — R1 `enable_paging_and_load_tss` tail `29b5 e97fd9` → relay `0337` (`caseD_0`, `0337..033b`, `2eff26fa02` cell-`[0x2fa]`), DYNAMIC-ONLY precedent (`2a5a` created with cited pair-table mechanism); `## sweep-aftermath ratification` — flip row `80cf..8118` original state; `## IVT loose ends` — strip full evidence package (`0929`-adjacent, `62f8` writer pair, JNZ→`1000:7f0d`=internal `633d` loop-back, zero static entries); `## far-return halves` — surplus flip RATIFY row `false→true`, `0675` bytes, six verdict rows, merged rulings list incl. "create needs mechanism" principle).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes; suite stays 10/10 untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` vs `data` before verbatim.
 - Task 1 writes NOTHING: dry-run only; reads only; tool error on required sub-step → BLOCKED.
 - Per-region mandatory evidence set (uniform across the six): current listing state (`get_function_by_address` start±1 + both walls, verbatim; gap row verbatim from FULL pagination pass); two-render windows + maximal render-stable CODE span; inbound-edge census — operand runs for EVERY address in the region's first 4 bytes (both space-views) + the relay-precedent form: cited insns whose recomputed target lands ANYWHERE in the region (R1→`0337` proves inbound static edges exist for this class; run them, don't assume absence); terminator/head-shape byte signature vs the other regions (the family comparison the design asks for: head bytes + loop-back + exit-op multiset per region, rendered as a 6×N signature table); mechanism row per region {pair-table word resolving into it (cite the table row + word), arm-cell writer with value, RETF-consumer story cite, or NONE}.
@@ -22,7 +22,7 @@
 - Capped-write regime for everything else: real disassembly → ONE nudge → RATIFY, verbatim before/after; never create over owned/defined bytes; stop-short wall cites; save ⇒ FULL slice-24 census protocol (count Δ reconciled to the write-set EXACTLY — the Δ arithmetic is itself the side-effect proof; gaps FULL pagination; neighborhood re-derivations; overlay membership spot-checks; scope line; any flip/absorption named in the ledger).
 - Naming bar unchanged: printed-ops mechanism names only (`return`-class needs cited terminator op — near `c3` admissible per slice-28 ruling 1; `far`-class needs segment-pop evidence; IVT/mode words need their cited pairing/CR-class ops); NOT-CONFIRMED-at-name default stands; plate `C: none — behavioral (<role>)`; direction words banned (H7-remainder keeps UNDECIDED status per slice-15/22 records — a family signature does NOT resolve direction unless ops do, cite).
 - Scope guard: `674c/675a`, `2cc5/0e3c`, `[0x56]/[0x58]` full stories, `[0x2fa]`/`[0x9ba]` runtime, name-class route, Δ1 — cite-only carry; no handler-primary re-walks; the relay `0337`'s own cell story (`[0x2fa]` writers) stays deferred (its inbound edge is cited as precedent only).
-- Append-only map (new section `## orphan family`); prior sections byte-identical; leave `fifa96.rep/**` churn unstaged; commit messages exactly per briefs; no new tests.
+- Append-only map (new section `## orphan family`); prior sections byte-identical; leave `data/fifa96.rep/**` churn unstaged; commit messages exactly per briefs; no new tests.
 
 ---
 
@@ -32,16 +32,16 @@ Six uniform evidence packages + one mechanism question + one sanctioned flow-rep
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## orphan family` (Task 1: per-region tables + signature matrix + mechanism rows + listing-decision analysis; Task 2: `### Writes` + verdicts + `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## orphan family` (Task 1: per-region tables + signature matrix + mechanism rows + listing-decision analysis; Task 2: `### Writes` + verdicts + `### Deferrals`).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only: ≤1 flow-repair + ≤1 H9-path create + mechanism-admitted creates per proposals + bar renames; `save_program` + census.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Family census + mechanism analysis (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## orphan family` with per-region evidence + signature matrix + mechanism + proposals)
+- Modify: `port/spec/loader_rename_map.md` (append `## orphan family` with per-region evidence + signature matrix + mechanism + proposals)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -62,14 +62,14 @@ Multiset/head/loop signature matrix; mechanism rows; per-cell arg analysis with 
 
 - [ ] **Step 4: H9 analysis + proposals + append + commit**
 
-Flow-repair expected-effect paragraph (pre-written for Task 2 to quote); dispositions + bar pre-tests. Append `## orphan family (verified 2026-09-30, program \`/fifa96.exe\`)`. Gate: build + `ctest` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: six-region orphan-family census with signatures mechanisms and proposals" || true`
+Flow-repair expected-effect paragraph (pre-written for Task 2 to quote); dispositions + bar pre-tests. Append `## orphan family (verified 2026-09-30, program \`/fifa96.exe\`)`. Gate: build + `ctest` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: six-region orphan-family census with signatures mechanisms and proposals" || true`
 
 ---
 
 ### Task 2: Execute dispositions (capped)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
 - Modify: Ghidra program `/fifa96.exe` — creates only per mechanism rule; ONE flow-repair attempt (H9 path) under the full pre/post protocol; renames at bar; `save_program` + census
 
 **Interfaces:**
@@ -86,7 +86,7 @@ Creates with mechanism cites; H9 path only if Task-1's preconditions hold at pre
 
 - [ ] **Step 3: Save + census + append + commit**
 
-`save_program` if writes; full protocol; append `### Writes`/verdicts/`### Deferrals` (+ `### Fix wave` trailer if needed). Gate: build + `ctest` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: dispose orphan family with flow-repair attempt and mechanism-gated creates" || true`
+`save_program` if writes; full protocol; append `### Writes`/verdicts/`### Deferrals` (+ `### Fix wave` trailer if needed). Gate: build + `ctest` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: dispose orphan family with flow-repair attempt and mechanism-gated creates" || true`
 
 ---
 

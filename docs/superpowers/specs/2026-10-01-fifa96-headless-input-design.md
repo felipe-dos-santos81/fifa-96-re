@@ -14,7 +14,7 @@ facility for every later gameplay-gated probe.
 
 ## Context
 
-* The capture rig (`run-fifa96-capture.sh`) generates a DOSBox-X conf and runs
+* The capture rig (`tools/run-fifa96-capture.sh`) generates a DOSBox-X conf and runs
   the game with `-silent`; windowed mode is unusable on this host and host-side
   input (xdotool) cannot reach the client window.
 * This DOSBox-X build supports `AUTOTYPE` (`AUTOTYPE [-w WAIT] [-p PACE] key
@@ -70,13 +70,13 @@ dependency. CLI: `fifa96_keys.py FILE [--pace P] [--check]`. Without
 `--check`, prints one `AUTOTYPE` line per step to stdout. With `--check`,
 prints nothing and exits 0/1 after validating.
 
-**`tests/test_keys.py`** (new, CTest `test_keys`) — unit tests: comment/blank
+**`tools/tests/test_keys.py`** (new, CTest `test_keys`) — unit tests: comment/blank
 skipping, integer and float waits, cumulative absolute waits across steps,
 multi-key lines, comma separators, default and overridden pace, exact
 `AUTOTYPE` output, and `--check` acceptance and rejection. Suite becomes 18
 tests.
 
-**`run-fifa96-capture.sh`** (modified) — gains `KEYS_FILE` (unset or empty:
+**`tools/run-fifa96-capture.sh`** (modified) — gains `KEYS_FILE` (unset or empty:
 today's behavior, byte-identical). When set: the file must exist and validate
 (via `--check`); its generated lines are inserted into the `[autoexec]`
 heredoc before the `FIFA96.EXE` line. Failure aborts before DOSBox starts.
@@ -88,7 +88,7 @@ refined during the empirical loop.
 
 `KEYS_FILE` → `fifa96_keys.py` → `AUTOTYPE` lines → DOSBox-X `[autoexec]` →
 emulated keyboard → guest input path → game advances → T_PROBE frames and/or
-new FILE opens in `captures/session-*/trace.bin`.
+new FILE opens in `data/captures/session-*/trace.bin`.
 
 ## Empirical loop and success criteria
 
@@ -109,10 +109,10 @@ the unchanged trace mix (no progress). No fabricated results.
 
 ## Testing
 
-* Unit: `tests/test_keys.py` (contract above); `make test` must be 18/18.
+* Unit: `tools/tests/test_keys.py` (contract above); `make test` must be 18/18.
 * Integration: the two probe runs above; their decoder output and trace
-  provenance are quoted in `docs/ghidra/FU13_headless_input.md`.
-* `sh -n run-fifa96-capture.sh` stays clean.
+  provenance are quoted in `port/spec/FU13_headless_input.md`.
+* `sh -n tools/run-fifa96-capture.sh` stays clean.
 
 ## Deliverables
 

@@ -8,12 +8,12 @@
 
 **Tech Stack:** Ghidra-MCP (`disassemble_function`, `disassemble_bytes` (Task 1 `dry_run=true`), `get_function_by_address`, `read_memory` (hex-vs-data protocol), `search_instructions` (authority), `search_byte_patterns`, `get_xrefs_to` (control only), `find_code_gaps` (full pagination), Task 2: real `disassemble_bytes`, `create_function`, `apply_data_type`/`set_global`-class defines, `set_comment`, `save_program` + slice-24 census protocol), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat proposal 2026-09-30 ("IVT loose ends (smallest, bytes already re-verified): `6329..633c` unowned zero-DS staging strip + `7750` capped define", user: "yes") + `docs/ghidra/loader_rename_map.md` (`## R3 IVT cluster` — `### Deferrals` bullets for both candidates; staging chain bytes `{76c8,76cc}`, `c7045077`/`8c4c02` → `0:19C/19E`, restore pair `8f4402/8f04`@`76d1/76d4`; Fold-in #2 disclosure row with the strip bytes; `2f65`/`6335/6338` mask-unreliability proof bytes; `## vector selection logic` — `016c` patch-leg family (sibling staging shapes), `0929` live `6a20/1f` pre-entry stub precedent; `## block head 2978..2a59` — `7739` as the `CS:[0x2ad9]` writer (neighborhood context for `7750`); `## sweep-aftermath ratification` — census protocol + name-propagation ledger format).
+**Spec:** Approved chat proposal 2026-09-30 ("IVT loose ends (smallest, bytes already re-verified): `6329..633c` unowned zero-DS staging strip + `7750` capped define", user: "yes") + `port/spec/loader_rename_map.md` (`## R3 IVT cluster` — `### Deferrals` bullets for both candidates; staging chain bytes `{76c8,76cc}`, `c7045077`/`8c4c02` → `0:19C/19E`, restore pair `8f4402/8f04`@`76d1/76d4`; Fold-in #2 disclosure row with the strip bytes; `2f65`/`6335/6338` mask-unreliability proof bytes; `## vector selection logic` — `016c` patch-leg family (sibling staging shapes), `0929` live `6a20/1f` pre-entry stub precedent; `## block head 2978..2a59` — `7739` as the `CS:[0x2ad9]` writer (neighborhood context for `7750`); `## sweep-aftermath ratification` — census protocol + name-propagation ledger format).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes; suite stays 10/10 untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` vs `data` before verbatim.
 - Task 1 writes NOTHING: dry-run disassembly only; reads only; tool error on required sub-step → BLOCKED.
 - Render-dependence discipline: for each candidate span, emit from AT LEAST TWO start offsets (the span start and a preceding anchor) and report both renderings — ownership claims must rest on the authority runs (`search_instructions` operand/bare-mnemonic), not on a single window (slices 26's `173b`/`4c94` rows are the template).
@@ -22,7 +22,7 @@
 - Naming bar: mechanism-level names only from the body's cited ops (segment-ops/stack-ops/stores with rendered cells are admissible; "vector/IVT"-flavored words still require in-body staging writes or INT/IRET pairing at the slice-26 bar); NOT-CONFIRMED-at-name = default name, no plate beyond `C: none — behavioral (...)`.
 - Negatives scoped ("defined-insn-only, at this-slice time"); OPEN-WINDOW rows for dynamic bases with the missing leg named; controls quoted not relied on; every run pattern + match_count + scope.
 - Scope guard: no new sweeps of `{0x9bc,0x9be,0x9c2,[0x56],[0x58]}` beyond what the strip's OWN ops require (census of referenced cells limited to the two/three the strip reads — writer enumeration one-line each, full stories stay deferred); `[0xe00]`/`[0x2f]`/`[0x2e]` gate-adjacent threads untouched (cite-only); `674c/675a` dive stays deferred.
-- Prior sections byte-identical (append-only; new section `## IVT loose ends`); leave `fifa96.rep/**` churn unstaged; commit messages exactly per briefs; no new tests.
+- Prior sections byte-identical (append-only; new section `## IVT loose ends`); leave `data/fifa96.rep/**` churn unstaged; commit messages exactly per briefs; no new tests.
 
 ---
 
@@ -32,16 +32,16 @@ Two carried candidates, each with one bounded walk + one capped-write decision. 
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## IVT loose ends` (Task 1: strip context + renders + reference/entry tables + 7750 neighborhood + proposals; Task 2: `### Writes` or zero-writes proof + dispositions + `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## IVT loose ends` (Task 1: strip context + renders + reference/entry tables + 7750 neighborhood + proposals; Task 2: `### Writes` or zero-writes proof + dispositions + `### Deferrals`).
 - Modify (conditional): Ghidra program `/fifa96.exe` — Task 2 only: creates/defines at cited bounds; `save_program` after writes.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Strip walk + 7750 census (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## IVT loose ends` with context/render/entry/neighborhood/proposal tables)
+- Modify: `port/spec/loader_rename_map.md` (append `## IVT loose ends` with context/render/entry/neighborhood/proposal tables)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -62,14 +62,14 @@ Reads + ownership probes + reference runs (`7750` operand, `5077` byte-pattern) 
 
 - [ ] **Step 4: Proposals + append + commit**
 
-Append `## IVT loose ends (verified 2026-09-30, program \`/fifa96.exe\`)` — tables + proposals + bar pre-test; disposition-so-far line. Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: walk 6329 staging strip context and 7750 sink neighborhood" || true`
+Append `## IVT loose ends (verified 2026-09-30, program \`/fifa96.exe\`)` — tables + proposals + bar pre-test; disposition-so-far line. Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: walk 6329 staging strip context and 7750 sink neighborhood" || true`
 
 ---
 
 ### Task 2: Execute dispositions (capped)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes` + verdicts + `### Deferrals`)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes` + verdicts + `### Deferrals`)
 - Modify (conditional): Ghidra program `/fifa96.exe` — creates/defines only per Task-1 proposals + live pre-check; `save_program` + census protocol if any write
 
 **Interfaces:**
@@ -86,7 +86,7 @@ Strip create (if entry-cited) at `6329` with bounds landing `..633c` (stop-short
 
 - [ ] **Step 3: Save + census + append + commit**
 
-`save_program` if any write; census protocol in full (slice-24 procedure); append `### Writes`/verdicts/`### Deferrals` (+ `### Fix wave` trailer if needed). Gate: build + `ctest` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: dispose IVT loose ends with capped dispositions" || true`
+`save_program` if any write; census protocol in full (slice-24 procedure); append `### Writes`/verdicts/`### Deferrals` (+ `### Fix wave` trailer if needed). Gate: build + `ctest` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: dispose IVT loose ends with capped dispositions" || true`
 
 ---
 

@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Repair the FIFA96 LE image's broken data-address model so data xrefs and string consumers resolve, then finish the dispatcher state-machine, loader-bridge, and triage gaps — as evidence-gated `docs/ghidra/FU*.md` slices.
+**Goal:** Repair the FIFA96 LE image's broken data-address model so data xrefs and string consumers resolve, then finish the dispatcher state-machine, loader-bridge, and triage gaps — as evidence-gated `port/spec/FU*.md` slices.
 
 **Architecture:** A first task (spike) establishes the true LE address model and issues a go/no-go on re-import vs. living with the `+0x100000` offset rule. The second task applies the chosen correction to the Ghidra project and verifies that a known global now reads its real bytes. Three further tasks close the structural legs (state producers, loader bridge, triage). Every task ends with a doc slice and two commits (doc, then `chore(ghidra)`); `make check` (80/80) must stay green.
 
 **Tech Stack:** Ghidra-MCP tools against programs `/fifa96_le.bin` and `/fifa96.exe`; repo tools in `tools/` (notably `tools/fifa96_le.py`); git; `make check` (CMake/CTest).
 
-**Spec:** `docs/ghidra/FU129_data_base_and_identity.md` (the `+0x100000` discovery and library identity).
+**Spec:** `port/spec/FU129_data_base_and_identity.md` (the `+0x100000` discovery and library identity).
 
 ## Global Constraints
 
@@ -17,18 +17,18 @@
 - **Ghidra scripts are DISABLED** (`GHIDRA_MCP_ALLOW_SCRIPTS` unset). Use only standard MCP tools: `inspect_memory_content`, `search_instructions`, `search_strings`, `get_bulk_xrefs`, `decompile_function`, `disassemble_function`, `search_functions_enhanced`, `set_comment`, `rename_symbol`, `save_program`, `get_function_by_address`.
 - **Authoritative memory is the Ghidra program `/fifa96_le.bin`**, not the on-disk `/tmp/opencode/fifa96_le.bin` (stale). Never run `objdump`/`ndisasm` on the on-disk file.
 - **Two programs are open:** `/fifa96.exe` (16-bit loader) and `/fifa96_le.bin` (32-bit LE image). Pass `program=` explicitly on every call.
-- **Doc numbering:** continue from FU-129; the first new slice is **FU-130**. File names: `docs/ghidra/FU<NNN>_<snake_topic>.md`.
+- **Doc numbering:** continue from FU-129; the first new slice is **FU-130**. File names: `port/spec/FU<NNN>_<snake_topic>.md`.
 - **Commit protocol** (two commits per task):
   ```bash
-  git add docs/ghidra/FU<NNN>_<topic>.md
+  git add port/spec/FU<NNN>_<topic>.md
   git commit -m "docs(fu<NNN>): <one line>"
-  git add -A fifa96.rep
-  git status --short fifa96.rep | grep -E 'tmp[0-9]+\.ps$' | sed 's/^...//' | while read -r f; do git restore --staged -- "$f" 2>/dev/null; done
+  git add -A data/fifa96.rep
+  git status --short data/fifa96.rep | grep -E 'tmp[0-9]+\.ps$' | sed 's/^...//' | while read -r f; do git restore --staged -- "$f" 2>/dev/null; done
   git commit -m "chore(ghidra): <one line>"
   ```
 - **Save the Ghidra program before the `chore(ghidra)` commit:** `ghidra_save_program(program="/fifa96_le.bin")`.
 - **Regression gate:** run `make check` before each `chore(ghidra)` commit; expect `100% tests passed, 0 tests failed out of 80`.
-- **No comments/assertions about runtime state** unless produced by a listed capture; do not touch `captures/`.
+- **No comments/assertions about runtime state** unless produced by a listed capture; do not touch `data/captures/`.
 
 ---
 
@@ -36,7 +36,7 @@
 
 **Files:**
 - Read: `tools/fifa96_le.py` (the LE parser), `game/` (source image), `README.md`
-- Create: `docs/ghidra/FU130_le_address_model.md`
+- Create: `port/spec/FU130_le_address_model.md`
 
 **Interfaces:**
 - Consumes: FU-129's empirical rule (`X` ↔ `X + 0x100000`).
@@ -73,14 +73,14 @@ ghidra_inspect_memory_content(program="/fifa96_le.bin", address="0x1A30",  lengt
 ```
 Expected: `0x101A30` holds a resource string (the table entry `0x1A30` at `0x107370` plus the base); `0x1A30` is `00`. This confirms the rule against live memory.
 
-- [ ] **Step 5: Write `docs/ghidra/FU130_le_address_model.md`**
+- [ ] **Step 5: Write `port/spec/FU130_le_address_model.md`**
 
 Include, with the verbatim outputs: the source path, the parser command used, the header's data-segment linear address, the fixup finding, the two memory cross-checks, the `REIMPORT_VIABLE` decision, and numbered open legs. Mirror the section layout of `FU129_data_base_and_identity.md` (result-in-one-line, evidence tables, provenance, open legs). If refuted, say so explicitly and set `REIMPORT_VIABLE: no` with the reason.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/ghidra/FU130_le_address_model.md
+git add port/spec/FU130_le_address_model.md
 git commit -m "docs(fu130): LE address model and re-import go/no-go"
 ```
 
@@ -90,7 +90,7 @@ git commit -m "docs(fu130): LE address model and re-import go/no-go"
 
 **Files:**
 - Modify: the Ghidra project `/fifa96_le.bin` (comments/labels; or a re-imported program)
-- Create: `docs/ghidra/FU131_data_relabel_map.md`
+- Create: `port/spec/FU131_data_relabel_map.md`
 
 **Interfaces:**
 - Consumes: `REIMPORT_VIABLE` and the data-segment address from Task 1.
@@ -132,7 +132,7 @@ ghidra_decompile_function(program="/fifa96_le.bin", address="0x4a6bc")
 ```
 Record the call chain; confirm the strings it feeds (`GAMEART`, `art/gameart0.pvi`) live at `0x101C64`/`0x101C6C`.
 
-- [ ] **Step 4: Write `docs/ghidra/FU131_data_relabel_map.md`**
+- [ ] **Step 4: Write `port/spec/FU131_data_relabel_map.md`**
 
 A table: `code operand | real data address | current bytes | meaning | provenance`. State which branch was taken. List remaining unmapped globals as open legs.
 
@@ -142,10 +142,10 @@ A table: `code operand | real data address | current bytes | meaning | provenanc
 ghidra_save_program(program="/fifa96_le.bin")
 ```
 ```bash
-git add docs/ghidra/FU131_data_relabel_map.md
+git add port/spec/FU131_data_relabel_map.md
 git commit -m "docs(fu131): data relabel map (+0x100000)"
-git add -A fifa96.rep
-git status --short fifa96.rep | grep -E 'tmp[0-9]+\.ps$' | sed 's/^...//' | while read -r f; do git restore --staged -- "$f" 2>/dev/null; done
+git add -A data/fifa96.rep
+git status --short data/fifa96.rep | grep -E 'tmp[0-9]+\.ps$' | sed 's/^...//' | while read -r f; do git restore --staged -- "$f" 2>/dev/null; done
 git commit -m "chore(ghidra): annotate real data addresses (+0x100000)"
 ```
 
@@ -155,7 +155,7 @@ git commit -m "chore(ghidra): annotate real data addresses (+0x100000)"
 
 **Files:**
 - Modify: `/fifa96_le.bin` (comments on the writer functions, if new functions are created/repaired)
-- Create: `docs/ghidra/FU132_state_producers.md`
+- Create: `port/spec/FU132_state_producers.md`
 
 **Interfaces:**
 - Consumes: FU-126/FU-127's state getters (`FUN_0004382c`=`[0x677C]`, `FUN_00043608`/`FUN_00043610`=`[0x6780]`) and the counters `[0x9090]`/`[0x9094]`.
@@ -186,7 +186,7 @@ ghidra_get_bulk_xrefs(program="/fifa96_le.bin", addresses="0x43568,0x435c0,0x435
 ```
 Expected: the special-render path (`FUN_00058bc0`) among the callers. Record each target's role.
 
-- [ ] **Step 4: Write `docs/ghidra/FU132_state_producers.md`**
+- [ ] **Step 4: Write `port/spec/FU132_state_producers.md`**
 
 Table: `state | writer | trigger | consumers`. Include the `FUN_000435xx` cluster roles. Open legs for any global with no static writer.
 
@@ -196,10 +196,10 @@ Table: `state | writer | trigger | consumers`. Include the `FUN_000435xx` cluste
 ghidra_save_program(program="/fifa96_le.bin")
 ```
 ```bash
-git add docs/ghidra/FU132_state_producers.md
+git add port/spec/FU132_state_producers.md
 git commit -m "docs(fu132): dispatcher state producers"
-git add -A fifa96.rep
-git status --short fifa96.rep | grep -E 'tmp[0-9]+\.ps$' | sed 's/^...//' | while read -r f; do git restore --staged -- "$f" 2>/dev/null; done
+git add -A data/fifa96.rep
+git status --short data/fifa96.rep | grep -E 'tmp[0-9]+\.ps$' | sed 's/^...//' | while read -r f; do git restore --staged -- "$f" 2>/dev/null; done
 git commit -m "chore(ghidra): annotate state producers"
 ```
 
@@ -209,7 +209,7 @@ git commit -m "chore(ghidra): annotate state producers"
 
 **Files:**
 - Read: `/fifa96.exe` Ghidra program; `README.md` (loader notes); `tools/fifa96_bind.py`
-- Create: `docs/ghidra/FU133_loader_bridge.md`
+- Create: `port/spec/FU133_loader_bridge.md`
 
 **Interfaces:**
 - Consumes: FU-114's open leg (no static caller of `FUN_00063ebc`).
@@ -239,14 +239,14 @@ ghidra_get_bulk_xrefs(program="/fifa96_le.bin", addresses="0x63ebc")
 ```
 Cross-reference FU-114's conclusion. If still no static caller, record it as a loader/indirect entry (not a defect).
 
-- [ ] **Step 4: Write `docs/ghidra/FU133_loader_bridge.md`**
+- [ ] **Step 4: Write `port/spec/FU133_loader_bridge.md`**
 
 Sections: loader inventory; load/relocation findings (or their absence); the `FUN_00063ebc` caller verdict; open legs. If a relocation table is found that explains the `+0x100000`, cross-link Task 1's FU-130.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/ghidra/FU133_loader_bridge.md
+git add port/spec/FU133_loader_bridge.md
 git commit -m "docs(fu133): loader bridge and FUN_00063ebc caller verdict"
 ```
 
@@ -255,7 +255,7 @@ git commit -m "docs(fu133): loader bridge and FUN_00063ebc caller verdict"
 ### Task 5: No-caller triage and `FUN_000a6a03`
 
 **Files:**
-- Create: `docs/ghidra/FU134_entry_triage.md`
+- Create: `port/spec/FU134_entry_triage.md`
 
 **Interfaces:**
 - Consumes: `search_functions_enhanced` results (this session's xref census).
@@ -276,14 +276,14 @@ ghidra_search_functions_enhanced(program="/fifa96_le.bin", name_pattern="^FUN_00
 ```
 For each function with `xref_count == 0` in the sample, record: address, whether it is reached only indirectly (no caller), and classification `RE-in-image` / `library-internal` / `runtime-only`.
 
-- [ ] **Step 3: Write `docs/ghidra/FU134_entry_triage.md`**
+- [ ] **Step 3: Write `port/spec/FU134_entry_triage.md`**
 
 Table: `function | xref_count | classification | evidence`. Explicitly list unresolved items as open legs. Add the `FUN_000a6a03` call-site analysis.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/ghidra/FU134_entry_triage.md
+git add port/spec/FU134_entry_triage.md
 git commit -m "docs(fu134): entry triage and FUN_000a6a03 call site"
 ```
 

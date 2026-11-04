@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan, Ghidra MCP read-only, SDL3 smoke (`make game`, DISPLAY=:1).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU148…`, `FU152…`, `FU145…`, `FU142…`, `FU75…`; predecessors `docs/superpowers/plans/2026-10-09-fifa96-m2-phase9-live-pad-loop.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU148…`, `FU152…`, `FU145…`, `FU142…`, `FU75…`; predecessors `docs/superpowers/plans/2026-10-09-fifa96-m2-phase9-live-pad-loop.md`.
 
 ## Global Constraints
 
@@ -23,7 +23,7 @@
 ### Task 1: T1 — ball staging producers (visible follow-cam + ball)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` (ball-staging call path), `src/fifa96_loader/fifa96_ball.c` / relevant loader (the `FUN_0007A490`/`FUN_0007A084` staging bodies per first-hand derivation), `src/fifa96_engine/fifa96_match_entities.c` (ball entity staging/height), `tests/test_engine_match_handlers.c`, `tests/test_engine_match_frame.c`, `docs/ghidra/FU148_presentation_hud_camera.md` (§13.5 status), `docs/ghidra/FU142_installer_arms_scope.md` (OL-88 status), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` (ball-staging call path), `port/src/fifa96_loader/fifa96_ball.c` / relevant loader (the `FUN_0007A490`/`FUN_0007A084` staging bodies per first-hand derivation), `port/src/fifa96_engine/fifa96_match_entities.c` (ball entity staging/height), `port/tests/test_engine_match_handlers.c`, `port/tests/test_engine_match_frame.c`, `port/spec/FU148_presentation_hud_camera.md` (§13.5 status), `port/spec/FU142_installer_arms_scope.md` (OL-88 status), `port/ENGINE.md`
 - Read: FU-148 §13.5 (ball-staging leads), FU-142 OL-88, the f-up8 T3 high-ball trigger (`0x739DC hi>0x10` gate) and f-up9 T3 arm (`0x71E1C..`, `hi>0xF0`), the ball-render path
 
 **Interfaces:**
@@ -39,7 +39,7 @@
 ### Task 2: T2 — live-path carry-ons (L4.1, config producers, remaining pan callers)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` / `fifa96_match_handlers.c` (L4.1 unbound-record walk per FU-75 §11), `src/fifa96_loader/fifa96_input.c` (`0x105278` config-cell producer per FU-148 §13), `src/fifa96_engine/fifa96_camera.c` (remaining `FUN_00071C94` callers, walk-gate config), `tests/*`, `docs/ghidra/FU75_*.md`, `docs/ghidra/FU148…`, `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` / `fifa96_match_handlers.c` (L4.1 unbound-record walk per FU-75 §11), `port/src/fifa96_loader/fifa96_input.c` (`0x105278` config-cell producer per FU-148 §13), `port/src/fifa96_engine/fifa96_camera.c` (remaining `FUN_00071C94` callers, walk-gate config), `port/tests/*`, `port/spec/FU75_*.md`, `port/spec/FU148…`, `port/ENGINE.md`
 - Read: FU-75 L4.1, FU-148 §12/§13 (config cells read-only census; producers), FU-152 §2
 
 **Interfaces:**
@@ -55,7 +55,7 @@
 ### Task 3: T3 — band-reachable acceptance (natural tape goal)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` / scripts as needed to make the acceptance sequence drive lane into the half-line band (live-driven or scripted scenario per spec §5 conventions), `tests/test_engine_m2.c` (+ golden **re-pin expected**), `tests/golden/engine/m2-frames.txt`, `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` / scripts as needed to make the acceptance sequence drive lane into the half-line band (live-driven or scripted scenario per spec §5 conventions), `port/tests/test_engine_m2.c` (+ golden **re-pin expected**), `port/tests/golden/engine/m2-frames.txt`, `port/ENGINE.md`
 - Read: spec §5 (tape conventions: declared forcing + reasons), f-up8 T4 natural-goal chain, f-up9 T3 no-re-pin evidence (lane ~1460+)
 
 **Interfaces:**
@@ -71,7 +71,7 @@
 ### Task 4: T4 — acceptance v10 + whole-plan review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (+ golden iff moved), `docs/ENGINE.md`, `README.md`, `docs/screens/*`
+- Modify: `port/tests/test_engine_m2.c` (+ golden iff moved), `port/ENGINE.md`, `README.md`, `docs/screens/*`
 - Read: tape v9 provenance
 
 **Interfaces:**

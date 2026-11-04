@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan, Ghidra MCP read-only, SDL3 smoke.
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU149_set_pieces_restarts.md`, `FU150_fouls_referee_offside.md`, `FU151_keeper_ai.md`, `FU152_presentation_residual.md`; predecessors `docs/superpowers/plans/2026-10-08-fifa96-m2-phase7-recon-ahead.md`, `2026-10-08-fifa96-m2-full-gameplay.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU149_set_pieces_restarts.md`, `FU150_fouls_referee_offside.md`, `FU151_keeper_ai.md`, `FU152_presentation_residual.md`; predecessors `docs/superpowers/plans/2026-10-08-fifa96-m2-phase7-recon-ahead.md`, `2026-10-08-fifa96-m2-full-gameplay.md`.
 
 ## Global Constraints
 
@@ -16,15 +16,15 @@
 - Evidence floor: first-hand bytes/addresses; fresh xrefs for census claims; `/FIFA96.EXE`; +0x100000 rule; CALL-byte/word-pair/gate traps.
 - Determinism: null backend source of truth; **M1 never moves**; M2 re-pins only for intended upgrades with written reason + frame diff; never to hide a mismatch.
 - No fakes; unreachable → numbered legs; shared 0xB/situation entries never duplicated.
-- ISO-gated tests skip without `game/FIFAPCCD96.iso`; commits `feat/fix/docs/test`; controller verifies (`make check`, tape `cmp`, tree clean) and pushes.
+- ISO-gated tests skip without `data/game/FIFAPCCD96.iso`; commits `feat/fix/docs/test`; controller verifies (`make check`, tape `cmp`, tree clean) and pushes.
 
 ---
 
 ### Task 1: P1 — set pieces & restarts (FU-149)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` / `.h` (rows 0x10 taker / 0x11 corner / 0x1D goal-kick per FU-149), `src/fifa96_engine/fifa96_match_run.c` / `.h` (set-piece routing: `fifa96_match_run_set_piece`, `fifa96_match_run_scan_restarts`, phase arm install 3 + controlled-side codes, session-gate state), `tests/test_engine_match_frame.c`, `tests/test_engine_match_handlers.c`, `tests/test_engine_m2.c` (+ golden iff moved), `docs/ghidra/FU149_set_pieces_restarts.md` (status/errata), `docs/ENGINE.md`
-- Read: `docs/ghidra/FU149_set_pieces_restarts.md` (requirements source), `FU146` §7.1 (shared-entry rule)
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` / `.h` (rows 0x10 taker / 0x11 corner / 0x1D goal-kick per FU-149), `port/src/fifa96_engine/fifa96_match_run.c` / `.h` (set-piece routing: `fifa96_match_run_set_piece`, `fifa96_match_run_scan_restarts`, phase arm install 3 + controlled-side codes, session-gate state), `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_match_handlers.c`, `port/tests/test_engine_m2.c` (+ golden iff moved), `port/spec/FU149_set_pieces_restarts.md` (status/errata), `port/ENGINE.md`
+- Read: `port/spec/FU149_set_pieces_restarts.md` (requirements source), `FU146` §7.1 (shared-entry rule)
 
 **Interfaces:**
 - Produces: set-piece situations — sit 2 throw-in → phase 3 (taker code 0x10), sit 3 corner → phase 4 + `side^side_swap` counter, sit 4 goal kick → phase 8 (keeper 0x1D); BX=1 fallback = phase 0 + act 8; scanner arms sit 2/3/4; `session_gate_14c32a`/`situation_pending`/`situation_id` state per the slice (L5 producer stays a leg if unprovable).
@@ -44,9 +44,9 @@
 ### Task 2: P2 — fouls / referee / offside (FU-150)
 
 **Files:**
-- Create: `src/fifa96_loader/fifa96_referee.c` / `include/fifa96_loader/fifa96_referee.h` (per the FU-150 port contract: `fifa96_ref_contact_register`, `fifa96_ref_foul_decide`, `fifa96_ref_offside_check`, `fifa96_ref_foul_sequence_step`, `fifa96_ref_offside_sequence_step`, caller-owned `struct fifa96_referee_state`)
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (wire contact/decision into act rows 0x0C/0x03/0x06 paths per slice; situation 9/0xA hand-off; free-kick award → phase 7/6 by z-band), `tests/*` (+ `tests/test_referee.c` registered), `CMakeLists.txt`, `docs/ghidra/FU150_fouls_referee_offside.md`, `docs/ENGINE.md`
-- Read: `docs/ghidra/FU150_fouls_referee_offside.md` (requirements), FU-149 (FK hand-off), FU-68 settings gates
+- Create: `port/src/fifa96_loader/fifa96_referee.c` / `port/src/fifa96_loader/fifa96_referee.h` (per the FU-150 port contract: `fifa96_ref_contact_register`, `fifa96_ref_foul_decide`, `fifa96_ref_offside_check`, `fifa96_ref_foul_sequence_step`, `fifa96_ref_offside_sequence_step`, caller-owned `struct fifa96_referee_state`)
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (wire contact/decision into act rows 0x0C/0x03/0x06 paths per slice; situation 9/0xA hand-off; free-kick award → phase 7/6 by z-band), `port/tests/*` (+ `port/tests/test_referee.c` registered), `CMakeLists.txt`, `port/spec/FU150_fouls_referee_offside.md`, `port/ENGINE.md`
+- Read: `port/spec/FU150_fouls_referee_offside.md` (requirements), FU-149 (FK hand-off), FU-68 settings gates
 
 **Interfaces:**
 - Produces: duck/contact → registrar (`FUN_0008A3FC` semantics) → decision (`FUN_0008A43C`, both callers: offside `0x79F2B`, contact `0x81EBF`) → act-3/phase-0x19 step machine / act-6/phase-0x1C → situation 9 (foul) / 9→free kick phase 7 or penalty phase 6 by the `[0x15888C]` z-band; offside check `FUN_00079D5C` + suppression `[0x157A6A]`; whistle/event requests per slice.
@@ -66,8 +66,8 @@
 ### Task 3: P3 — keeper + AI team logic (FU-151)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` / `.h` (row 1E 10-stage machine extending S1's claim base; row 1D closedown), `src/fifa96_engine/fifa96_match_entities.c` / `.h` (`fifa96_entity_face` sector, `_team_pick`, `_reset_lane` per slice), `src/fifa96_engine/fifa96_match_run.c` (AI pre-pass, driver), `tests/*` (+ golden iff moved), `docs/ghidra/FU151_keeper_ai.md`, `docs/ghidra/FU147_possession_locomotion.md` (the B3 errata: `[+0x8E]>>24` is byte `+0x91` action code — verify the engine already reads the right field; doc-only if so), `docs/ENGINE.md`
-- Read: `docs/ghidra/FU151_keeper_ai.md` (requirements; 15 legs), FU-147 §8/§9
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` / `.h` (row 1E 10-stage machine extending S1's claim base; row 1D closedown), `port/src/fifa96_engine/fifa96_match_entities.c` / `.h` (`fifa96_entity_face` sector, `_team_pick`, `_reset_lane` per slice), `port/src/fifa96_engine/fifa96_match_run.c` (AI pre-pass, driver), `port/tests/*` (+ golden iff moved), `port/spec/FU151_keeper_ai.md`, `port/spec/FU147_possession_locomotion.md` (the B3 errata: `[+0x8E]>>24` is byte `+0x91` action code — verify the engine already reads the right field; doc-only if so), `port/ENGINE.md`
+- Read: `port/spec/FU151_keeper_ai.md` (requirements; 15 legs), FU-147 §8/§9
 
 **Interfaces:**
 - Produces: keeper rows 1D/1E full stage machines (`fifa96_keeper_claim_step`, `fifa96_keeper_closedown_step`), claim→hold→release→restart, `+0x9B` lifecycle complete; AI mover reachable subset (nearest/lane picks `FUN_0008DDE0`, min-`+0x6B` team pick, reset pass `FUN_0008C33C`, pre-pass `0x8D9BD..0x8DAF3` incl. `0x10F37C`, `+0x7C7` writes, `FUN_0008DE8C` selection).
@@ -87,8 +87,8 @@
 ### Task 4: P4 — presentation residual (FU-152)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (render rows: sub strip, replay, overlay per slice §port contract), `src/fifa96_engine/fifa96_camera.c` / `.h` (camera handlers `0x108B80` bodies, mode table, FU-71 remaining bodies `709D0/70DE0/71DF4` + atan), `src/fifa96_loader/fifa96_palette.c` (pool identity + shade cube if a consumer exists), `src/fifa96_font.c` (centered draw + overlay strings), `tests/*`, `docs/ghidra/FU152_presentation_residual.md`, `docs/ENGINE.md`
-- Read: `docs/ghidra/FU152_presentation_residual.md` (requirements; 14 legs), FU-148 §5.2
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (render rows: sub strip, replay, overlay per slice §port contract), `port/src/fifa96_engine/fifa96_camera.c` / `.h` (camera handlers `0x108B80` bodies, mode table, FU-71 remaining bodies `709D0/70DE0/71DF4` + atan), `port/src/fifa96_loader/fifa96_palette.c` (pool identity + shade cube if a consumer exists), `port/src/fifa96_font.c` (centered draw + overlay strings), `port/tests/*`, `port/spec/FU152_presentation_residual.md`, `port/ENGINE.md`
+- Read: `port/spec/FU152_presentation_residual.md` (requirements; 14 legs), FU-148 §5.2
 
 **Interfaces:**
 - Produces: residual overlays (period/substitution/extra-time per case table, sub strip `%d - %d` + 5-mark rows, R5 dormant pinned), replay/cutscene rows (gates + draw order), camera handler bodies + pose selection, FU-71 remaining bodies, palette pool identity (38+9+1 slots) / shade cube per evidence.
@@ -108,7 +108,7 @@
 ### Task 5: P5 — acceptance v7 + whole-plan review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (+ `tests/golden/engine/m2-frames.txt` iff moved and not yet committed), `docs/ENGINE.md`, `README.md`, `docs/screens/*`
+- Modify: `port/tests/test_engine_m2.c` (+ `port/tests/golden/engine/m2-frames.txt` iff moved and not yet committed), `port/ENGINE.md`, `README.md`, `docs/screens/*`
 - Read: spec §5; the tape v6 provenance
 
 **Interfaces:**

@@ -2,7 +2,7 @@
 
 **Task:** M2 phase-32 Stage-2 task 2
 (`docs/superpowers/plans/2026-10-22-fifa96-m2-phase32-producers.md:60-75`).
-**Procedure:** `docs/ghidra/FU321_r2l6_nonzero_acceptance.md` §4 (the trace cells,
+**Procedure:** `port/spec/FU321_r2l6_nonzero_acceptance.md` §4 (the trace cells,
 the same-clock pairs, G1–G8, the attribution rules) + the frozen phase-31 T3
 procedure (`docs/screens/p31-l2-notes.md:10-61`, FU317 §5).
 **Scope:** the captures + the trace extract (`p32-l2-trace-pan.txt`) + this
@@ -11,7 +11,7 @@ note only; no production code, no test change, no golden change.
 ## The run
 
 `DISPLAY=:1 FIFA96_CAMERA_TRACE=/tmp/opencode/p32/trace-run2.log make game`
-(`./build/fifa96 game/FIFAPCCD96.iso`, SDL3; the client is 960×720, `import
+(`./build/fifa96 data/game/FIFAPCCD96.iso`, SDL3; the client is 960×720, `import
 -window` used for every capture).
 
 Walkthrough: intro RETURN → front-end BACKSPACE → RETURN (match). The live drive
@@ -185,10 +185,10 @@ on the pan. Gate 2 remains the documented sprite-only caveat.
 ## Invariants
 
 No code/test/golden change. M1 `09b726b7…` (22 004 B) and M2 `8434cfab…`
-(295 087 B) unchanged; `./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt`
-and `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt` are
+(295 087 B) unchanged; `./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt`
+and `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt` are
 identical; `make check` 111/111 (the plan's Task 2 Step 7 gate; the committed
-close-out register `docs/ENGINE.md` §M2 phase-32 records the same count). The
+close-out register `port/ENGINE.md` §M2 phase-32 records the same count). The
 trace sink stayed default-off outside this run. The census stays `60/80 = 75%`.
 
 ## Commands (exact)
@@ -196,7 +196,7 @@ trace sink stayed default-off outside this run. The census stays `60/80 = 75%`.
 ```sh
 # the run
 DISPLAY=:1 FIFA96_CAMERA_TRACE=/tmp/opencode/p32/trace-run2.log \
-  ./build/fifa96 game/FIFAPCCD96.iso          # Makefile's `make game` entry
+  ./build/fifa96 data/game/FIFAPCCD96.iso          # Makefile's `make game` entry
 # walkthrough: Return (intro) / BackSpace (front-end) / Return (match)
 # the driver: the M2 prefix by trace tick, the FU320 tail by wall clock
 python3 /tmp/opencode/p32/p32-run.py      "$WID" /tmp/opencode/p32/trace-run2.log \

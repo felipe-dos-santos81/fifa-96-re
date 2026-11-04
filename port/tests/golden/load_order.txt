@@ -1,0 +1,6 @@
+port/tests/golden/fnames.dat
+port/tests/golden/lengths.dat
+port/tests/golden/pcindex.pog
+port/tests/golden/fw1.qfs
+port/tests/golden/sfx_game.bnk
+port/tests/golden/vid_game.tgv

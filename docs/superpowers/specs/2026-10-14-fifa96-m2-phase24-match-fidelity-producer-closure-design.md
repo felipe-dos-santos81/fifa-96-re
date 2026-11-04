@@ -6,7 +6,7 @@ leg closure", the producer-closure wave chosen by the user).
 Parent spec: `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`
 Predecessor spec: `docs/superpowers/specs/2026-10-14-fifa96-m2-phase23-census-ceiling-design.md`
 Predecessor plan: `docs/superpowers/plans/2026-10-14-fifa96-m2-phase23-census-ceiling.md`
-Recon slices (to be produced by this phase's wave): `docs/ghidra/FU248…FU255`.
+Recon slices (to be produced by this phase's wave): `port/spec/FU248…FU255`.
 
 ## 1. Context
 
@@ -33,7 +33,7 @@ a producer genuinely un-dormants a row still NULL, the census rises too.
 
 ### The producer frontier (frozen per-leg evidence)
 
-The engine slot comments + `docs/ENGINE.md` carry the authoritative leg evidence.
+The engine slot comments + `port/ENGINE.md` carry the authoritative leg evidence.
 The high-value clusters:
 
 | cluster | the unported producer | what it un-dormants | source |
@@ -129,8 +129,8 @@ shape). One implementer at a time; dependency order T1 → T2 → … → Tn.
   wave's payoff × tractability ranking: each lands the native producer with a
   RED/GREEN fixture test + a **mutation-RED** rider.
 - **T(k+1) — the census close-out** (only if a producer wires a row): recompute
-  `floor(100 × wired/80)`, update the README title + `docs/ENGINE.md` +
-  `docs/PROGRESS.md` + `AGENTS.md` + the `tests/test_engine_m2.c` pins in the
+  `floor(100 × wired/80)`, update the README title + `port/ENGINE.md` +
+  `docs/PROGRESS.md` + `AGENTS.md` + the `port/tests/test_engine_m2.c` pins in the
   same commit.
 - **T(k+2) — the leg-register close-out:** append the resolved/forbidden legs
   (quoted errata; prior doc sections never rewritten).
@@ -176,17 +176,17 @@ ceiling it proves.
 - ISO-gated tests skip cleanly without the ISO.
 - Commits `feat` / `fix` / `docs(fuNNN)` / `test` / `chore`; work on `main`; push
   per dispatch. Recon drafts in `.superpowers/sdd/<phase>/` (git-ignored); the
-  controller promotes them to `docs/ghidra/FU248…FU255` in serialized commits.
+  controller promotes them to `port/spec/FU248…FU255` in serialized commits.
 
 ## 9. Interfaces
 
 - **The producer frontier** — the `OL-*` / `FU24x-L*` legs (the engine slot
-  comments + `docs/ENGINE.md`).
+  comments + `port/ENGINE.md`).
 - **The desired-order matrices** `formation_order`/`formation_current`/
   `formation_mismatch` + `fifa96_match_run_formation_sort` (the act-4 consumer).
 - **The phase-23 wire seams** — `fifa96_match_action_25`/`_15`,
   `fifa96_match_action_phase_1E`, the `bx!=0` re-route.
-- **The recon slices** `docs/ghidra/FU248…FU255` — appended errata only.
+- **The recon slices** `port/spec/FU248…FU255` — appended errata only.
 
 ## 10. Decisions (approved in-chat)
 
@@ -195,7 +195,7 @@ ceiling it proves.
   to fake a producer).
 - **D2 — read-only recon, serialized promotion.** The 8 slices run in parallel
   read-only; the controller freeze-reviews and promotes each to a canonical
-  `docs/ghidra/FU2xx_*.md`.
+  `port/spec/FU2xx_*.md`.
 - **D3 — the formation arm's honesty gate.** FU248 must settle the non-permutation
   question first-hand before any un-gating; a no-op/fake is forbidden.
 - **D4 — no front-end visual work.** The formation setup is ported as a producer,

@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 / CMake / CTest, ASan/UBSan, the null backend (determinism source of truth), SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-design.md` (§5, D1, §7.1). **Frozen evidence (authority for every native address):** `docs/ghidra/FU264_camera_y_producer.md`, `FU265_place_pan_ball_framing.md`, `FU271_live_trigger_census.md`. **Parent recon plan:** `docs/superpowers/plans/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead.md`.
+**Spec:** `docs/superpowers/specs/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-design.md` (§5, D1, §7.1). **Frozen evidence (authority for every native address):** `port/spec/FU264_camera_y_producer.md`, `FU265_place_pan_ball_framing.md`, `FU271_live_trigger_census.md`. **Parent recon plan:** `docs/superpowers/plans/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead.md`.
 
 ## Global Constraints
 
@@ -17,7 +17,7 @@
 - **The live-chain rule (AGENTS/spec):** a chain is **live** only when a **ported producer raiser** raises its gate on a real engine path — a fixture that stages the gate does **not** count; a stand-in is a **fake** (R15/R45/R49). A producer that cannot be raised live is a **numbered leg**, not a wire.
 - **No fakes.** Do not invent a live gate (FU265 §4.1: "Do not invent a live gate"). A cell with no live producer stays a leg.
 - **M2 preservation:** M2 moves only on a written reason + frame diff; prefer changes that leave the tape byte-identical. **M1 never moves.**
-- **Census:** a NULL row a live producer wires is honest **upside**; if the wired count changes, update README title + `docs/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + `tests/test_engine_m2.c` pins **in the same commit**. It may hold at 59/80.
+- **Census:** a NULL row a live producer wires is honest **upside**; if the wired count changes, update README title + `port/ENGINE.md` + `docs/PROGRESS.md` + `AGENTS.md:90` + `port/tests/test_engine_m2.c` pins **in the same commit**. It may hold at 59/80.
 - **Engine seams (verified):** the arc store `fifa96_camera.c:90-91` (inside `fifa96_camera_update_walk`, live at `match_run.c:4147`); the event setter `fifa96_camera_event_set`; the follow `fifa96_match_run_camera_follow` (`match_run.c:3747-3749`); the pan `fifa96_camera_pan_step` (`camera.c:96`); the row-1E release `handlers.c:521-530`.
 - Native addresses are quoted **only** from the frozen slices; re-verify first-hand before trusting (Ghidra read-only, program exactly `/FIFA96.EXE`).
 
@@ -34,22 +34,22 @@
     (c) the throw-in stage-3 cut  0x85919  (camY := 0x80; restart-driven; sets NO event)
 ```
 
-**File structure (touched):** `src/fifa96_engine/fifa96_match_run.c` (the frame body / the producer seam), `src/fifa96_engine/fifa96_match_handlers.c` / `fifa96_match_action_*.c` (the row bodies a producer feeds), `src/fifa96_loader/fifa96_camera.c` (only if the arc/pan needs a faithfulness fix), `tests/test_engine_match_frame.c` + `tests/test_camera.c` (the reach tests), `docs/ENGINE.md` / `docs/PROGRESS.md` / `README.md` / `tests/test_engine_m2.c` (only on a census change).
+**File structure (touched):** `port/src/fifa96_engine/fifa96_match_run.c` (the frame body / the producer seam), `port/src/fifa96_engine/fifa96_match_handlers.c` / `fifa96_match_action_*.c` (the row bodies a producer feeds), `port/src/fifa96_loader/fifa96_camera.c` (only if the arc/pan needs a faithfulness fix), `port/tests/test_engine_match_frame.c` + `port/tests/test_camera.c` (the reach tests), `port/ENGINE.md` / `docs/PROGRESS.md` / `README.md` / `port/tests/test_engine_m2.c` (only on a census change).
 
 ---
 
 ### Task 1: The determinism + reachability gate
 
-**Files:** none changed. `docs/ENGINE.md` read.
+**Files:** none changed. `port/ENGINE.md` read.
 
 - [ ] Recompute the census (`36 action + 23 phase`); confirm `59/80`.
-- [ ] Prove M1/M2 byte-stability: `./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt` and the M2 equivalent (≥3 replays); sha-check both goldens.
+- [ ] Prove M1/M2 byte-stability: `./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt` and the M2 equivalent (≥3 replays); sha-check both goldens.
 - [ ] Build the 26a reachability map from FU264/FU271: the arc is live-but-starved; the only open-play writer candidates are (a)/(b)/(c) above.
 - [ ] Report: the gate is green, and the exact producer route Task 2 must port.
 
 ### Task 2: The live open-play camera-Y producer (the visible anchor's gate)
 
-**Files:** `src/fifa96_engine/fifa96_match_run.c` (+ the row body a producer feeds, per the chosen route), `tests/test_engine_match_frame.c`.
+**Files:** `port/src/fifa96_engine/fifa96_match_run.c` (+ the row body a producer feeds, per the chosen route), `port/tests/test_engine_match_frame.c`.
 
 - [ ] **RED first:** add a test that drives a **live** open-play scenario and asserts `fifa96_camera.pos_y != 0` **and** the follow/pan consumer fires (e.g. `camera.tracked != 0` / the row-0E window admits). Run it — it **must fail** on the baseline (the cell stays 0). Record the failure.
 - [ ] Port the **shortest honest** live route among (a)/(b)/(c) — prefer **(a) `FUN_00070C08 0x70DD1`** (open-play, no R11-L4 dependency) if it is reachable from a live actor; else port **(b)** behind the R11-L4 sit-5 producers (rows 1A/1B — a separate, larger leg; if chosen, split into its own task). Cite FU264/FU265 bytes; do **not** invent a gate.
@@ -58,7 +58,7 @@
 
 ### Task 3: The live pan + ball framing (FU265)
 
-**Files:** `src/fifa96_engine/fifa96_match_run.c` / `fifa96_camera.c`, `tests/test_camera.c`.
+**Files:** `port/src/fifa96_engine/fifa96_match_run.c` / `fifa96_camera.c`, `port/tests/test_camera.c`.
 
 - [ ] With Task 2's Y source live, prove the **row-0E pan window** (`0x20 < camY < 0x70`, FU264 §2.1) admits and the pan fires (the pan step + counter are already ported, `camera.c:96`/`883`).
 - [ ] Keep the camera-0 seed + the camera-derived lead (FU265 §3); do **not** port R2-L1's framing integrators (FU264-L4 — framing only, not required for translation).
@@ -72,7 +72,7 @@
 
 ### Task 5: The census / leg-register close-out
 
-**Files:** `docs/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md:90`, `tests/test_engine_m2.c` — **only if the wired count changed.**
+**Files:** `port/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md:90`, `port/tests/test_engine_m2.c` — **only if the wired count changed.**
 
 - [ ] Recompute `floor(100 × wired/80)`; if it moved, reconcile the five docs + the test pins **in one commit**.
 - [ ] Append the resolved/forbidden camera legs (FU264-L1..L5) as quoted errata; update the phase-7 known-gaps rows.

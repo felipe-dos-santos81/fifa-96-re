@@ -18,34 +18,34 @@
 - Determinism contract: the `null` backend is the regression source of truth; the engine never reads back from the platform, so SDL cannot change hashes.
 - Evidence-gated: every reverse-engineering claim cites bytes/addresses/tool output; unprovable items become named open legs; corrections land as errata, never by rewriting prior map rows.
 - Authoritative Ghidra program is `/FIFA96.EXE` (native LE, fixups applied); flat offsets need `+0x100000`. `program="fifa96.exe"` case-collides with `/FIFA96.EXE` — target the loader explicitly.
-- Ghidra writes (renames/comments/`fifa96.rep` commits) and all git commits are serialized by the controller; read-only Ghidra calls may run in parallel.
-- `tmp*.ps` never committed; `.gitignore` already excludes `fifa96.rep/**/tmp*.ps`.
+- Ghidra writes (renames/comments/`data/fifa96.rep` commits) and all git commits are serialized by the controller; read-only Ghidra calls may run in parallel.
+- `tmp*.ps` never committed; `.gitignore` already excludes `data/fifa96.rep/**/tmp*.ps`.
 - Commit style: `feat(engine): …`, `docs(fuNNN): …`, `chore(engine): …`.
-- Original assets are never committed; tests skip ISO-dependent cases when `game/FIFAPCCD96.iso` is absent.
+- Original assets are never committed; tests skip ISO-dependent cases when `data/game/FIFAPCCD96.iso` is absent.
 
 ## File Structure
 
 | Path | Responsibility |
 |---|---|
-| `include/fifa96_engine/fifa96_platform.h` | Frozen platform ABI (video/audio/input/time) |
-| `include/fifa96_engine/fifa96_platform_null.h` | Null backend factory + observability stats |
-| `include/fifa96_engine/fifa96_engine.h` | Opaque engine API (create/boot/step/run/destroy) |
-| `include/fifa96_engine/fifa96_surface.h` | Indexed 320×240 surface + palette + Mode-X plane packing |
-| `include/fifa96_engine/fifa96_asset.h` | ISO mount, path→lba/size table, raw byte cache |
-| `src/fifa96_engine/fifa96_engine_internal.h` | Engine state struct (controller-owned; single writer) |
-| `src/fifa96_engine/fifa96_engine.c` | Engine core + mode dispatch loop |
-| `src/fifa96_engine/fifa96_surface.c` | Surface/plane implementation |
-| `src/fifa96_engine/fifa96_asset.c` | ISO mount + asset table + byte cache |
-| `include/fifa96_engine/fifa96_cache.h`, `src/fifa96_engine/fifa96_cache.c` | Runtime byte cache |
-| `src/fifa96_engine/fifa96_clock.c`, `include/fifa96_engine/fifa96_clock.h` | 100 Hz PIT model driver + tick ISR |
-| `src/fifa96_engine/fifa96_intro.c` | TGV intro playback into the surface |
-| `src/fifa96_engine/fifa96_frontend_run.c` | Front-end state machine + menu rendering + input |
-| `src/fifa96_engine/fifa96_match_run.c` | M2 match wiring (lifecycle/frame/display/entities) |
-| `src/fifa96_engine/platform_null.c` | Headless backend (hash/replay/fixed-step) |
-| `src/fifa96_engine/platform_sdl3.c` | SDL3 backend |
-| `src/fifa96_engine/fifa96_main.c` | `fifa96` executable entry (SDL3 target) |
-| `tests/test_engine_*.c` | CTest cases per task |
-| `tests/golden/engine/` | Pinned engine frame/audio hashes |
+| `port/src/fifa96_engine/fifa96_platform.h` | Frozen platform ABI (video/audio/input/time) |
+| `port/src/fifa96_engine/fifa96_platform_null.h` | Null backend factory + observability stats |
+| `port/src/fifa96_engine/fifa96_engine.h` | Opaque engine API (create/boot/step/run/destroy) |
+| `port/src/fifa96_engine/fifa96_surface.h` | Indexed 320×240 surface + palette + Mode-X plane packing |
+| `port/src/fifa96_engine/fifa96_asset.h` | ISO mount, path→lba/size table, raw byte cache |
+| `port/src/fifa96_engine/fifa96_engine_internal.h` | Engine state struct (controller-owned; single writer) |
+| `port/src/fifa96_engine/fifa96_engine.c` | Engine core + mode dispatch loop |
+| `port/src/fifa96_engine/fifa96_surface.c` | Surface/plane implementation |
+| `port/src/fifa96_engine/fifa96_asset.c` | ISO mount + asset table + byte cache |
+| `port/src/fifa96_engine/fifa96_cache.h`, `port/src/fifa96_engine/fifa96_cache.c` | Runtime byte cache |
+| `port/src/fifa96_engine/fifa96_clock.c`, `port/src/fifa96_engine/fifa96_clock.h` | 100 Hz PIT model driver + tick ISR |
+| `port/src/fifa96_engine/fifa96_intro.c` | TGV intro playback into the surface |
+| `port/src/fifa96_engine/fifa96_frontend_run.c` | Front-end state machine + menu rendering + input |
+| `port/src/fifa96_engine/fifa96_match_run.c` | M2 match wiring (lifecycle/frame/display/entities) |
+| `port/src/fifa96_engine/platform_null.c` | Headless backend (hash/replay/fixed-step) |
+| `port/src/fifa96_engine/platform_sdl3.c` | SDL3 backend |
+| `port/src/fifa96_engine/fifa96_main.c` | `fifa96` executable entry (SDL3 target) |
+| `port/tests/test_engine_*.c` | CTest cases per task |
+| `port/tests/golden/engine/` | Pinned engine frame/audio hashes |
 
 ---
 
@@ -54,13 +54,13 @@
 ### Task 1: Contract freeze — platform ABI, engine skeleton, null backend
 
 **Files:**
-- Create: `include/fifa96_engine/fifa96_platform.h`
-- Create: `include/fifa96_engine/fifa96_platform_null.h`
-- Create: `include/fifa96_engine/fifa96_engine.h`
-- Create: `src/fifa96_engine/fifa96_engine_internal.h`
-- Create: `src/fifa96_engine/fifa96_engine.c`
-- Create: `src/fifa96_engine/platform_null.c`
-- Create: `tests/test_engine_platform.c`
+- Create: `port/src/fifa96_engine/fifa96_platform.h`
+- Create: `port/src/fifa96_engine/fifa96_platform_null.h`
+- Create: `port/src/fifa96_engine/fifa96_engine.h`
+- Create: `port/src/fifa96_engine/fifa96_engine_internal.h`
+- Create: `port/src/fifa96_engine/fifa96_engine.c`
+- Create: `port/src/fifa96_engine/platform_null.c`
+- Create: `port/tests/test_engine_platform.c`
 - Modify: `CMakeLists.txt`
 
 **Interfaces:**
@@ -70,7 +70,7 @@
 - [ ] **Step 1: Write the failing test**
 
 ```c
-/* tests/test_engine_platform.c */
+/* port/tests/test_engine_platform.c */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -111,7 +111,7 @@ Expected: configure/build fails on the missing `fifa96_engine/fifa96_platform.h`
 
 - [ ] **Step 3: Write the ABI headers**
 
-`include/fifa96_engine/fifa96_platform.h` — complete content:
+`port/src/fifa96_engine/fifa96_platform.h` — complete content:
 
 ```c
 #pragma once
@@ -147,7 +147,7 @@ fifa96_platform *fifa96_platform_sdl3_create(void);
 void fifa96_platform_destroy(fifa96_platform *p);
 ```
 
-`include/fifa96_engine/fifa96_platform_null.h` — complete content:
+`port/src/fifa96_engine/fifa96_platform_null.h` — complete content:
 
 ```c
 #pragma once
@@ -174,7 +174,7 @@ fifa96_platform *fifa96_platform_null_create(const struct fifa96_platform_null_c
 void fifa96_platform_null_stats(const fifa96_platform *p, struct fifa96_platform_null_stats *out);
 ```
 
-`include/fifa96_engine/fifa96_engine.h` — complete content:
+`port/src/fifa96_engine/fifa96_engine.h` — complete content:
 
 ```c
 #pragma once
@@ -198,7 +198,7 @@ int  fifa96_engine_should_quit(const struct fifa96_engine *e);
 void fifa96_engine_destroy(struct fifa96_engine *e);
 ```
 
-`src/fifa96_engine/fifa96_engine_internal.h` — complete content:
+`port/src/fifa96_engine/fifa96_engine_internal.h` — complete content:
 
 ```c
 #pragma once
@@ -217,7 +217,7 @@ struct fifa96_engine {
 
 - [ ] **Step 4: Write minimal implementations**
 
-`src/fifa96_engine/platform_null.c`:
+`port/src/fifa96_engine/platform_null.c`:
 
 ```c
 #include <stdlib.h>
@@ -299,7 +299,7 @@ void fifa96_platform_null_stats(const fifa96_platform *p, struct fifa96_platform
 }
 ```
 
-`src/fifa96_engine/fifa96_engine.c`:
+`port/src/fifa96_engine/fifa96_engine.c`:
 
 ```c
 #include <stdlib.h>
@@ -371,12 +371,12 @@ Append to `CMakeLists.txt`:
 ```cmake
 # ── Engine (M1) ────────────────────────────────────────────────────────────────
 add_library(fifa96_engine
-  src/fifa96_engine/fifa96_engine.c
-  src/fifa96_engine/platform_null.c)
+  port/src/fifa96_engine/fifa96_engine.c
+  port/src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
 
-add_executable(test_engine_platform tests/test_engine_platform.c)
+add_executable(test_engine_platform port/tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
 add_test(NAME test_engine_platform COMMAND test_engine_platform
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -395,7 +395,7 @@ Expected: `100% tests passed` (81 tests).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add include/fifa96_engine src/fifa96_engine tests/test_engine_platform.c CMakeLists.txt
+git add port/src/fifa96_engine port/src/fifa96_engine port/tests/test_engine_platform.c CMakeLists.txt
 git commit -m "feat(engine): freeze platform ABI, engine skeleton, null backend"
 ```
 
@@ -404,9 +404,9 @@ git commit -m "feat(engine): freeze platform ABI, engine skeleton, null backend"
 ### Task 2: SDL3 backend + `make game`
 
 **Files:**
-- Create: `src/fifa96_engine/platform_sdl3.c`
-- Create: `src/fifa96_engine/fifa96_main.c`
-- Create: `tests/test_engine_sdl3.c`
+- Create: `port/src/fifa96_engine/platform_sdl3.c`
+- Create: `port/src/fifa96_engine/fifa96_main.c`
+- Create: `port/tests/test_engine_sdl3.c`
 - Modify: `CMakeLists.txt`
 - Modify: `Makefile`
 
@@ -417,7 +417,7 @@ git commit -m "feat(engine): freeze platform ABI, engine skeleton, null backend"
 - [ ] **Step 1: Write the failing test**
 
 ```c
-/* tests/test_engine_sdl3.c — runs only when SDL3 is present; dummy drivers */
+/* port/tests/test_engine_sdl3.c — runs only when SDL3 is present; dummy drivers */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -452,7 +452,7 @@ Expected: configure/build fails on `fifa96_platform_sdl3_create` (not defined) o
 
 - [ ] **Step 3: Implement the SDL3 backend**
 
-`src/fifa96_engine/platform_sdl3.c` (structure; complete the audio ring):
+`port/src/fifa96_engine/platform_sdl3.c` (structure; complete the audio ring):
 
 - `struct sdl_state { SDL_Window *win; SDL_Renderer *ren; SDL_Texture *tex; SDL_AudioStream *stream; int w, h; uint8_t rgba[320*240*4]; uint64_t audio_frames; }`.
 - `init`: `SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)`; `SDL_CreateWindowAndRenderer("FIFA 96", 960, 720, SDL_WINDOW_RESIZABLE, &win, &ren)`; `SDL_SetRenderLogicalPresentation(ren, 320, 240, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE)` (SDL3) or manual scaling fallback for SDL2; `SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 240)`.
@@ -462,7 +462,7 @@ Expected: configure/build fails on `fifa96_platform_sdl3_create` (not defined) o
 - `now_ns` = `SDL_GetTicksNS()`; `sleep_ns` = `SDL_DelayNS(ns)`.
 - `shutdown`/`destroy`: close device, destroy texture/renderer/window, `SDL_Quit`; set `p->destroy` to the state-freeing function (the generic `fifa96_platform_destroy` in `fifa96_engine.c` calls it, so the backend must not define `fifa96_platform_destroy` itself).
 
-`src/fifa96_engine/fifa96_main.c`:
+`port/src/fifa96_engine/fifa96_main.c`:
 
 ```c
 #include <stdio.h>
@@ -503,13 +503,13 @@ Append to `CMakeLists.txt`:
 find_package(SDL3 QUIET)
 if(SDL3_FOUND)
   message(STATUS "engine: SDL3 found -> building fifa96 + test_engine_sdl3")
-  add_executable(test_engine_sdl3 tests/test_engine_sdl3.c
-                 src/fifa96_engine/platform_sdl3.c)
+  add_executable(test_engine_sdl3 port/tests/test_engine_sdl3.c
+                 port/src/fifa96_engine/platform_sdl3.c)
   target_link_libraries(test_engine_sdl3 PRIVATE fifa96_engine SDL3::SDL3)
   add_test(NAME test_engine_sdl3 COMMAND test_engine_sdl3
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-  add_executable(fifa96 src/fifa96_engine/fifa96_main.c
-                 src/fifa96_engine/platform_sdl3.c)
+  add_executable(fifa96 port/src/fifa96_engine/fifa96_main.c
+                 port/src/fifa96_engine/platform_sdl3.c)
   target_link_libraries(fifa96 PRIVATE fifa96_engine SDL3::SDL3)
 else()
   message(STATUS "engine: SDL3 NOT found -> headless-only build (make game unavailable)")
@@ -519,9 +519,9 @@ endif()
 Append to `Makefile` (add `game` to `.PHONY`):
 
 ```make
-game: build ## Build and run the native engine (needs SDL3 + game/FIFAPCCD96.iso)
+game: build ## Build and run the native engine (needs SDL3 + data/game/FIFAPCCD96.iso)
 	@test -x $(BUILD)/fifa96 || { echo "fifa96 not built (SDL3 missing)"; exit 1; }
-	./$(BUILD)/fifa96 $(if $(FILE),$(FILE),game/FIFAPCCD96.iso)
+	./$(BUILD)/fifa96 $(if $(FILE),$(FILE),data/game/FIFAPCCD96.iso)
 ```
 
 - [ ] **Step 5: Run tests and gate**
@@ -537,7 +537,7 @@ Expected: a 960×720 window opens showing black; ESC closes it.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/fifa96_engine/platform_sdl3.c src/fifa96_engine/fifa96_main.c tests/test_engine_sdl3.c CMakeLists.txt Makefile
+git add port/src/fifa96_engine/platform_sdl3.c port/src/fifa96_engine/fifa96_main.c port/tests/test_engine_sdl3.c CMakeLists.txt Makefile
 git commit -m "feat(engine): SDL3 backend, fifa96 executable, make game"
 ```
 
@@ -546,10 +546,10 @@ git commit -m "feat(engine): SDL3 backend, fifa96 executable, make game"
 ### Task 3: Render surface (indexed → Mode-X → present)
 
 **Files:**
-- Create: `include/fifa96_engine/fifa96_surface.h`
-- Create: `src/fifa96_engine/fifa96_surface.c`
-- Create: `tests/test_engine_surface.c`
-- Modify: `src/fifa96_engine/fifa96_engine.c`, `src/fifa96_engine/fifa96_engine_internal.h`, `CMakeLists.txt`
+- Create: `port/src/fifa96_engine/fifa96_surface.h`
+- Create: `port/src/fifa96_engine/fifa96_surface.c`
+- Create: `port/tests/test_engine_surface.c`
+- Modify: `port/src/fifa96_engine/fifa96_engine.c`, `port/src/fifa96_engine/fifa96_engine_internal.h`, `CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: `fifa96_platform_frame` (Task 1).
@@ -558,7 +558,7 @@ git commit -m "feat(engine): SDL3 backend, fifa96 executable, make game"
 - [ ] **Step 1: Write the failing test**
 
 ```c
-/* tests/test_engine_surface.c */
+/* port/tests/test_engine_surface.c */
 #include <assert.h>
 #include <stdio.h>
 #include "fifa96_engine/fifa96_surface.h"
@@ -597,7 +597,7 @@ Expected: build fails on the missing surface header.
 
 - [ ] **Step 3: Write the surface header + implementation**
 
-`include/fifa96_engine/fifa96_surface.h`:
+`port/src/fifa96_engine/fifa96_surface.h`:
 
 ```c
 #pragma once
@@ -624,7 +624,7 @@ void fifa96_surface_plane(struct fifa96_surface *s, fifa96_platform_frame *out);
 uint64_t fifa96_surface_hash(const struct fifa96_surface *s); /* FNV-1a over indexed + palette */
 ```
 
-Implementation notes: `set_palette6` scales `(v << 2) | (v >> 4)`; `plane` packs in the repo's derived Mode-X planar-chunky layout (witness `src/fifa96_loader/fifa96_blit.c:55-61`): for pixel `(x, y)`, `planes[x & 3][y * 80 + (x >> 2)] = indexed[y * width + x]` — one full 8-bit byte per pixel, stride 80. It sets `out->stride = width / 4` (80), `out->palette = s->palette`, `out->flags = 0`. `hash` is FNV-1a 64 over `indexed` then `palette` (offset basis `14695981039346656037ull`, prime `1099511628211ull`), used by the menu-art and acceptance tests.
+Implementation notes: `set_palette6` scales `(v << 2) | (v >> 4)`; `plane` packs in the repo's derived Mode-X planar-chunky layout (witness `port/src/fifa96_loader/fifa96_blit.c:55-61`): for pixel `(x, y)`, `planes[x & 3][y * 80 + (x >> 2)] = indexed[y * width + x]` — one full 8-bit byte per pixel, stride 80. It sets `out->stride = width / 4` (80), `out->palette = s->palette`, `out->flags = 0`. `hash` is FNV-1a 64 over `indexed` then `palette` (offset basis `14695981039346656037ull`, prime `1099511628211ull`), used by the menu-art and acceptance tests.
 
 - [ ] **Step 4: Wire the engine to the surface**
 
@@ -638,9 +638,9 @@ Expected: `test_engine_surface OK`, `100% tests passed` (83 with SDL3).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add include/fifa96_engine/fifa96_surface.h src/fifa96_engine/fifa96_surface.c \
-        src/fifa96_engine/fifa96_engine.c src/fifa96_engine/fifa96_engine_internal.h \
-        tests/test_engine_surface.c CMakeLists.txt
+git add port/src/fifa96_engine/fifa96_surface.h port/src/fifa96_engine/fifa96_surface.c \
+        port/src/fifa96_engine/fifa96_engine.c port/src/fifa96_engine/fifa96_engine_internal.h \
+        port/tests/test_engine_surface.c CMakeLists.txt
 git commit -m "feat(engine): indexed surface and Mode-X plane presentation"
 ```
 
@@ -649,10 +649,10 @@ git commit -m "feat(engine): indexed surface and Mode-X plane presentation"
 ### Task 4: Boot + asset table (ISO mount, path enumeration)
 
 **Files:**
-- Create: `include/fifa96_engine/fifa96_asset.h`
-- Create: `src/fifa96_engine/fifa96_asset.c`
-- Create: `tests/test_engine_asset.c`
-- Modify: `src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
+- Create: `port/src/fifa96_engine/fifa96_asset.h`
+- Create: `port/src/fifa96_engine/fifa96_asset.c`
+- Create: `port/tests/test_engine_asset.c`
+- Modify: `port/src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: `fifa96_iso9660_*` (existing).
@@ -660,10 +660,10 @@ git commit -m "feat(engine): indexed surface and Mode-X plane presentation"
 
 - [ ] **Step 1: Write the failing test**
 
-Build a minimal in-memory ISO in the test (PVD at sector 16 with `CD001`, one directory record for `ART/PIX.PVI`), following the structure used by `tests/test_iso9660.c` (reuse its helper if `static`; otherwise construct the 2048-byte sectors inline). Then:
+Build a minimal in-memory ISO in the test (PVD at sector 16 with `CD001`, one directory record for `ART/PIX.PVI`), following the structure used by `port/tests/test_iso9660.c` (reuse its helper if `static`; otherwise construct the 2048-byte sectors inline). Then:
 
 ```c
-/* tests/test_engine_asset.c */
+/* port/tests/test_engine_asset.c */
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -697,7 +697,7 @@ Expected: build fails on the missing asset header.
 
 - [ ] **Step 3: Implement the asset table**
 
-`include/fifa96_engine/fifa96_asset.h`:
+`port/src/fifa96_engine/fifa96_asset.h`:
 
 ```c
 #pragma once
@@ -734,8 +734,8 @@ Expected: `test_engine_asset OK`, `100% tests passed` (84 with SDL3).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add include/fifa96_engine/fifa96_asset.h src/fifa96_engine/fifa96_asset.c \
-        src/fifa96_engine/fifa96_engine.c tests/test_engine_asset.c CMakeLists.txt
+git add port/src/fifa96_engine/fifa96_asset.h port/src/fifa96_engine/fifa96_asset.c \
+        port/src/fifa96_engine/fifa96_engine.c port/tests/test_engine_asset.c CMakeLists.txt
 git commit -m "feat(engine): ISO mount and asset table"
 ```
 
@@ -744,9 +744,9 @@ git commit -m "feat(engine): ISO mount and asset table"
 ### Task 5: Runtime byte cache
 
 **Files:**
-- Create: `src/fifa96_engine/fifa96_cache.c`
-- Create: `include/fifa96_engine/fifa96_cache.h`
-- Create: `tests/test_engine_cache.c`
+- Create: `port/src/fifa96_engine/fifa96_cache.c`
+- Create: `port/src/fifa96_engine/fifa96_cache.h`
+- Create: `port/tests/test_engine_cache.c`
 - Modify: `CMakeLists.txt`
 
 **Interfaces:**
@@ -756,7 +756,7 @@ git commit -m "feat(engine): ISO mount and asset table"
 - [ ] **Step 1: Write the failing test**
 
 ```c
-/* tests/test_engine_cache.c — reuses the synthetic ISO from Task 4's test */
+/* port/tests/test_engine_cache.c — reuses the synthetic ISO from Task 4's test */
 #include <assert.h>
 #include <stdio.h>
 #include "fifa96_engine/fifa96_cache.h"
@@ -785,7 +785,7 @@ Expected: build fails on the missing cache header.
 
 - [ ] **Step 3: Implement the cache**
 
-`include/fifa96_engine/fifa96_cache.h` declares the struct and API; `fifa96_cache.c` holds a linked list of `{ char path[]; uint8_t *bytes; size_t len; }`. `get` returns the cached pointer or calls `fifa96_asset_read`, stores, and returns it; unknown path → `NULL` and `*len = 0`. `destroy` frees all entries and the table's bytes but not the asset table.
+`port/src/fifa96_engine/fifa96_cache.h` declares the struct and API; `fifa96_cache.c` holds a linked list of `{ char path[]; uint8_t *bytes; size_t len; }`. `get` returns the cached pointer or calls `fifa96_asset_read`, stores, and returns it; unknown path → `NULL` and `*len = 0`. `destroy` frees all entries and the table's bytes but not the asset table.
 
 - [ ] **Step 4: Run tests and gate**
 
@@ -795,8 +795,8 @@ Expected: `test_engine_cache OK`, `100% tests passed` (85 with SDL3).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fifa96_engine/fifa96_cache.c src/fifa96_engine/fifa96_cache.h \
-        tests/test_engine_cache.c CMakeLists.txt
+git add port/src/fifa96_engine/fifa96_cache.c port/src/fifa96_engine/fifa96_cache.h \
+        port/tests/test_engine_cache.c CMakeLists.txt
 git commit -m "feat(engine): runtime asset byte cache"
 ```
 
@@ -805,10 +805,10 @@ git commit -m "feat(engine): runtime asset byte cache"
 ### Task 6: Clock and fixed-step tick loop
 
 **Files:**
-- Create: `src/fifa96_engine/fifa96_clock.c`
-- Create: `include/fifa96_engine/fifa96_clock.h`
-- Create: `tests/test_engine_clock.c`
-- Modify: `src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
+- Create: `port/src/fifa96_engine/fifa96_clock.c`
+- Create: `port/src/fifa96_engine/fifa96_clock.h`
+- Create: `port/tests/test_engine_clock.c`
+- Modify: `port/src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: `fifa96_pacing_clock`, `fifa96_tick` (existing).
@@ -817,7 +817,7 @@ git commit -m "feat(engine): runtime asset byte cache"
 - [ ] **Step 1: Write the failing test**
 
 ```c
-/* tests/test_engine_clock.c */
+/* port/tests/test_engine_clock.c */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -849,7 +849,7 @@ Expected: build fails on the missing clock header.
 - [ ] **Step 3: Implement the clock**
 
 ```c
-/* src/fifa96_engine/fifa96_clock.h */
+/* port/src/fifa96_engine/fifa96_clock.h */
 #pragma once
 #include <stdint.h>
 #include "fifa96_loader/fifa96_pacing.h"
@@ -876,8 +876,8 @@ Expected: `test_engine_clock OK`, `100% tests passed` (86 with SDL3).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fifa96_engine/fifa96_clock.c src/fifa96_engine/fifa96_clock.h \
-        src/fifa96_engine/fifa96_engine.c tests/test_engine_clock.c CMakeLists.txt
+git add port/src/fifa96_engine/fifa96_clock.c port/src/fifa96_engine/fifa96_clock.h \
+        port/src/fifa96_engine/fifa96_engine.c port/tests/test_engine_clock.c CMakeLists.txt
 git commit -m "feat(engine): 100 Hz pacing clock and tick loop driver"
 ```
 
@@ -886,10 +886,10 @@ git commit -m "feat(engine): 100 Hz pacing clock and tick loop driver"
 ### Task 7: Intro video playback (TGV → surface)
 
 **Files:**
-- Create: `src/fifa96_engine/fifa96_intro.c`
-- Create: `include/fifa96_engine/fifa96_intro.h`
-- Create: `tests/test_engine_intro.c`
-- Modify: `src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
+- Create: `port/src/fifa96_engine/fifa96_intro.c`
+- Create: `port/src/fifa96_engine/fifa96_intro.h`
+- Create: `port/tests/test_engine_intro.c`
+- Modify: `port/src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: `fifa96_vgt_player` (existing), `fifa96_surface` (Task 3), `fifa96_cache` (Task 5).
@@ -897,10 +897,10 @@ git commit -m "feat(engine): 100 Hz pacing clock and tick loop driver"
 
 - [ ] **Step 1: Write the failing test**
 
-Use the committed vectors already exercised by `tests/test_vgt_player.c` (`tests/golden/vgt/kvgt-frame-01.bin`, `fvgt-01.*`); build the same 2-chunk stream that `tests/test_play.py` builds.
+Use the committed vectors already exercised by `port/tests/test_vgt_player.c` (`port/tests/golden/vgt/kvgt-frame-01.bin`, `fvgt-01.*`); build the same 2-chunk stream that `tools/tests/test_play.py` builds.
 
 ```c
-/* tests/test_engine_intro.c */
+/* port/tests/test_engine_intro.c */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -922,7 +922,7 @@ static uint8_t *slurp(const char *path, size_t *len) {
 
 int main(void) {
   size_t klen = 0;
-  uint8_t *kvgt = slurp("tests/golden/vgt/kvgt-frame-01.bin", &klen);
+  uint8_t *kvgt = slurp("port/tests/golden/vgt/kvgt-frame-01.bin", &klen);
   assert(kvgt && klen > 0);
 
   size_t stream_len = 8u + klen;
@@ -958,7 +958,7 @@ Expected: build fails on the missing intro header.
 
 - [ ] **Step 3: Implement intro playback**
 
-`src/fifa96_engine/fifa96_intro.h`:
+`port/src/fifa96_engine/fifa96_intro.h`:
 
 ```c
 #pragma once
@@ -994,8 +994,8 @@ Expected: `test_engine_intro OK`, `100% tests passed` (87 with SDL3).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/fifa96_engine/fifa96_intro.c src/fifa96_engine/fifa96_intro.h \
-        src/fifa96_engine/fifa96_engine.c tests/test_engine_intro.c CMakeLists.txt
+git add port/src/fifa96_engine/fifa96_intro.c port/src/fifa96_engine/fifa96_intro.h \
+        port/src/fifa96_engine/fifa96_engine.c port/tests/test_engine_intro.c CMakeLists.txt
 git commit -m "feat(engine): TGV intro playback into the surface"
 ```
 
@@ -1004,10 +1004,10 @@ git commit -m "feat(engine): TGV intro playback into the surface"
 ### Task 8: Front-end control flow and input
 
 **Files:**
-- Create: `src/fifa96_engine/fifa96_frontend_run.c`
-- Create: `include/fifa96_engine/fifa96_frontend_run.h`
-- Create: `tests/test_engine_frontend.c`
-- Modify: `src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
+- Create: `port/src/fifa96_engine/fifa96_frontend_run.c`
+- Create: `port/src/fifa96_engine/fifa96_frontend_run.h`
+- Create: `port/tests/test_engine_frontend.c`
+- Modify: `port/src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: `fifa96_frontend` (existing), `fifa96_platform_key` (Task 1), `fifa96_surface` (Task 3).
@@ -1016,7 +1016,7 @@ git commit -m "feat(engine): TGV intro playback into the surface"
 - [ ] **Step 1: Write the failing test**
 
 ```c
-/* tests/test_engine_frontend.c */
+/* port/tests/test_engine_frontend.c */
 #include <assert.h>
 #include <stdio.h>
 #include "fifa96_engine/fifa96_frontend_run.h"
@@ -1106,8 +1106,8 @@ Expected: `test_engine_frontend OK`, `100% tests passed` (88 with SDL3).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/fifa96_engine/fifa96_frontend_run.c src/fifa96_engine/fifa96_frontend_run.h \
-        src/fifa96_engine/fifa96_engine.c tests/test_engine_frontend.c CMakeLists.txt
+git add port/src/fifa96_engine/fifa96_frontend_run.c port/src/fifa96_engine/fifa96_frontend_run.h \
+        port/src/fifa96_engine/fifa96_engine.c port/tests/test_engine_frontend.c CMakeLists.txt
 git commit -m "feat(engine): front-end control flow and input mapping"
 ```
 
@@ -1116,11 +1116,11 @@ git commit -m "feat(engine): front-end control flow and input mapping"
 ### Task 9: Front-end screen rendering (visual reconstruction)
 
 **Files:**
-- Create: `src/fifa96_engine/fifa96_menu_art.c`
-- Create: `include/fifa96_engine/fifa96_menu_art.h`
-- Create: `tests/test_engine_menu_art.c`
-- Modify: `src/fifa96_engine/fifa96_frontend_run.c`, `CMakeLists.txt`
-- Read: `docs/ghidra/FU65_competition_screens.md`, `FU66_frontend_dispatch.md`, `FU56_modex_blit.md`, `FU98_kit_remap_shade_cube.md`
+- Create: `port/src/fifa96_engine/fifa96_menu_art.c`
+- Create: `port/src/fifa96_engine/fifa96_menu_art.h`
+- Create: `port/tests/test_engine_menu_art.c`
+- Modify: `port/src/fifa96_engine/fifa96_frontend_run.c`, `CMakeLists.txt`
+- Read: `port/spec/FU65_competition_screens.md`, `FU66_frontend_dispatch.md`, `FU56_modex_blit.md`, `FU98_kit_remap_shade_cube.md`
 
 **Interfaces:**
 - Consumes: `fifa96_sprite`, `fifa96_bigf`, `fifa96_blit`, `fifa96_render` (existing).
@@ -1128,12 +1128,12 @@ git commit -m "feat(engine): front-end control flow and input mapping"
 
 - [ ] **Step 1: Ghidra evidence pass (bounded)**
 
-Derive from the native program: for the front-end entry states (`fifa96_frontend_dispatch_resolve` table, FU-66), the background/sprite asset path and the menu row placement. Produce `docs/ghidra/FU135_frontend_menu_render.md` (new number) with: the state table, the asset paths, the row geometry, and the cursor blit calls, every claim cited to addresses/tool output. If geometry cannot be statically proven, record it as an open leg and use the DOSBox-X screenshot oracle (non-gating) for placement.
+Derive from the native program: for the front-end entry states (`fifa96_frontend_dispatch_resolve` table, FU-66), the background/sprite asset path and the menu row placement. Produce `port/spec/FU135_frontend_menu_render.md` (new number) with: the state table, the asset paths, the row geometry, and the cursor blit calls, every claim cited to addresses/tool output. If geometry cannot be statically proven, record it as an open leg and use the DOSBox-X screenshot oracle (non-gating) for placement.
 
 - [ ] **Step 2: Write the failing test**
 
 ```c
-/* tests/test_engine_menu_art.c — pins a deterministic menu frame hash */
+/* port/tests/test_engine_menu_art.c — pins a deterministic menu frame hash */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -1168,9 +1168,9 @@ Expected: `test_engine_menu_art OK`, `100% tests passed` (89 with SDL3).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/ghidra/FU135_frontend_menu_render.md \
-        src/fifa96_engine/fifa96_menu_art.c src/fifa96_engine/fifa96_menu_art.h \
-        src/fifa96_engine/fifa96_frontend_run.c tests/test_engine_menu_art.c CMakeLists.txt
+git add port/spec/FU135_frontend_menu_render.md \
+        port/src/fifa96_engine/fifa96_menu_art.c port/src/fifa96_engine/fifa96_menu_art.h \
+        port/src/fifa96_engine/fifa96_frontend_run.c port/tests/test_engine_menu_art.c CMakeLists.txt
 git commit -m "feat(engine): front-end menu rendering with pinned fallback"
 ```
 
@@ -1179,8 +1179,8 @@ git commit -m "feat(engine): front-end menu rendering with pinned fallback"
 ### Task 10: M1 acceptance harness
 
 **Files:**
-- Create: `tests/test_engine_m1.c`
-- Create: `tests/golden/engine/m1-frames.txt` (hash tape, generated once and reviewed)
+- Create: `port/tests/test_engine_m1.c`
+- Create: `port/tests/golden/engine/m1-frames.txt` (hash tape, generated once and reviewed)
 - Modify: `CMakeLists.txt`
 
 **Interfaces:**
@@ -1189,10 +1189,10 @@ git commit -m "feat(engine): front-end menu rendering with pinned fallback"
 
 - [ ] **Step 1: Write the acceptance test**
 
-The test drives the engine with the null backend and a scripted tape: skip intro (CONFIRM), navigate the menu (DOWN×2, CONFIRM, DECLINE), quit (QUIT key). It writes one line per presented frame to stdout as `frame=<n> hash=<hex>` and compares the full transcript against `tests/golden/engine/m1-frames.txt` when `game/FIFAPCCD96.iso` is present; without the ISO it runs the no-assets smoke mode and asserts the same number of presents and a stable hash (self-consistency), then skips the golden comparison.
+The test drives the engine with the null backend and a scripted tape: skip intro (CONFIRM), navigate the menu (DOWN×2, CONFIRM, DECLINE), quit (QUIT key). It writes one line per presented frame to stdout as `frame=<n> hash=<hex>` and compares the full transcript against `port/tests/golden/engine/m1-frames.txt` when `data/game/FIFAPCCD96.iso` is present; without the ISO it runs the no-assets smoke mode and asserts the same number of presents and a stable hash (self-consistency), then skips the golden comparison.
 
 ```c
-/* tests/test_engine_m1.c (core loop) */
+/* port/tests/test_engine_m1.c (core loop) */
 fifa96_engine *e = /* create with ISO if present, else NULL assets */;
 fifa96_engine_boot(e);
 while (!fifa96_engine_should_quit(e)) fifa96_engine_step(e);
@@ -1201,7 +1201,7 @@ while (!fifa96_engine_should_quit(e)) fifa96_engine_step(e);
 
 - [ ] **Step 2: Generate and pin the tape**
 
-Run: `./build/test_engine_m1 > tests/golden/engine/m1-frames.txt` (with the ISO present), review the transcript for sanity (frame count, no all-zero hashes), and commit it.
+Run: `./build/test_engine_m1 > port/tests/golden/engine/m1-frames.txt` (with the ISO present), review the transcript for sanity (frame count, no all-zero hashes), and commit it.
 
 - [ ] **Step 3: Gate + commit**
 
@@ -1209,7 +1209,7 @@ Run: `make check`
 Expected: `100% tests passed` (90 with SDL3).
 
 ```bash
-git add tests/test_engine_m1.c tests/golden/engine/m1-frames.txt CMakeLists.txt
+git add port/tests/test_engine_m1.c port/tests/golden/engine/m1-frames.txt CMakeLists.txt
 git commit -m "test(engine): M1 headless acceptance tape with pinned frames"
 ```
 
@@ -1220,7 +1220,7 @@ git commit -m "test(engine): M1 headless acceptance tape with pinned frames"
 ### Task 11: M2 scope probe (action-handler/entity surface)
 
 **Files:**
-- Create: `docs/ghidra/FU136_action_handler_port_scope.md`
+- Create: `port/spec/FU136_action_handler_port_scope.md`
 - Modify: `.superpowers/sdd/<workspace>/progress.md` (controller-ledger ruling)
 
 **Interfaces:**
@@ -1233,7 +1233,7 @@ git commit -m "test(engine): M1 headless acceptance tape with pinned frames"
 - [ ] **Step 4: Commit.**
 
 ```bash
-git add docs/ghidra/FU136_action_handler_port_scope.md
+git add port/spec/FU136_action_handler_port_scope.md
 git commit -m "docs(fu136): M2 action-handler port scope probe"
 ```
 
@@ -1244,10 +1244,10 @@ If the decision is **split**: stop here, write the M2 child plan (its own brains
 ### Task 12: Match lifecycle wiring
 
 **Files:**
-- Create: `src/fifa96_engine/fifa96_match_run.c`
-- Create: `include/fifa96_engine/fifa96_match_run.h`
-- Create: `tests/test_engine_match_lifecycle.c`
-- Modify: `src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
+- Create: `port/src/fifa96_engine/fifa96_match_run.c`
+- Create: `port/src/fifa96_engine/fifa96_match_run.h`
+- Create: `port/tests/test_engine_match_lifecycle.c`
+- Modify: `port/src/fifa96_engine/fifa96_engine.c`, `CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: `fifa96_match_lifecycle` (existing), `fifa96_match_pace` (existing), `fifa96_tick` (Task 6).
@@ -1264,8 +1264,8 @@ If the decision is **split**: stop here, write the M2 child plan (its own brains
 ### Task 13: Match frame body, pacing and clock state
 
 **Files:**
-- Create: `tests/test_engine_match_frame.c`
-- Modify: `src/fifa96_engine/fifa96_match_run.c`
+- Create: `port/tests/test_engine_match_frame.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c`
 
 **Interfaces:**
 - Consumes: `fifa96_match_state`, `fifa96_match_pace` (existing).
@@ -1281,8 +1281,8 @@ If the decision is **split**: stop here, write the M2 child plan (its own brains
 ### Task 14: Match input and control slots
 
 **Files:**
-- Create: `tests/test_engine_match_input.c`
-- Modify: `src/fifa96_engine/fifa96_match_run.c`
+- Create: `port/tests/test_engine_match_input.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c`
 
 **Interfaces:**
 - Consumes: `fifa96_input` (existing), `fifa96_control_slot` (existing), `fifa96_platform_key` (Task 1).
@@ -1298,9 +1298,9 @@ If the decision is **split**: stop here, write the M2 child plan (its own brains
 ### Task 15: Match presentation (camera, scene, sprites, display)
 
 **Files:**
-- Create: `tests/test_engine_match_render.c`
-- Modify: `src/fifa96_engine/fifa96_match_run.c`
-- Read: `docs/ghidra/FU71_camera_track.md`, `FU84_animation.md`, `FU85_match_renderer.md`, `FU88_projection.md`, `FU89_scene_assembly.md`, `FU92_match_window.md`, `FU93_window_zoom.md`, `FU98_kit_remap_shade_cube.md`
+- Create: `port/tests/test_engine_match_render.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c`
+- Read: `port/spec/FU71_camera_track.md`, `FU84_animation.md`, `FU85_match_renderer.md`, `FU88_projection.md`, `FU89_scene_assembly.md`, `FU92_match_window.md`, `FU93_window_zoom.md`, `FU98_kit_remap_shade_cube.md`
 
 **Interfaces:**
 - Consumes: `fifa96_camera`, `fifa96_projection`, `fifa96_scene`, `fifa96_render`, `fifa96_sprite`, `fifa96_blit`, `fifa96_window`, `fifa96_match_display`.
@@ -1316,9 +1316,9 @@ If the decision is **split**: stop here, write the M2 child plan (its own brains
 ### Task 16: Entities, ball, action handlers, score/half/end
 
 **Files:**
-- Create: `tests/test_engine_match_play.c`
-- Modify: `src/fifa96_engine/fifa96_match_run.c`
-- Read: `docs/ghidra/FU60_match_frame_body.md`, `FU67_entity_update.md`, `FU73_ball_pairing.md`, `FU74_keeper_dispatch.md`, `FU75_outfield_decide.md`, `FU76_action_handlers.md`, `FU77_locomotion.md`, `FU78_possession_tackle.md`, `FU120_snapshot_sides_ball.md`
+- Create: `port/tests/test_engine_match_play.c`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c`
+- Read: `port/spec/FU60_match_frame_body.md`, `FU67_entity_update.md`, `FU73_ball_pairing.md`, `FU74_keeper_dispatch.md`, `FU75_outfield_decide.md`, `FU76_action_handlers.md`, `FU77_locomotion.md`, `FU78_possession_tackle.md`, `FU120_snapshot_sides_ball.md`
 
 **Interfaces:**
 - Consumes: all match libraries; output of Task 11 governs scope.
@@ -1334,8 +1334,8 @@ If the decision is **split**: stop here, write the M2 child plan (its own brains
 ### Task 17: M2 acceptance harness
 
 **Files:**
-- Create: `tests/test_engine_m2.c`
-- Create: `tests/golden/engine/m2-frames.txt`
+- Create: `port/tests/test_engine_m2.c`
+- Create: `port/tests/golden/engine/m2-frames.txt`
 - Modify: `CMakeLists.txt`
 
 - [ ] Step 1: Write the tape test — boot → skip intro → menu → start match (CONFIRM×n) → kickoff → move → kick → score → run to half → quit; record `frame=<n> hash=<hex>` + `state=<phase>` lines.
@@ -1346,7 +1346,7 @@ If the decision is **split**: stop here, write the M2 child plan (its own brains
 
 ### Task 18: M2 gate — docs, review, merge
 
-Controller task (not a subagent implementer): update `README.md` (new engine targets, `make game`, test counts), append the engine sections to `docs/HOST_RUNNER.md` or a new `docs/ENGINE.md`, run the final whole-branch review on the M1+M2 range, adjudicate findings, and finish the branch (git worktree/branch flow per `superpowers:finishing-a-development-branch`). No code steps; the reviewer prompts and ledger live in the SDD workspace.
+Controller task (not a subagent implementer): update `README.md` (new engine targets, `make game`, test counts), append the engine sections to `port/HOST_RUNNER.md` or a new `port/ENGINE.md`, run the final whole-branch review on the M1+M2 range, adjudicate findings, and finish the branch (git worktree/branch flow per `superpowers:finishing-a-development-branch`). No code steps; the reviewer prompts and ledger live in the SDD workspace.
 
 ```bash
 git add README.md docs/
@@ -1360,5 +1360,5 @@ git commit -m "docs(engine): native engine targets, make game, verification"
 - **Spec coverage:** §4 architecture → Tasks 1–3; §5 ABI → Task 1; §6 boot/cache/loop → Tasks 4–6; §7 M1 → Tasks 7–10; §8 M2 → Tasks 12–17; §9 verification → every task's gate plus Tasks 10/17; §10 orchestration → the plan's task order and the controller's serialization rules; §11 risks → R2 handled by Task 11, R1 by Task 9's oracle note, R4 by the null backend, R6 by the optional SDL3 target; §12 → Task 11 is the decomposition gate.
 - **Known gap (by design):** Task 9's screen geometry may be runtime-gated; the task requires the derived evidence first and a DOSBox-X oracle, with the procedural fallback pinned so the task is testable either way.
 - **Type consistency:** `fifa96_platform_frame`/`fifa96_platform_key`, `fifa96_engine_*`, `fifa96_surface_*`, `fifa96_asset_*`, `fifa96_cache_*`, `fifa96_clock_*`, `fifa96_intro_*`, `fifa96_frontend_run_*`, `fifa96_menu_art_*`, `fifa96_match_run_*` are used with the same names and signatures in every task that touches them.
-- **M2 test density:** Tasks 12–17 state concrete assertions rather than full test bodies; implementers must mirror the semantics pinned by the existing `tests/test_match_lifecycle.c`, `test_match_state.c`, `test_match_pace.c`, `test_camera.c`, `test_projection.c`, `test_scene.c`, `test_render.c`, `test_ball_pairing.c`, `test_keeper.c`, `test_outfield.c`, `test_control.c` cases. If a library's tested contract contradicts a described assertion, the library's test wins and the task report must say so.
+- **M2 test density:** Tasks 12–17 state concrete assertions rather than full test bodies; implementers must mirror the semantics pinned by the existing `port/tests/test_match_lifecycle.c`, `test_match_state.c`, `test_match_pace.c`, `test_camera.c`, `test_projection.c`, `test_scene.c`, `test_render.c`, `test_ball_pairing.c`, `test_keeper.c`, `test_outfield.c`, `test_control.c` cases. If a library's tested contract contradicts a described assertion, the library's test wins and the task report must say so.
 - **Test-count note:** the counts in each task's gate are the expected running totals; adjust the CMake registration and this plan if a task adds more than one test binary.

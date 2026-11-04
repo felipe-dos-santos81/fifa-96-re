@@ -8,12 +8,12 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, Ghidra MCP (read-only), SDL3 for `make game`; null backend = deterministic regression source of truth.
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.4-3.5, §5, §6); scope authority: `docs/ghidra/FU89_scene_assembly.md` §11 (`0x79B6C`/`0x79F3C` vicinity), `docs/ghidra/FU96_camera_objects.md` (leg 5 `:157-163`; camera/slot data), `docs/ghidra/FU142_installer_arms_scope.md` (OL-T11-6/-7; App. J/K), `docs/ghidra/FU143_phase_rows.md` (§8/§10/§11 corrected), `docs/ghidra/FU137_dispatch_mechanics.md` (§4/§6/§7), `docs/ghidra/FU144_match_palette_install.md`; predecessor plans: all five M2 plans incl. `2026-10-07-fifa96-m2-playable-match.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.4-3.5, §5, §6); scope authority: `port/spec/FU89_scene_assembly.md` §11 (`0x79B6C`/`0x79F3C` vicinity), `port/spec/FU96_camera_objects.md` (leg 5 `:157-163`; camera/slot data), `port/spec/FU142_installer_arms_scope.md` (OL-T11-6/-7; App. J/K), `port/spec/FU143_phase_rows.md` (§8/§10/§11 corrected), `port/spec/FU137_dispatch_mechanics.md` (§4/§6/§7), `port/spec/FU144_match_palette_install.md`; predecessor plans: all five M2 plans incl. `2026-10-07-fifa96-m2-playable-match.md`.
 
 ## Global Constraints
 
 - Baseline at plan start: `make check` **104/104**; wired **14/80** (`00,01,04,06,07,08,0F,18,1E,21,23,26,28,2A`); dispatch 14 OK / 65 UNSUP / 1 NOTF; tree at `e606acd` or later.
-- C11, `-Wall -Wextra -Werror`; ASan/UBSan engine tests; ISO-gated tests skip without `game/FIFAPCCD96.iso`.
+- C11, `-Wall -Wextra -Werror`; ASan/UBSan engine tests; ISO-gated tests skip without `data/game/FIFAPCCD96.iso`.
 - Evidence-gated: first-hand bytes/addresses only; unprovable → numbered leg; errata append. Authoritative program `/FIFA96.EXE`; `+0x100000` rule; never objdump the stale flat bin; diff CALL bytes; word-pair/sign/width/gate/jump-table traps.
 - Ghidra read-only for implementers; commits + Ghidra writes serialized by the controller.
 - Determinism: null backend source of truth. **M1 golden never moves.** M2 golden re-pins only for intended behavior upgrades (movement, camera framing, HUD) with written reason + frame diff; never to hide a mismatch.
@@ -24,13 +24,13 @@
 
 | Path | Responsibility |
 |---|---|
-| `src/fifa96_engine/fifa96_match_input.c` / `.h` | Input mapping to record targets/velocity (extend) |
-| `src/fifa96_engine/fifa96_match_handlers.c` / `.h` | Ported locomotion/possession rows (extend) |
-| `src/fifa96_engine/fifa96_match_entities.c` / `.h` | Velocity/target fields (extend) |
-| `src/fifa96_engine/fifa96_match_render.c` / `.h` | Camera place `FUN_00079F3C` fields, HUD overlay (extend) |
-| `src/fifa96_engine/fifa96_match_run.c` / `.h` | Frame/begin integration (extend) |
-| `tests/test_engine_match_handlers.c`, `test_engine_match_input.c`, `test_engine_match_render.c`, `test_engine_match_frame.c`, `test_engine_m2.c` + `tests/golden/engine/m2-frames.txt` | Fixtures + tape v5 |
-| `docs/ghidra/FU89…/FU96…/FU84…/FU142/FU143/FU145 (HUD)`, `docs/ENGINE.md`, `README.md`, `docs/screens/*` | RE record + status |
+| `port/src/fifa96_engine/fifa96_match_input.c` / `.h` | Input mapping to record targets/velocity (extend) |
+| `port/src/fifa96_engine/fifa96_match_handlers.c` / `.h` | Ported locomotion/possession rows (extend) |
+| `port/src/fifa96_engine/fifa96_match_entities.c` / `.h` | Velocity/target fields (extend) |
+| `port/src/fifa96_engine/fifa96_match_render.c` / `.h` | Camera place `FUN_00079F3C` fields, HUD overlay (extend) |
+| `port/src/fifa96_engine/fifa96_match_run.c` / `.h` | Frame/begin integration (extend) |
+| `port/tests/test_engine_match_handlers.c`, `test_engine_match_input.c`, `test_engine_match_render.c`, `test_engine_match_frame.c`, `test_engine_m2.c` + `port/tests/golden/engine/m2-frames.txt` | Fixtures + tape v5 |
+| `port/spec/FU89…/FU96…/FU84…/FU142/FU143/FU145 (HUD)`, `port/ENGINE.md`, `README.md`, `docs/screens/*` | RE record + status |
 | `CMakeLists.txt` | Registration if new sources/tests |
 
 ---
@@ -40,7 +40,7 @@
 ### Task 1: input → controlled-record locomotion
 
 **Files:**
-- Modify: the input/handlers/entities/run files above, `tests/test_engine_match_input.c`, `tests/test_engine_match_handlers.c`, `tests/test_engine_match_frame.c`, `tests/test_engine_m2.c` (+ golden iff movement enters the tape), `docs/ghidra/FU*.md`, `docs/ENGINE.md`
+- Modify: the input/handlers/entities/run files above, `port/tests/test_engine_match_input.c`, `port/tests/test_engine_match_handlers.c`, `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_m2.c` (+ golden iff movement enters the tape), `port/spec/FU*.md`, `port/ENGINE.md`
 - Read: FU-137 §4/§6 (row semantics), FU-143 §10–11 (kickoff/possession chain `0x7546E`/`0x75B58`/`0x76072`; FU-73 vicinity), FU-142 App. J/K, the engine's `input_state`/`entities.controlled` seam, T4 f-up4 smoke finding ("keys reach `input_state[0]`, no wired consumer")
 
 **Interfaces:**
@@ -64,7 +64,7 @@
 ### Task 2: per-record camera place (`FUN_00079F3C`, FU-96 leg 5)
 
 **Files:**
-- Modify: render/camera sources + `tests/test_engine_match_render.c`, `tests/test_engine_m2.c` (+ golden iff framing changes), `docs/ghidra/FU96_camera_objects.md` (leg 5), `docs/ghidra/FU89_scene_assembly.md` §11, `docs/ENGINE.md`
+- Modify: render/camera sources + `port/tests/test_engine_match_render.c`, `port/tests/test_engine_m2.c` (+ golden iff framing changes), `port/spec/FU96_camera_objects.md` (leg 5), `port/spec/FU89_scene_assembly.md` §11, `port/ENGINE.md`
 - Read: FU-96 (`FUN_00079F3C` leads; `:157-163` leg; camera/slot fields), FU-89 §11 (`0x79F3C(EBX=0x15774C)` in the 11-record loop), T1 f-up3 report (positive-depth-only draw caveat)
 
 **Interfaces:**
@@ -80,7 +80,7 @@
 ### Task 3: match HUD (OL-T11-7)
 
 **Files:**
-- Modify: render + `tests/test_engine_match_render.c`, `tests/test_engine_m2.c` (+ golden iff HUD draws), new `docs/ghidra/FU145_match_hud.md` (or FU-84 appendix), `docs/ENGINE.md`, `docs/screens/*`
+- Modify: render + `port/tests/test_engine_match_render.c`, `port/tests/test_engine_m2.c` (+ golden iff HUD draws), new `port/spec/FU145_match_hud.md` (or FU-84 appendix), `port/ENGINE.md`, `docs/screens/*`
 - Read: FU-84 (HUD/overlays), FU-142 OL-T11-7, FU-144 (palette conventions), the period/score state (`fifa96_match_run`), `FIRSTHAND` HUD draw chain to derive
 
 **Interfaces:**
@@ -102,7 +102,7 @@
 ### Task 4: Interactive-match acceptance — tape v5, smoke, docs, final review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c`, `tests/golden/engine/m2-frames.txt` (only if moved and not yet committed), `docs/ENGINE.md`, `README.md`, `docs/screens/*`
+- Modify: `port/tests/test_engine_m2.c`, `port/tests/golden/engine/m2-frames.txt` (only if moved and not yet committed), `port/ENGINE.md`, `README.md`, `docs/screens/*`
 - Read: spec §5; the T4 f-up4 tape provenance
 
 **Interfaces:**

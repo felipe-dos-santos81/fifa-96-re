@@ -6,20 +6,20 @@
 
 **Architecture:** A 32-bit cave injected at the LE image's only in-range zero area (link `0x6728D`) is entered by a `call rel32` patched over each target's entry. The cave reads the caller return address from the stack, builds a DPMI real-mode register structure on its own stack, and simulates `INT 61h`; a new TSR handler (`T_PROBE = 0x08`) dumps the passed registers to COM1 in the existing frame format. A Python tool extracts `FIFA96.EXE` from a copy of the ISO, applies trampolines at LE file offsets, and the existing capture script runs the patched copy headless; a decoder recovers caller return addresses, derives the runtime delta per run (`target_ret − (target + overwrite)`), and normalizes to link addresses for cross-checking against the static caller lists in FU-8/FU-9.
 
-**Tech Stack:** nasm + ndisasm (installed), Python 3 `unittest` under CTest, DOSBox-X headless (`-silent`) serial capture rig (`tsr/fifa96_capture.asm`), `tools/fifa96_le.py` LE parser.
+**Tech Stack:** nasm + ndisasm (installed), Python 3 `unittest` under CTest, DOSBox-X headless (`-silent`) serial capture rig (`_tools/tsr/fifa96_capture.asm`), `tools/fifa96_le.py` LE parser.
 
-**Spec:** `docs/ghidra/FU10_dpmi_trace_plan.md` (approved plan) with evidence from `docs/ghidra/FU8_loader_chain.md`, `docs/ghidra/FU9_format_consumers.md`, and the `/tmp/opencode/daytrace` experiments (PM cave precedent, ISO in-place patch precedent, `dosbox-x-nocap` host-scan rig).
+**Spec:** `port/spec/FU10_dpmi_trace_plan.md` (approved plan) with evidence from `port/spec/FU8_loader_chain.md`, `port/spec/FU9_format_consumers.md`, and the `/tmp/opencode/daytrace` experiments (PM cave precedent, ISO in-place patch precedent, `dosbox-x-nocap` host-scan rig).
 
 ## Global Constraints
 
 - All 14 existing CTest tests must stay green (`make test`); only ADD tests. `src/`, `include/`, existing test expectations, and `CMakeLists.txt` test semantics for existing tests are NOT changed.
-- **Never write to `game/FIFAPCCD96.iso` or `/media/felipe/FIFAPCCD/`.** Every patched artifact is a copy under `build/` (`build/` is gitignored). The tool reads the input ISO only.
+- **Never write to `data/game/FIFAPCCD96.iso` or `/media/felipe/FIFAPCCD/`.** Every patched artifact is a copy under `build/` (`build/` is gitignored). The tool reads the input ISO only.
 - No Ghidra program writes. Static caller lists for cross-check come from FU-8/FU-9 verbatim; the probe measures the runtime lists.
 - The runtime linear delta is MEASURED each run (`delta = target_ret − (target_link + overwrite)`); never hardcode `0x2D1000` in a decoder/assertion — it is a prior hypothesis, the probe is the authority.
-- `captures/` is gitignored: docs quote only verbatim decoded lines with session provenance (`captures/session-<name>/trace.bin`).
+- `data/captures/` is gitignored: docs quote only verbatim decoded lines with session provenance (`data/captures/session-<name>/trace.bin`).
 - Capture-rig invariants preserved in the TSR: `INT 21h AH=31h` residency, COM1 divisor-1 programming, forward only CF from chained handler results.
 - The cave must be placed only in the obj1 zero cave at link `0x6728D` (capacity `0x103` bytes); links outside stored pages are rejected.
-- Commit messages exactly as each task brief specifies; no `fifa96.rep/**` staging; no `git push`.
+- Commit messages exactly as each task brief specifies; no `data/fifa96.rep/**` staging; no `git push`.
 
 ---
 
@@ -30,15 +30,15 @@ Single subsystem: the trace probe (proto). Four files of tooling plus TSR/script
 ## File Structure
 
 - Create `tools/fifa96_probe.py` — probe-frame decoder + delta normalization + CLI (Task 1).
-- Create `tests/test_probe.py` — decoder unit tests (Task 1); registered in CMake Python block.
-- Modify `tsr/fifa96_capture.asm` — `T_PROBE` + `int61` handler + install hooks (Task 2).
-- Create `tsr/probe_stub.asm` — 16-bit real-mode `INT 61h` smoke stub (Task 2).
+- Create `tools/tests/test_probe.py` — decoder unit tests (Task 1); registered in CMake Python block.
+- Modify `_tools/tsr/fifa96_capture.asm` — `T_PROBE` + `int61` handler + install hooks (Task 2).
+- Create `_tools/tsr/probe_stub.asm` — 16-bit real-mode `INT 61h` smoke stub (Task 2).
 - Create `tools/int61_smoke.sh` — headless DOSBox smoke: TSR + stub → serial → decoder assert (Task 2).
 - Create `tools/fifa96_patch.py` — ISO/LE trampoline injector + cave assembler (Task 3).
-- Create `tests/test_patch.py` — injector unit tests (Task 3); registered in CMake Python block.
-- Modify `run-fifa96-capture.sh` — `ISO` override + `HEADLESS` + `TIMEOUT` env (Task 3), default behavior unchanged.
+- Create `tools/tests/test_patch.py` — injector unit tests (Task 3); registered in CMake Python block.
+- Modify `tools/run-fifa96-capture.sh` — `ISO` override + `HEADLESS` + `TIMEOUT` env (Task 3), default behavior unchanged.
 - Create `tools/trace_probe.sh` — one-command target run: patch ISO copy → headless capture → decode (Task 4).
-- Create `docs/ghidra/FU11_dpmi_probe_findings.md` — findings (Tasks 4, 5).
+- Create `port/spec/FU11_dpmi_probe_findings.md` — findings (Tasks 4, 5).
 
 ---
 
@@ -46,7 +46,7 @@ Single subsystem: the trace probe (proto). Four files of tooling plus TSR/script
 
 **Files:**
 - Create: `tools/fifa96_probe.py`
-- Create: `tests/test_probe.py`
+- Create: `tools/tests/test_probe.py`
 - Modify: `CMakeLists.txt` (add `test_probe` in the Python block)
 
 **Interfaces:**
@@ -60,7 +60,7 @@ Single subsystem: the trace probe (proto). Four files of tooling plus TSR/script
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-# tests/test_probe.py
+# tools/tests/test_probe.py
 import struct
 import sys
 import unittest
@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `python3 tests/test_probe.py`
+Run: `python3 tools/tests/test_probe.py`
 Expected: FAIL/error `ModuleNotFoundError: No module named 'fifa96_probe'` (or import failure).
 
 - [ ] **Step 3: Implement the decoder**
@@ -123,7 +123,7 @@ Expected: FAIL/error `ModuleNotFoundError: No module named 'fifa96_probe'` (or i
 #!/usr/bin/env python3
 """fifa96_probe.py — decode T_PROBE frames from a capture trace.
 
-Frame wire format (emitted by tsr/fifa96_capture.asm):
+Frame wire format (emitted by _tools/tsr/fifa96_capture.asm):
     type:u8, seq:u16 LE, len:u16 LE, payload[len]
 T_PROBE (0x08) payload = four LE u32: site, caller_lo, caller_hi, target_ret.
 
@@ -210,7 +210,7 @@ if __name__ == "__main__":
 
 ```cmake
 # CMakeLists.txt, inside the if(Python3_Interpreter_FOUND) block
-  add_test(NAME test_probe COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_probe.py)
+  add_test(NAME test_probe COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/tests/test_probe.py)
 ```
 
 Run: `make test`
@@ -219,7 +219,7 @@ Expected: 15/15 pass (`test_probe` new).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/fifa96_probe.py tests/test_probe.py CMakeLists.txt
+git add tools/fifa96_probe.py tools/tests/test_probe.py CMakeLists.txt
 git commit -m "feat(trace): decode DPMI probe frames and normalize caller addresses"
 ```
 
@@ -228,8 +228,8 @@ git commit -m "feat(trace): decode DPMI probe frames and normalize caller addres
 ### Task 2: TSR INT 61 probe handler + real-mode smoke
 
 **Files:**
-- Modify: `tsr/fifa96_capture.asm`
-- Create: `tsr/probe_stub.asm`
+- Modify: `_tools/tsr/fifa96_capture.asm`
+- Create: `_tools/tsr/probe_stub.asm`
 - Create: `tools/int61_smoke.sh`
 
 **Interfaces:**
@@ -238,7 +238,7 @@ git commit -m "feat(trace): decode DPMI probe frames and normalize caller addres
 
 - [ ] **Step 1: Add the frame type and resident buffer**
 
-In `tsr/fifa96_capture.asm`, next to the existing type constants:
+In `_tools/tsr/fifa96_capture.asm`, next to the existing type constants:
 
 ```asm
 T_PROBE   equ 0x08
@@ -304,8 +304,8 @@ In `install:`, beside the `0x3560`/`0x2560` pair:
 - [ ] **Step 4: Write the real-mode smoke stub**
 
 ```asm
-; tsr/probe_stub.asm — INT 61h smoke: sets four sentinel values and exits.
-; nasm -f bin tsr/probe_stub.asm -o STUB.COM
+; _tools/tsr/probe_stub.asm — INT 61h smoke: sets four sentinel values and exits.
+; nasm -f bin _tools/tsr/probe_stub.asm -o STUB.COM
         org 0x100
         bits 16
         mov  esi, 0x0000BEEF
@@ -327,7 +327,7 @@ DIR=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$(mktemp -d -t fifa96int61.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 [ -f "$DIR/build/FIFACAP.COM" ] || { echo "missing build/FIFACAP.COM (make tsr)" >&2; exit 1; }
-nasm -f bin "$DIR/tsr/probe_stub.asm" -o "$WORK/STUB.COM"
+nasm -f bin "$DIR/_tools/tsr/probe_stub.asm" -o "$WORK/STUB.COM"
 cp "$DIR/build/FIFACAP.COM" "$WORK/"
 cat > "$WORK/dosbox.conf" <<EOF
 [dosbox]
@@ -363,7 +363,7 @@ Expected: `FIFACAP.COM: <size>` + sha256; then `T_PROBE site=48879 caller_lo=0x1
 Run: `make test` (15/15 unchanged).
 
 ```bash
-git add tsr/fifa96_capture.asm tsr/probe_stub.asm tools/int61_smoke.sh
+git add _tools/tsr/fifa96_capture.asm _tools/tsr/probe_stub.asm tools/int61_smoke.sh
 git commit -m "feat(tsr): add INT 61 DPMI probe dump handler and real-mode smoke"
 ```
 
@@ -373,9 +373,9 @@ git commit -m "feat(tsr): add INT 61 DPMI probe dump handler and real-mode smoke
 
 **Files:**
 - Create: `tools/fifa96_patch.py`
-- Create: `tests/test_patch.py`
+- Create: `tools/tests/test_patch.py`
 - Modify: `CMakeLists.txt` (add `test_patch`)
-- Modify: `run-fifa96-capture.sh`
+- Modify: `tools/run-fifa96-capture.sh`
 
 **Interfaces:**
 - Consumes: `tools/fifa96_le.parse()` (objects with `base`, `pages`, `page_index`; `data_offset`, `page_size`, `last_page`) and the cave template below.
@@ -385,7 +385,7 @@ git commit -m "feat(tsr): add INT 61 DPMI probe dump handler and real-mode smoke
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-# tests/test_patch.py
+# tools/tests/test_patch.py
 import struct
 import sys
 import unittest
@@ -464,7 +464,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `python3 tests/test_patch.py`
+Run: `python3 tools/tests/test_patch.py`
 Expected: `ModuleNotFoundError: No module named 'fifa96_patch'`.
 
 - [ ] **Step 3: Implement the injector**
@@ -538,15 +538,15 @@ cave:
 
 - [ ] **Step 4: Run the injector tests**
 
-Run: `python3 tests/test_patch.py`
+Run: `python3 tools/tests/test_patch.py`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Add capture-script options (default behavior unchanged)**
 
-In `run-fifa96-capture.sh`:
+In `tools/run-fifa96-capture.sh`:
 
 ```sh
-ISO=${ISO:-"$DIR/game/FIFAPCCD96.iso"}     # replaces the fixed assignment
+ISO=${ISO:-"$DIR/data/game/FIFAPCCD96.iso"}     # replaces the fixed assignment
 HEADLESS=${HEADLESS:-0}
 TIMEOUT=${TIMEOUT:-0}
 ```
@@ -566,19 +566,19 @@ else
 fi
 ```
 
-Also add `[ -f "$ISO" ]` check against the overridden path (replace the existing `[ -f "$ISO" ]` check's message unchanged). Verify `sh -n run-fifa96-capture.sh`.
+Also add `[ -f "$ISO" ]` check against the overridden path (replace the existing `[ -f "$ISO" ]` check's message unchanged). Verify `sh -n tools/run-fifa96-capture.sh`.
 
 - [ ] **Step 6: Register the test, run the suite, commit**
 
 ```cmake
-  add_test(NAME test_patch COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_patch.py)
+  add_test(NAME test_patch COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/tests/test_patch.py)
 ```
 
 Run: `make test`
 Expected: 16/16 pass.
 
 ```bash
-git add tools/fifa96_patch.py tests/test_patch.py CMakeLists.txt run-fifa96-capture.sh
+git add tools/fifa96_patch.py tools/tests/test_patch.py CMakeLists.txt tools/run-fifa96-capture.sh
 git commit -m "feat(patch): inject PM trace trampolines into ISO copies"
 ```
 
@@ -588,11 +588,11 @@ git commit -m "feat(patch): inject PM trace trampolines into ISO copies"
 
 **Files:**
 - Create: `tools/trace_probe.sh`
-- Create: `docs/ghidra/FU11_dpmi_probe_findings.md`
+- Create: `port/spec/FU11_dpmi_probe_findings.md`
 
 **Interfaces:**
-- Consumes: `tools/fifa96_patch.py` CLI, `tools/fifa96_probe.py` CLI, `run-fifa96-capture.sh` env (`ISO`, `SESSION`, `HEADLESS`, `TIMEOUT`), TSR `INT 61h`.
-- Produces: `tools/trace_probe.sh TARGET_LINK SITE_ID SESSION` → patched ISO under `build/`, capture under `captures/session-<SESSION>/trace.bin`, decoded probe lines on stdout; FU-11 doc with the mechanism and the first target's verified caller set.
+- Consumes: `tools/fifa96_patch.py` CLI, `tools/fifa96_probe.py` CLI, `tools/run-fifa96-capture.sh` env (`ISO`, `SESSION`, `HEADLESS`, `TIMEOUT`), TSR `INT 61h`.
+- Produces: `tools/trace_probe.sh TARGET_LINK SITE_ID SESSION` → patched ISO under `build/`, capture under `data/captures/session-<SESSION>/trace.bin`, decoded probe lines on stdout; FU-11 doc with the mechanism and the first target's verified caller set.
 
 - [ ] **Step 1: Write the one-command runner**
 
@@ -607,12 +607,12 @@ TARGET=$1
 SITE=$2
 SESSION=$3
 ISO="$DIR/build/fifa96-trace-$SITE.iso"
-python3 "$DIR/tools/fifa96_patch.py" --iso "$DIR/game/FIFAPCCD96.iso" \
+python3 "$DIR/tools/fifa96_patch.py" --iso "$DIR/data/game/FIFAPCCD96.iso" \
     --out "$ISO" --target "$TARGET" --cave 0x6728D --site-id "$SITE"
 ISO="$ISO" SESSION="$SESSION" HEADLESS=1 TIMEOUT=120 \
-    "$DIR/run-fifa96-capture.sh"
+    "$DIR/tools/run-fifa96-capture.sh"
 python3 "$DIR/tools/fifa96_probe.py" \
-    "$DIR/captures/session-$SESSION/trace.bin" \
+    "$DIR/data/captures/session-$SESSION/trace.bin" \
     --target-link "$TARGET" --expect-site "$SITE"
 ```
 
@@ -625,14 +625,14 @@ If zero frames: do NOT fabricate. Re-run once with `TIMEOUT=180`; if still zero,
 
 - [ ] **Step 3: Document the mechanism and the first result**
 
-Create `docs/ghidra/FU11_dpmi_probe_findings.md` with: the cave/handler contract, the measured delta for the run, the verbatim decoded probe lines, and the cross-check row (`caller_link` ↔ static call site from the FU-8/FU-9 census), plus the session provenance line (`captures/session-probe-9e718/trace.bin`, size in bytes). State explicitly that the delta is measured, not assumed.
+Create `port/spec/FU11_dpmi_probe_findings.md` with: the cave/handler contract, the measured delta for the run, the verbatim decoded probe lines, and the cross-check row (`caller_link` ↔ static call site from the FU-8/FU-9 census), plus the session provenance line (`data/captures/session-probe-9e718/trace.bin`, size in bytes). State explicitly that the delta is measured, not assumed.
 
 - [ ] **Step 4: Run the suite and commit**
 
 Run: `make test` (16/16).
 
 ```bash
-git add tools/trace_probe.sh docs/ghidra/FU11_dpmi_probe_findings.md
+git add tools/trace_probe.sh port/spec/FU11_dpmi_probe_findings.md
 git commit -m "feat(trace): end-to-end DPMI probe on the decompressor entry"
 ```
 
@@ -641,10 +641,10 @@ git commit -m "feat(trace): end-to-end DPMI probe on the decompressor entry"
 ### Task 5: Batch the remaining entry points
 
 **Files:**
-- Modify: `docs/ghidra/FU11_dpmi_probe_findings.md`
+- Modify: `port/spec/FU11_dpmi_probe_findings.md`
 
 **Interfaces:**
-- Consumes: Task 4's validated `tools/trace_probe.sh` and decoder; static caller censuses from `docs/ghidra/FU8_loader_chain.md` / `FU9_format_consumers.md`.
+- Consumes: Task 4's validated `tools/trace_probe.sh` and decoder; static caller censuses from `port/spec/FU8_loader_chain.md` / `FU9_format_consumers.md`.
 - Produces: one capture + decoder table per target in FU-11, each with the measured delta, matched static call site, and unmatched findings.
 
 - [ ] **Step 1: Run the three remaining targets**
@@ -668,7 +668,7 @@ For each target append: overwrite length, measured delta, verbatim decoder lines
 Run: `make test` (16/16).
 
 ```bash
-git add docs/ghidra/FU11_dpmi_probe_findings.md
+git add port/spec/FU11_dpmi_probe_findings.md
 git commit -m "docs(fu11): record runtime callers for wrapper and loader entries"
 ```
 

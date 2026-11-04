@@ -5,7 +5,7 @@ File format (one step per line):
     WAIT KEYS...
 WAIT is decimal seconds since the previous step; KEYS are AUTOTYPE tokens
 (e.g. `enter`, `esc`, `up`, `kp_8`, commas allowed). Waits are emitted
-cumulatively for compatibility; see docs/ghidra/FU13_headless_input.md:
+cumulatively for compatibility; see port/spec/FU13_headless_input.md:
 DOSBox-X serializes AUTOTYPE typists, so only a single-step (comma-paced)
 keys file is supported and `--check` rejects multi-step files.
 """
@@ -69,7 +69,7 @@ def main(argv=None):
             print(
                 "error: multi-step keys files are not supported (DOSBox-X "
                 "serializes AUTOTYPE typists; see "
-                "docs/ghidra/FU13_headless_input.md)",
+                "port/spec/FU13_headless_input.md)",
                 file=sys.stderr,
             )
             return 1

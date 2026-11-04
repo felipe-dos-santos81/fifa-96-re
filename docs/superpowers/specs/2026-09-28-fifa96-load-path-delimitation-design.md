@@ -6,7 +6,7 @@ Predecessor: `2026-09-28-fifa96-container-decode-design.md` (slice 2, shipped: e
 
 ## 1. Context & verified facts
 
-Slice 2 closed with an honest negative result: the "codec funnel" is a DOS MZ/EXE-style program loader (`load_mf_object@11bd:5dd2` + `mem_grow_relocate@1000:0b12` + `exec_loaded_image@11bd:6907` + `alloc_retry_loop@11bd:5d79` + `copy_bytes_far@11bd:6102` + `int21_dispatch@11bd:26d0`), not a game-asset codec. No member references any asset tag or envelope field; block-walk verdict is DEFER. FU-3 (`docs/ghidra/FU3_codec_runtime_capture.md`) queues a DOSBox-X INT-21h trace, but the trace needs precise targets that do not exist yet.
+Slice 2 closed with an honest negative result: the "codec funnel" is a DOS MZ/EXE-style program loader (`load_mf_object@11bd:5dd2` + `mem_grow_relocate@1000:0b12` + `exec_loaded_image@11bd:6907` + `alloc_retry_loop@11bd:5d79` + `copy_bytes_far@11bd:6102` + `int21_dispatch@11bd:26d0`), not a game-asset codec. No member references any asset tag or envelope field; block-walk verdict is DEFER. FU-3 (`port/spec/FU3_codec_runtime_capture.md`) queues a DOSBox-X INT-21h trace, but the trace needs precise targets that do not exist yet.
 
 Spike of 2026-09-28 (trace feasibility, throwaway probes only, nothing kept):
 - `dosbox-x` installs from the Ubuntu archive (installed 2024.03.01 SDL2) and runs in this environment (`DISPLAY=:1`, rc=0).
@@ -28,7 +28,7 @@ In-scope (this slice):
 1. **Decompile + document** the four targets at instruction level (exact call/instruction evidence per FUN, same bar as slice-2 Task 2).
 2. **Driver-loop search**: callers of `5992` (and of `5dd2`), walked up until a loop or a program-entry boundary is found or the chain is exhausted; record either way.
 3. **Rename + plate comments** for CONFIRMED members only (evidence-based names, no `decode_*` unless a transform is observed); `save_program` after each batch.
-4. **Docs**: extend `docs/ghidra/loader_rename_map.md` (new `## Load-path delimitation` section), update `docs/ghidra/FU3_codec_runtime_capture.md` with refined trace targets (exact breakpoint addresses from this pass), update the 5 decoder headers ONLY if attribution changes (default: untouched).
+4. **Docs**: extend `port/spec/loader_rename_map.md` (new `## Load-path delimitation` section), update `port/spec/FU3_codec_runtime_capture.md` with refined trace targets (exact breakpoint addresses from this pass), update the 5 decoder headers ONLY if attribution changes (default: untouched).
 5. **No codec, no CRC, no emulator work**: `fifa96_codec_expand` stays unimplemented unless (a)(b)(c) flip to ADOPT on new evidence (not expected; the bar is unchanged).
 
 Out-of-scope: the DOSBox-X trace itself (needs this slice's breakpoint list + debugger-scripting spike), FU-2 CRC (still blocked on codec output), boot/main-loop beyond the `5992` caller chain, pixel/audio/simulation.
@@ -45,10 +45,10 @@ Ghidra (project fifa96, program /fifa96.exe):
   FUN_11bd_5bdb     # else-branch head
   FUN_11bd_5c8b     # else-branch body (hosts a mem_grow_relocate caller)
   FUN_11bd_5992     # word-compare dispatcher; caller-chain walked upward
-docs/ghidra/
+port/spec/
   loader_rename_map.md         # += ## Load-path delimitation rows
   FU3_codec_runtime_capture.md # += refined breakpoint list (§ experiment)
-src/ tests/                    # UNCHANGED (docs/Ghidra-only slice)
+src/ port/tests/                    # UNCHANGED (docs/Ghidra-only slice)
 ```
 
 Data flow under test: `5992` reads word → `== 0x4d` ? `load_mf_object` (incl. `5db2`×3) : `5bdb` → `5c8b`; upward: `? → 5992 → ?` until loop or boundary. The pass records which shape the disassembly actually shows.
@@ -66,7 +66,7 @@ Data flow under test: `5992` reads word → `== 0x4d` ? `load_mf_object` (incl. 
 
 ## 7. Non-goals
 
-No `fifa96_codec_expand`, no FU-2 CRC, no DOSBox-X execution, no `run-fifa96.sh` changes, no writes to `/media/felipe/FIFAPCCD`, no C/test/CMake changes (regression suite must stay 9/9 green untouched).
+No `fifa96_codec_expand`, no FU-2 CRC, no DOSBox-X execution, no `tools/run-fifa96.sh` changes, no writes to `/media/felipe/FIFAPCCD`, no C/test/CMake changes (regression suite must stay 9/9 green untouched).
 
 ## 8. Next step
 

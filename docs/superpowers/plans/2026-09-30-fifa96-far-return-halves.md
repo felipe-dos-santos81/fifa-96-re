@@ -8,12 +8,12 @@
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `disassemble_function`, `disassemble_bytes` (Task 1 `dry_run=true`), `read_memory` (hex-vs-data protocol), `search_instructions` (authority for entry runs — includes `cb`/`ca` far-return and `ea`-landing analysis; operand runs per proposed start), `find_code_gaps` (full pagination), `get_xrefs_to` (control only), Task 2: real `disassemble_bytes`, `create_function`, `rename_function`, `set_comment`, `save_program`), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat proposal 2026-09-30 ("Far-return halves — the 6 blocked pair-consumer blocks (`0443..045d` etc.) + `674c/675a` dive; bigger, closes slice-22's last structural deferral", order approved by "yes") + `docs/ghidra/loader_rename_map.md` (`## vector dispatch handlers` — the six DEVIATION→RATIFIED relabel rows with re-quoted Task-1 boundary proposals + "shared far-ret `**` note / one-hop deferral pointer", the `0974 f3f0` H7 split deferral and `0976..099a` remainder (family-adjacent — NOT admitted this slice), handler primaries' live bounds as the inner walls; `## sweep-aftermath ratification` — the three halves' undefined→defined-unowned flip rows (drift census (4)); `## block head 2978..2a59` — DYNAMIC-ONLY entry precedent (`2a5a` block entry created with cited statics-zero + runtime arm leg), capped-write format; `## vector selection logic` — scan-scope + entry-run formats; `## R3 IVT cluster` — the `675a`/`674c` consumer note (H4-adjacency? verify segment: `674c` is NOT one of the six — carried, not admitted) and two-render discipline rows).
+**Spec:** Approved chat proposal 2026-09-30 ("Far-return halves — the 6 blocked pair-consumer blocks (`0443..045d` etc.) + `674c/675a` dive; bigger, closes slice-22's last structural deferral", order approved by "yes") + `port/spec/loader_rename_map.md` (`## vector dispatch handlers` — the six DEVIATION→RATIFIED relabel rows with re-quoted Task-1 boundary proposals + "shared far-ret `**` note / one-hop deferral pointer", the `0974 f3f0` H7 split deferral and `0976..099a` remainder (family-adjacent — NOT admitted this slice), handler primaries' live bounds as the inner walls; `## sweep-aftermath ratification` — the three halves' undefined→defined-unowned flip rows (drift census (4)); `## block head 2978..2a59` — DYNAMIC-ONLY entry precedent (`2a5a` block entry created with cited statics-zero + runtime arm leg), capped-write format; `## vector selection logic` — scan-scope + entry-run formats; `## R3 IVT cluster` — the `675a`/`674c` consumer note (H4-adjacency? verify segment: `674c` is NOT one of the six — carried, not admitted) and two-render discipline rows).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes; suite stays 10/10 untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` vs `data` before verbatim.
 - Task 1 writes NOTHING: dry-run disassembly only; reads only; tool error on required sub-step → BLOCKED.
 - Per-half evidence set is mandatory and uniform: (a) current ownership (`get_function_by_address` at block start + both walls verbatim — an "already owned" result RECLASSIFIES that half: no duplicate create, disposition row instead); (b) two-render check (span-start window + anchor window) per the `173b`/`4c94`/strip precedent before any CODE claim; (c) entry census: operand runs for each proposed start address (both `11bd:`-class and `1000:`-space renders where tools report that space) with per-hit `nextIP+rel` arithmetic + fallthrough check at the inner wall (primary's LAST insn — cite its terminator byte: if the primary's body-end insn does NOT terminate flow, fallthrough-into-half is an OWNERSHIP question for the analyzer, record it as such, do not create over it); (d) terminator cite at the outer wall (`c3`/`cb`/`ca`/`f4`/tail-`e9` as found).
@@ -21,7 +21,7 @@
 - Naming bar: verb-led snake_case from the half-body's OWN cited ops; "return"-class words admissible ONLY with a cited `cb`/`ca` (RET/near-far) terminator in that body; "far"-class claims additionally require the body's stack-frame ops cited (segment-pop before the return); mechanism-weak bodies keep default names NOT-CONFIRMED-at-name; plate `C: none — behavioral (<role>)`; direction words still banned; no `decode_*`.
 - Entry verdict vocabulary: DYNAMIC-ONLY requires the cited statics-zero run set + the runtime reachability mechanism named by reference to existing map records (far-call pairing from slice 22's H-rows: which primary's `f4`/exit the half returns-to, cited — a pairing CLAIM without its bytes cited is a hypothesis row, mark it such).
 - Scope guard (closes slice 22's LAST structural deferral only): H7's `0976..099a` remainder, `02da..02f8`/`0976..099a`/`6328..634e` orphan FAMILY question, `674c/675a` dive, `[0x56]/[0x58]` stories, `2cc5`/`0e3c` unowned fragments, runtime writers, name-class route, Δ1 — all cite-only deferrals; no handler primary re-walks beyond wall cites.
-- Append-only map (new section `## far-return halves`); prior sections byte-identical; leave `fifa96.rep/**` churn unstaged; commit messages exactly per briefs; no new tests.
+- Append-only map (new section `## far-return halves`); prior sections byte-identical; leave `data/fifa96.rep/**` churn unstaged; commit messages exactly per briefs; no new tests.
 
 ---
 
@@ -31,16 +31,16 @@ Six uniform evidence packages + six capped creates; the "one big structural defe
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## far-return halves` (Task 1: per-half tables (walls/renders/entry/terminators/pairing hypotheses) + disposition proposals; Task 2: `### Writes` (6 capped creates ± nudges) + verdict rows + `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## far-return halves` (Task 1: per-half tables (walls/renders/entry/terminators/pairing hypotheses) + disposition proposals; Task 2: `### Writes` (6 capped creates ± nudges) + verdict rows + `### Deferrals`).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only: up to 6 creates at cited ranges + bar-gated renames; `save_program` + census protocol.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Six-half evidence (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## far-return halves` with per-half evidence tables + proposals)
+- Modify: `port/spec/loader_rename_map.md` (append `## far-return halves` with per-half evidence tables + proposals)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -61,14 +61,14 @@ Operand runs both space-views per proposed start; primary terminator bytes (`f4`
 
 - [ ] **Step 4: Pairing + bar pre-tests + append + commit**
 
-Pairing rows CLASS-tagged (cited-pair needs primary-exit BYTES + half frame ops); bar candidates printed as pre-tests only. Append `## far-return halves (verified 2026-09-30, program \`/fifa96.exe\`)` — six blocks + disposition proposal rows. Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: six-half wall render entry and pairing evidence" || true`
+Pairing rows CLASS-tagged (cited-pair needs primary-exit BYTES + half frame ops); bar candidates printed as pre-tests only. Append `## far-return halves (verified 2026-09-30, program \`/fifa96.exe\`)` — six blocks + disposition proposal rows. Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: six-half wall render entry and pairing evidence" || true`
 
 ---
 
 ### Task 2: Capped creates + verdicts
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
 - Modify: Ghidra program `/fifa96.exe` — creates per Task-1 proposals at cited spans (≤6), renames only at bar, `save_program` + census protocol
 
 **Interfaces:**
@@ -85,7 +85,7 @@ Per admitted half: the capped sequence; stop-short at walls citing last-owned/fi
 
 - [ ] **Step 3: Save + census + append + commit**
 
-`save_program`; census protocol in full (slice-24 procedure, incl. overlay spot-checks); append `### Writes`/verdicts/`### Deferrals` (+ `### Fix wave` trailer if needed). Gate: build + `ctest` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: create six far-return half bodies with pairing verdicts" || true`
+`save_program`; census protocol in full (slice-24 procedure, incl. overlay spot-checks); append `### Writes`/verdicts/`### Deferrals` (+ `### Fix wave` trailer if needed). Gate: build + `ctest` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: create six far-return half bodies with pairing verdicts" || true`
 
 ---
 

@@ -9,7 +9,7 @@ Make the follow/pan camera **visibly move in sustained open play** — `make gam
 
 ## 2. What phases 14 and 28 left (the binding starting state)
 
-- The Layer-1 installer gate is green (census `60/80 = 75%`); the visible follow-cam remains waivered (`docs/ENGINE.md` phase-28 register; the follow-cam row).
+- The Layer-1 installer gate is green (census `60/80 = 75%`); the visible follow-cam remains waivered (`port/ENGINE.md` phase-28 register; the follow-cam row).
 - Ported: the every-frame auto-camera call site + first arm, the row-04 pan origin, the `FUN_0007A084` receive arm, the `0x157750` camera-height producer (FUN_00070B94 + the integrator store, phase-11 T1), the jump producer + the `0x10F3C4` arc (FU-153), the ball machine (FU-148 §16), the native camera-0 view seed (FU-154 §5.1), the sustained window + pan-counter lockout (FU171-L1 closed).
 - The pan arm requires a **strict mid-band** camera Y (`0x20 < (int32)[0x157750] < 0x70`, FU168 §2.2); the current live chain only reaches mid-band during a height event. The live camera-Y producer stays **FU168-L5 / FU171-L4**: the row-1E keeper release is dispatch-dead (R11-L4), the throw-in cut is restart-driven and re-anchors the chain, and the `0x10F3C4` arc needs an existing event.
 - The real sustained follow = the row-`0x5E` install + one open-play event (FU171 §5); the live event source (the `[0x1577EE].hi > 0xF0` arm + the pan writers) is **FU305-L5**.
@@ -29,7 +29,7 @@ Make the follow/pan camera **visibly move in sustained open play** — `make gam
 
 ## 4. Structure
 
-**Stage-1 (recon-ahead):** a four-slice read-only wave, FU306–FU309 as §3, one agent per slice (the user's up-to-4 cap), each a draft `docs/ghidra/FU30N_<slug>.md` (single H1, Phase/Provenance line, port shape, evidence table, numbered legs, GO/NO-GO verdict); promoted one-per-commit; read-only Ghidra discipline (fresh reads, the alias traps, LE globals `+0x100000`, unprovable ⇒ a numbered leg with its native owner). No production code.
+**Stage-1 (recon-ahead):** a four-slice read-only wave, FU306–FU309 as §3, one agent per slice (the user's up-to-4 cap), each a draft `port/spec/FU30N_<slug>.md` (single H1, Phase/Provenance line, port shape, evidence table, numbered legs, GO/NO-GO verdict); promoted one-per-commit; read-only Ghidra discipline (fresh reads, the alias traps, LE globals `+0x100000`, unprovable ⇒ a numbered leg with its native owner). No production code.
 **Stage-2:** a producer plan written after the wave promotes (task text from the FU306–FU309 verdicts), executed via subagent-driven development — the event chain first (the chaser + the event source), then the Y producer, then the stand-ins/seam, then the Layer-2 acceptance + close-out.
 
 ## 5. Acceptance

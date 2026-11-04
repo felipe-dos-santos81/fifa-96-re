@@ -4,7 +4,7 @@
 
 **Goal:** Freeze the eight read-only evidence slices (`FU256…FU263`) that establish, first-hand, the native **gating producer** of each of the 22 unwired match-action rows — its exact body, its installer, its reachability, and whether porting it lets the row **install AND dispatch** (a census rise) while keeping M2 byte-identical — so the phase-25 producer plan can be written without guessing.
 
-**Architecture:** This is the phase-25 **Stage 1** (recon-ahead), exactly the phase-21/22/23/24 shape. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase25-census-closeout-design.md` §4) sequences the recon before the implementation plan; the Stage-2 producer tasks are authored off these frozen slices. Each of the 8 agents investigates one producer cluster, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `docs/ghidra/FU2xx_*.md` in a serialized commit.
+**Architecture:** This is the phase-25 **Stage 1** (recon-ahead), exactly the phase-21/22/23/24 shape. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase25-census-closeout-design.md` §4) sequences the recon before the implementation plan; the Stage-2 producer tasks are authored off these frozen slices. Each of the 8 agents investigates one producer cluster, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `port/spec/FU2xx_*.md` in a serialized commit.
 
 **Tech Stack:** Ghidra MCP (read-only), REA MCP (second read), C11/CMake/CTest, ASan/UBSan, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
@@ -17,7 +17,7 @@
 - **Evidence floor (AGENTS.md):** every address/byte claim cites a fresh disassembly output or reconciled raw-byte read. Anything not statically provable becomes a **numbered open leg** with its native owner. LE-image globals at `+0x100000`.
 - **Alias traps:** `dword[addr] >> 16` = the word at `addr+2`, `>> 24` = the byte at `addr+3`; verify CALL bytes (rel32); watch sign/width, inverted gates, gate-index misreads. Any "only/sole/exactly" or caller-count claim needs a **fresh** `get_xrefs_to`. (The phase-24 wave caught two alias-trap errors; re-verify before trusting an inherited verdict.)
 - **The census rule:** a row counts only when a ported path **installs AND dispatches** it (the rows-27/29/2C precedent). A NULL→fn flip with no live producer is **not** counted. Tape-dormant rows count only when a fixture proves the install+dispatch.
-- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `docs/ghidra/FU2xx_*.md` and commits.
+- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `port/spec/FU2xx_*.md` and commits.
 - **No fakes.** A producer that would compute a residual 0 / copy desired→current is a no-op or a fake (R15/R45/R49); it must be ruled a leg, never invented as a wire.
 - **M2 preservation:** the approved stance is **M2 byte-identical**. A producer whose row is **tape-visible** keeps that row leg'd (do not move the golden). The known tape-visible risk is the `[rec+0x1C]=0x6DCC8` chain (transcribed frame 29).
 - **Scope guard:** the native **gating producers** of the 22 unwired match-action rows only. No front-end *visual* work, no audio, no new subsystem.
@@ -28,7 +28,7 @@
 |---|---|
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/progress.md` | The SDD ledger (recovery map) |
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-<n>-*.md` | The 8 recon drafts (git-ignored scratch) |
-| `docs/ghidra/FU256_*.md … FU263_*.md` | The promoted canonical slices (controller, serialized commits) |
+| `port/spec/FU256_*.md … FU263_*.md` | The promoted canonical slices (controller, serialized commits) |
 | Prior slices `FU137`, `FU142`, `FU175`, `FU177`, `FU178`, `FU180`, `FU185`, `FU186`, `FU191`, `FU192`, `FU201`, `FU239`, `FU243`, `FU247`, `FU248`, `FU250`, `ENGINE.md` leg register | Prior evidence — appended errata only, never rewritten |
 
 **Ordering (dependency):** Tasks 1–8 are independent read-only investigations and run in parallel. The controller reconciles at promotion time only if two slices reach the same native producer (e.g. Tasks 3 and 254/FU249 both touch the OL-13 `[rec+0xC]` source; Tasks 1 and 260 both walk the installer domain).
@@ -38,7 +38,7 @@
 ### Task 1: W25-1 / FU256 — the row-09 arm-1 install chain (→ action `0D`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-1-row09-arm1-chain.md`
-**Promotes to:** `docs/ghidra/FU256_row09_arm1_chain.md`
+**Promotes to:** `port/spec/FU256_row09_arm1_chain.md`
 
 **Objective:** Derive the row-09 arm-1 install path (the only installer of action `0D`) and decide whether it is honestly port-able so row `0D` installs AND dispatches (census) — with M2 preserved.
 
@@ -53,7 +53,7 @@
 ### Task 2: W25-2 / FU257 — the keeper CPU ladder (→ action `1A`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-2-keeper-cpu-ladder.md`
-**Promotes to:** `docs/ghidra/FU257_keeper_cpu_ladder.md`
+**Promotes to:** `port/spec/FU257_keeper_cpu_ladder.md`
 
 **Objective:** Derive the `FUN_0008D8EC` → `FUN_000782D0` pre-pass and the `FUN_00077EAC` CPU ladder that install row `1A`, and decide whether they are honestly port-able (census for action `1A`).
 
@@ -68,7 +68,7 @@
 ### Task 3: W25-3 / FU258 — the `[rec+0x1C]=0x6DCC8` target-rewrite chain (→ action `03`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-3-rec1c-dcc8-chain.md`
-**Promotes to:** `docs/ghidra/FU258_rec1c_dcc8_chain.md`
+**Promotes to:** `port/spec/FU258_rec1c_dcc8_chain.md`
 
 **Objective:** Derive the `[rec+0x1C]=0x6DCC8` target-rewrite chain + the OL-13 `[rec+0xC]` bind that gate action `03`, and settle the **tape-visibility** question (frame 29) — since the approved stance preserves M2.
 
@@ -82,7 +82,7 @@
 ### Task 4: W25-4 / FU259 — OL-65: the staging fix + the row-07 `0x816DF` invoke (→ action `22`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-4-ol65-invoke.md`
-**Promotes to:** `docs/ghidra/FU259_ol65_invoke.md`
+**Promotes to:** `port/spec/FU259_ol65_invoke.md`
 
 **Objective:** Turn FU250's finding into a port plan — the 3 angle words are live pool fields (`word[+0x6D]`/`word[+0x6F]`/`word[+0x7D]`); the fix is a 2-line staging; prove whether the `0x816DF` invoke then fires (census for action `22`).
 
@@ -96,7 +96,7 @@
 ### Task 5: W25-5 / FU260 — the ECX-carried installer re-census (→ `27`/`29`/`2B`/`2C`/`0A`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-5-installer-recensus.md`
-**Promotes to:** `docs/ghidra/FU260_installer_recensus.md`
+**Promotes to:** `port/spec/FU260_installer_recensus.md`
 
 **Objective:** Re-run the installer census with the **ECX-carried** method phase-23 pioneered (which refuted the "no installer" verdicts for rows `25`/`15`) over ALL unwired action rows, and settle the `27`/`29`/`2B`/`2C`/`0A` verdicts.
 
@@ -110,7 +110,7 @@
 ### Task 6: W25-6 / FU261 — the unwired phase bodies A (`01`/`0B`/`0D`/`0E`/`11`/`12`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-6-phase-bodies-a.md`
-**Promotes to:** `docs/ghidra/FU261_phase_bodies_a.md`
+**Promotes to:** `port/spec/FU261_phase_bodies_a.md`
 
 **Objective:** Derive the native bodies + producer-writers for the six NULL phase slots `01`/`0B`/`0D`/`0E`/`11`/`12`, settling the R10 "do not double-wire" question (`01`/`11`/`12` share the formation-placement body) and the "never written by an engine source" question (FU191 §10).
 
@@ -124,7 +124,7 @@
 ### Task 7: W25-7 / FU262 — the unwired phase bodies B (`13`/`14`/`1A`/`1B`/`1C`)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-7-phase-bodies-b.md`
-**Promotes to:** `docs/ghidra/FU262_phase_bodies_b.md`
+**Promotes to:** `port/spec/FU262_phase_bodies_b.md`
 
 **Objective:** Derive the native bodies + producer-writers for the five act-tail phase slots `13`/`14`/`1A`/`1B`/`1C`, incl. the FU-239 collapsed-arm question for `13`/`14`.
 
@@ -138,7 +138,7 @@
 ### Task 8: W25-8 / FU263 — the act-4 formation arm (`17`) + the phase-24 errata sweep
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase25-census-closeout-recon-ahead/w25-8-formation-arm-errata.md`
-**Promotes to:** `docs/ghidra/FU263_formation_arm_errata.md`
+**Promotes to:** `port/spec/FU263_formation_arm_errata.md`
 
 **Objective:** Re-verify the act-4 formation arm verdict (`17` — phase-24 proved it gated) against the frozen `FU248`, and assemble the **phase-24 corrections sweep** the wave surfaced, as a port/errata list for Stage 2.
 
@@ -171,5 +171,5 @@ the corrections + leg-register close-out.
 
 Hand this plan to `superpowers:subagent-driven-development`: dispatch a fresh
 read-only subagent per task (all 8 in parallel), then the controller freeze-reviews
-and promotes each draft to a canonical `docs/ghidra/FU2xx_*.md` in a serialized
+and promotes each draft to a canonical `port/spec/FU2xx_*.md` in a serialized
 commit per slice.

@@ -4,7 +4,7 @@
 
 **Goal:** Give the headless capture rig a reusable, tested key-script facility (keys file → `AUTOTYPE` lines) and use it to reach the two input-gated probe targets (`FUN_00014c18` at `0x14C18`, `FUN_00023b38` at `0x23B38`) that FU-12 proved unreachable unattended.
 
-**Architecture:** A pure-Python helper converts a `WAIT KEYS...` step file into cumulative-wait `AUTOTYPE` lines; `run-fifa96-capture.sh` gains `KEYS_FILE` (unset → today's behavior) and injects those lines into the generated DOSBox conf's `[autoexec]`; a `DRY_RUN=1` mode prints the conf for testability. The existing probe runner drives the empirical loop, and results land in a FU-13 evidence doc.
+**Architecture:** A pure-Python helper converts a `WAIT KEYS...` step file into cumulative-wait `AUTOTYPE` lines; `tools/run-fifa96-capture.sh` gains `KEYS_FILE` (unset → today's behavior) and injects those lines into the generated DOSBox conf's `[autoexec]`; a `DRY_RUN=1` mode prints the conf for testability. The existing probe runner drives the empirical loop, and results land in a FU-13 evidence doc.
 
 **Tech Stack:** Python 3 unittest under CTest, POSIX shell, DOSBox-X `AUTOTYPE`, the proven DPMI probe rig (`tools/trace_probe.sh`, `tools/fifa96_probe.py`).
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - All 17 existing CTest tests stay green; this slice adds `test_keys` (suite becomes 18). Only ADD tests.
-- `game/FIFAPCCD96.iso` is read-only; `captures/`, `build/`, and `fifa96.rep/**` are never staged.
+- `data/game/FIFAPCCD96.iso` is read-only; `data/captures/`, `build/`, and `data/fifa96.rep/**` are never staged.
 - No TSR changes. Default capture behavior when `KEYS_FILE` is unset must be byte-identical (same conf except nothing added, same launch command).
 - Commit messages exactly as specified in each task. Do not `git push`.
 - The empirical loop never fabricates a result: zero-frame outcomes are recorded with trace size and (when available) new FILE-open evidence.
@@ -25,7 +25,7 @@
 
 **Files:**
 - Create: `tools/fifa96_keys.py`
-- Create: `tests/test_keys.py`
+- Create: `tools/tests/test_keys.py`
 - Modify: `CMakeLists.txt` (add `test_keys` in the Python block)
 
 **Interfaces:**
@@ -37,7 +37,7 @@
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-# tests/test_keys.py
+# tools/tests/test_keys.py
 import io
 import sys
 import tempfile
@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `python3 tests/test_keys.py`
+Run: `python3 tools/tests/test_keys.py`
 Expected: `ModuleNotFoundError: No module named 'fifa96_keys'`.
 
 - [ ] **Step 3: Implement the helper**
@@ -221,7 +221,7 @@ if __name__ == "__main__":
 
 ```cmake
 # CMakeLists.txt, inside the if(Python3_Interpreter_FOUND) block
-  add_test(NAME test_keys COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_keys.py)
+  add_test(NAME test_keys COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/tests/test_keys.py)
 ```
 
 Run: `make test`
@@ -230,7 +230,7 @@ Expected: 18/18 pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/fifa96_keys.py tests/test_keys.py CMakeLists.txt
+git add tools/fifa96_keys.py tools/tests/test_keys.py CMakeLists.txt
 git commit -m "feat(keys): parse key-step files into cumulative AUTOTYPE lines"
 ```
 
@@ -239,7 +239,7 @@ git commit -m "feat(keys): parse key-step files into cumulative AUTOTYPE lines"
 ### Task 2: Capture-runner integration and key library
 
 **Files:**
-- Modify: `run-fifa96-capture.sh`
+- Modify: `tools/run-fifa96-capture.sh`
 - Create: `tools/keys/skip-intro.keys`
 
 **Interfaces:**
@@ -248,7 +248,7 @@ git commit -m "feat(keys): parse key-step files into cumulative AUTOTYPE lines"
 
 - [ ] **Step 1: Add the key wiring and dry-run**
 
-At the top of `run-fifa96-capture.sh`, beside the other defaults:
+At the top of `tools/run-fifa96-capture.sh`, beside the other defaults:
 
 ```sh
 KEYS_FILE=${KEYS_FILE:-}
@@ -296,9 +296,9 @@ fi
 
 Run:
 ```sh
-sh -n run-fifa96-capture.sh
-DRY_RUN=1 KEYS_FILE=tools/keys/skip-intro.keys ./run-fifa96-capture.sh | grep -c '^AUTOTYPE'
-DRY_RUN=1 ./run-fifa96-capture.sh | grep -c '^AUTOTYPE' || true
+sh -n tools/run-fifa96-capture.sh
+DRY_RUN=1 KEYS_FILE=tools/keys/skip-intro.keys ./tools/run-fifa96-capture.sh | grep -c '^AUTOTYPE'
+DRY_RUN=1 ./tools/run-fifa96-capture.sh | grep -c '^AUTOTYPE' || true
 ```
 Expected: syntax clean; first count `4`; second count `0` (default unchanged).
 
@@ -307,7 +307,7 @@ Expected: syntax clean; first count `4`; second count `0` (default unchanged).
 Run: `make test` (18/18).
 
 ```bash
-git add run-fifa96-capture.sh tools/keys/skip-intro.keys
+git add tools/run-fifa96-capture.sh tools/keys/skip-intro.keys
 git commit -m "feat(keys): scripted headless input for capture runs"
 ```
 
@@ -317,7 +317,7 @@ git commit -m "feat(keys): scripted headless input for capture runs"
 
 **Files:**
 - Modify: `tools/keys/skip-intro.keys` (as refined)
-- Create: `docs/ghidra/FU13_headless_input.md`
+- Create: `port/spec/FU13_headless_input.md`
 
 **Interfaces:**
 - Consumes: `KEYS_FILE` (Task 2), `tools/trace_probe.sh TARGET SITE SESSION`, `tools/fifa96_probe.py` (existing), `tools/fifa96_callers.py` (existing).
@@ -331,7 +331,7 @@ For each attempt: adjust `tools/keys/skip-intro.keys` if the previous attempt ma
 KEYS_FILE=tools/keys/skip-intro.keys sh tools/trace_probe.sh 0x14C18 7 probe-14c18-keys
 ```
 
-Read the decoder output. Success = ≥1 `T_PROBE site=7` frame with `caller_link` in `{0x25D69, 0x27B47}`. Record every attempt (session name, keys steps, trace size, frames or zero). Forward progress without frames = new FILE opens appearing in the trace compared with the FU-12 baseline (`captures/session-probe-14c18/trace.bin`, 314,318 bytes). Stop at success or 6 attempts.
+Read the decoder output. Success = ≥1 `T_PROBE site=7` frame with `caller_link` in `{0x25D69, 0x27B47}`. Record every attempt (session name, keys steps, trace size, frames or zero). Forward progress without frames = new FILE opens appearing in the trace compared with the FU-12 baseline (`data/captures/session-probe-14c18/trace.bin`, 314,318 bytes). Stop at success or 6 attempts.
 
 - [ ] **Step 2: Site 8 attempts (max 6)**
 
@@ -341,18 +341,18 @@ Same loop for
 KEYS_FILE=tools/keys/skip-intro.keys sh tools/trace_probe.sh 0x23B38 8 probe-23b38-keys
 ```
 
-with the twelve-site census `+5` as the match set, comparing against the FU-12 baseline (`captures/session-probe-23b38/trace.bin`, 314,753 bytes). Stop at success or 6 attempts.
+with the twelve-site census `+5` as the match set, comparing against the FU-12 baseline (`data/captures/session-probe-23b38/trace.bin`, 314,753 bytes). Stop at success or 6 attempts.
 
 - [ ] **Step 3: Write FU-13**
 
-Create `docs/ghidra/FU13_headless_input.md`: the `KEYS_FILE` facility and file format; the discovered sequence with its cumulative waits; a per-target table (attempt, session dir, trace bytes, frames, matched `caller_link`s or zero-frame verdict); explicit statement when input failed to reach a target (no fabricated pass); capture provenance.
+Create `port/spec/FU13_headless_input.md`: the `KEYS_FILE` facility and file format; the discovered sequence with its cumulative waits; a per-target table (attempt, session dir, trace bytes, frames, matched `caller_link`s or zero-frame verdict); explicit statement when input failed to reach a target (no fabricated pass); capture provenance.
 
 - [ ] **Step 4: Run the suite and commit**
 
 Run: `make test` (18/18).
 
 ```bash
-git add tools/keys/skip-intro.keys docs/ghidra/FU13_headless_input.md
+git add tools/keys/skip-intro.keys port/spec/FU13_headless_input.md
 git commit -m "docs(fu13): headless input and menu-gated entry reachability"
 ```
 

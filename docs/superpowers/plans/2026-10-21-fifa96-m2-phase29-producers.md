@@ -8,12 +8,12 @@
 
 **Tech Stack:** C (strict `-Wall -Wextra -Werror`, ASan/UBSan), the repo's frame-tape tests, SDL3 `make game`, Ghidra MCP read-only.
 **Spec:** `docs/superpowers/specs/2026-10-21-fifa96-m2-phase29-visible-follow-cam-design.md` (§3, §5, §6, §8).
-**Authority:** the phase-29 wave `docs/ghidra/FU306..FU309` (reviewed, errata round 1) + the phase-28 register.
+**Authority:** the phase-29 wave `port/spec/FU306..FU309` (reviewed, errata round 1) + the phase-28 register.
 
 ## Global Constraints
 
 - `make check` green (strict; ASan/UBSan; ~143 s → ≥600 s timeout); work on `main`; commit per task; push per task.
-- M1 `09b726b7…` immutable; **M2 `b281a9b2…` byte-identical** — the seam (T1) and the cell unification (T3) change live CX/pan inputs; each task runs `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt` and **stops on a diff** (a written reason + frame diff before any re-pin).
+- M1 `09b726b7…` immutable; **M2 `b281a9b2…` byte-identical** — the seam (T1) and the cell unification (T3) change live CX/pan inputs; each task runs `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt` and **stops on a diff** (a written reason + frame diff before any re-pin).
 - The live-chain rule: a fixture that stages a gate is a fake; staging a producer's *input* is legitimate; unraised surfaces are numbered LIVE-LEGs.
 - The census holds `60/80 = 75%` (no row joins; the four-doc same-commit rule if one does).
 - The keeper band is in scope when installer-proven (§8.1); the R11-L4 remainder, the set-piece/free-kick/corner routes and the throw-in cut stay **Out**.
@@ -31,7 +31,7 @@
 
 ### Task 1: The keeper `follow_speed` seam
 
-**Files:** `src/fifa96_engine/fifa96_match_run.c` (the frame bind), `fifa96_match_entities.c` (the seam); Tests `tests/test_keeper_cpu.c`, `tests/test_engine_match_frame.c`
+**Files:** `port/src/fifa96_engine/fifa96_match_run.c` (the frame bind), `fifa96_match_entities.c` (the seam); Tests `port/tests/test_keeper_cpu.c`, `port/tests/test_engine_match_frame.c`
 
 - [ ] **Step 1: RED** — the unit pin: `camera.speed = 9` → the CX=1 stage yields 1; `0xA` → 0 (the native `0x78046..0x7804E`).
 - [ ] **Step 2: Implement** `f->follow_speed = (int16_t)mr->render.camera.speed;` (keep `camera.follow_speed` for the `0x739CE` gate).
@@ -40,7 +40,7 @@
 
 ### Task 2: The `[0x157750]` stand-ins
 
-**Files:** `src/fifa96_engine/fifa96_match_handlers.c` (rows 05/06/08), `fifa96_match_run.c` (the chase gate); Test `tests/test_engine_match_frame.c`
+**Files:** `port/src/fifa96_engine/fifa96_match_handlers.c` (rows 05/06/08), `fifa96_match_run.c` (the chase gate); Test `port/tests/test_engine_match_frame.c`
 
 - [ ] **Step 1: RED** — each site reads `(int32_t)mr->render.camera.pos_y` (the native `dword[0x157750]`), not the zero stand-in; the chase height widened to int32.
 - [ ] **Step 2: Implement** the four sites (`handlers.c:2813`, `:3086`, `:2977`; `run.c:912`).
@@ -49,7 +49,7 @@
 
 ### Task 3: The keeper-band camera-Y delivery + the natural reach
 
-**Files:** the keeper claim module (`src/fifa96_loader/fifa96_keeper_claim.*`), `fifa96_match_handlers.c`, `fifa96_match_entities.c`, `fifa96_camera.*`; Test `tests/test_engine_match_frame.c`
+**Files:** the keeper claim module (`port/src/fifa96_loader/fifa96_keeper_claim.*`), `fifa96_match_handlers.c`, `fifa96_match_entities.c`, `fifa96_camera.*`; Test `port/tests/test_engine_match_frame.c`
 
 - [ ] **Step 1: RED** — the row-`0x1E` cuts (`0x75A0F` = 0x38, `0x75EEA`, `0x75F86` = 0x80) deliver a `cam_y_written` raw store to `render.camera.pos_y`; the fixture asserts the band lands.
 - [ ] **Step 2: Implement** the raw-store output + the single-cell unification (the keeper band → the render camera Y; no double-writer; the arc untouched).
@@ -59,7 +59,7 @@
 
 ### Task 4: The chaser corrections + the one-shot re-arm
 
-**Files:** `src/fifa96_engine/fifa96_camera.c`, `fifa96_match_run.c`; Test `tests/test_engine_match_frame.c`
+**Files:** `port/src/fifa96_engine/fifa96_camera.c`, `fifa96_match_run.c`; Test `port/tests/test_engine_match_frame.c`
 
 - [ ] **Step 1: RED** — `ramp_param = 1` (native `0x70DBA MOV ECX,1`; the engine passes 0); the stale `height_5d` (`run.c:584` vs `:1510`); the 16-bit seed wrap.
 - [ ] **Step 2: Implement** the three corrections + the one-shot re-arm test (the `0x7C83E` tracked-skip; the `0x71D27` rebind).
@@ -68,7 +68,7 @@
 
 ### Task 5: The event chain + the Layer-1 gate
 
-**Files:** `tests/test_engine_match_frame.c` (the fixture); `fifa96_match_run.c` if the event staging requires it
+**Files:** `port/tests/test_engine_match_frame.c` (the fixture); `fifa96_match_run.c` if the event staging requires it
 
 - [ ] **Step 1: RED** — the follow/height assertion fails on the phase-29 baseline: a real receive event (traj `0x100`, a nonzero vector, `has_slot` `0x73B65`) + the mid-band Y → the follow arm fires → the camera pos/pan cells move over the window (52 frames at camY `0x70`, 54 at `0x50`).
 - [ ] **Step 2: GREEN** with mutation-RED riders on each producer (the seam, the stand-ins, the band, the chaser, the event).
@@ -77,7 +77,7 @@
 
 ### Task 6: The Layer-2 acceptance + the close-out
 
-**Files:** `docs/screens/p29-*`; `docs/ENGINE.md`, `docs/PROGRESS.md`, `AGENTS.md:90` (only if the census moves)
+**Files:** `docs/screens/p29-*`; `port/ENGINE.md`, `docs/PROGRESS.md`, `AGENTS.md:90` (only if the census moves)
 
 - [ ] **Step 1:** `make game` (`DISPLAY=:1`): the same-clock pan/still pairs (`960x591+0+0`); the relative gate `AE_pan > AE_still` (the p28 fresh datum: 1582 vs 2052); the cell assertions as the attribution (the pan AE as corroboration).
 - [ ] **Step 2:** the honest verdict — visible follow, or the §6 waiver (the FU307-L1 natural-reach leg + the remaining legs).

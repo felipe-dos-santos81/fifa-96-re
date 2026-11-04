@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 / CMake / CTest, ASan+UBSan (`-fno-sanitize-recover=all`), the null backend as the determinism source of truth, Ghidra MCP (read-only) for native facts.
 
-**Spec:** `docs/superpowers/specs/2026-10-13-fifa96-m2-phase21-live-period-end-design.md` (§5 T1–T6 + §10 errata E1–E4). Frozen native evidence: `docs/ghidra/FU223…FU230`. Predecessor plan: `docs/superpowers/plans/2026-10-13-fifa96-m2-phase21-recon-ahead.md`.
+**Spec:** `docs/superpowers/specs/2026-10-13-fifa96-m2-phase21-live-period-end-design.md` (§5 T1–T6 + §10 errata E1–E4). Frozen native evidence: `port/spec/FU223…FU230`. Predecessor plan: `docs/superpowers/plans/2026-10-13-fifa96-m2-phase21-recon-ahead.md`.
 
 ## Global Constraints
 
@@ -17,7 +17,7 @@
 - **Determinism source of truth = the null backend** (`platform_null.c`); the SDL3 backend stays consistent with it.
 - **No fakes.** Every unreachable native is a numbered leg with its native owner; the stand-in cells stage the native BSS default (`0`).
 - **Evidence floor (AGENTS.md):** every native claim cites a fresh disassembly or the frozen `FU2xx` slice; addresses are `/FIFA96.EXE` flat addresses; LE globals at `+0x100000`.
-- **Commits:** `feat` / `fix` / `docs(fuNNN)` / `test` / `chore`; work on `main`; push per dispatch. Update the README title + `docs/ENGINE.md` census line + `docs/PROGRESS.md` + `AGENTS.md` **in the same commit** only if the wired count moves (this phase expects none: 68%).
+- **Commits:** `feat` / `fix` / `docs(fuNNN)` / `test` / `chore`; work on `main`; push per dispatch. Update the README title + `port/ENGINE.md` census line + `docs/PROGRESS.md` + `AGENTS.md` **in the same commit** only if the wired count moves (this phase expects none: 68%).
 - **Test commands:** `make check` (gate); single: `ctest --test-dir build -R <name> --output-on-failure`; direct from repo root: `./build/test_engine_m2`.
 
 ## Errata the plan carries (spec §10)
@@ -31,12 +31,12 @@
 
 | Path | Responsibility | Task |
 |---|---|---|
-| `tests/test_engine_m2.c` | the M2 acceptance tape, the period-end feasibility probe, the phase-21 riders, the re-pin | T1, T6 |
-| `tests/test_engine_match_completion.c` | the period-length pin, the half-time completion route, the `mark_over` trigger | T2, T5 |
-| `tests/test_engine_match_frame.c` | the roll/flag staging pins, the chooser half-time select, the `mark_over` boundary | T3, T5 |
-| `src/fifa96_engine/fifa96_match_run.c` | the live mode-0 cadence (T4), the `mark_over` re-point (T5) | T4, T5 |
-| `tests/golden/engine/m2-frames.txt` | re-pinned at T6 (v20 → v21) | T6 |
-| `docs/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md` | census/re-pin record (only if the count moves; expected none) | T6 |
+| `port/tests/test_engine_m2.c` | the M2 acceptance tape, the period-end feasibility probe, the phase-21 riders, the re-pin | T1, T6 |
+| `port/tests/test_engine_match_completion.c` | the period-length pin, the half-time completion route, the `mark_over` trigger | T2, T5 |
+| `port/tests/test_engine_match_frame.c` | the roll/flag staging pins, the chooser half-time select, the `mark_over` boundary | T3, T5 |
+| `port/src/fifa96_engine/fifa96_match_run.c` | the live mode-0 cadence (T4), the `mark_over` re-point (T5) | T4, T5 |
+| `port/tests/golden/engine/m2-frames.txt` | re-pinned at T6 (v20 → v21) | T6 |
+| `port/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md` | census/re-pin record (only if the count moves; expected none) | T6 |
 
 ---
 
@@ -45,10 +45,10 @@
 **Objective (spec §5 T1).** Extend the tape's *scripted run* (in a transcript-neutral probe) to drive a period completion with the spine's producers still gated; prove null-backend determinism across ≥3 replays; characterize exactly what the run does now (**no re-pin**). If not byte-stable → STOP and report.
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (add `run_period_end_probe` + a ≥3-replay determinism check; call it from `main`). Do **not** touch `M2_KEYS`, `M2_STAGE_ROWS`, or `tests/golden/engine/m2-frames.txt`.
+- Modify: `port/tests/test_engine_m2.c` (add `run_period_end_probe` + a ≥3-replay determinism check; call it from `main`). Do **not** touch `M2_KEYS`, `M2_STAGE_ROWS`, or `port/tests/golden/engine/m2-frames.txt`.
 
 **Interfaces:**
-- Consumes: `run_tape` (`tests/test_engine_m2.c:2629`), the `run_natural_probe` exemplar (`:2964-3044`), the `memcmp` idiom (`:4060`), `M2_STEP_CAP`/`M2_TRANSCRIPT_CAP` (`:1568-1569`), `M2_POST_RESTART_FRAMES` (`:1603`).
+- Consumes: `run_tape` (`port/tests/test_engine_m2.c:2629`), the `run_natural_probe` exemplar (`:2964-3044`), the `memcmp` idiom (`:4060`), `M2_STEP_CAP`/`M2_TRANSCRIPT_CAP` (`:1568-1569`), `M2_POST_RESTART_FRAMES` (`:1603`).
 - Produces: `static uint64_t run_period_end_probe(void)` → the measured completion step; the characterization T5/T6 rely on (the completion schedule + that the run currently exits there).
 
 **Measured fact (from planning recon; re-verify):** with the stop at `:2936-2937` removed, the class-1 phase-2 clock (`set_period(mr,1,1)` → `limit=1`, carried `aux=6`, `limit+aux=7`) completes at **engine step 845** (match-relative **m=840**); the same step fires `mark_over` → one-step `OVER→POST→EXIT→run_end` (`:4161/:4174-4180`), mode `MATCH→FRONTEND`, and **no `state=12/` frame is presented**. The completion is `differing`-agnostic at this index (roll `global_157ac2=1`, not the sit-8 `==4` gate). The trajectory is byte-stable over 3 replays.
@@ -136,8 +136,8 @@ Expected: PASS (byte-stable). If **not** byte-stable → **STOP and report** (sp
 
 ```bash
 ctest --test-dir build -R test_engine_m2 --output-on-failure
-./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt   # must be clean (no re-pin)
-git add tests/test_engine_m2.c
+./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt   # must be clean (no re-pin)
+git add port/tests/test_engine_m2.c
 git commit -m "test(engine): phase-21 T1 — the period-end feasibility probe + determinism gate"
 ```
 
@@ -148,10 +148,10 @@ git commit -m "test(engine): phase-21 T1 — the period-end feasibility probe + 
 **Objective (spec §5 T2 + errata E3).** Confirm the engine already stages the live period length byte-exact (no producer to port) and pin it.
 
 **Files:**
-- Modify: `tests/test_engine_match_completion.c` (add `test_period_length_pin`; call it from `main`).
+- Modify: `port/tests/test_engine_match_completion.c` (add `test_period_length_pin`; call it from `main`).
 
 **Interfaces:**
-- Consumes: `fifa96_match_run_set_period` (`fifa96_match_run.c:2425`), the staged defaults (`:2368..2372`), the existing `test_begin_installs_derived_periods` (`tests/test_engine_match_completion.c:71..94`).
+- Consumes: `fifa96_match_run_set_period` (`fifa96_match_run.c:2425`), the staged defaults (`:2368..2372`), the existing `test_begin_installs_derived_periods` (`port/tests/test_engine_match_completion.c:71..94`).
 
 - [ ] **Step 1: Write the failing test.**
 
@@ -189,7 +189,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit.**
 
 ```bash
-git add tests/test_engine_match_completion.c
+git add port/tests/test_engine_match_completion.c
 git commit -m "test(engine): phase-21 T2 — the period-length pin (FU-223, no producer)"
 ```
 
@@ -200,7 +200,7 @@ git commit -m "test(engine): phase-21 T2 — the period-length pin (FU-223, no p
 **Objective (spec §5 T3 + errata E1).** Pin the two live cells (`mr->global_157ac2` roll, `mr->global_157ac0` OL-85 flag) and their staging; the front-end producers are unreachable (FU-224 §4.3) so the stand-in is the already-committed zero — no functional change.
 
 **Files:**
-- Modify: `tests/test_engine_match_frame.c` (add `test_roll_flag_staged_zero` + `test_phase_drive_roll4_flag_differing`; call from `main`).
+- Modify: `port/tests/test_engine_match_frame.c` (add `test_roll_flag_staged_zero` + `test_phase_drive_roll4_flag_differing`; call from `main`).
 
 **Interfaces:**
 - Consumes: `fifa96_match_run_init` (`fifa96_match_run.c:2034-2035` zeroes the cells), `fifa96_match_run_phase_drive` (`:2584`), the roll (`:2643`), the flag writer (`:2618-2619`).
@@ -242,7 +242,7 @@ Run: `ctest --test-dir build -R test_engine_match_frame --output-on-failure` —
 - [ ] **Step 4: Commit.**
 
 ```bash
-git add tests/test_engine_match_frame.c
+git add port/tests/test_engine_match_frame.c
 git commit -m "test(engine): phase-21 T3 — the roll + extra-time-flag staging pins (FU-224)"
 ```
 
@@ -253,8 +253,8 @@ git commit -m "test(engine): phase-21 T3 — the roll + extra-time-flag staging 
 **Objective (spec §5 T4 + errata E2).** Make the mode-0 producer (`fifa96_match_run_period_setup(mr, 0)`, native `FUN_0004B02C(0)` at `0x4950A`) run **every frame** (native cadence) instead of only on an index-4 completion — the edit that makes the sit-1 else-arm reachable. There is **no** `period_setup_live` flip (already `1` at `:2225`). FU-225 D2–D4 stand-ins prescribe no non-zero value (zero = native BSS default; no change).
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` — insert the per-frame call at `:2591-2593`; **delete** the guarded call at `:2654-2657` (native-faithful form A, FU-225 §4).
-- Modify: `tests/test_engine_m2.c` — add `run_phase21_riders` (cadence + chooser stand-in rider) and re-pin `run_phase19_riders` blocks 3/4/5 if the one-frame cadence shifts them.
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` — insert the per-frame call at `:2591-2593`; **delete** the guarded call at `:2654-2657` (native-faithful form A, FU-225 §4).
+- Modify: `port/tests/test_engine_m2.c` — add `run_phase21_riders` (cadence + chooser stand-in rider) and re-pin `run_phase19_riders` blocks 3/4/5 if the one-frame cadence shifts them.
 
 **Interfaces:**
 - Produces: `fifa96_match_run_period_setup(mr, 0)` on every `fifa96_match_run_phase_drive` call; the sit-1 (half-time) arm reachable; the bit-8 extra-time gate (`:3214`) live per-frame.
@@ -262,7 +262,7 @@ git commit -m "test(engine): phase-21 T3 — the roll + extra-time-flag staging 
 
 - [ ] **Step 1: Write the failing rider.**
 
-Add to `tests/test_engine_m2.c` after `run_phase19_riders` (`:3789`); register in `main` (`:3832`):
+Add to `port/tests/test_engine_m2.c` after `run_phase19_riders` (`:3789`); register in `main` (`:3832`):
 
 ```c
 /* v21 (M2 phase-21 T4): the mode-0 per-frame cadence + the chooser stand-ins.
@@ -300,7 +300,7 @@ Expected: FAIL at rider 1 (`global_157ac2 != 4` — the per-frame call is absent
 
 - [ ] **Step 3: Implement the per-frame cadence.**
 
-In `src/fifa96_engine/fifa96_match_run.c`, inside `fifa96_match_run_phase_drive` (opens `:2584`), after the null guard (`:2591-2593`), insert:
+In `port/src/fifa96_engine/fifa96_match_run.c`, inside `fifa96_match_run_phase_drive` (opens `:2584`), after the null guard (`:2591-2593`), insert:
 
 ```c
   /* FU-225 §4 / D10 (T4): the native `FUN_0004B02C(mode 0)` runs EVERY frame
@@ -321,8 +321,8 @@ Expected: PASS. If `run_phase19_riders` blocks 3/4/5 (sit-8 same-frame assertion
 - [ ] **Step 5: Verify the goldens are unmoved; run the gate.**
 
 ```bash
-./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt   # clean (tape reaches no completion)
-./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt   # clean
+./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt   # clean (tape reaches no completion)
+./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt   # clean
 make check
 ```
 
@@ -331,7 +331,7 @@ make check
 - [ ] **Step 7: Commit.**
 
 ```bash
-git add src/fifa96_engine/fifa96_match_run.c tests/test_engine_m2.c
+git add port/src/fifa96_engine/fifa96_match_run.c port/tests/test_engine_m2.c
 git commit -m "feat(engine,fu225): the live per-frame mode-0 cadence (phase-21 T4)"
 ```
 
@@ -344,9 +344,9 @@ git commit -m "feat(engine,fu225): the live per-frame mode-0 cadence (phase-21 T
 **Objective (spec §5 T5 + errata E4).** Make the first (half-time) completion continue the match instead of exiting: re-point the `mark_over` trigger at the FU-228 native condition (end word decided **and** past half-time), and assert the sit-1 half-time route and the ET-entry route run end-to-end.
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c:4161-4167` (the `mark_over` trigger only).
-- Modify: `tests/test_engine_match_completion.c` (add the half-time route + `mark_over` tests; update the 3 named lifecycle pins).
-- Modify: `tests/test_engine_match_frame.c` (add the chooser half-time select; update `:493` and `:717`).
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c:4161-4167` (the `mark_over` trigger only).
+- Modify: `port/tests/test_engine_match_completion.c` (add the half-time route + `mark_over` tests; update the 3 named lifecycle pins).
+- Modify: `port/tests/test_engine_match_frame.c` (add the chooser half-time select; update `:493` and `:717`).
 
 **Interfaces:**
 - Consumes: the T4 live mode-0 call; the sit-1 else-arm (`:3199-3209`); the phase-0x17 row (`fifa96_match_handlers.c:5235`); the lifecycle (`fifa96_match_lifecycle_*`).
@@ -354,7 +354,7 @@ git commit -m "feat(engine,fu225): the live per-frame mode-0 cadence (phase-21 T
 
 - [ ] **Step 1: Write the failing half-time route test.**
 
-In `tests/test_engine_match_completion.c` (mirror the loop-backed `TICKS_PER_SECOND` pattern `:233..266`):
+In `port/tests/test_engine_match_completion.c` (mirror the loop-backed `TICKS_PER_SECOND` pattern `:233..266`):
 
 ```c
 /* v21 (M2 phase-21 T5): the half-time completion runs the sit-1 route live
@@ -412,7 +412,7 @@ Expected: FAIL (the current raw `period_ended` trigger fires `mark_over` at half
 
 - [ ] **Step 4: Implement the `mark_over` re-point.**
 
-In `src/fifa96_engine/fifa96_match_run.c:4161-4167`, replace the raw-`period_ended` gate with the FU-228 §4.2 derived condition (drive the exit from the end-of-match condition; do **not** port `FUN_0008BAF0`):
+In `port/src/fifa96_engine/fifa96_match_run.c:4161-4167`, replace the raw-`period_ended` gate with the FU-228 §4.2 derived condition (drive the exit from the end-of-match condition; do **not** port `FUN_0008BAF0`):
 
 ```c
   /* FU-228 §4.2 (T5): the native `mark_over` fires only when the end word is
@@ -434,9 +434,9 @@ In `src/fifa96_engine/fifa96_match_run.c:4161-4167`, replace the raw-`period_end
 - [ ] **Step 5: Run the focused tests; update the 3 lifecycle pins.**
 
 Run: `ctest --test-dir build -R 'test_engine_match_completion|test_engine_match_frame' --output-on-failure`
-Update the now-changed pins per FU-228 §4.2 / FU228-L4: `tests/test_engine_match_completion.c:121` (`test_period_end_resolve_returns_to_frontend`), `:160` (`test_staged_exit_survives_period_end`), `:196` (`test_live_period_end_exits_to_frontend`), `:233` (`test_loopbacked_tiebreak_completion`), and `tests/test_engine_match_frame.c:493`/`:717` — each re-derived to a **past-half-time, flag-clear** completion for the exit positive, and continuation at half-time.
+Update the now-changed pins per FU-228 §4.2 / FU228-L4: `port/tests/test_engine_match_completion.c:121` (`test_period_end_resolve_returns_to_frontend`), `:160` (`test_staged_exit_survives_period_end`), `:196` (`test_live_period_end_exits_to_frontend`), `:233` (`test_loopbacked_tiebreak_completion`), and `port/tests/test_engine_match_frame.c:493`/`:717` — each re-derived to a **past-half-time, flag-clear** completion for the exit positive, and continuation at half-time.
 
-- [ ] **Step 6: Add the chooser half-time select test** (sibling of `test_phase_drive_extra_time_tiebreak` `:553`) in `tests/test_engine_match_frame.c`:
+- [ ] **Step 6: Add the chooser half-time select test** (sibling of `test_phase_drive_extra_time_tiebreak` `:553`) in `port/tests/test_engine_match_frame.c`:
 
 ```c
 /* v21 (M2 phase-21 T5): a first completion selects the sit-1 (half-time) arm.
@@ -455,19 +455,19 @@ static void test_phase_drive_half_time_selects_act1(void) {
 - [ ] **Step 7: Verify the goldens are unmoved; run the gate.**
 
 ```bash
-./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt   # clean (T6 owns the re-pin)
-./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt   # clean
+./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt   # clean (T6 owns the re-pin)
+./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt   # clean
 make check
 ```
 
 - [ ] **Step 8: Commit.**
 
 ```bash
-git add src/fifa96_engine/fifa96_match_run.c tests/test_engine_match_completion.c tests/test_engine_match_frame.c
+git add port/src/fifa96_engine/fifa96_match_run.c port/tests/test_engine_match_completion.c port/tests/test_engine_match_frame.c
 git commit -m "feat(engine,fu228): the half-time route + the mark_over re-point (phase-21 T5)"
 ```
 
-> **Do not** re-pin the golden in T5 (T6 owns it). The v20 tape reaches no completion (`tests/test_engine_m2.c:3860 assert(res.exit_step < 0)`), so T5 is tape-inert.
+> **Do not** re-pin the golden in T5 (T6 owns it). The v20 tape reaches no completion (`port/tests/test_engine_m2.c:3860 assert(res.exit_step < 0)`), so T5 is tape-inert.
 
 ---
 
@@ -476,9 +476,9 @@ git commit -m "feat(engine,fu228): the half-time route + the mark_over re-point 
 **Objective (spec §5 T6/§6 + errata E1).** Extend the M2 tape to play half-time and a **differing-score** regulation end → extra-time entry; re-pin M2 with the written reason + frame diff; add the 7 mutation-RED rider classes; update the docs.
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (directives + `m2_result` fields + the completion window + `run_phase21_riders` + `main` anchors + the provenance block + the file header).
-- Modify: `tests/golden/engine/m2-frames.txt` (re-pin v20 → v21).
-- Modify (only if the census moves; expected none): `docs/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md`.
+- Modify: `port/tests/test_engine_m2.c` (directives + `m2_result` fields + the completion window + `run_phase21_riders` + `main` anchors + the provenance block + the file header).
+- Modify: `port/tests/golden/engine/m2-frames.txt` (re-pin v20 → v21).
+- Modify (only if the census moves; expected none): `port/ENGINE.md`, `docs/PROGRESS.md`, `README.md`, `AGENTS.md`.
 
 **Interfaces:**
 - Consumes: T1's measured completion schedule; the T4 cadence; the T5 `mark_over` re-point.
@@ -486,7 +486,7 @@ git commit -m "feat(engine,fu228): the half-time route + the mark_over re-point 
 
 - [ ] **Step 1: Add the directive macros + tail bound.**
 
-After `tests/test_engine_m2.c:1592`:
+After `port/tests/test_engine_m2.c:1592`:
 ```c
 #define M2_M_HALF_TIME <T1-measured m>   /* period 0 -> 1 (half-time); FU230-L1 */
 #define M2_M_ET_ENTRY  <T1-measured m>   /* period 1 -> 2 (reg end -> ET entry); FU230-L1 */
@@ -540,12 +540,12 @@ Expected: `N` in the FU-230 §2.3 range (~1050–1600; higher if a cutscene ente
 - [ ] **Step 8: Re-pin the golden (the methodology).**
 
 ```bash
-cp tests/golden/engine/m2-frames.txt /tmp/m2-v20.txt
-./build/test_engine_m2 > tests/golden/engine/m2-frames.txt
-head -792 tests/golden/engine/m2-frames.txt | cmp - /tmp/m2-v20.txt   # additivity: clean
-cmp /tmp/m2-v20.txt tests/golden/engine/m2-frames.txt                 # first differing line
-diff <(cut -d' ' -f3- /tmp/m2-v20.txt) <(cut -d' ' -f3- tests/golden/engine/m2-frames.txt)  # state= isolation
-diff <(cut -d' ' -f2   /tmp/m2-v20.txt) <(cut -d' ' -f2   tests/golden/engine/m2-frames.txt)  # hash= isolation
+cp port/tests/golden/engine/m2-frames.txt /tmp/m2-v20.txt
+./build/test_engine_m2 > port/tests/golden/engine/m2-frames.txt
+head -792 port/tests/golden/engine/m2-frames.txt | cmp - /tmp/m2-v20.txt   # additivity: clean
+cmp /tmp/m2-v20.txt port/tests/golden/engine/m2-frames.txt                 # first differing line
+diff <(cut -d' ' -f3- /tmp/m2-v20.txt) <(cut -d' ' -f3- port/tests/golden/engine/m2-frames.txt)  # state= isolation
+diff <(cut -d' ' -f2   /tmp/m2-v20.txt) <(cut -d' ' -f2   port/tests/golden/engine/m2-frames.txt)  # hash= isolation
 ```
 If the 792-prefix is **not** clean, document the shifted region **line-by-line with the reason** (spec §6) — never silently. Any *unexplained* drift is a regression to investigate, never a re-pin.
 
@@ -553,22 +553,22 @@ If the 792-prefix is **not** clean, document the shifted region **line-by-line w
 
 - [ ] **Step 10: Add the v21 provenance block** between `:1542` and `:1543` (template: the v14 re-pin block, `:1154-1213`), and bump the file header `:1-13` (`v20` → `v21`). Use this written reason:
 
-> The M2 golden is re-pinned for phase-21 (the live period-end spine; FU-223…FU-230, T6). Reason: the tape now drives the live FU-62 clock through **two period completions** — period 0 → 1 (half-time) and period 1 → 2 (regulation end) — and the reg-end completion installs the OL-85 extra-time arm (`[0x157AC0]` W2 `0x8B2AC`, raised because the reg-end score **differs**: errata E1). The acceptance stops at **extra-time entry** (spec §2 non-goal: no full ET match). Frame diff (measured with the ISO present): lines 1..792 byte-identical (`head -792 new | cmp - old` clean); first appended line is 793; … The intended live continuation, not a regression. Regenerated with the ISO present (`./build/test_engine_m2 > tests/golden/engine/m2-frames.txt`); M1 unmoved (`09b726b7…`); old M2 `441415fc…` (v20, 792 lines) → new M2 `<sha>` (v21, `<N>` lines).
+> The M2 golden is re-pinned for phase-21 (the live period-end spine; FU-223…FU-230, T6). Reason: the tape now drives the live FU-62 clock through **two period completions** — period 0 → 1 (half-time) and period 1 → 2 (regulation end) — and the reg-end completion installs the OL-85 extra-time arm (`[0x157AC0]` W2 `0x8B2AC`, raised because the reg-end score **differs**: errata E1). The acceptance stops at **extra-time entry** (spec §2 non-goal: no full ET match). Frame diff (measured with the ISO present): lines 1..792 byte-identical (`head -792 new | cmp - old` clean); first appended line is 793; … The intended live continuation, not a regression. Regenerated with the ISO present (`./build/test_engine_m2 > port/tests/golden/engine/m2-frames.txt`); M1 unmoved (`09b726b7…`); old M2 `441415fc…` (v20, 792 lines) → new M2 `<sha>` (v21, `<N>` lines).
 
 - [ ] **Step 11: Verify M1 unmoved; update the docs; run the gate.**
 
 ```bash
-./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt   # MUST be clean
+./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt   # MUST be clean
 make check
 ```
-Update `docs/ENGINE.md` / `docs/PROGRESS.md` / `README.md` / `AGENTS.md` **only if** the wired count moved (expected: none — still 55/80 = 68%); record the re-pin + the smoke in `docs/PROGRESS.md`.
+Update `port/ENGINE.md` / `docs/PROGRESS.md` / `README.md` / `AGENTS.md` **only if** the wired count moved (expected: none — still 55/80 = 68%); record the re-pin + the smoke in `docs/PROGRESS.md`.
 
 - [ ] **Step 12: Smoke (`DISPLAY=:1`) + commit.**
 
 Run `make game` on a display and record an honest smoke note (the live reach: the clock → the completions). Then:
 
 ```bash
-git add tests/test_engine_m2.c tests/golden/engine/m2-frames.txt docs/ENGINE.md docs/PROGRESS.md README.md AGENTS.md
+git add port/tests/test_engine_m2.c port/tests/golden/engine/m2-frames.txt port/ENGINE.md docs/PROGRESS.md README.md AGENTS.md
 git commit -m "test(engine): phase-21 T6 — the live period-end acceptance tape v21 (re-pin)"
 ```
 

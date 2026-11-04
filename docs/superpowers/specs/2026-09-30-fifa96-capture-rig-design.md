@@ -23,19 +23,19 @@ closeouts.
 - No game-logic porting, no decoder implementations in this slice. The rig
   *observes*; decoding is the next sub-project's job, driven by captured bytes.
 - No in-VM session automation. Sessions are played by a human; the rig logs.
-- Nothing in `captures/` is ever committed (derived from copyrighted content);
+- Nothing in `data/captures/` is ever committed (derived from copyrighted content);
   only synthetic parser fixtures and verbatim parsed lines in docs are.
 
 ## Hard constraints (inherited)
 
-- Never write to `game/FIFAPCCD96.iso` (read-only convention). The TSR lives
-  in `game/hdd/` (writable emulated state), copied there by the run script.
+- Never write to `data/game/FIFAPCCD96.iso` (read-only convention). The TSR lives
+  in `data/game/hdd/` (writable emulated state), copied there by the run script.
 - Honesty rules extend to captured evidence: a map/FU citation quotes parsed
   trace output verbatim; "runtime-captured" is labeled as its own evidence
   class, never blended with static cites; no address is patched that the map
   does not cite with instruction bytes.
 - Existing 10 golden CTests stay green; no edits to `src/`, `include/`,
-  `tests/golden/` behavior baselines.
+  `port/tests/golden/` behavior baselines.
 
 ## System dependency (approved)
 
@@ -44,7 +44,7 @@ time, `make tsr` fails with a clear message; no hand-emitted blob fallback.
 
 ## Architecture
 
-### Guest: `tsr/fifa96_capture.asm` → `FIFACAP.COM`
+### Guest: `_tools/tsr/fifa96_capture.asm` → `FIFACAP.COM`
 
 16-bit real-mode COM, assembled `nasm -f bin`. Installs resident via
 `INT 27h` (AL=0, DX=paragraphs). Components:
@@ -108,10 +108,10 @@ time, `make tsr` fails with a clear message; no hand-emitted blob fallback.
 
 ### Host
 
-- `run-fifa96-capture.sh`: copy of `run-fifa96.sh` + `serial1=file
-  file:$CAP_FILE multiplier:100` (default `captures/session-<UTC>/trace.bin`,
+- `tools/run-fifa96-capture.sh`: copy of `tools/run-fifa96.sh` + `serial1=file
+  file:$CAP_FILE multiplier:100` (default `data/captures/session-<UTC>/trace.bin`,
   `mkdir -p`), autoexec: mount C, imgmount D, `C:\FIFACAP.COM` (copied into
-  `game/hdd/`), then `FIFA96.EXE`. Exit of DOSBox finalizes the file.
+  `data/game/hdd/`), then `FIFA96.EXE`. Exit of DOSBox finalizes the file.
   Note: the serial file sink form is `serial1=file file:<path>` (verified
   against `dosbox-x.reference.conf`); no `mode:file`/`filename=` and no
   `timeout:` — DOSBox-X closes/flushes the file on exit, which the rig relies on.
@@ -122,7 +122,7 @@ time, `make tsr` fails with a clear message; no hand-emitted blob fallback.
   `changeLineProperties` (which applies it) only runs on a guest UART
   reconfiguration — so the TSR programs COM1 LCR/DLL/DLM to divisor 1
   (115200 raw) at install, before emitting anything.
-- `tools/fifa96_trace.c`: parser — CLI `fifa96_trace [--raw] FILE`: validates
+- `port/tools/fifa96_trace.c`: parser — CLI `fifa96_trace [--raw] FILE`: validates
   header, walks frames, resyncs with flagged `LOST-SYNC`/`SEQ-GAP` lines,
   prints one text line per record (`FILE ah=3F h=0x03 x=1024 got=1024
   name=FW1.QFS hash=8a3f21b0 len=1024 head=hex…`, `CODEC site=5dd2 ax=…
@@ -130,13 +130,13 @@ time, `make tsr` fails with a clear message; no hand-emitted blob fallback.
   (files-by-name, opens-per-session, patch results, codec hits per site).
 - `Makefile` targets: `tsr` (nasm), `capture` (script), `trace FILE=…`
   (parser). CMake builds the parser alongside `fifa96_dump`.
-- `.gitignore`: add `captures/`.
+- `.gitignore`: add `data/captures/`.
 
 ## Data flow → follow-on evidence use
 
 Session (human plays boot→intro→asset load) → `trace.bin` → `fifa96_trace`
 → FU-2 closeout cites parsed lines to bind filenames↔golden container bytes
-(hash+size matched against `game/FIFAPCCD96.iso` reads performed by an
+(hash+size matched against `data/game/FIFAPCCD96.iso` reads performed by an
 in-repo matcher) → FU-3 closeout cites CODEC in/out records to bind buffers
 to container payload offsets → next map slice records these as
 runtime-captured cites under the same quote-only rules.
@@ -169,7 +169,7 @@ runtime-captured cites under the same quote-only rules.
       `PATCH_OK` (site id + computed target linear) or `PATCH_SKIP` with a
       reason — all five accounted for.
    c. Reaching an asset load emits ≥1 CODEC record for the responsible site.
-   d. Game behaves as with the plain `run-fifa96.sh` (no new hangs/corruption)
+   d. Game behaves as with the plain `tools/run-fifa96.sh` (no new hangs/corruption)
       — the self-checksum assumption, stated as an assumption until observed.
 
 ## Assumptions (explicit)

@@ -8,12 +8,12 @@
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `disassemble_function`, `disassemble_bytes` (Task 1 `dry_run=true` only), `search_instructions` (authority), `get_function_callers`/`get_function_callees`, `get_xrefs_to`/`get_function_xrefs` (control only), `read_memory` (hex-vs-data protocol), `find_code_gaps`, Task 2: real `disassemble_bytes`, `create_function`, `rename_function`, `set_comment`, `save_program`), `grep`, CTest (regression gate only).
 
-**Spec:** Approved chat design 2026-09-30 ("who calls `dispatch_mode_vector@092c` vs `FUN_11bd_0931`, how the arm selects cells; capped writes only if the `0931` walk lands new bodies") + `docs/ghidra/loader_rename_map.md` (`## 7c62 exit arm` — `dispatch_mode_vector@092c` rename, callers `7d15/7d1e`; `## 0290/0293 fall-through` — `execute_mode_switch` staging; `## vector dispatch handlers` — `FUN_11bd_0931` carve with `0934` load + band legs, `092c`/`0931` split rationale, H13 `clear_msw_and_callfar`; `## 2811..296c pocket + 9bc vector` — `mode_vector_source_pair@2820`, `0x9bc/0x9be` = `CS:[BX-4]/[BX-2]` sourcing, `41ee` sole `[0x9c2]` writer value `0x296d`, pocket `284c/2864` FUNs; `## callee arg question` + `## [0x9ba] consumers` — cell-writer disciplines; `## block head 2978..2a59` — `mode_29bc_source_pair@29b8`, `enable_paging_and_load_tss`, writer `2892/28a0`; `## sweep-aftermath ratification` — H11 ACCEPTED-SPLIT, scan scope `15589`, `[0xdfe]` 3-hit re-render precedent).
+**Spec:** Approved chat design 2026-09-30 ("who calls `dispatch_mode_vector@092c` vs `FUN_11bd_0931`, how the arm selects cells; capped writes only if the `0931` walk lands new bodies") + `port/spec/loader_rename_map.md` (`## 7c62 exit arm` — `dispatch_mode_vector@092c` rename, callers `7d15/7d1e`; `## 0290/0293 fall-through` — `execute_mode_switch` staging; `## vector dispatch handlers` — `FUN_11bd_0931` carve with `0934` load + band legs, `092c`/`0931` split rationale, H13 `clear_msw_and_callfar`; `## 2811..296c pocket + 9bc vector` — `mode_vector_source_pair@2820`, `0x9bc/0x9be` = `CS:[BX-4]/[BX-2]` sourcing, `41ee` sole `[0x9c2]` writer value `0x296d`, pocket `284c/2864` FUNs; `## callee arg question` + `## [0x9ba] consumers` — cell-writer disciplines; `## block head 2978..2a59` — `mode_29bc_source_pair@29b8`, `enable_paging_and_load_tss`, writer `2892/28a0`; `## sweep-aftermath ratification` — H11 ACCEPTED-SPLIT, scan scope `15589`, `[0xdfe]` 3-hit re-render precedent).
 
 ## Global Constraints
 
 - No C, test, CMake, or `tools/` changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/bytes citation; disassembly wins over the decompiler; every `read_memory` quote reconciles `hex` vs `data` before verbatim (slice-17 protocol).
 - Task 1 writes NOTHING in Ghidra: `disassemble_bytes` only `dry_run=true`; reads only via the read tools; tool error on a required sub-step → BLOCKED report, never a write.
 - Caller/callee censuses: `search_instructions` operand runs are the authority (slice-16 dead-channel ruling — `get_xrefs_to`/`get_function_xrefs` quoted as controls only); every computed target shows its delta arithmetic (`−0x1bd0` for `1000:`-space renders; far-thunk rule `0x1000:xxxx − 0x1BD0 = 11bd:xxxx`).
@@ -22,7 +22,7 @@
 - Naming bar: verb-led snake_case, mechanism-only from the body's own cited ops; CR0/LGDT/LIDT-class cite required for mode-flavored words; NOT-CONFIRMED-at-name = create-only, no rename, no plate beyond behavioral default; plates `C: none — behavioral (<role>)`; no `decode_*`, no direction words.
 - Verdict vocabulary: RATIFIED / ACCEPTED / NOT-CONFIRMED-at-name / DYNAMIC-ONLY / OPEN-WINDOW; negatives = "not attributable from enumerated sweeps, defined-insn-only, at this-slice time" never "doesn't exist"; OPEN-WINDOW rows for dynamic bases.
 - Scope guard: the arm-cascade TRACE goes one hop from `7c62`'s own recorded callees only; callee trees of the 13 handlers stay deferred; R3's `INT 0x67` cluster is NOT this slice (queued slice 26); `[0x9ba]` armed-value runtime stays trace-blocked (FU notes).
-- Leave `fifa96.rep/**` churn unstaged; prior sections byte-identical (append-only); commit messages exactly per the briefs; no new tests; `save_program` only if Task 2 writes.
+- Leave `data/fifa96.rep/**` churn unstaged; prior sections byte-identical (append-only); commit messages exactly per the briefs; no new tests; `save_program` only if Task 2 writes.
 
 ---
 
@@ -32,16 +32,16 @@ Spine question (callers + walk + cell-selection) with one defensible write windo
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## vector selection logic` (Task 1: caller census + walk + cell tables + selection trace; Task 2: `### Writes` if any + verdict rows + `### Deferrals`).
+- Modify: `port/spec/loader_rename_map.md` — append `## vector selection logic` (Task 1: caller census + walk + cell tables + selection trace; Task 2: `### Writes` if any + verdict rows + `### Deferrals`).
 - Modify: Ghidra program `/fifa96.exe` — Task 2 only: capped creates/renames at Task-1-cited ranges; `save_program` after writes.
-- `src/`, `tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, `include/`, `tools/` — UNTOUCHED.
 
 ---
 
 ### Task 1: Callers, walk, cell selection (no writes)
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## vector selection logic` with census/walk/cell/trace tables)
+- Modify: `port/spec/loader_rename_map.md` (append `## vector selection logic` with census/walk/cell/trace tables)
 - Modify: none in Ghidra (read-only pass)
 
 **Interfaces:**
@@ -62,14 +62,14 @@ Cell census runs; the one-hop cascade trace with cites; classify what statically
 
 - [ ] **Step 4: Append + verify + commit**
 
-Append `## vector selection logic (verified 2026-09-30, program \`/fifa96.exe\`)` — tables + disposition-so-far (caller counts per dispatcher, walk outcome incl. exposed-bodies list or NONE, cell census status vs prior records — flag any delta from slice-22/23/24 quotes, selection answer or OPEN). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: census vector dispatcher callers, walk 0931, trace cell selection" || true`
+Append `## vector selection logic (verified 2026-09-30, program \`/fifa96.exe\`)` — tables + disposition-so-far (caller counts per dispatcher, walk outcome incl. exposed-bodies list or NONE, cell census status vs prior records — flag any delta from slice-22/23/24 quotes, selection answer or OPEN). Gate: `cmake -S . -B build && cmake --build build && ctest --test-dir build` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: census vector dispatcher callers, walk 0931, trace cell selection" || true`
 
 ---
 
 ### Task 2: Capped writes + verdicts
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
+- Modify: `port/spec/loader_rename_map.md` (append `### Writes` + verdict rows + `### Deferrals`)
 - Modify: Ghidra program `/fifa96.exe` — ONLY if Task 1 exposed new contiguous CODE runs: capped creates at cited ranges; `rename_function` + plate only at the naming bar; `save_program`
 
 **Interfaces:**
@@ -86,7 +86,7 @@ Per exposed run: real `disassemble_bytes` → `create_function` at cited start �
 
 - [ ] **Step 3: Append + verify + commit**
 
-Append `### Writes` + verdicts + `### Deferrals` (+ `### Fix wave` trailer if own-row edits needed). Gate: full build + `ctest` → 10/10. Commit exactly: `git add docs/ghidra/loader_rename_map.md && git commit -m "docs: execute selection-slice writes with dispatcher verdicts" || true`
+Append `### Writes` + verdicts + `### Deferrals` (+ `### Fix wave` trailer if own-row edits needed). Gate: full build + `ctest` → 10/10. Commit exactly: `git add port/spec/loader_rename_map.md && git commit -m "docs: execute selection-slice writes with dispatcher verdicts" || true`
 
 ---
 

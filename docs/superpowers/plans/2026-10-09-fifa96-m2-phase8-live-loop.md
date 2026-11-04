@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan, Ghidra MCP read-only, SDL3 smoke (`make game`, DISPLAY=:1).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU145…FU152`; predecessors `docs/superpowers/plans/2026-10-09-fifa96-m2-phase7-ports.md`, `2026-10-08-fifa96-m2-phase7-recon-ahead.md`.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU145…FU152`; predecessors `docs/superpowers/plans/2026-10-09-fifa96-m2-phase7-ports.md`, `2026-10-08-fifa96-m2-phase7-recon-ahead.md`.
 
 ## Global Constraints
 
@@ -23,7 +23,7 @@
 ### Task 1: T1 — taker/corner row machines (L13)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_handlers.c` / `.h` (rows 0x10 throw-in taker, 0x11 corner taker/`0x12` free-kick + `0x13` penalty taker codes per FU-149 §6 L13 + P1's installed codes), `tests/test_engine_match_handlers.c`, `tests/test_engine_match_frame.c`, `docs/ghidra/FU149_set_pieces_restarts.md` (L13 status), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` / `.h` (rows 0x10 throw-in taker, 0x11 corner taker/`0x12` free-kick + `0x13` penalty taker codes per FU-149 §6 L13 + P1's installed codes), `port/tests/test_engine_match_handlers.c`, `port/tests/test_engine_match_frame.c`, `port/spec/FU149_set_pieces_restarts.md` (L13 status), `port/ENGINE.md`
 - Read: FU-149 L13 + §6 (installed codes 0x10/0x11/0x12/0x13/0x1D), FU-137 §6.1 row taxonomy, the phase-arm machinery (P1)
 
 **Interfaces:**
@@ -40,7 +40,7 @@
 ### Task 2: T2 — camera live feed / pan origin (OL-T11-79)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_camera.c` / `.h`, `src/fifa96_loader/fifa96_camera.c` / `.h` (FU-71 event bodies `709D0/70DE0/71DF4` + atan walk + tails; `FUN_00071C94` bail gate `[0x157A6C]`; rate/timer producers for the pan), `src/fifa96_engine/fifa96_match_run.c` (frame wiring), `tests/test_camera.c`, `tests/test_engine_match_frame.c`, `docs/ghidra/FU148_presentation_hud_camera.md` (OL-T11-79 status), `docs/ghidra/FU96_camera_objects.md`, `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_camera.c` / `.h`, `port/src/fifa96_loader/fifa96_camera.c` / `.h` (FU-71 event bodies `709D0/70DE0/71DF4` + atan walk + tails; `FUN_00071C94` bail gate `[0x157A6C]`; rate/timer producers for the pan), `port/src/fifa96_engine/fifa96_match_run.c` (frame wiring), `port/tests/test_camera.c`, `port/tests/test_engine_match_frame.c`, `port/spec/FU148_presentation_hud_camera.md` (OL-T11-79 status), `port/spec/FU96_camera_objects.md`, `port/ENGINE.md`
 - Read: FU-148 §2/§5.2 + OL-T11-79, FU-152 §2 (handler bodies/atan), the S4 pose-feed seam, `FUN_000736AC` pan integrator (rate words `0x1577C0/C2`)
 
 **Interfaces:**
@@ -57,7 +57,7 @@
 ### Task 3: T3 — input hold/kick semantics (OL-T4-1 + row 0x19)
 
 **Files:**
-- Modify: `src/fifa96_engine/platform_sdl3.c` (repeat/hold policy: keep auto-repeat or synthesize hold), `src/fifa96_engine/fifa96_match_input.c` / `.h`, `src/fifa96_engine/fifa96_match_handlers.c` / `.h` (kick/pass/shoot rows reachable from the pad — row 0x19 kick execution path per FU-137 §6), `tests/test_engine_match_input.c`, `tests/test_engine_match_frame.c`, `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/platform_sdl3.c` (repeat/hold policy: keep auto-repeat or synthesize hold), `port/src/fifa96_engine/fifa96_match_input.c` / `.h`, `port/src/fifa96_engine/fifa96_match_handlers.c` / `.h` (kick/pass/shoot rows reachable from the pad — row 0x19 kick execution path per FU-137 §6), `port/tests/test_engine_match_input.c`, `port/tests/test_engine_match_frame.c`, `port/ENGINE.md`
 - Read: OL-T4-1 (auto-repeat drop), the pump/possess chain (S1/FU-147), FU-137 §6 rows, the kick gates (`+0x91` action code family)
 
 **Interfaces:**
@@ -73,7 +73,7 @@
 ### Task 4: T4 — natural goal chain close-out (OL-87/88/89)
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c`, `src/fifa96_loader/fifa96_referee.c` (as the chain dictates), `tests/test_engine_match_frame.c`, `tests/test_engine_m2.c` (+ golden iff a natural goal enters the tape), `docs/ghidra/FU142_installer_arms_scope.md` App. L (status), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c`, `port/src/fifa96_loader/fifa96_referee.c` (as the chain dictates), `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_m2.c` (+ golden iff a natural goal enters the tape), `port/spec/FU142_installer_arms_scope.md` App. L (status), `port/ENGINE.md`
 - Read: FU-142 App. L (11 writer sites + handlers), FU-146 (consumers), T2's natural pan, the S3 chain
 
 **Interfaces:**
@@ -89,7 +89,7 @@
 ### Task 5: T5 — acceptance v8 + whole-plan review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (+ golden iff moved), `docs/ENGINE.md`, `README.md`, `docs/screens/*`
+- Modify: `port/tests/test_engine_m2.c` (+ golden iff moved), `port/ENGINE.md`, `README.md`, `docs/screens/*`
 - Read: spec §5; tape v7 provenance
 
 **Interfaces:**

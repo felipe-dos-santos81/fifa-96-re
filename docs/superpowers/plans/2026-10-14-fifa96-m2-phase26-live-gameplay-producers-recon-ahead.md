@@ -4,7 +4,7 @@
 
 **Goal:** Freeze the eight read-only evidence slices (`FU264…FU271`) that establish, first-hand, the native **live producer** of each phase-7 chain's gate cell — its exact body, its live trigger, and whether a live engine path can raise it (Layer 1 headless, Layer 2 visible for the camera) — so the phase-26 producer plan can be written without guessing.
 
-**Architecture:** This is the phase-26 **Stage 1** (recon-ahead), exactly the phase-21…25 shape. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-design.md` §4) sequences the recon before the implementation plan; the Stage-2 producer tasks are authored off these frozen slices. Each of the 8 agents investigates one cluster slice, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `docs/ghidra/FU2xx_*.md` in a serialized commit.
+**Architecture:** This is the phase-26 **Stage 1** (recon-ahead), exactly the phase-21…25 shape. The approved design (`docs/superpowers/specs/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-design.md` §4) sequences the recon before the implementation plan; the Stage-2 producer tasks are authored off these frozen slices. Each of the 8 agents investigates one cluster slice, writes only its draft, and hands off; the controller freeze-reviews and promotes to a canonical `port/spec/FU2xx_*.md` in a serialized commit.
 
 **Tech Stack:** Ghidra MCP (read-only), REA MCP (second read), C11/CMake/CTest, ASan/UBSan, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
@@ -17,7 +17,7 @@
 - **Evidence floor (AGENTS.md):** every address/byte claim cites a fresh disassembly output or reconciled raw-byte read. Anything not statically provable becomes a **numbered open leg** with its native owner. LE-image globals at `+0x100000`.
 - **Alias traps:** `dword[addr] >> 16` = the word at `addr+2`, `>> 24` = the byte at `addr+3`; verify CALL bytes (rel32); watch sign/width, inverted gates, gate-index misreads. Any "only/sole/exactly" or caller-count claim needs a **fresh** `get_xrefs_to`. (The phase-24/25 waves caught alias-trap errors — re-verify before trusting an inherited verdict.)
 - **The live-chain rule:** a chain is **live** only when a **ported producer raiser** raises its gate on a live engine path (the frame loop / a granted-frame scenario) — a fixture that stages the gate does **not** count; a stand-in producer is a fake. Report the exact live trigger and whether it is **headless-reachable** (Layer 1) and **smoke-reachable** (Layer 2).
-- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `docs/ghidra/FU2xx_*.md` and commits.
+- **No code, no test, no shared-doc edits** by the recon agents. Each writes **only** its own draft file (+ a workspace report). The controller promotes drafts to canonical `port/spec/FU2xx_*.md` and commits.
 - **No fakes** (R15/R45/R49). A cell with no live producer stays a numbered leg.
 - **No census chase.** A live producer that wires a NULL row is honest **upside** only; the census holds at 59/80 otherwise.
 - **M2 preservation:** byte-identical unless a producer genuinely changes a live path (written reason + frame diff).
@@ -29,7 +29,7 @@
 |---|---|
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/progress.md` | The SDD ledger (recovery map) |
 | `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-<n>-*.md` | The 8 recon drafts (git-ignored scratch) |
-| `docs/ghidra/FU264_*.md … FU271_*.md` | The promoted canonical slices (controller, serialized commits) |
+| `port/spec/FU264_*.md … FU271_*.md` | The promoted canonical slices (controller, serialized commits) |
 | Prior slices `FU-148`…`FU-152`, `FU-168`, `FU-170`, `FU-171`, `FU-180`, `FU-186`, `FU-194`, `FU-204`, `FU-207`, `FU-208`, `FU-209`, `FU-241`, `ENGINE.md` leg register | Prior evidence — appended errata only, never rewritten |
 
 **Ordering (dependency):** Tasks 1–8 are independent read-only investigations and run in parallel. The controller reconciles at promotion time only if two slices reach the same producer (e.g. Tasks 5 and 8 both touch the extra-time flag `OL-85`).
@@ -39,7 +39,7 @@
 ### Task 1: W26-1 / FU264 — the open-play camera-Y producer (the visible anchor)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-1-camera-y-producer.md`
-**Promotes to:** `docs/ghidra/FU264_camera_y_producer.md`
+**Promotes to:** `port/spec/FU264_camera_y_producer.md`
 
 **Objective:** Derive what raises `[0x157750]` (the camera-Y / ball-height cell) off zero on a **live open-play path** (FU168-L5), and whether the follow-cam is **smoke-visible** (the Layer-2 anchor).
 
@@ -53,7 +53,7 @@
 ### Task 2: W26-2 / FU265 — the live place/pan reachability + the ball framing
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-2-place-pan-ball-framing.md`
-**Promotes to:** `docs/ghidra/FU265_place_pan_ball_framing.md`
+**Promotes to:** `port/spec/FU265_place_pan_ball_framing.md`
 
 **Objective:** Derive the live-camera place/pan reachability (R2-L4: which live event fires the pan) + the row-07 `+0x44` animation ack (T1-L2, the one-possession second-kick blocker) + the on-screen ball framing.
 
@@ -67,7 +67,7 @@
 ### Task 3: W26-3 / FU266 — the taker-arm residuals (FU-149 L13)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-3-taker-arm-residuals.md`
-**Promotes to:** `docs/ghidra/FU266_taker_arm_residuals.md`
+**Promotes to:** `port/spec/FU266_taker_arm_residuals.md`
 
 **Objective:** Derive the taker-arm producers (`FU-149 L13.1–L13.7`) that keep the set-piece arms **fixture-dormant** — the throw setup, the timer+draw completion, the arm vector/RNG, the `0x974DC(0x1E)`/`0x8F188` sinks, the `0x8DE8C` picks, the `[0x157821]`/`[0x157A6A]` state cells, the penalty.
 
@@ -81,7 +81,7 @@
 ### Task 4: W26-4 / FU267 — the situation-0xB producers (OL-84)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-4-situation-producers.md`
-**Promotes to:** `docs/ghidra/FU267_situation_producers.md`
+**Promotes to:** `port/spec/FU267_situation_producers.md`
 
 **Objective:** Derive the remaining situation-0xB producers (`OL-84`: row 02, rows `0x10..0x13`, the keeper/restart bodies, the computed act-8 call) + row-01's camera/event/ball-stage sinks.
 
@@ -95,7 +95,7 @@
 ### Task 5: W26-5 / FU268 — the fouls/offside producers + the extra-time flag
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-5-fouls-offside-extratime.md`
-**Promotes to:** `docs/ghidra/FU268_fouls_offside_extratime.md`
+**Promotes to:** `port/spec/FU268_fouls_offside_extratime.md`
 
 **Objective:** Derive the `FU-150` foul/referee/offside live producers (the sit-9/0xA entries) + the extra-time flag `OL-85` (`[0x157AC0]`; `FU207-L2` the `0x389A4` front-end producer) + `FU208-L1`.
 
@@ -109,7 +109,7 @@
 ### Task 6: W26-6 / FU269 — the keeper restart rows + the post-period hold
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-6-keeper-restart-hold.md`
-**Promotes to:** `docs/ghidra/FU269_keeper_restart_hold.md`
+**Promotes to:** `port/spec/FU269_keeper_restart_hold.md`
 
 **Objective:** Derive the `FU-151` keeper restart rows `1D`/`1E` live producers (the stage ladder, `0x7546E`/`0x75B58`/`0x76072`) + the post-period hold `OL-86`.
 
@@ -123,7 +123,7 @@
 ### Task 7: W26-7 / FU270 — the replay/overlay/sub-strip producers (FU-152)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-7-replay-overlay.md`
-**Promotes to:** `docs/ghidra/FU270_replay_overlay.md`
+**Promotes to:** `port/spec/FU270_replay_overlay.md`
 
 **Objective:** Derive the `FU-152` replay/overlay/sub-strip live producers (legs 1/2/3/7; the rows are zero-gated).
 
@@ -137,7 +137,7 @@
 ### Task 8: W26-8 / FU271 — the live-trigger census (cross-cutting)
 
 **Draft:** `.superpowers/sdd/2026-10-14-fifa96-m2-phase26-live-gameplay-producers-recon-ahead/w26-8-live-trigger-census.md`
-**Promotes to:** `docs/ghidra/FU271_live_trigger_census.md`
+**Promotes to:** `port/spec/FU271_live_trigger_census.md`
 
 **Objective:** The cross-cutting reachability map: for each phase-7 gating cell, the live engine path that raises it, and whether it is **interactively reachable** (smoke) vs **granted-frame-only** (headless Layer 1) — the map that sizes the Stage-2 plan and anchors the visible acceptance.
 
@@ -169,5 +169,5 @@ cluster, incl. the visible anchor) and phase-26b (set-piece/fouls/keeper/replay)
 
 Hand this plan to `superpowers:subagent-driven-development`: dispatch a fresh
 read-only subagent per task (all 8 in parallel), then the controller freeze-reviews
-and promotes each draft to a canonical `docs/ghidra/FU2xx_*.md` in a serialized
+and promotes each draft to a canonical `port/spec/FU2xx_*.md` in a serialized
 commit per slice.

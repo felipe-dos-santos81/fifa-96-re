@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan (engine + tests), Ghidra MCP read-only (`/FIFA96.EXE`; the authoritative recon tool — rea MCP only as a secondary read-only view, context7 only if SDL3/CMake docs are needed), SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU153…FU174`; predecessor `docs/superpowers/plans/2026-10-11-fifa96-m2-phase13-live-camera-ball-art.md` + its final review + the 2026-10-12 two-axis review fixes.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU153…FU174`; predecessor `docs/superpowers/plans/2026-10-11-fifa96-m2-phase13-live-camera-ball-art.md` + its final review + the 2026-10-12 two-axis review fixes.
 
 ## Global Constraints
 
@@ -23,7 +23,7 @@
 
 ## Wave R — parallel read-only recon, eight agents (gate: eight FU slices + reports, committed)
 
-R15–R22 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `docs/ghidra/FU16N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-167…FU-174 in one `docs(fu167-fu174)` commit after the wave returns.
+R15–R22 run **concurrently** (the user-directed speed-up surface). Each is read-only on the repo: it writes ONLY its new `port/spec/FU16N_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-167…FU-174 in one `docs(fu167-fu174)` commit after the wave returns.
 
 ### R15 → FU-167: row-0x0E stage-2 else arm (FU160-L4) (unblocks T1)
 - Question: derive `0x82820..0x82A9C` byte-level — the camera-follow/slot-dir arm that runs when the record is NOT camera-tracked (or `word[+0x85] == 0`): entry conditions, every cell written (slot id/dir, camera follow, record fields), its gates, and the stage-3 tail interplay. Rank what a live port needs first.
@@ -69,28 +69,28 @@ R15–R22 run **concurrently** (the user-directed speed-up surface). Each is rea
 
 ### Task 1: T1 — row-0x0E completion + row-0x5E installer (from R15/R17)
 
-**Files:** per the recs (`fifa96_match_handlers.c` else arm, `fifa96_match_run.c` installer/successor paths); tests + FU-167/FU-169 status + `docs/ENGINE.md`.
+**Files:** per the recs (`fifa96_match_handlers.c` else arm, `fifa96_match_run.c` installer/successor paths); tests + FU-167/FU-169 status + `port/ENGINE.md`.
 **Produces:** the jump selector's stage-2 else arm and the live row-0x5E install run end-to-end in the live chain.
 **Gate T1:** else arm + row-0x5E install covered by RED/GREEN live tests (or the deepest provable step + numbered legs).
 - [ ] RED test → implement → GREEN → gate (`make check` + golden decision + smoke `p14-t1-*`) → commit `feat(engine,fu167): row-0x0E stage-2 else arm + row-0x5E installer`.
 
 ### Task 2: T2 — sustained follow (from R16/R19)
 
-**Files:** per the recs (camera chain + pan arm + coupling); tests + FU-168/FU-171 status + `docs/ENGINE.md`.
+**Files:** per the recs (camera chain + pan arm + coupling); tests + FU-168/FU-171 status + `port/ENGINE.md`.
 **Produces:** sustained on-screen following in open play (the thing phase-13 could only assert in the ISO test).
 **Gate T2:** visible sustained pan/follow in the smoke (or deepest provable + numbered leg).
 - [ ] RED test → implement → GREEN → gate + smoke `p14-t2-*` → commit `feat(engine,fu168): sustained follow — pan arm + rate coupling`.
 
 ### Task 3: T3 — post-goal continuation (from R18/R20/R21)
 
-**Files:** per the recs (goal/hold/restart chain, row-table arms, tape extension); tests + FU-170/FU-172/FU-173 status + `docs/ENGINE.md`.
+**Files:** per the recs (goal/hold/restart chain, row-table arms, tape extension); tests + FU-170/FU-172/FU-173 status + `port/ENGINE.md`.
 **Produces:** the match continues past a goal live (the hold releases, play restarts); the M2 tape extends additively (v14) iff the frames genuinely move.
 **Gate T3:** the tape/live session continues post-goal (or the deepest provable step + numbered legs); M2 v14 additive re-pin with written reason + frame diff; M1 never moves.
 - [ ] RED test → implement → GREEN → gate + smoke `p14-t3-*` → tape decision → commit `feat(engine,fu170): post-goal continuation — restart chain`.
 
 ### Task 4: T4 — acceptance v14 + riders + smoke + docs + final review
 
-**Files:** `tests/test_engine_m2.c` (+ golden iff genuinely moved), `docs/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
+**Files:** `port/tests/test_engine_m2.c` (+ golden iff genuinely moved), `port/ENGINE.md`, `docs/PROGRESS.md`, `docs/screens/*`.
 **Produces:** the v14 strata (or v13-held with recorded reason); the cheap riders the T1–T3 reviews surface (regression pins for the else arm / 0x5E install / restart chain); the honest smoke record; remaining forcings with legs; census recomputed if wired moved.
 - [ ] Tests + riders → tape decision → smoke → docs → commit `test(engine): phase-14 acceptance tape v14 and docs` → whole-plan final review (one fix wave max) → close.
 

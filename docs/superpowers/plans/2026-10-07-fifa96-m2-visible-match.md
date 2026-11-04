@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, Ghidra MCP (read-only); the null backend is the deterministic host; SDL3 only for `make game`.
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.4-3.5, §5, §6); scope authority `docs/ghidra/FU89_scene_assembly.md` (§11 errata; `0x79B6C` tail), `docs/ghidra/FU142_installer_arms_scope.md` (§6 OL-T11-8, Appendix J/K), `docs/ghidra/FU143_phase_rows.md` (§8 OL-79/OL-84/OL-85), `docs/ghidra/FU96_camera_objects.md`; predecessor plans `docs/superpowers/plans/2026-10-07-fifa96-m2-playability-legs.md` and the two earlier M2 plans.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (§3.4-3.5, §5, §6); scope authority `port/spec/FU89_scene_assembly.md` (§11 errata; `0x79B6C` tail), `port/spec/FU142_installer_arms_scope.md` (§6 OL-T11-8, Appendix J/K), `port/spec/FU143_phase_rows.md` (§8 OL-79/OL-84/OL-85), `port/spec/FU96_camera_objects.md`; predecessor plans `docs/superpowers/plans/2026-10-07-fifa96-m2-playability-legs.md` and the two earlier M2 plans.
 
 ## Global Constraints
 
@@ -26,12 +26,12 @@
 
 | Path | Responsibility |
 |---|---|
-| `src/fifa96_loader/fifa96_scene.c` (+ `.h`) | Formation/resource load chain and derived placement inputs (extend) |
-| `src/fifa96_loader/fifa96_iso9660.c` (read-only use) / resource plumbing | `t%s.dat`/`lay%s.fmt` reads through the derived table |
-| `src/fifa96_engine/fifa96_match_entities.c` / `.h` | `kickoff_place`/`place` inputs to real positions; record target seeding (extend) |
-| `src/fifa96_engine/fifa96_match_run.c` / `.h` | Begin wiring, phase-entry drive (extend) |
-| `tests/test_scene.c`, `test_engine_match_entities.c`, `test_engine_match_render.c`, `test_engine_match_frame.c`, `test_engine_m2.c` + `tests/golden/engine/m2-frames.txt` | Fixtures + tape v3 |
-| `docs/ghidra/FU89_scene_assembly.md`, `FU142_installer_arms_scope.md`, `FU143_phase_rows.md`, `docs/ENGINE.md`, `README.md` | RE record and status |
+| `port/src/fifa96_loader/fifa96_scene.c` (+ `.h`) | Formation/resource load chain and derived placement inputs (extend) |
+| `port/src/fifa96_loader/fifa96_iso9660.c` (read-only use) / resource plumbing | `t%s.dat`/`lay%s.fmt` reads through the derived table |
+| `port/src/fifa96_engine/fifa96_match_entities.c` / `.h` | `kickoff_place`/`place` inputs to real positions; record target seeding (extend) |
+| `port/src/fifa96_engine/fifa96_match_run.c` / `.h` | Begin wiring, phase-entry drive (extend) |
+| `port/tests/test_scene.c`, `test_engine_match_entities.c`, `test_engine_match_render.c`, `test_engine_match_frame.c`, `test_engine_m2.c` + `port/tests/golden/engine/m2-frames.txt` | Fixtures + tape v3 |
+| `port/spec/FU89_scene_assembly.md`, `FU142_installer_arms_scope.md`, `FU143_phase_rows.md`, `port/ENGINE.md`, `README.md` | RE record and status |
 | `CMakeLists.txt` | Registration if new sources/tests |
 
 ---
@@ -41,7 +41,7 @@
 ### Task 1: OL-T11-8 — formation/record placement from the resource tables
 
 **Files:**
-- Modify: `src/fifa96_loader/fifa96_scene.c` / `.h`, `src/fifa96_engine/fifa96_match_entities.c` / `.h`, `src/fifa96_engine/fifa96_match_run.c`, `tests/test_scene.c`, `tests/test_engine_match_entities.c`, `tests/test_engine_match_render.c`, `tests/test_engine_m2.c`, `tests/golden/engine/m2-frames.txt` (re-pin iff entities draw — the intended upgrade), `docs/ghidra/FU89_scene_assembly.md` (§11 errata), `docs/ghidra/FU142_installer_arms_scope.md` (OL-T11-8 status), `docs/ghidra/FU96_camera_objects.md` (if placement feeds the camera), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_loader/fifa96_scene.c` / `.h`, `port/src/fifa96_engine/fifa96_match_entities.c` / `.h`, `port/src/fifa96_engine/fifa96_match_run.c`, `port/tests/test_scene.c`, `port/tests/test_engine_match_entities.c`, `port/tests/test_engine_match_render.c`, `port/tests/test_engine_m2.c`, `port/tests/golden/engine/m2-frames.txt` (re-pin iff entities draw — the intended upgrade), `port/spec/FU89_scene_assembly.md` (§11 errata), `port/spec/FU142_installer_arms_scope.md` (OL-T11-8 status), `port/spec/FU96_camera_objects.md` (if placement feeds the camera), `port/ENGINE.md`
 - Read: FU-89 §11 (`0x79B6C..0x79C1C`; `FUN_00073E08 → 0x8C24C → FUN_0008CF60(0x1588A4/0x1590D9)` 11-record loop), FU-142 §6 OL-T11-8 (`FUN_0004A6BC` reading `t%s.dat`/`lay%s.fmt` via `0x14BFC0`), FU-96 (camera ratio/slot data)
 
 **Interfaces:**
@@ -66,7 +66,7 @@
 ### Task 2: OL-84/OL-85 — kickoff phase entry
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` / `.h`, `tests/test_engine_match_frame.c`, `tests/test_engine_m2.c` (+ golden iff the entry upgrades the tape), `docs/ghidra/FU143_phase_rows.md` (§8 OL-84/OL-85 status), `docs/ENGINE.md`
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` / `.h`, `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_m2.c` (+ golden iff the entry upgrades the tape), `port/spec/FU143_phase_rows.md` (§8 OL-84/OL-85 status), `port/ENGINE.md`
 - Read: FU-143 §8.1 (OL-79 static negative; OL-84 kickoff entry; OL-85 extra-time flag), the phase machine (`fifa96_match_phase_machine`), T3's driver wiring
 
 **Interfaces:**
@@ -90,7 +90,7 @@
 ### Task 3: Visible-match acceptance — tape v3, smoke, docs, final review
 
 **Files:**
-- Modify: `tests/test_engine_m2.c`, `tests/golden/engine/m2-frames.txt` (only if not already re-pinned by T1/T2), `docs/ENGINE.md`, `README.md`; no other code unless the smoke uncovers a defect.
+- Modify: `port/tests/test_engine_m2.c`, `port/tests/golden/engine/m2-frames.txt` (only if not already re-pinned by T1/T2), `port/ENGINE.md`, `README.md`; no other code unless the smoke uncovers a defect.
 - Read: spec §5; the T6 v2 tape provenance
 
 **Interfaces:**

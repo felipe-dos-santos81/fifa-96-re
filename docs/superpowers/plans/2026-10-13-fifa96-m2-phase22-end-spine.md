@@ -11,15 +11,15 @@
 **Spec:** `docs/superpowers/specs/2026-10-13-fifa96-m2-phase22-end-spine-design.md` (argue from it; it travels with this plan).
 
 **Design authority (frozen recon — read before touching code):**
-- `docs/ghidra/FU239_et_rearm_and_live_phase.md` — **the ET re-arm + the live phase 2 (T1's authority)**.
-- `docs/ghidra/FU231_end_machine.md` (the three terminal arms), `FU236_regulation_end_route.md`, `FU232_frame_loop_lifecycle.md`, `FU233_extra_time_halves.md`, `FU234_front_end_return.md`, `FU235_match_over_screen.md`, `FU237_extra_time_terminal.md`, `FU238_tape_extension_v22.md`.
+- `port/spec/FU239_et_rearm_and_live_phase.md` — **the ET re-arm + the live phase 2 (T1's authority)**.
+- `port/spec/FU231_end_machine.md` (the three terminal arms), `FU236_regulation_end_route.md`, `FU232_frame_loop_lifecycle.md`, `FU233_extra_time_halves.md`, `FU234_front_end_return.md`, `FU235_match_over_screen.md`, `FU237_extra_time_terminal.md`, `FU238_tape_extension_v22.md`.
 
 ## Global Constraints
 
 - Every address/byte claim cites a disassembly or a reconciled raw-byte read; unprovables become numbered legs, never asserted. (AGENTS.md evidence rules.)
-- The M1 golden `tests/golden/engine/m1-frames.txt` (`09b726b7…`, 691 lines) is **immutable** — stop and report if it moves.
-- The M2 golden `tests/golden/engine/m2-frames.txt` re-pins only with a written reason + frame diff; the v21 **2522-line prefix must stay byte-identical** (FU-238 §2.5).
-- Determinism source of truth is the null backend (`src/fifa96_engine/platform_null.c`).
+- The M1 golden `port/tests/golden/engine/m1-frames.txt` (`09b726b7…`, 691 lines) is **immutable** — stop and report if it moves.
+- The M2 golden `port/tests/golden/engine/m2-frames.txt` re-pins only with a written reason + frame diff; the v21 **2522-line prefix must stay byte-identical** (FU-238 §2.5).
+- Determinism source of truth is the null backend (`port/src/fifa96_engine/platform_null.c`).
 - Engine edits stay in `fifa96_engine`/`fifa96_loader`; the ISO is read-only.
 - Build/test gate: `make check` (strict `-Wall -Wextra -Werror` + full CTest). Single: `ctest --test-dir build -R <name> --output-on-failure`; binaries run from the repo root.
 - Commit types `feat|fix|docs(fuNNN)|test|chore`; work on `main`; `git push origin main` per task.
@@ -27,14 +27,14 @@
 
 ## File Structure
 
-- `src/fifa96_engine/fifa96_match_run.c` — the spine: the period-over re-arm / ET arm (T1), the end machine + the `mark_over` tail (T2/T3), the ET-over dwell + the return (T4). One responsibility: the match frame lifecycle.
-- `include/fifa96_engine/fifa96_match_run.h` — the new `mr->end_word_158822` cell + any new API (T2).
-- `src/fifa96_engine/fifa96_match_run.h`-adjacent act state — the ET-over dwell timer (`mr->act.timer` = `word[0x158818]`) reuse (T4); no new file.
-- `tests/test_engine_match_completion.c` — the end-word/`mark_over` unit home (T2/T3).
-- `tests/test_engine_match_frame.c` — the frame/phase home (T1/T4).
-- `tests/test_match_state.c` — the clock home (T1, characterization only).
-- `tests/test_engine_m2.c` — the acceptance tape + the in-test gate (T5/T6).
-- `tests/golden/engine/m2-frames.txt` — the re-pinned golden (T5).
+- `port/src/fifa96_engine/fifa96_match_run.c` — the spine: the period-over re-arm / ET arm (T1), the end machine + the `mark_over` tail (T2/T3), the ET-over dwell + the return (T4). One responsibility: the match frame lifecycle.
+- `port/src/fifa96_engine/fifa96_match_run.h` — the new `mr->end_word_158822` cell + any new API (T2).
+- `port/src/fifa96_engine/fifa96_match_run.h`-adjacent act state — the ET-over dwell timer (`mr->act.timer` = `word[0x158818]`) reuse (T4); no new file.
+- `port/tests/test_engine_match_completion.c` — the end-word/`mark_over` unit home (T2/T3).
+- `port/tests/test_engine_match_frame.c` — the frame/phase home (T1/T4).
+- `port/tests/test_match_state.c` — the clock home (T1, characterization only).
+- `port/tests/test_engine_m2.c` — the acceptance tape + the in-test gate (T5/T6).
+- `port/tests/golden/engine/m2-frames.txt` — the re-pinned golden (T5).
 
 ---
 
@@ -43,8 +43,8 @@
 **Authority:** FU-239 §1/§3/§4. The ET half currently parks in class-0 phase `0x13` and the clock never ticks (the T1 probe stall). The native re-arms at period-over via `FUN_0004B02C(mode 0)` → `FUN_00088860` (gate phase `0x0C`) → `sit-8` when `dword[0x157AC2]==4` → the ET half runs in class-1 **phase `2`**.
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (the period-over re-arm ~`:3207-3217`; the ET entry `phase_drive` ~`:2584-2696`; the act-`0xC` path).
-- Test: `tests/test_engine_match_completion.c` (+ `tests/test_engine_match_frame.c`).
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (the period-over re-arm ~`:3207-3217`; the ET entry `phase_drive` ~`:2584-2696`; the act-`0xC` path).
+- Test: `port/tests/test_engine_match_completion.c` (+ `port/tests/test_engine_match_frame.c`).
 
 **Interfaces:**
 - Consumes: `mr->state.period`, `mr->state.phase`, `mr->global_157ac2`, `mr->extra_length` (from phase-21).
@@ -52,7 +52,7 @@
 
 - [ ] **Step 1: Characterization test — the ET half must clock.**
 
-In `tests/test_engine_match_completion.c`, add (mirror `test_loopbacked_tiebreak_completion` `:280`, driving the clock with `make_fixture`):
+In `port/tests/test_engine_match_completion.c`, add (mirror `test_loopbacked_tiebreak_completion` `:280`, driving the clock with `make_fixture`):
 
 ```c
 /* FU-239: the extra-time half is class-1 phase 2 and must complete. */
@@ -77,7 +77,7 @@ Expected: FAIL — `fifa96_match_run_period_over_rearm` undefined (or `phase != 
 
 - [ ] **Step 3: Implement the re-arm helper + the sit-8 arm.**
 
-In `src/fifa96_engine/fifa96_match_run.c`, beside the existing phase-`0x0C` gate (`:3207-3217`), factor the period-over re-arm and add the ET discriminator:
+In `port/src/fifa96_engine/fifa96_match_run.c`, beside the existing phase-`0x0C` gate (`:3207-3217`), factor the period-over re-arm and add the ET discriminator:
 
 ```c
 /* FU-239 §1: the period-over re-arm dispatcher (native FUN_0004B02C(mode 0) ->
@@ -92,7 +92,7 @@ void fifa96_match_run_period_over_rearm(fifa96_match_run *mr) {
      staging frames to the play phase; the exact route is FU239-L1. */
 }
 ```
-**No live wiring in T1 (controller ruling, the T1↔T4 conflict):** add the helper + the characterization test **only**. Do **not** modify `phase_drive` or the half-time call site — a live re-arm at the ET chooser fires at engine step 2502 and changes M2 transcript frames 2503–2522 (`state=19`→`state=2`), breaking T5's byte-identical v21 prefix and the ET-entry riders (`tests/test_engine_m2.c:2780`, `:3900`). **T4 owns the ET-entry screen dwell + the live re-arm call**, which fires only after the dwell (step > 2522).
+**No live wiring in T1 (controller ruling, the T1↔T4 conflict):** add the helper + the characterization test **only**. Do **not** modify `phase_drive` or the half-time call site — a live re-arm at the ET chooser fires at engine step 2502 and changes M2 transcript frames 2503–2522 (`state=19`→`state=2`), breaking T5's byte-identical v21 prefix and the ET-entry riders (`port/tests/test_engine_m2.c:2780`, `:3900`). **T4 owns the ET-entry screen dwell + the live re-arm call**, which fires only after the dwell (step > 2522).
 
 - [ ] **Step 4: Run the test — expect pass.**
 
@@ -104,7 +104,7 @@ Expected: PASS.
 Run: `make check` — Expected: green (the phase-21 lifecycle tests still pass; no phase row wired → census unchanged).
 
 ```bash
-git add src/fifa96_engine/fifa96_match_run.c tests/test_engine_match_completion.c
+git add port/src/fifa96_engine/fifa96_match_run.c port/tests/test_engine_match_completion.c
 git commit -m "feat(engine): the extra-time half live via the sit-8 re-arm (phase 2)"
 ```
 
@@ -115,8 +115,8 @@ git commit -m "feat(engine): the extra-time half live via the sit-8 re-arm (phas
 **Authority:** FU-231 §3/§4, FU-236, FU-239 §5. Three arms: regulation-over `1` (the flag-clear phase-`0xC` terminal `0x8BCD9`), ET-over `2` (the `0x13`/`0x14` dwell past the timer gate → `0x8BD8A`/`0x8BDD4`), and the no-end-word screen `[0x105FFC]=5` (`0x37F54`, no engine cell → leg).
 
 **Files:**
-- Modify: `include/fifa96_engine/fifa96_match_run.h` (the cell), `src/fifa96_engine/fifa96_match_run.c` (init `:2035`/begin `:2157` + the machine).
-- Test: `tests/test_engine_match_completion.c`.
+- Modify: `port/src/fifa96_engine/fifa96_match_run.h` (the cell), `port/src/fifa96_engine/fifa96_match_run.c` (init `:2035`/begin `:2157` + the machine).
+- Test: `port/tests/test_engine_match_completion.c`.
 
 **Interfaces:**
 - Consumes: `mr->state.phase`, `mr->state.period`, `mr->global_157ac0`, `mr->global_157ac2`, `mr->act.timer` (= `word[0x158818]`).
@@ -165,7 +165,7 @@ Stage it: in the frame body, when `mr->end_word_158822 == 0u`, set it from `fifa
 
 - [ ] **Step 5: Commit.**
 ```bash
-git add include/fifa96_engine/fifa96_match_run.h src/fifa96_engine/fifa96_match_run.c tests/test_engine_match_completion.c
+git add port/src/fifa96_engine/fifa96_match_run.h port/src/fifa96_engine/fifa96_match_run.c port/tests/test_engine_match_completion.c
 git commit -m "feat(engine): the FUN_0008BAF0 end machine -> the end word cell"
 ```
 
@@ -176,8 +176,8 @@ git commit -m "feat(engine): the FUN_0008BAF0 end machine -> the end word cell"
 **Authority:** FU-232 §2/§4, FU-237. `mark_over` iff the end word is set **and** `global_157ac2 >= 2` — replacing the phase-21 proxy `end_word_decided` (`fifa96_match_run.c:4185`), which excludes the ET-over.
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (the `mark_over` tail `:4177-4192`).
-- Test: `tests/test_engine_match_completion.c` (`test_mark_over_only_past_half_time` `:360` + a new ET-over pin).
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (the `mark_over` tail `:4177-4192`).
+- Test: `port/tests/test_engine_match_completion.c` (`test_mark_over_only_past_half_time` `:360` + a new ET-over pin).
 
 **Interfaces:**
 - Consumes: `mr->end_word_158822` (T2), `mr->global_157ac2`, `mr->global_157ac0`.
@@ -221,7 +221,7 @@ In the frame body, when `mr->end_word_158822 == 2u` (the ET-over), **clear it** 
 - [ ] **Step 4: Run — expect pass.** `ctest --test-dir build -R test_engine_match_completion --output-on-failure`
 - [ ] **Step 5: Commit.**
 ```bash
-git add src/fifa96_engine/fifa96_match_run.c tests/test_engine_match_completion.c
+git add port/src/fifa96_engine/fifa96_match_run.c port/tests/test_engine_match_completion.c
 git commit -m "feat(engine): the mark_over tail keyed to the end word (FU-232)"
 ```
 
@@ -234,8 +234,8 @@ git commit -m "feat(engine): the mark_over tail keyed to the end word (FU-232)"
 **Authority:** FU-235 §4 (D1: the `0x960` dwell is the `word[0x158818]` timer, the bound is `> 0x168`), FU-234 §4.2/§4.3 (the return), FU-239 §5. D1 = **model it** (a phase-`0xC` dwell on `mr->act.timer`); the `0x960`/`0x780` "camera" is a ball lead (legs L14.8.a), not a sink.
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (the dwell gate upstream of `mark_over` `:4184`; the `run_end`/`post_exit` return `:4231`/`:1781`).
-- Test: `tests/test_engine_match_frame.c` (the screen state) + `tests/test_engine_match_completion.c`.
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (the dwell gate upstream of `mark_over` `:4184`; the `run_end`/`post_exit` return `:4231`/`:1781`).
+- Test: `port/tests/test_engine_match_frame.c` (the screen state) + `port/tests/test_engine_match_completion.c`.
 
 **Interfaces:**
 - Consumes: `mr->end_word_158822` (T2/T3), `mr->act.timer`.
@@ -247,7 +247,7 @@ git commit -m "feat(engine): the mark_over tail keyed to the end word (FU-232)"
 - [ ] **Step 4: Run — expect pass.** `ctest --test-dir build -R 'test_engine_match_frame|test_engine_match_completion' --output-on-failure`
 - [ ] **Step 5: Commit.**
 ```bash
-git add src/fifa96_engine/fifa96_match_run.c tests/test_engine_match_frame.c
+git add port/src/fifa96_engine/fifa96_match_run.c port/tests/test_engine_match_frame.c
 git commit -m "feat(engine): the match-over screen dwell + the front-end return (D1)"
 ```
 
@@ -258,8 +258,8 @@ git commit -m "feat(engine): the match-over screen dwell + the front-end return 
 **Authority (phase-22b recon, `t4b-recon/g1..g8`):** at *each* ET-half completion the native chooser writes phase `0x13`/`0x14` + act `0xC` and rolls `[0x157AC2]` (2→3→4); the sit-8 re-arm fires **only post-ET (index 4)** — never during the ET halves (G1/G8). The ET-over terminal is `phase 0x13/0x14` → dwell `word[0x158818] > 0x4B0` → `word[0x158822]=2` + latch `[0x10F360]` (G2). **FU-232-L6 closed (G3):** the ET-over consume is self-terminating — it clears the word (`0x4B29B`) and the loop resumes; no over-screen.
 
 **Files:**
-- Modify: `src/fifa96_engine/fifa96_match_run.c` (`:4215-4217` the re-arm guard; `:4237-4238` the dwell accrual; the comments `:4202-4236`).
-- Test: `tests/test_engine_match_completion.c`, `tests/test_engine_match_frame.c`.
+- Modify: `port/src/fifa96_engine/fifa96_match_run.c` (`:4215-4217` the re-arm guard; `:4237-4238` the dwell accrual; the comments `:4202-4236`).
+- Test: `port/tests/test_engine_match_completion.c`, `port/tests/test_engine_match_frame.c`.
 
 **Interfaces:**
 - Consumes: `fifa96_match_run_period_over_rearm` (T1), `mr->end_word_158822` (T2/T3), the terminal dwell (T4).
@@ -278,8 +278,8 @@ git commit -m "feat(engine): the match-over screen dwell + the front-end return 
 **Authority:** FU-238 §2.2/§2.5, the fact sheet `t6a`/`t6b`. Additive: the v21 2522-prefix stays byte-identical; expected `N ≈ 3000–4500`.
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (the directives `:1684-1686`, the anchors `:2771-2785`, the stop `:3105-3115`, the `m2_result` `:2041-2044`, the caps `:1647-1648`, the additivity gate `:4561-4589`, the `assert(exit_step<0)` `:4349`).
-- Modify: `tests/golden/engine/m2-frames.txt` (re-pin).
+- Modify: `port/tests/test_engine_m2.c` (the directives `:1684-1686`, the anchors `:2771-2785`, the stop `:3105-3115`, the `m2_result` `:2041-2044`, the caps `:1647-1648`, the additivity gate `:4561-4589`, the `assert(exit_step<0)` `:4349`).
+- Modify: `port/tests/golden/engine/m2-frames.txt` (re-pin).
 
 **Interfaces:**
 - Consumes: T1–T4b (the live ET half + the terminal + the return).
@@ -289,12 +289,12 @@ git commit -m "feat(engine): the match-over screen dwell + the front-end return 
 
 - [ ] **Step 1: Extend the tape + the stop.** Add the directives `M2_M_ET_HALF2` / `M2_M_ET_TERMINAL` / `M2_M_ET_OVER` / `M2_M_RETURN` + `M2_POST_RETURN_FRAMES 20` (per FU-238 §2.2), and replace the `M2_POST_PERIOD_END_FRAMES`-past-ET-entry stop with the return-window break (t1-facts §3). Raise `M2_STEP_CAP` to the measured `N` and `M2_TRANSCRIPT_CAP` to `1u << 24`.
 - [ ] **Step 2: Record + assert the anchors** — the ET half completes → the terminal (`end_word_158822 == 2u`) → the ET-over → the return (`exit_step > 0`). Flip `assert(res.exit_step < 0)` → `> 0` (`:4349`) and the additivity gate constant `792` → `2522` (`:4561-4589`).
-- [ ] **Step 3: Run — expect the new transcript.** `./build/test_engine_m2 > /tmp/m2-v22.txt`; verify the prefix: `head -2522 /tmp/m2-v22.txt | cmp - tests/golden/engine/m2-frames.txt` (clean).
-- [ ] **Step 4: Re-pin with a written reason.** `cp tests/golden/engine/m2-frames.txt /tmp/m2-v21.txt`; `cp /tmp/m2-v22.txt tests/golden/engine/m2-frames.txt`; record the old/new sha + line counts + the first-diff line in the plan's completion note + the commit body (the FU-238 §:287-306 template).
+- [ ] **Step 3: Run — expect the new transcript.** `./build/test_engine_m2 > /tmp/m2-v22.txt`; verify the prefix: `head -2522 /tmp/m2-v22.txt | cmp - port/tests/golden/engine/m2-frames.txt` (clean).
+- [ ] **Step 4: Re-pin with a written reason.** `cp port/tests/golden/engine/m2-frames.txt /tmp/m2-v21.txt`; `cp /tmp/m2-v22.txt port/tests/golden/engine/m2-frames.txt`; record the old/new sha + line counts + the first-diff line in the plan's completion note + the commit body (the FU-238 §:287-306 template).
 - [ ] **Step 5: Prove determinism + commit.**
 Run: `make check` — Expected green; then
 ```bash
-git add tests/test_engine_m2.c tests/golden/engine/m2-frames.txt
+git add port/tests/test_engine_m2.c port/tests/golden/engine/m2-frames.txt
 git commit -m "test(engine): extend + re-pin the M2 golden to the end spine (v21->v22)"
 ```
 
@@ -305,8 +305,8 @@ git commit -m "test(engine): extend + re-pin the M2 golden to the end spine (v21
 **Authority:** FU-238 §2.5/§3.3, the fact sheets `t6b`/`conv`.
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (`run_phase22_riders` beside `run_phase21_riders` `:4090-4250`, the provenance block `:1-1618`).
-- Modify: `docs/ghidra/FU233_extra_time_halves.md`, `docs/ghidra/FU238_tape_extension_v22.md` (errata cross-refs to FU-239), `docs/PROGRESS.md`, `docs/ENGINE.md` (the slice closure).
+- Modify: `port/tests/test_engine_m2.c` (`run_phase22_riders` beside `run_phase21_riders` `:4090-4250`, the provenance block `:1-1618`).
+- Modify: `port/spec/FU233_extra_time_halves.md`, `port/spec/FU238_tape_extension_v22.md` (errata cross-refs to FU-239), `docs/PROGRESS.md`, `port/ENGINE.md` (the slice closure).
 
 **Interfaces:**
 - Consumes: the v22 golden (T5).
@@ -315,11 +315,11 @@ git commit -m "test(engine): extend + re-pin the M2 golden to the end spine (v21
 - [ ] **Step 1: Add `run_phase22_riders`** with FU-238 §3.3's 7 classes: reg-over word 1; ET-over word 2; the frame-loop consumer; the ET halves live; the front-end return; the screen timing gate; the additivity/determinism gate. Each is a prose-comment break + an aborting assert (the `conv-facts` mutation-RED convention).
 - [ ] **Step 2: Strengthen the in-test gate** — assert the v21 2522-prefix is byte-identical inside the producer (`:4569-4589`).
 - [ ] **Step 3: Land the errata** — quoted cross-refs: FU-233 §3 / FU-238 §2.3 → FU-239 (§4: the ET half is phase `2`, `0x13`/`0x14` is the ET-over screen); FU-213 §11 → FU-239 §1 (`FUN_00088860` is the dispatcher).
-- [ ] **Step 4: Update the records** — close the phase-22 slice in `docs/PROGRESS.md`; add the gates/legs to `docs/ENGINE.md`. Do **not** change the README census line (no row wired).
+- [ ] **Step 4: Update the records** — close the phase-22 slice in `docs/PROGRESS.md`; add the gates/legs to `port/ENGINE.md`. Do **not** change the README census line (no row wired).
 - [ ] **Step 5: Run + commit.**
 Run: `make check` — green.
 ```bash
-git add tests/test_engine_m2.c docs/
+git add port/tests/test_engine_m2.c docs/
 git commit -m "test(engine): phase-22 mutation-RED riders + the additivity gate + errata"
 ```
 

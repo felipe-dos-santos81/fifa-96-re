@@ -25,7 +25,7 @@ In-scope (this slice):
 2. **Bound `3ed8`**: entry conditions, return/exit shape, its relationship to the load path; full internals deferred (named future slice if unbounded).
 3. **Entry header**: what `entry@11bd:2382` establishes before calling `2d9c` (segments, stack, obvious argv/env handling) — header level, not a full CRT RE.
 4. **Rename + plate comments** for CONFIRMED members only; `save_program` after each batch.
-5. **Docs**: extend `docs/ghidra/loader_rename_map.md` (`## Boot preamble` section); no FU-3 changes unless a breakpoint target moves (then a one-line correction, not a rewrite).
+5. **Docs**: extend `port/spec/loader_rename_map.md` (`## Boot preamble` section); no FU-3 changes unless a breakpoint target moves (then a one-line correction, not a rewrite).
 
 Out-of-scope: full `3ed8` internals (named follow-up if needed), codec/FU-2 CRC, trace execution, rendering/audio/simulation, C/test/CMake changes (docs/Ghidra-only slice — 10-test regression gate), CD writes.
 
@@ -40,9 +40,9 @@ Ghidra (project fifa96, program /fifa96.exe):
   FUN_11bd_2f7f / 614a / 6028 / 627f / 2d43 / 6a2d   # full roles
   FUN_11bd_3ed8                                        # role bound only
   entry@11bd:2382                                      # header-level setup
-docs/ghidra/
+port/spec/
   loader_rename_map.md   # += ## Boot preamble rows
-src/ tests/              # UNCHANGED
+src/ port/tests/              # UNCHANGED
 ```
 
 Data flow under test: `entry` → (`65e1`/`66e1`/`191d`/`614a` prologue…) → char loops (`2f7f`) → `dispatch_object_load` [→ `6028` ? `2d43` + second dispatch] → `[0x2f]>2` ? (`3ed8` → `2d99`? → `6a2d` → `627f`) : (`22ad` noreturn). The pass records which shape the disassembly actually shows (the parenthesized callees are leads from the `2d9c` decompile, not confirmed roles).
@@ -59,7 +59,7 @@ Data flow under test: `entry` → (`65e1`/`66e1`/`191d`/`614a` prologue…) → 
 
 ## 7. Non-goals
 
-No `3ed8` internals, no codec, no FU-2, no trace execution, no C/tests/CMake, no rendering/audio, no DOSBox changes, no CD writes.
+No `3ed8` internals, no codec, no FU-2, no trace execution, no C/port/tests/CMake, no rendering/audio, no DOSBox changes, no CD writes.
 
 ## 8. Next step
 

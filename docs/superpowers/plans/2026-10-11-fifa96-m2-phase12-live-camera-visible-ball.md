@@ -8,7 +8,7 @@
 
 **Tech Stack:** C11 (`-Wall -Wextra -Werror`), CMake/CTest, ASan/UBSan (test TUs; T3 extends to the engine target), Ghidra MCP read-only, SDL3 smoke (`make game`, `DISPLAY=:1`).
 
-**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `docs/ghidra/FU148…`, `FU75…`, `FU145…`; predecessor `docs/superpowers/plans/2026-10-11-fifa96-m2-phase11-visible-ball.md` + its final review.
+**Spec:** `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`; slices `port/spec/FU148…`, `FU75…`, `FU145…`; predecessor `docs/superpowers/plans/2026-10-11-fifa96-m2-phase11-visible-ball.md` + its final review.
 
 ## Global Constraints
 
@@ -23,7 +23,7 @@
 
 ## Wave R — parallel read-only recon (gate: four FU slices + reports, committed)
 
-R1–R4 run **concurrently**. Each is read-only on the repo: it writes ONLY its new `docs/ghidra/FU1NN_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-153…FU-156 in one `docs(fu153-fu156)` commit after the wave returns.
+R1–R4 run **concurrently**. Each is read-only on the repo: it writes ONLY its new `port/spec/FU1NN_*.md` slice and its workspace report; **no git write commands, no edits to existing files, no code**. The controller commits FU-153…FU-156 in one `docs(fu153-fu156)` commit after the wave returns.
 
 ### R1 → FU-153: `0x7CD60` second arm + the band-2 crossing (unblocks 15.a)
 - Question: what live event can produce a trajectory crossing band-2 (`d == 0x70` exactly) at a kick frame? Derive the `0x7CD60` second arm's full preconditions and its missing tracked-side producer (leg 15.c/OL-68): arm selects `rec == [0x1577CA]`; `[target+0x20] == 0`; `FUN_000786A0`; `[+0x820] = 0x3C`.
@@ -47,28 +47,28 @@ R1–R4 run **concurrently**. Each is read-only on the repo: it writes ONLY its 
 
 ### Task 1: T1 — follow-cam wiring (from R1/R4)
 
-**Files:** per R1's recommendation (engine run/camera paths, possibly `fifa96_ball_pairing.c` second arm, `fifa96_match_run.c`); tests + FU-153 status + `docs/ENGINE.md`.
+**Files:** per R1's recommendation (engine run/camera paths, possibly `fifa96_ball_pairing.c` second arm, `fifa96_match_run.c`); tests + FU-153 status + `port/ENGINE.md`.
 **Produces:** the live event crossing band-2 at a kick frame → the follow arm holds → **smoke shows the camera visibly following**.
 **Gate T1:** visible follow (or the deepest provable step with the next-hop as a numbered leg).
 - [ ] RED test → implement → GREEN → gate (`make check` + golden decision + smoke `p12-t1-*`) → commit `feat(engine,fu153): live follow — band-2 crossing (15.a)`.
 
 ### Task 2: T2 — ball-visibility wiring (from R2; coupled to T1)
 
-**Files:** per R2's recommendation (engine camera/ball paths, render seam); tests + FU-154 status + `docs/ENGINE.md`.
+**Files:** per R2's recommendation (engine camera/ball paths, render seam); tests + FU-154 status + `port/ENGINE.md`.
 **Produces:** the camera place/pan live in open play → the ball's lead lands on canvas → **smoke shows the ball on screen**.
 **Gate T2:** visible ball (or deepest provable + numbered leg).
 - [ ] RED test → implement → GREEN → gate + smoke `p12-t2-*` → commit `feat(engine,fu154): on-screen ball — live camera place (L14.8.e)`.
 
 ### Task 3: T3 — engine sanitizer build
 
-**Files:** `CMakeLists.txt` (engine target + `fifa96` executable flags), any real UB fixes surfaced (or legs), `docs/ENGINE.md`.
+**Files:** `CMakeLists.txt` (engine target + `fifa96` executable flags), any real UB fixes surfaced (or legs), `port/ENGINE.md`.
 **Produces:** `fifa96_engine` and the SDL3 main built with `-fsanitize=address,undefined -fno-sanitize-recover=all`; suite green; **triage clause:** pre-existing UB found → fix real issues or leg-number them with byte/stack evidence; do not derail the phase.
 **Gate T3:** sanitized engine build green (or triaged with legs).
 - [ ] Enable → run full suite + M1/M2 → triage → commit `build(engine): sanitize the engine target (phase-12 T3)`.
 
 ### Task 4: T4 — acceptance v12 + smoke + docs + final review
 
-**Files:** `tests/test_engine_m2.c` (+ golden iff genuinely moved — reason + diff), `docs/ENGINE.md`, `docs/PROGRESS.md`, README title check (census), `docs/screens/*`.
+**Files:** `port/tests/test_engine_m2.c` (+ golden iff genuinely moved — reason + diff), `port/ENGINE.md`, `docs/PROGRESS.md`, README title check (census), `docs/screens/*`.
 **Produces:** v12 strata for the phase's visible legs; the honest smoke record (follow? ball?); remaining forcings with legs; final-review material.
 - [ ] Tests → tape decision → smoke → docs → commit `test(engine): phase-12 acceptance tape v12 and docs` → whole-plan final review (one fix wave max) → close.
 

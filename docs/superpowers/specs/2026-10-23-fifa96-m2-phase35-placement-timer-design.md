@@ -37,7 +37,7 @@ distribution and the remaining legs.
 - The acceptance design exists but is unpinned: **FU329 Branch B** (the
   undriven tape, the arm-B tuple, `has_slot 0`, `|v0| ≥ 1`, the per-axis
   `T(s)`, the segment cells; no staged slot/seed/face cells). The phase-33
-  inversion's A3 window (`tests/test_engine_m2.c:3972-3979`) must re-pin with
+  inversion's A3 window (`port/tests/test_engine_m2.c:3972-3979`) must re-pin with
   the new pacing (FU329's design; the A3 constants ride this producer).
 - Pins: M1 `09b726b7…` immutable; M2 `d5446144…` is the current pin (the
   phase-33 re-pin); census `60/80 = 75%`.
@@ -95,7 +95,7 @@ distribution and the remaining legs.
 Two stages, the phase-33/34 shape:
 
 - **Stage 1 (recon-ahead wave):** four read-only slices → FU330–FU333, one
-  agent each, drafts under `docs/ghidra/`, whole-wave review + quoted errata,
+  agent each, drafts under `port/spec/`, whole-wave review + quoted errata,
   promoted one-per-commit. Probes are out-of-tree; the repo receives only
   the four draft docs.
 - **Stage 2 (SDD execution):** the producer plan. Sketch: **P1** the native

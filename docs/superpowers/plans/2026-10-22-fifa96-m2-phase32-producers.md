@@ -39,7 +39,7 @@
 ### Task 1: The natural non-zero-delta witness
 
 **Files:**
-- Modify: `tests/test_engine_m2.c` (a new pass beside `run_natural_claim_pass`; its call in the M2 test main; the shared helpers)
+- Modify: `port/tests/test_engine_m2.c` (a new pass beside `run_natural_claim_pass`; its call in the M2 test main; the shared helpers)
 - Test: the same file's focused M2 test
 
 **Interfaces:**
@@ -52,7 +52,7 @@
 - [ ] **Step 4: Assert the event/claim/pan.** Event `f=1529`: code 5, seed `−0x40`, `trk 2`, `timer 0/12`, `ramp 12`; claim `f=1530`: `carrier 2`; motion `f=1530..1556`: 27 changed frames; stop `f=1557` at `(−0x90,0,0)`; `pan 0→4`; speed `5→3→2→1→0`; Y=Z=0; armer/OOB 0; `follow 0`.
 - [ ] **Step 5: Assert the delta-run/off-zero separation.** The changed-frame run is 27; the off-zero count is recorded and is **not** the count (assert the relation; never assert `off_zero == 27`).
 - [ ] **Step 6: The trace cross-check and the zero control.** The trace is 1 header + 3 598 body lines, `trk=2` on the pan lines, `follow=0` on all; `run_natural_pass` is unchanged (3 598 granted frames, zero camera).
-- [ ] **Step 7: GREEN and the suite.** Focused test PASS; `make check` 111/111; `./build/test_engine_m1 | cmp - tests/golden/engine/m1-frames.txt`; `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt`. The frame-path fixture is the existing `test_live_claim_pan_row04_half_line` (same chain; producer inputs only); the T2 pair remains the unit pin. No new gate-staging fixture and no new mutation rider.
+- [ ] **Step 7: GREEN and the suite.** Focused test PASS; `make check` 111/111; `./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt`; `./build/test_engine_m2 | cmp - port/tests/golden/engine/m2-frames.txt`. The frame-path fixture is the existing `test_live_claim_pan_row04_half_line` (same chain; producer inputs only); the T2 pair remains the unit pin. No new gate-staging fixture and no new mutation rider.
 - [ ] **Step 8: Commit and push** `test(fu320): the non-zero-delta natural pan witness`.
 
 ---
@@ -79,7 +79,7 @@
 ### Task 3: The close-out
 
 **Files:**
-- Modify: `docs/ENGINE.md` (append the phase-32 register), `docs/PROGRESS.md` (append the narrative), `docs/superpowers/specs/2026-10-22-fifa96-m2-phase32-face-aligned-pan-design.md` (append the plan erratum)
+- Modify: `port/ENGINE.md` (append the phase-32 register), `docs/PROGRESS.md` (append the narrative), `docs/superpowers/specs/2026-10-22-fifa96-m2-phase32-face-aligned-pan-design.md` (append the plan erratum)
 - Test: the final verification commands
 
 **Interfaces:**

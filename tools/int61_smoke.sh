@@ -5,7 +5,7 @@ DIR=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$(mktemp -d -t fifa96int61.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 [ -f "$DIR/build/FIFACAP.COM" ] || { echo "missing build/FIFACAP.COM (make tsr)" >&2; exit 1; }
-nasm -f bin "$DIR/tsr/probe_stub.asm" -o "$WORK/STUB.COM"
+nasm -f bin "$DIR/_tools/tsr/probe_stub.asm" -o "$WORK/STUB.COM"
 cp "$DIR/build/FIFACAP.COM" "$WORK/"
 cat > "$WORK/dosbox.conf" <<EOF
 [dosbox]

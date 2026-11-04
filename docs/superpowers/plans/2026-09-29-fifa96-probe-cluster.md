@@ -4,16 +4,16 @@
 
 **Goal:** Delimit the `3ed8` config-probe cluster (four probe callees + SI mode-word producer) with instruction evidence and map rows.
 
-**Architecture:** Read-only Ghidra evidence pass (resolve body → decompile → callees → rename CONFIRMED + plate + save), rows appended to `docs/ghidra/loader_rename_map.md` under `## 3ed8 probe cluster`. The `42de..4368` mode-word dispatch arms are explicitly out of scope (follow-up slice). No C, no tests, no CMake.
+**Architecture:** Read-only Ghidra evidence pass (resolve body → decompile → callees → rename CONFIRMED + plate + save), rows appended to `port/spec/loader_rename_map.md` under `## 3ed8 probe cluster`. The `42de..4368` mode-word dispatch arms are explicitly out of scope (follow-up slice). No C, no tests, no CMake.
 
 **Tech Stack:** Ghidra-MCP (`get_function_by_address`, `decompile_function`, `get_function_callees`, `rename_function`, `set_comment`, `save_program`), `grep` (content checks), CTest (regression gate only).
 
-**Spec:** `docs/ghidra/loader_rename_map.md`, `### 3ed8 verdict: NEEDS-OWN-SLICE` (entry/exit/38-callee facts) + approved chat design 2026-09-29 (probe cluster first, dispatch later; one-FUN-layer scope guard on the SI producer).
+**Spec:** `port/spec/loader_rename_map.md`, `### 3ed8 verdict: NEEDS-OWN-SLICE` (entry/exit/38-callee facts) + approved chat design 2026-09-29 (probe cluster first, dispatch later; one-FUN-layer scope guard on the SI producer).
 
 ## Global Constraints
 
 - No C, test, or CMake changes in this slice; the 10-test suite must stay green untouched.
-- Never write to `/media/felipe/FIFAPCCD/` or `game/FIFAPCCD96.iso`.
+- Never write to `/media/felipe/FIFAPCCD/` or `data/game/FIFAPCCD96.iso`.
 - No address/byte/algorithm claim without an instruction/`xxd`/golden citation; disassembly wins over prior descriptions.
 - No `decode_*` name without an observed byte transform; NOT-CONFIRMED members get no rename and no map row.
 - Scope guard: the SI-producer hunt may descend at most one additional FUN layer past the four probes; if the producer is deeper, name the boundary and stop — remainder defers to the dispatch slice.
@@ -27,16 +27,16 @@ One subsystem (probe cluster) in two gates: four probe callees (Task 1), SI mode
 
 ## File Structure
 
-- Modify: `docs/ghidra/loader_rename_map.md` — append `## 3ed8 probe cluster` section (Task 1 probe rows, Task 2 producer row + boundary note).
+- Modify: `port/spec/loader_rename_map.md` — append `## 3ed8 probe cluster` section (Task 1 probe rows, Task 2 producer row + boundary note).
 - Modify: Ghidra program `/fifa96.exe` — evidence-based renames + plate comments, CONFIRMED only (Tasks 1–2).
-- `src/`, `tests/`, `CMakeLists.txt`, headers — UNTOUCHED.
+- `src/`, `port/tests/`, `CMakeLists.txt`, headers — UNTOUCHED.
 
 ---
 
 ### Task 1: Four probe callees + renames + map rows
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append `## 3ed8 probe cluster` section)
+- Modify: `port/spec/loader_rename_map.md` (append `## 3ed8 probe cluster` section)
 - Modify: Ghidra program `/fifa96.exe` (renames + plate comments, CONFIRMED only, then `save_program`)
 
 **Interfaces:**
@@ -58,7 +58,7 @@ For each CONFIRMED probe: `rename_function` to an evidence-based name (verb-tier
 
 - [ ] **Step 3: Append the map section**
 
-Append to `docs/ghidra/loader_rename_map.md`:
+Append to `port/spec/loader_rename_map.md`:
 ```markdown
 ## 3ed8 probe cluster (verified 2026-09-29, program `/fifa96.exe`)
 
@@ -78,7 +78,7 @@ Expected: PASS — 10/10 green (docs/Ghidra only).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/ghidra/loader_rename_map.md
+git add port/spec/loader_rename_map.md
 git commit -m "docs: delimit 3ed8 config-probe callees with instruction evidence" || true
 ```
 
@@ -87,7 +87,7 @@ git commit -m "docs: delimit 3ed8 config-probe callees with instruction evidence
 ### Task 2: SI mode-word producer + regression closeout
 
 **Files:**
-- Modify: `docs/ghidra/loader_rename_map.md` (append producer row + boundary note to the `## 3ed8 probe cluster` section)
+- Modify: `port/spec/loader_rename_map.md` (append producer row + boundary note to the `## 3ed8 probe cluster` section)
 - Modify: Ghidra program `/fifa96.exe` (rename + plate ONLY if the producer role is CONFIRMED, then `save_program`)
 
 **Interfaces:**
@@ -108,10 +108,10 @@ CONFIRMED producer: append row `| FUN_11bd_<off> | 11bd:<off> | <source-to-dispa
 - [ ] **Step 3: Verify suite + content and commit**
 
 Run: `cmake -S . -B build && cmake --build build && ctest --test-dir build`
-Expected: PASS — 10/10 green. Verify: `grep -c "3ed8 probe cluster" docs/ghidra/loader_rename_map.md` is nonzero.
+Expected: PASS — 10/10 green. Verify: `grep -c "3ed8 probe cluster" port/spec/loader_rename_map.md` is nonzero.
 
 ```bash
-git add docs/ghidra/loader_rename_map.md
+git add port/spec/loader_rename_map.md
 git commit -m "docs: trace SI mode-word producer and close probe-cluster regression" || true
 ```
 
