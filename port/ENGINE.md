@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-78/78 native dispatch bodies ported (100%) — 56/80 dispatch slots wired
+78/78 native dispatch bodies ported (100%) — 57/80 dispatch slots wired
 (62/80 install-live)
 (37 action + the wired phase rows 0x02, 0x0D, 0x10, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
@@ -8200,3 +8200,27 @@ free-record bind) and `0x4BDF8`/`0x4BD38` (the `0x1587D4` strip readers);
   hold test per arm plus the full 0 -> 9 drive) and the full CTest run are
   green; M1 `09b726b7…` and M2 `6aa2703b…` are byte-identical (`cmp`), no
   re-pin.
+## M2 phase-`0x1F` one-shot producer (2026-11-04) — natural wired `56/80 → 57/80`
+
+The native sit-0xC install is invoke-now: `0x8AF0E MOV EBX,1` /
+`0x8AF13 MOV EAX,9` / `0x8AF18 XOR EDX,EDX` / `0x8AF1A CALL 0x888FC`, and
+`0x8892E TEST BX,BX` / `0x88937 CALL dword[0x158808]` runs the stage-0 body in
+the install frame. The engine previously passed `invoke=0` for act 9, then the
+begin reset cleared the slot before any act tick.
+
+`match_run_situation_side` now passes `invoke=1` for `out.act == 9` (the same
+flag already used for acts 2 and 7). The live begin path executes
+`fifa96_match_action_phase_1F` stage 0 once, then the native-shaped match-init
+reset and act-0xA install supersede it (`0x4B095`/`0x4B0A5`). This is the only
+ordinary-match reach; the sustained restart chain remains Practise-only
+(`[0x14C32A]`).
+
+Census: phase `0x1F` leaves `fifa96_match_port_blocked`; `FIFA96_MATCH_PORT_BLOCKED_ROWS`
+is 5, install-live is 62/80, and the natural count is **57/80 = 71%**. The
+port-coverage title stays 78/78 = 100%.
+
+M2 moves at the restart window: first differing transcript line frame 466
+(`state=21/1-0` → `state=4/1-0`), 5985 of 6522 lines; the re-derived pins are
+`gate_step - phase15_step` 96 → 93, `phase4_step - phase15_step` 100 → 96, and
+`restart_step - phase4_step` 303 → 304. The final re-pin is done with the
+other body branches in the same commit; M1 `09b726b7…` is exact.

@@ -96,7 +96,7 @@ struct fifa96_match_blocked_row {
   uint8_t domain;
   uint8_t code;
 };
-#define FIFA96_MATCH_PORT_BLOCKED_ROWS 6u
+#define FIFA96_MATCH_PORT_BLOCKED_ROWS 5u
 extern const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS];
 

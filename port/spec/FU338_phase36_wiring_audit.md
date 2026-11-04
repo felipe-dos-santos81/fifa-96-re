@@ -110,10 +110,13 @@ mirrors lost the high byte and, reading 0 == 0 live, always chose 3).
 
 Consequences for this audit's numbers:
 
-- `fifa96_match_port_blocked` is `[6]` (`FIFA96_MATCH_PORT_BLOCKED_ROWS 6`):
-  action `0x13`/`0x1F`/`0x28`/`0x2A` and phase `0x06`/`0x1F` remain.
+- `fifa96_match_port_blocked` is `[5]` (`FIFA96_MATCH_PORT_BLOCKED_ROWS 5`):
+  action `0x13`/`0x1F`/`0x28`/`0x2A` and phase `0x06` remain. Phase `0x1F`
+  is closed by the native one-shot sit-0xC invoke (`0x8AF0E EBX=1` /
+  `0x88937 CALL [0x158808]`); the begin act-9 stage-0 run is observable before
+  the match-init act-0xA supersession.
 - Install-live stays `37 action + 25 phase = 62/80`; the **natural-reach**
-  count moves `62 - 6 = 56/80` (was `62 - 7 = 55`).
+  count moves `62 - 5 = 57/80` (was `62 - 7 = 55`).
 - The M2 acceptance tape is untouched here; the controller does the final
   re-pin (expected: row `0x25` joins the transcript, first diff frame 3299,
   3224 lines, `state=` tags unchanged). The audit closes no other leg.

@@ -3542,3 +3542,9 @@ The row was already registered and counted, so the census does not move
 sinks (`0x651F0`/`0x974F0`/`0x8F188`), `0x4C374`'s reader-less
 `word[0x157A68]`, the `0x45001` gate, the ball-record `+0x44` and arm 9's
 `[0x157AC0]` write-back (FU209-L5) remain the carried legs.
+- **phase-0x1F one-shot invoke (2026-11-04).** The native sit-0xC install uses
+  `0x8AF0E EBX=1` and invokes act 9 in the install frame; the engine now passes
+  `invoke=1` for act 9. This closes phase `0x1F` in the natural-reach census
+  (blocked rows 6 → 5; natural wired 56/80 → **57/80**, install-live 62/80).
+  The sustained restart chain remains Practise-only (`[0x14C32A]`). M2 moves at
+  the restart window and is re-pinned with the final body wave; M1 is exact.

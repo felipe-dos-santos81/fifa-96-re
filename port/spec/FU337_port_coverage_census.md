@@ -123,18 +123,21 @@ and the test-only `ac5`/`ac7` byte mirrors are gone (OL-81 closed).
 
 Current numbers:
 
-- `fifa96_match_port_blocked[6]` (`FIFA96_MATCH_PORT_BLOCKED_ROWS 6`).
+- `fifa96_match_port_blocked[5]` (`FIFA96_MATCH_PORT_BLOCKED_ROWS 5`).
 - `37 action + 25 phase = 62` install-live (unchanged);
-  `62 - 6 = 56` natural.
+  `62 - 5 = 57` natural.
 - canonical line:
-  `port-census: bodies 78/78 (100%) no-body 2 wired 56/80 install-live 62/80 action 37/45 phase 25/35`.
+  `port-census: bodies 78/78 (100%) no-body 2 wired 57/80 install-live 62/80 action 37/45 phase 25/35`.
 
 ```
 ported_percentage = floor(100 * 78 / 78) = 100
-wired_percentage  = floor(100 * 56 / 80) = 70   (natural, 6 producer-blocked)
+wired_percentage  = floor(100 * 57 / 80) = 71   (natural, 5 producer-blocked)
 install_live_pct  = floor(100 * 62 / 80) = 77
 ```
 
-The README title stays `100%` (port coverage); the ENGINE headline carries
-`56/80` wired and `62/80` install-live. The six remaining counted-but-blocked
-rows are FU-338 §4 (minus `0x25`).
+Phase `0x1F` also left the blocked set: the native sit-0xC install uses
+`0x8AF0E EBX=1`, and `0x88937 CALL [0x158808]` invokes the stage-0 body once
+before the match-init act-0xA supersession. The README title stays `100%`
+(port coverage); the ENGINE headline carries `57/80` wired and `62/80`
+install-live. The five remaining counted-but-blocked rows are FU-338 §4
+(minus `0x25` and phase `0x1F`).

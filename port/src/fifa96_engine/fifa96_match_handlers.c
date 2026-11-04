@@ -7409,7 +7409,9 @@ const struct fifa96_match_blocked_row
   {FIFA96_MATCH_PORT_ACTION, 0x28},  /* phase-0x14 chooser arm unfed */
   {FIFA96_MATCH_PORT_ACTION, 0x2A},  /* same */
   {FIFA96_MATCH_PORT_PHASE, 0x06},   /* contact_kind != 3 arm unreachable */
-  {FIFA96_MATCH_PORT_PHASE, 0x1F},   /* begin act-9 seat zeroed before tick */
+  /* Phase 0x1F is closed: the sit-0xC install invokes act 9 now (0x8AF0E
+   * EBX=1 / 0x88937 CALL [0x158808]); the native one-shot stage-0 run is
+   * observable before the match-init act-0xA supersession. */
 };
 
 unsigned fifa96_match_port_blocked_count(void) {

@@ -98,8 +98,8 @@ int main(void) {
   assert(fifa96_match_port_bodies() == bodies);
   assert(fifa96_match_port_no_body() == no_body);
   assert(fifa96_match_port_install_live() == action_install + phase_install);
-  assert(fifa96_match_port_blocked_count() == 6u);
-  assert(fifa96_match_port_wired() == 56u);
+  assert(fifa96_match_port_blocked_count() == 5u);
+  assert(fifa96_match_port_wired() == 57u);
 
   /* The two body-less slots, at their native positions. */
   assert(fifa96_match_port_table[0x2B].kind == FIFA96_MATCH_PORT_NO_BODY);
@@ -124,10 +124,10 @@ int main(void) {
 
   assert(fifa96_match_port_bodies() == FIFA96_MATCH_PORT_NATIVE_ROWS);
   assert(file_contains("README.md", "Reverse Engineering (100%)"));
-  assert(file_contains("README.md", "56/80 dispatch slots naturally wired"));
+  assert(file_contains("README.md", "57/80 dispatch slots naturally wired"));
   assert(file_contains("port/ENGINE.md",
                        "78/78 native dispatch bodies ported (100%)"));
-  assert(file_contains("port/ENGINE.md", "56/80 dispatch slots wired"));
+  assert(file_contains("port/ENGINE.md", "57/80 dispatch slots wired"));
   assert(file_contains("port/ENGINE.md", "62/80 install-live"));
   printf("port-census: bodies %u/%u (%u%%) no-body %u wired %u/%u "
          "install-live %u/%u action %u/45 phase %u/35\n",
