@@ -489,3 +489,14 @@ Derived mapping decisions recorded (all cited legs stand):
 **Census:** unchanged by the pair (the slots stay NULL); the T4 move is row
 `0x16` + phase `0x19` (FU-187 §8). Owner for the pair remains **FU188-L1** (the
 situation-0 producer `FUN_0004b02c`/`FUN_000493a0`).
+
+## Phase-39 erratum (2026-11-04)
+
+The stage-0 wait (`0x865CB..0x8660B`) is no longer unmodeled. The body now
+holds until `timer89 >= ((subtype*(([+0x8A]>>25)*60))>>4) + side*60`
+(equality releases), then commits the target and resets the timer/stage.
+Live `player_e` is staged 0, so the live threshold is `60*side`; the
+`[rec+4]+0xE` descriptor producer stays the FU188-L3 leg. The wait moved the
+FU333 natural-pan witness to record 21; the re-derived tuple and the M2 v25
+re-pin are recorded in FU333/FU332 and `port/ENGINE.md` phase 39. The
+`0x157A38` lane write (FU188-L5) and the `0x67800(1)` bank load remain legs.

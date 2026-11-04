@@ -552,3 +552,15 @@ census is unchanged; no repo write but this draft; no git.
 **5. The dump identity and count.** Quote (§7): "the v1 and v2 dumps are **byte-identical** (71 990 record lines)". **Corrected (the artefacts):** the raw dumps differ only in the `label=d1`/`d2` prefix; after label normalisation they are identical (`cmp`). The **REC** lines are **71 960** (20 records × 3 598); the 71 990/71 991 totals include the PH/RUN/PLACE/FILTER/MOVE summary lines. The load-bearing facts — the transcripts `6aa2703b…` both, the 71 960 record-frames, 0 code-9 — stand.
 
 **6. The per-record `max |Δpos|` column is x-only.** Quote (§4): "`max |Δpos|` = the largest divergence from v0 over the window". **Corrected (the dumps):** the tabulated values are the max **x-axis** divergence (id 3 1 368, id 4 2 488, …); the largest Euclidean divergence is **2 894** (id 4), and the largest `|Δz|` is **1 968** (id 13/16). The overall **2 488** is the max per-axis; label the column `max |Δx|` or report both. (The v3 "2 872" is likewise x-only; the Euclidean max at 15 is 3 417.)
+
+## Phase-39 erratum — record-21 band under the row-0x24 wait (2026-11-04)
+
+The measured band record moves from **12** (team 1 record 1) to **21** (team 1
+record 10) once the FU188-L3 stage-0 threshold wait is live. The old record-12
+tuple is superseded by the record-21 tuple in FU333's phase-39 erratum:
+gate f 703 / step 2352, lane 54/-54, `cam_dz6f 2`, bound 66, face -0xFD,
+pos (54,0,-2); event f 704 / step 2355, trk 21, pos (42,0,-2); the 13-frame
+-38 pan and the A2/A3 anchors survive. The M2 v25 golden is
+`ea18ee1d…` (first diff line 852, 5671/6522 hash-only lines). The
+`[rec+4]+0xE` descriptor producer remains open, so this tuple stays
+descriptor-conditioned.

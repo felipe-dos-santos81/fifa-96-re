@@ -352,6 +352,15 @@ One commit, type `test` (the house list; the golden + the test-side change ride 
 
 **Consistency checks run:** every file:line in §3–§7 was read this session (no cite is inherited from another doc's line numbers except where marked *carried*); the three asserts' exact text was read at `:3722-3724`; the m-42/m-58 staging and the additivity gate were read at their fresh sites; the follow gates were read in the port source. The `T(s)` helpers are specified against the already-pinned arithmetic (E9/E10), not re-derived from native bytes.
 
+## Phase-39 erratum — first-bind identity re-pin (2026-11-04)
+
+The row-0x24 stage-0 threshold wait moves the natural first bind from
+record 12 to **record 21** (team 1 record 10; `active` 10). This is the S6
+reasoned re-pin recorded in FU333/FU332: gate f 703 / step 2352, event f 704 /
+step 2355, 13-frame -38 pan, A2/A3 unchanged, M2 v25 `ea18ee1d…`. The
+binding's identity assertion still holds on the new record; the old
+record-12 constant is superseded, not silently rewritten.
+
 ---
 
 ## Review erratum (wave review, 2026-10-22)

@@ -4993,11 +4993,13 @@ static void test_action_24_face_constant_vector(void) {
   assert(mr.record.type == 2);                  /* ((0x100 + 0x40) & 0x3FF) >> 7 */
 }
 
-/* Row 0x24 stage 0 (FU-188 §4, `0x865CB..0x8660B`): the native derived
- * threshold wait is **withheld** as the FU188-L3 leg because landing it
- * changes the FU333 natural-pan witness (gate code 4 -> 3 and the seed
- * pair). The derived no-wait arm therefore commits the target on the first
- * stage-0 dispatch; this test pins that deliberate derived behavior. */
+/* Row 0x24 stage 0 (FU-188 §4, `0x865CB..0x8660B`): the native threshold
+ * wait. The helper computes
+ * `((subtype*(([+0x8A]>>25)*60))>>4) + side*60`; this fixture
+ * (`active=8`, `player_e=4`, `side=0`) yields 60. The seed/face writes run
+ * before the wait; the target commit and timer/stage reset run only when
+ * `timer89 >= 60` (equality releases). `distance=0x20` holds stage 1 so the
+ * in-call stage-1 fall-through does not advance to stage 2. */
 static void test_action_24_stage0_wait(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -5008,11 +5010,30 @@ static void test_action_24_stage0_wait(void) {
   mr.record.player_e = 4;
   mr.record.timer89 = 0;
   mr.record.delta = 0;
+  mr.record.target_x = 0x1111;
+  mr.record.target_z = 0x2222;
   assert(fifa96_match_action_24(&mr) == FIFA96_OK);
-  assert(mr.record.pos_x == 0x9F0);             /* seeds precede the wait */
+  assert(mr.record.pos_x == 0x9F0);             /* 0x8657A before the wait */
   assert(mr.record.pos_z == -(4 * 6));          /* side 0 -> -6*subtype */
-  assert(mr.record.stage92 >= 1u);              /* derived no-wait arm */
+  assert(mr.record.speed71 == 0);
+  assert(mr.record.vel73 == 0);
+  assert(mr.record.vel75 == 0);
+  assert(mr.record.face7d == 0x100);            /* 0x79C50(1,0) before the wait */
+  assert(mr.record.type == 2u);
+  assert(mr.record.stage92 == 0u);              /* 60 > 0 -> hold */
+  assert(mr.record.target_x == 0x1111);         /* no commit while held */
+  assert(mr.record.target_z == 0x2222);
+  mr.record.timer89 = 59;                       /* one below still holds */
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.stage92 == 0u);
+  assert(mr.record.target_x == 0x1111);
+  mr.record.timer89 = 60;                       /* equality releases */
+  mr.record.distance = 0x20;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
   assert(mr.record.target_x == 0x7E0 + 6 * 4);  /* 0x86617/0x8664B */
+  assert(mr.record.target_z == -(4 * 6));       /* 0x86611 */
+  assert(mr.record.timer89 == 0);
+  assert(mr.record.stage92 == 1u);
 }
 
 /* Row 0x24 stage 1 ball gates (FU-188 §4, `0x8665C..0x86684`): the

@@ -6396,14 +6396,14 @@ static int fifa96_match_action_16(struct fifa96_match_run *mr) {
  *    `+0x71/+0x73/+0x75`, run the `0x79C50` face with the native constant
  *    vector `(1,0)` (`0x865B5`/`0x865BE`/`0x865C6`, FU314-L5a), then the
  *    `fifa96_action_sequence_lane` threshold (`0x865CB..0x8660B`:
- *    `((subtype*(([+0x8A]>>25)*60))>>4) + side*60`) is **withheld** as the
- *    FU188-L3 leg: landing it changes the FU333 natural-pan witness (gate
- *    code 4 -> 3 and the seed pair), so the derived no-wait arm keeps the
- *    accepted tape until that witness is re-derived; commit
+ *    `((subtype*(([+0x8A]>>25)*60))>>4) + side*60`) is ported (phase-39):
+ *    the body holds until `timer89 >= threshold`, then commits
  *    `target_z = pos_z` and
- *    `target_x = 0x7E0 + 6*byte` (`0x86611..0x8664B`), reset `+0x89` and
- *    stage to 1. Residuals: `player_e` (the `[rec+4]+0xE` subtype) is staged
- *    0 (its producer is unported, FU188-L3); the `[rec+0x8A]` boost byte is
+ *    `target_x = 0x7E0 + 6*byte` (`0x86611..0x8664B`), resets `+0x89` and
+ *    stages to 1. The wait moved the FU333 witness to record 21; that
+ *    re-derivation is recorded in FU333/FU332. Residuals: `player_e` (the
+ *    `[rec+4]+0xE` subtype) is staged 0 (its producer is unported,
+ *    FU188-L3); the `[rec+0x8A]` boost byte is
  *    reconstructed from `active` (`[+0x8D]`, the dword's top byte), the lower
  *    bytes are not modelled.
  *  - stage 1 (`0x8665C..0x866CF`): the `0x8EEC0`/`0x67800`/`0x8EEB4` ball
@@ -6464,8 +6464,8 @@ int fifa96_match_action_24(struct fifa96_match_run *mr) {
     uint8_t sector = r->type;
     /* 0x86587..0x865AE: `z = side ? +6*subtype : -6*subtype` (the native
      * `TEST BH,BH / JNZ` arm) and `x = 0x7E0 + 6*subtype`. The shared helper
-     * carries both; the threshold wait (`0x865CB..0x8660B`) is the FU188-L3
-     * leg withheld above. */
+     * carries both; the threshold wait is landed below (`0x865CB..0x8660B`,
+     * phase-39). */
     (void)fifa96_action_sequence_lane((uint8_t)r->player_e,
                                       (uint8_t)(r->side != 0u ? 1u : 0u), boost,
                                       &lane);
@@ -6482,11 +6482,13 @@ int fifa96_match_action_24(struct fifa96_match_run *mr) {
       r->type = sector;
     }
     /* 0x86601..0x8660B: `CMP EDX(threshold), ESI(timer); JG return` — the
-     * native stage holds until `timer89 >= threshold`. The derived threshold
-     * (`fifa96_action_sequence_lane`) is not landed yet: it shifts the FU333
-     * natural-pan witness (gate code 4 -> 3 and the seed pair), so the
-     * accepted tape keeps the no-wait arm until that witness is re-derived.
-     * FU188-L3 leg. */
+     * native stage holds until `timer89 >= threshold` (equality releases).
+     * `fifa96_action_sequence_lane` computes the native threshold:
+     * `((subtype * (([+0x8A]>>25) * 60)) >> 4) + side*60`; live `player_e`
+     * is staged 0, so the live threshold is `60*side`. The face/type cells
+     * above refresh on every held frame; the target commit and timer/stage
+     * reset run only on release. */
+    if (lane.threshold > r->timer89) return FIFA96_OK; /* 0x86609/0x8660B */
     r->target_z = r->pos_z;                        /* 0x86611 [+0x55]=[+0x61] */
     r->target_x = lane.x;                          /* 0x86617/0x8664B */
     r->timer89 = 0;                                /* 0x86639 */
@@ -7765,7 +7767,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x23, fifa96_match_action_23,
      "FU-139 §10/FU-137: row 23 ported (0x82F84..0x83163 machine; 0x82DD0 attempt, stage-1 target arm, 0x79B58 receiver, installs 0x0E/0x0F) over the pool; install arm 0x7D1B9; 0x1577xx camera/track inputs staged zero OL-68"},
     {0x24, fifa96_match_action_24,
-     "FU-188 §4/§6 (phase-16 T4) + FU-202 §6 rec (b) (M2 phase-18 T3): row 24 lane/anim body (fifa96_match_action_24, 0x86510..0x866F1, 3 stages: head timer89 += delta + the +0x7B lane word, stage 0 the pos_x=0x9F0/±6·[[rec+4]+0xE] facing + 0x79C50 face + target commit (the native threshold wait 0x865CB..0x8660B is the FU188-L3 leg withheld to preserve the FU333 natural-pan witness), stage 1 the 0x8EEC0/0x8EEB4 ball-gate latch (mr->ball_gate_15b37a) + `word[+0x65] < 0x20` wait, stage 2 the 0x6E1D0 phase-cell release via match_record_placement_6e1d0). COUNTED: the producer is LIVE — the match-init situation 0 (0x4B0A5) dispatches act 0xA (the sit-0 arm 0x8AB8E), whose phase-0x20 body (fifa96_match_action_phase_20, now registered) stage 0 installs code 0x24 on the 22 records; the arm survives into the first granted frame's clock-tail act tick (the begin-tail act reset precedes the re-placed producer, FU-202 §6 rec (b)). The `0x157A38` lane table (FU188-L5) and the 0x67800(1) bank load (FU188-L3) stay legs; OL-9"},
+     "FU-188 §4/§6 (phase-16 T4) + FU-202 §6 rec (b) (M2 phase-18 T3): row 24 lane/anim body (fifa96_match_action_24, 0x86510..0x866F1, 3 stages: head timer89 += delta + the +0x7B lane word, stage 0 the pos_x=0x9F0/±6·[[rec+4]+0xE] facing + 0x79C50 face + the native threshold wait ((subtype*(([+0x8A]>>25)*60))>>4 + side*60; landed phase-39, FU333 witness re-derived on record 21) + target commit, stage 1 the 0x8EEC0/0x8EEB4 ball-gate latch (mr->ball_gate_15b37a) + `word[+0x65] < 0x20` wait, stage 2 the 0x6E1D0 phase-cell release via match_record_placement_6e1d0). COUNTED: the producer is LIVE — the match-init situation 0 (0x4B0A5) dispatches act 0xA (the sit-0 arm 0x8AB8E), whose phase-0x20 body (fifa96_match_action_phase_20, now registered) stage 0 installs code 0x24 on the 22 records; the arm survives into the first granted frame's clock-tail act tick (the begin-tail act reset precedes the re-placed producer, FU-202 §6 rec (b)). The `0x157A38` lane table (FU188-L5) and the 0x67800(1) bank load (FU188-L3) stay legs; OL-9"},
     {0x25, fifa96_match_action_25,
      "FU-243 §4.2/§6 (phase-23 T2): row 25 body 0x880CC ported (FU-82 7-arm table 0x880B0). "
      "COUNTED: the installer 0x8D79D/0x8D7AD (PUSH -1 / MOV ECX,0x25 -> FUN_0008CEB8 -> FUN_0007D9A4) is on the "

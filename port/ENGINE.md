@@ -8338,3 +8338,36 @@ Census: **78/78 bodies = 100%; 57/80 natural = 71%; 63/80 install-live = 78%;
 6 producer-blocked rows** (`0x0D`, `0x13`, `0x1F`, `0x28`, `0x2A` action,
 phase `0x06`). Action install-live is 38/45. M1 `09b726b7…` and M2
 `274e7431…` are byte-identical (`cmp`); `make check` **112/112**.
+
+## Phase 39 — row 0x24 stage-0 threshold wait; FU333 record-21 re-derivation (2026-11-04)
+
+FU188-L3's stage-0 wait is landed. `fifa96_match_action_24` now holds on
+`timer89 >= ((subtype*(([+0x8A]>>25)*60))>>4) + side*60` before the target
+commit (`0x865CB..0x8660B`; equality releases). The live `player_e` is still
+staged 0, so the live threshold is `60*side`; the `[rec+4]+0xE` descriptor
+producer remains the open leg. The face/type writes refresh on held frames;
+the target and timer/stage reset run only on release.
+
+The wait moved the FU333 natural-pan witness from record 12 to record 21
+(team 1 record 10; `active` is index-valued, measured 10). The re-derived
+witness passes C1–C6 on its own cells: gate f 703 / step 2352, id 21, code 4,
+anim 0, `has_slot 0`, lane 54/-54, `cam_dz6f` 2, bound 66, `timer81` 0,
+face -0xFD, pos (54,0,-2), chain `timer79/timer7b` 6/6, vel (-6,0), speed 6;
+event f 704 / step 2355, id/trk 21, code 5, vel (-2,0), speed 2, timer 0/12,
+ramp 12, pos (42,0,-2); motion 705..717, stop 718, 13 changed frames, place
+-38, pan 0→2; seed (-24,0), `v0` (-2,0), `T` (-38,0); first bind f 704 /
+step 2355; 1 pan / 3598 granted frames. A2 (704 all-zero frames) and A3
+(first departure 2355) survive unchanged; score 0-0 and the ladder counters
+survive.
+
+M2 re-pinned to **v25**
+`ea18ee1d54c51f4283e0bde1b7fbe8bebfd1e8611353b4b48507b7672149037f`
+(old `274e7431…`): first differing line 852 (`state=1/1-0`), 5671/6522 lines
+differ, one hash-only tail 852..6522; the 10-tag state set and its counts are
+unchanged; 295086 bytes / 6522 lines / 6517 `state=` lines. M1 `09b726b7…`
+is exact. Census unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live,
+6 blocked, action 38/45, phase 25/35**. `make check` **112/112**.
+
+Residuals: FU188-L3's descriptor `player_e`, FU188-L5's `0x157A38` lane write
+and the `0x67800(1)` bank load stay legs; FU333/FU332 record the S6 re-pin
+and the record-21 tuple.

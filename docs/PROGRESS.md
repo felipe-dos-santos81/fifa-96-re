@@ -3586,3 +3586,18 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   Action install-live is now **38/45**. The arm-1 anim is applied after the
   loader step, so arm 2's `+0x44` gate sees the pre-install byte (FU180-L9;
   producer-blocked, not live). M1/M2 byte-identical; `make check` 112/112.
+
+- **phase-39 row-0x24 wait + FU333 re-derivation (2026-11-04).** Landed the
+  native stage-0 threshold wait (`0x865CB..0x8660B`): `timer89 >=
+  ((subtype*(([+0x8A]>>25)*60))>>4) + side*60`, equality releases; live
+  `player_e` is 0, so the live threshold is `60*side`. The wait moved the
+  natural-pan witness from record 12 to record 21 (team 1 record 10, active
+  10). Record 21 passes C1–C6: gate f 703 / step 2352, lane 54/-54,
+  `cam_dz6f` 2, bound 66, face -0xFD, pos (54,0,-2); event f 704 / step 2355,
+  code 5, trk 21, pos (42,0,-2); the 13-frame -38 pan survives. M2 re-pinned
+  to v25 `ea18ee1d…` (first diff line 852, 5671/6522 hash-only lines; state
+  set/counts unchanged; 295086 bytes / 6522 lines). M1 `09b726b7…` exact.
+  Census unchanged (**78/78 bodies, 57/80 natural, 63/80 install-live, 6
+  blocked, action 38/45, phase 25/35**); `make check` 112/112. The
+  `player_e` descriptor, the `0x157A38` lane table and the `0x67800(1)` bank
+  load remain numbered legs.

@@ -701,3 +701,28 @@ the ISO, and runs no probe; the only scratch path named
 **7. The memcmp rationale.** Quote (§4.4): "the null platform consumes the copy, so a mutation is detectable". **Corrected (fresh `platform_null.c` `n_poll`):** the null platform only advances `tape_pos`; it never writes the tape. The post-run `memcmp(tape, M2_KEYS, …)` is a valid source-level check because any mutation is the pass's, not because the platform consumes it.
 
 **8. "Probably wholesale" is measured.** Quote (§6.1): "M2 **will** move, and probably wholesale". **Corrected (FU332 §5):** the measured diff is **5 671 / 6 522 lines (86.95 %)**, one contiguous tail **852..6522**, the 10-tag stratum set intact, length unchanged. "Probably wholesale" should be the measured shape; the 851 pre-diff lines are unchanged.
+
+## Phase-39 erratum — row-0x24 wait and the record-21 witness (2026-11-04)
+
+The FU188-L3 stage-0 threshold wait is landed, and the FU333 natural-pan
+witness is re-derived under S6. The first bind is now **record 21** (team 1
+record 10; the `active` cell is index-valued and measures 10), not the old
+record 12. The new tuple: gate **f 703 / step 2352**, id 21, code 4, anim 0,
+`has_slot 0`, cam (0,0,0), tracked -1, controlled 1, lane **54/-54**,
+`cam_dz6f 2`, bound 66, `timer81 0`, face **-0xFD**, chain `timer79/timer7b`
+6/6, vel (-6,0), speed 6, pos **(54,0,-2)**, target (0,0); event **f 704 /
+step 2355**, code 5, id/trk 21, vel (-2,0), speed 2, timer 0/12, ramp 12,
+event_param 0, pos **(42,0,-2)**; run first_motion f 705 / step 2359, stop
+f 718 / step 2402, **13 changed frames**, stop **(-38,0,0)**, pan 2,
+speed sequence 2,1,0, seed (-24,0), v0 (-2,0), T (-38,0); first bind f 704 /
+step 2355; frequency 1 pan / 3598 granted frames. C1–C6 pass on record 21's
+own cells; the old record-12 literals (active 1, lane 56/-56, dz 0, bound 68,
+face -0x100, pos (56,0,0), event pos (44,0,0)) are superseded. The wait is
+descriptor-conditioned: live `player_e=0` gives threshold `60*side`; the
+`[rec+4]+0xE` producer remains open.
+
+M2 re-pinned to **v25** `ea18ee1d54c51f4283e0bde1b7fbe8bebfd1e8611353b4b48507b7672149037f`
+(old `274e7431…`): first differing line **852** (`state=1/1-0`), **5671/6522**
+lines, one hash-only tail **852..6522**; 295086 bytes / 6522 lines / 6517
+`state=` lines; the 10-tag set and counts are unchanged. M1 `09b726b7…` is
+exact. Census unchanged (78/78, 57/80 natural, 63/80 install-live, 6 blocked).

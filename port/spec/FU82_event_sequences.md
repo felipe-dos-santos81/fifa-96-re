@@ -543,3 +543,13 @@ port: no tool, capture-rig, ISO or Ghidra-project change. Port write set:
 `port/src/fifa96_loader/fifa96_action_handlers.c`,
 `port/tests/test_event_sequences.c`, `CMakeLists.txt` (one test block).
 `data/game/FIFAPCCD96.iso` untouched; `data/fifa96.rep/**` churn not staged.
+
+## Phase-39 erratum — the row-0x24 wait boundary (2026-11-04)
+
+The table prose at `:341` says the row-0x24 stage waits while
+`+0x89 <= threshold`. The authoritative bytes at `0x86601`/`0x86609` are
+`CMP EDX,ESI; JG 0x866EC`, i.e. the body holds only while
+`threshold > timer89`; **equality releases**. The port and
+`test_action_24_stage0_wait` implement and pin the byte reading (hold at 59,
+release at 60 for the 60-threshold fixture). See FU188's phase-39 erratum and
+`port/ENGINE.md` phase 39.

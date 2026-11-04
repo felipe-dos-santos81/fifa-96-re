@@ -30,14 +30,15 @@
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m2 > port/tests/golden/engine/m2-frames.txt
  *
- * v24 re-pin (2026-11-04): the phase-0x1F sit-0xC invoke-now and the row-0x25
- * live score producer move the restart window. First differing line 466:
- * `state=21/1-0` -> `state=4/1-0`; 5985 of 6522 lines differ. The state-tag
- * set is unchanged; counts move `21/1-0` 100 -> 96, `4/1-0` 303 -> 304 and
- * `12/1-0` 4 -> 7. New sha
- * `274e74314d9cb95960e2a8db214ec37528d194f3941e41cb8c7a65d81bfa2f83`
- * (old `6aa2703b…`). M1 `09b726b7…` is exact. The row-0x24 stage-0 threshold
- * wait remains a leg (it would invalidate the FU333 natural-pan witness).
+ * v25 re-pin (2026-11-04): the row-0x24 stage-0 threshold wait
+ * (`0x865CB..0x8660B`, FU188-L3) is now live. It moves the first bind from
+ * record 12 to record 21, so the FU333 natural-pan witness is re-derived on
+ * record 21 (gate f=703 step=2352, code 4, active 10; event f=704 step=2355;
+ * the 13-frame -38 pan survives). The first differing golden line is 852
+ * (`state=1/1-0`); 5671 of 6522 lines differ, hash-only, with the state-tag
+ * set and counts unchanged. New sha
+ * `ea18ee1d54c51f4283e0bde1b7fbe8bebfd1e8611353b4b48507b7672149037f`
+ * (old `274e7431…`). M1 `09b726b7…` stays exact.
  *
  * --- v3 provenance: natural path and remaining forcing (G4 playability, G3
  * visible-match; retained in v4) --------------------------------------------
@@ -1991,21 +1992,22 @@
 #define M2_OFFSET_LEFT_TO 1829
 #define M2_OFFSET_DOWN_FROM 1830
 
-/* FU322 §4.3 (erratum 1 re-shape), re-based by phase-35 P1: the undriven
- * tape's band record — the record the row-04 gate binds at granted f=704 /
- * engine step 2355 in the produced world (the phases-33/34 pre-producer
- * baseline bound it at f=1517 — FU323-L1's silent bind; entity 12 = team 1
- * record 1). The bind identity is locked (its P3 sensitivity is declared):
- * the first-bind frame is walk-driven and stable, but its identity re-pins
- * with a reasoned re-pin if the face-coupled walk order moves it. */
-#define M2_NAT_BAND_ENTITY 12
+/* FU322 §4.3 (erratum 1 re-shape), re-based by phase-35 P1 and re-derived by
+ * phase-39: the undriven tape's band record — the record the row-04 gate
+ * binds at granted f=704 / engine step 2355 in the produced world. With the
+ * row-0x24 threshold wait live the first bind is record 21 = team 1 record 10
+ * (active cell 10), not the old record 12 = team 1 record 1. The bind
+ * identity is locked (its P3 sensitivity is declared): the first-bind frame
+ * is walk-driven and stable, and this identity re-pinned with the FU333 S6
+ * written reason when the wait moved the face-coupled walk order. */
+#define M2_NAT_BAND_ENTITY 21
 /* FU322 §4.1 A3 / errata 1+3, re-pinned by phase-35 P1 (the +0x79 producer;
  * FU330/FU331/FU332): the first camera-cell departure. FU323 measured the
  * bind at engine step 5065 (granted f=1517) on the producer-less tree; with
  * the produced placement limit (`+0x79 = 6`) the formation runs, the row-04
  * band gate passes on the undriven tape and the first camera departure is
  * **engine step 2355 (granted f=704)** — FU332 §6's measured event frame
- * (the band record 12, `v0 = -2`, `T_x = -0x26`, 13 frames, pan 2).
+ * (the phase-39 band record 21, `v0 = -2`, `T_x = -0x26`, 13 frames, pan 2).
  * The slack is the declared ALIGNMENT class only: the one-frame
  * gate-vs-capture offset between the event capture and the row-04 body
  * (FU328-L6), converted into steps at the measured pace (11 996 live steps /
@@ -2679,10 +2681,11 @@ struct m2_claim {
  * over run_natural_pass's own camera cells, plus the bind snapshot (the first
  * frame with tracked != NONE) and the per-segment record (FU333 §4.2 item 3:
  * the witness segment is named, not inferred from the pass-level cells).
- * Measured in the produced world: the band record 12 binds at granted f=704 /
- * engine step 2355 with a live no-slot seed (vel -2), the delta-run machine
- * records ONE segment / 13 changed frames / off-zero 2 893 / stop f 718 /
- * place -38 / pan 2, and the bind frame itself is the first departure. The
+ * Measured in the produced world (phase-39 re-derivation): the band record 21
+ * binds at granted f=704 / engine step 2355 with a live no-slot seed
+ * (vel -2), the delta-run machine records ONE segment / 13 changed frames /
+ * off-zero 2 893 / stop f 718 / place -38 / pan 2, and the bind frame itself
+ * is the first departure. The
  * phases-33/34 pre-producer baseline was the silent code-5 bind at f=1517
  * with a zero seed and no motion (FU323-L1). seg[0] carries the FU333 witness
  * (its gate/event chain cells are asserted in run_natural_pass); the
@@ -2749,7 +2752,7 @@ struct m2_natural {
    * phases-33/34 baseline was 1 517, the pre-bind prefix). */
   int first_left_zero_f;
   /* FU322 §4.3/erratum 1: the first bind (the first frame with a tracked
-   * record). Measured phase-35: trk=12 at granted f=704 (step 2355) — the
+   * record). Phase-39 measured trk=21 at granted f=704 (step 2355) — the
    * producer-conditioned no-slot pan (seed -0x18, v0 -2, place -38). The
    * phases-33/34 baseline was the FU323-L1 silent code-5 bind at f=1517 (a
    * zero seed, the place never moved). The bind identity is what makes A1
@@ -4199,7 +4202,7 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
    * recorded-only. */
   if (with_iso) {
     /* A1 (locked): a camera cell left the all-zero state — the
-     * producer-conditioned pan/bind (the event frame binds trk=12 and the
+     * producer-conditioned pan/bind (the event frame binds trk=21 and the
      * next frame starts the pan; the pre-producer baseline saw only the
      * bind). */
     assert(nat->camera_left_zero >= 1u);
@@ -4242,7 +4245,8 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       /* The closure identity (phase-35 final review): `g->id == ev->id` is
        * construction-identity (both ring records flow from the same band
        * argument); the load-bearing half is `g->id == M2_NAT_BAND_ENTITY`
-       * (measured 12), which pins the record the chain is attributed to. */
+       * (measured 21 under the phase-39 wait), which pins the record the
+       * chain is attributed to. */
       assert(g->id == ev->id);
       assert(g->id == M2_NAT_BAND_ENTITY);
       /* §4.5 item 2: the record id is read from the bind, and the band
@@ -4262,7 +4266,7 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
        * nor controlled. */
       assert(g->code == 4u);
       assert(g->anim_id != 0x13u);
-      assert(g->active == 1u);
+      assert(g->active == 10u);   /* entity 21 = team 1 record 10; index-valued */
       assert(g->cam_pos_y == 0);
       assert(g->has_slot == 0u);
       assert(g->cam_pos_x >= -0x630 && g->cam_pos_x <= 0x630);
@@ -4294,7 +4298,7 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       assert((g->timer7b & 0x0Fu) >= 3u);   /* the algebra's pan threshold */
       assert(g->vel73 == -6 && g->vel75 == 0);
       assert(g->speed71 == 6);
-      assert(g->pos_x == 56 && g->pos_y == 0 && g->pos_z == 0);
+      assert(g->pos_x == 54 && g->pos_y == 0 && g->pos_z == -2);
       assert(g->target_x == 0 && g->target_z == 0);
       assert(g->vel73 <= (int16_t)(g->timer7b & 0x0F) &&
              g->vel73 >= -(int16_t)(g->timer7b & 0x0F));
@@ -4303,11 +4307,11 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       /* C3 (W2) — the half-line gate set and its live face. The lane cells
        * are exact (FU332); the bound predicates are structural. The bearing
        * and folded delta are RECORDED only. */
-      assert(g->lane_x == 56 && g->lane_z == -56);
-      assert(g->cam_dz6f == 0);
-      assert(g->bound == 68);
+      assert(g->lane_x == 54 && g->lane_z == -54);
+      assert(g->cam_dz6f == 2);
+      assert(g->bound == 66);
       assert(g->timer81 == 0u);
-      assert(g->face7d == -0x100);
+      assert(g->face7d == -0xFD);
       assert(g->lane_x >= 1);
       assert(g->lane_x <= 0x40 - (int32_t)g->timer81);
       assert(g->lane_x <= (int32_t)g->bound);
