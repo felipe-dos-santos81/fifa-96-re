@@ -373,9 +373,11 @@ static void test_sequence_0d_row(void) {
   assert(o.stage92 == 1);
 
   /* Second call with the +0x92 write applied and the native wait cleared
-   * (+0x85 = 0): arms 1..3 run. */
+   * (+0x85 = 0): arms 1..3 run. Stage a pre-install +0x44=1; the arm-1
+   * 0x6E598 install of row 0x0B (flags 0) must refresh it before arm 2. */
   s.stage92 = o.stage92;
   s.word85 = 0;
+  s.byte44 = 1;
   assert(fifa96_action_sequence_0d_step(&s, &o) == FIFA96_OK);
   assert(o.word85 == 0);
   assert(o.target_set == 1);          /* arm 1 pos -> target */
@@ -388,7 +390,8 @@ static void test_sequence_0d_row(void) {
   assert(o.reset == 0);               /* timer89 0 is not > 0x14 */
   assert(o.anim == 1);
   assert(o.anim_id == 0x0B);          /* arm 1 overrides arm 0's 0x10 */
-  assert(o.stage92 == 3);
+  assert(s.byte44 == 0);              /* 0x6E6CC row 0x0B flags bit 0 */
+  assert(o.stage92 == 3);             /* arm 2 advanced on the refreshed byte */
 
   /* stage > 3 -> the 0x826F8 tail. */
   memset(&s, 0, sizeof s);

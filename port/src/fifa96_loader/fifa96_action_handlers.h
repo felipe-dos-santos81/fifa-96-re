@@ -758,7 +758,9 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
  *    `(int8)0x10F334/0x10F33C[sector] << 6` target offsets, the `0x8DCD4`
  *    metric into `+0x65`, anim `0x0B`, `timer89=0`, `+0x92++`;
  *  - arm 2 `0x826B0`: `word[+0x71] != 0 && byte[+0x44] != 0` -> tail; else
- *    `timer89=0`, `+0x92++`;
+ *    `timer89=0`, `+0x92++`. The body refreshes `+0x44` after the arm-0/1
+ *    `0x6E598` installs (rows 0x10/0x0B flags 0), so this gate sees the
+ *    installed row byte;
  *  - arm 3 `0x826D5`: `0x79C50(rec, word[+0x71]>>16, word[+0x73]>>16)`; a
  *    `timer89 > 0x14` -> the `0x826F1` reset.
  * The external calls are reported as requests (`ball_param` = the `0x702F8`
@@ -774,7 +776,8 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
 typedef struct fifa96_action_0d_state {
   uint8_t stage92;      /* +0x92 in */
   uint8_t active;       /* +0x8D */
-  uint8_t byte44;       /* +0x44 anim-row terminal */
+  uint8_t byte44;       /* +0x44 anim-row terminal; arms 0/1 refresh it to 0
+                         * after the 0x6E598 install of rows 0x10/0x0B */
   uint8_t is_actor;     /* rec == [0x157A83] */
   uint8_t sector;       /* +0x8E byte = [rec+0x8B]>>24 */
   uint16_t word81;      /* +0x81 dword low word; NOT the 0x702F8 argument (that

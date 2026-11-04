@@ -8404,3 +8404,19 @@ the act-9 tick path. M1/M2 are byte-identical: M1 `09b726b7…`, M2 v25
 `ea18ee1d…`; `make check` **112/112**. Census unchanged: **78/78 bodies,
 57/80 natural, 63/80 install-live, 6 blocked, action 38/45, phase 25/35**.
 FU181-L5 stages 1/2 and the presentation sinks remain legs.
+
+## Phase 42 — row-0x0D arm-2 `+0x44` ordering (FU180-L9, 2026-11-04)
+
+The row-0x0D loader body now refreshes `byte44` to 0 after each arm-0/1
+`0x6E598` request. Both requested rows are statically flags-0 (`0x10` and
+`0x0B` in the animation table; native store `0x6E6CC`), so arm 2's
+`0x826BB` gate sees the installed row byte instead of the pre-dispatch
+staging byte. The engine adapter still installs the anim after the step, but
+the in-call gate is now native-ordered; the pool view is updated by the
+adapter. Fixtures stage a stale `byte44 = 1` and assert the stage-3 advance
+in both the loader and engine paths.
+
+FU180-L9 is closed. M1/M2 are byte-identical: M1 `09b726b7…`, M2 v25
+`ea18ee1d…`; `make check` **112/112**. Census unchanged: **78/78 bodies,
+57/80 natural, 63/80 install-live, 6 blocked, action 38/45, phase 25/35**.
+Row `0x0D` remains producer-blocked by `desc_16`/`[rec+0x24]` (OL-22).

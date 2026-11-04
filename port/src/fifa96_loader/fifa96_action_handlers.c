@@ -1436,6 +1436,7 @@ fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
     out->word87_zero = 1;                           /* 0x825a4 word[+0x87]=0 */
     out->anim = 1;                                  /* 0x825ad 0x6E598 */
     out->anim_id = 0x10;                            /* the 0x82583 EDX immediate */
+    state->byte44 = 0;                              /* 0x6E6CC: row 0x10 flags 0 */
     tx = state->type_off_x ? state->type_off_x[state->sector & 0x1Fu] : 0;
     tz = state->type_off_z ? state->type_off_z[state->sector & 0x1Fu] : 0;
     (void)fifa96_action_sequence_velocity_scale(tx, tz, &state->vel73,
@@ -1476,6 +1477,7 @@ fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
     }
     out->anim = 1;                                  /* 0x82693 0x6E598 */
     out->anim_id = 0x0B;                            /* 0x82683 EDX */
+    state->byte44 = 0;                              /* 0x6E6CC: row 0x0B flags 0 */
     state->timer89 = 0;                             /* 0x8269e */
     stage = 2u;                                     /* 0x826a8 */
   }

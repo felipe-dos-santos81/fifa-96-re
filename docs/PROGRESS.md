@@ -3620,3 +3620,10 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   state arm and stage-1/2 presentation sinks remain legs. Tests pin the
   handler and tick paths. M1/M2 byte-identical (M2 v25 `ea18ee1d…`); census
   unchanged (`78/78`, `57/80`, `63/80`, `6` blocked); `make check` 112/112.
+
+- **phase-42 row-0x0D `+0x44` ordering (2026-11-04).** Closed FU180-L9: the
+  loader body now sets `byte44 = 0` after the arm-0/1 `0x6E598` requests
+  (anim rows 0x10/0x0B both flags 0), so arm 2's gate reads the installed row
+  byte. Fixtures stage stale `byte44 = 1` and assert the stage-3 advance in
+  both the loader and engine paths. Row 0x0D remains producer-blocked; M1/M2
+  byte-identical; census unchanged; `make check` 112/112.

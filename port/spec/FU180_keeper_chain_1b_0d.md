@@ -444,3 +444,11 @@ precedent). It co-wires when row-09 arm 1 lands. The `0x702F8`/`0x6E598`/
 > install-live is 63/80 (blocked six). Residual FU180-L9: the arm-1 anim
 > install is applied after the loader step, so arm 2's `+0x44` gate reads the
 > pre-install byte; the row is not live.
+
+> **FU-180 §14 phase-42 erratum (2026-11-04).** FU180-L9 is closed. The
+> loader body refreshes `+0x44 = 0` after each arm-0/1 `0x6E598` request
+> (anim rows 0x10 and 0x0B both carry flags bit 0 = 0, `0x6E6CC`). Arm 2
+> therefore reads the installed row byte, matching the native in-call order;
+> the engine adapter's later anim install updates the pool view. Fixtures
+> stage a stale `byte44 = 1` and assert the stage-3 advance. The row remains
+> producer-blocked (OL-22), so the natural count is unchanged.

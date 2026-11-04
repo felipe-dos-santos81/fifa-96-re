@@ -1773,14 +1773,18 @@ static void test_action_0d_arm1_installer_leg(void) {
   assert(f.mr.record.pos_z == 0x100);
   assert(f.mr.record.target_x == 0x1111);  /* arm 1 waits on word[+0x85] */
   assert(f.mr.record.target_z == 0x2222);
-  /* Clear the wait and run arm 1's pos->target + metric + anim 0x0B. */
+  /* Clear the wait and run arm 1's pos->target + metric + anim 0x0B. Stage
+   * a stale +0x44=1; the arm-1 install (row 0x0B, flags 0) refreshes it before
+   * arm 2, so the machine advances to stage 3. */
   f.mr.record.jump_base = 0;
   f.mr.record.distance = 0x20;
+  f.mr.record.row44 = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x0D) == FIFA96_OK);
   assert(f.mr.record.target_x == 0x100);   /* pos + type_off_x[0]<<6 */
   assert(f.mr.record.target_z == 0x140);   /* pos + type_off_z[0]<<6 */
   assert(f.mr.record.anim_id == 0x0Bu);    /* arm 1 install */
-  assert(f.mr.record.stage92 >= 2u);
+  assert(f.mr.record.row44 == 0u);         /* 0x6E6CC row 0x0B flags 0 */
+  assert(f.mr.record.stage92 == 3u);       /* arm 2 saw the refreshed byte */
   drop_fixture(&f);
 }
 
