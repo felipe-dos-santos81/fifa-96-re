@@ -3514,3 +3514,31 @@ unchanged).
   the open follow-up). Census unchanged (`78/78` bodies, `55/80` natural,
   `62/80` install-live). No golden was edited; the no-ISO M1/M2 output is
   byte-identical to the base commit.
+## Row-1d close-out (2026-11-04) — act 7 / phase `0x1D` arms 2..8
+
+The phase-`0x1D` / act-7 body (`0x89868`) was ported as arms 0, 1 and 9 only, so
+it stalled at stage 2 and never reached its terminal. FU-209 §2 establishes the
+structural fact the pre-fix port missed: the native arms are a **fall-through
+cascade** — a passing arm advances `[0x158829]` and runs the next arm in the same
+call; only arm 3's two exits RETURN. The body is now one `switch` in a `for (;;)`
+loop, and arms 2..8 are ported:
+
+- arm 2 — the ball-pair actor (`[0x158730]`) / ack (`[0x158746]`) contact wait;
+- arm 3 — `[0x15781D]`/`[0x15781E]` (`goal_armed`/`goal_zone`) + the `0x89AB3`
+  camera-word (`[0x1577BE]`/`[0x1577F0]`) raise-then-lower tail;
+- arm 4 — the camera-event clear wait;
+- arm 5 — the `[0x15881A]` timeline windows (derived `state.tick_total`; the
+  `0x45001` input cell is a sibling leg);
+- arm 6 — the actor `+0x91` code gate (the record-11 ball `+0x44` is FU-142 OL-49);
+- arm 7 — `0x4BEC8`, fresh-read as `XOR EAX,EAX; RET`;
+- arm 8 — the substitution-strip selection block, ported over the existing FU-152
+  R1 view `render.sub`: the rank / number-pair winner, the score-pair write, the
+  `0x8F188(0xBA,0x20,…)` request (recorded as `match1d_event_id`), the
+  `0x4C374(7)` clear and the no-winner `[0x1587CC]` rebind (FU217-L2).
+
+The row was already registered and counted, so the census does not move
+(`78/78` bodies, `55/80` natural, `62/80` install-live); no golden changed
+(M1 `09b726b7…`, M2 `6aa2703b…`, `cmp`-verified) and the gate is green. The
+sinks (`0x651F0`/`0x974F0`/`0x8F188`), `0x4C374`'s reader-less
+`word[0x157A68]`, the `0x45001` gate, the ball-record `+0x44` and arm 9's
+`[0x157AC0]` write-back (FU209-L5) remain the carried legs.

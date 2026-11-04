@@ -756,6 +756,244 @@ static void test_phase_1D_arm0_installs_row_20(void) {
   assert(mr.entities.team[0].records[1].code != 0x20u);
 }
 
+/* ===== FU-209 §2 arms 2..8 (the phase-0x1D middle of the timeline) ========
+ *
+ * Fresh this round: every arm is a fall-through extension of the previous one
+ * (`0x89868` has no per-arm epilogue except arm 3's two RET exits), so one call
+ * can walk several stages. The tests below pin one wait gate per arm plus the
+ * complete 0 -> 9 drive. */
+
+/* Arm 2 (0x89A4E): the actor/referee contact wait. The gate is the actor
+ * record `[0x1587D4]` vs the staged ball actor `[0x158730]` and the
+ * `byte[0x158746]` ack. Both a mismatched actor and a clear ack hold (the head
+ * timer add stands); the pair opens the stage-3 advance. Mutation-RED: dropping
+ * either compare advances without the contact. */
+static void test_phase_1D_arm2_contact_wait(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 7;
+  mr.act.stage = 2;
+  mr.act.timer = 10;
+  mr.actor_1587d4 = 3;
+  mr.entities.ball.pair.actor = 4;      /* 0x89A52 JNZ -> epilogue */
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 2u && mr.act.timer == 12);   /* head add stands */
+  mr.entities.ball.pair.actor = 3;
+  mr.entities.ball.pair.ack = 0;        /* 0x89A65 JZ -> epilogue */
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 2u);
+  mr.entities.ball.pair.ack = 1;        /* 0x89A6B..0x89A74 */
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 3u && mr.act.timer == 0);
+}
+
+/* Arm 3 (0x89A7A) + arm 4 (0x89AEA): the goal-pan gate and the two-phase
+ * camera-word handshake. `[0x15781D]`/`[0x15781E]` are the header-bound
+ * goal_armed/goal_zone; `word[0x1577BE]`/`word[0x1577F0]` are the live
+ * camera.speed/event_param. The pan branch (`armed && zone == 0`) advances to
+ * stage 4 and RETURNS (0x89AAE); the `0x89AB3` tail advances on either camera
+ * word high and also RETURNS; arm 4 requires BOTH zero and falls into arm 5. */
+static void test_phase_1D_arm3_4_camera_handshake(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 7;
+  mr.act.stage = 3;
+  mr.act.timer = 5;
+  /* neither branch: armed clear, both camera words zero -> hold (0x89AC5) */
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 3u && mr.act.timer == 7);
+  /* armed but in the zone: still the hold path (0x89A8A JNZ) */
+  mr.goal_armed = 1u;
+  mr.goal_zone = 1u;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 3u);
+  /* the pan branch fires 0x651F0(6)/0x974F0(0x5DC) and returns at stage 4 */
+  mr.goal_zone = 0u;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 4u && mr.act.timer == 0);    /* 0x89AA8/0x89AA0 */
+  /* arm 4: a high camera word holds (0x89AF4/0x89B02) */
+  mr.render.camera.speed = 1;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 4u);
+  mr.render.camera.speed = 0;
+  mr.render.camera.event_param = 1;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 4u);
+  /* both zero: arm 4 advances to 5 and falls into arm 5, which holds below
+   * the 0x3C timeline floor. */
+  mr.render.camera.event_param = 0;
+  mr.state.tick_total = 0x3B;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 5u && mr.act.timer == 0);
+  /* the 0x89AB3 tail also advances (goal_armed clear, camera speed high) */
+  mr.act.stage = 3;
+  mr.render.camera.speed = 1;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 4u);                         /* 0x89ADB/0x89AE0 RET */
+}
+
+/* Arm 5 (0x89B16): the shared-timeline gate. Below 0x3C holds; the middle
+ * window [0x3C,0x78) is the `0x45001()` (`byte[0x1067EC] & 0xF0`) arm, which
+ * has no engine cell (FU184-L3/FU188-L2 sibling) and is derived false, so it
+ * holds; at/above 0x78 it advances into arm 6, which holds on actor code 0x20.
+ * Mutation-RED: dropping the 0x3C floor advances early. */
+static void test_phase_1D_arm5_timeline_windows(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 7;
+  mr.act.stage = 5;
+  mr.act.timer = 0;
+  mr.state.tick_total = 0x3B;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 5u && mr.act.timer == 2);    /* 0x89B21 JL */
+  mr.state.tick_total = 0x3C;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 5u);                         /* the 0x45001 window */
+  mr.state.tick_total = 0x77;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 5u);
+  /* >= 0x78: stage 6, then arm 6 holds while the actor still carries 0x20 */
+  mr.actor_1587d4 = 1;
+  mr.entities.team[0].records[1].code = 0x20u;
+  mr.state.tick_total = 0x78;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 6u && mr.act.timer == 0);    /* 0x89B4A/0x89B60 */
+}
+
+/* Arm 6 (0x89B50): the actor code `+0x91` gate. A record still on code 0x20
+ * (the arm-0 install) holds; the ball record `+0x44` gate is the derived ready
+ * value (the record-11 `[[actor]+0x7A6]` cell has no pool home, FU-142 OL-49),
+ * so a non-0x20 actor walks 6 -> 7 -> 8; the zeroed strip state then takes the
+ * arm-8 no-winner reset back to stage 0. Mutation-RED: dropping the code gate
+ * would advance on the installed 0x20. */
+static void test_phase_1D_arm6_code_gate(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 1;
+  mr.act.id = 7;
+  mr.act.stage = 6;
+  mr.act.timer = 4;
+  mr.actor_1587d4 = 1;
+  mr.entities.team[0].records[1].code = 0x20u;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 6u && mr.act.timer == 5);    /* head add 1 then hold */
+  mr.act.timer = 0;
+  mr.entities.team[0].records[1].code = 0x19u;
+  mr.actor_1587cc[0] = 5;
+  mr.actor_1587cc[1] = 7;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  /* 6 -> 7 (0x89B94 0x4BEC8 = 0) -> 8 -> the no-winner reset (stage 0). */
+  assert(mr.act.stage == 0u && mr.act.timer == 0);
+  assert(mr.actor_1587d4 == 7);                       /* [0x1587CC+(side^1)*4] */
+}
+
+/* Arm 8 (0x89BB6..0x89E6D): the no-winner reset. With the strip block zeroed
+ * the rank compares select nothing (0x89CDF JGE inverse), so the native rebinds
+ * the side's free record (0x897F4) and re-reads the opposite side's cell into
+ * `[0x1587D4]` (0x89DCF), resetting the act to stage 0. The cursor rotates only
+ * when the actor's side differs from the strip side; a 4 -> 5 crossing clears
+ * the 5x2 flag table (0x89D45..0x89D77). Mutation-RED: a missing rebind leaves
+ * the actor cell unchanged. */
+static void test_phase_1D_arm8_no_winner_reset(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 7;
+  mr.act.stage = 8;
+  mr.actor_1587d4 = 2;
+  mr.actor_1587cc[0] = 5;
+  mr.actor_1587cc[1] = 7;
+  mr.render.sub.current_side = 1u;               /* byte[0x1587E6] */
+  mr.render.sub.cursor_raw = 4u;                 /* byte[0x1587E7] */
+  for (int i = 0; i < 10; i++) mr.render.sub.flags[i] = 0xAAu;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 0u && mr.act.timer == 0); /* 0x89DBB/0x89DC8 */
+  assert(mr.render.sub.cursor_raw == 5u);          /* 4 -> 5 (the %5 reset) */
+  for (int i = 0; i < 10; i++) assert(mr.render.sub.flags[i] == 0u);
+  assert(mr.actor_1587cc[0] == 1);                 /* 0x897F4(side 0, start -1) */
+  assert(mr.actor_1587d4 == 7);                    /* [0x1587CC + (side^1)*4] */
+}
+
+/* Arm 8 winner + arm 9 terminal (0x89DDE..0x89EA5): with the cursor at/over 5
+ * and the two strip numbers ordered, the winner scores `word[0x157AC5+2*idx]`
+ * 1 / the other 0 (0x89DED/0x89E00), writes `[0x1587E8]` (the actor ==
+ * `[0x157A9F]` flag, `mr->goal_record`), posts `0x8F188(0xBA,0x20,...)`
+ * (recorded as `match1d_event_id`), advances to stage 9 and falls STRAIGHT into
+ * the terminal: the act slot and `[0x157A4C]` clear in the same call.
+ * Mutation-RED: dropping the fall-through leaves stage 9 installed. */
+static void test_phase_1D_arm8_winner_terminal(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 7;
+  mr.act.stage = 8;
+  mr.act.timer = 9;
+  mr.actor_1587d4 = 1;
+  mr.goal_record = 1;                            /* [0x157A9F] == the actor */
+  mr.global_157a4c = 1u;
+  mr.render.sub.cursor_raw = 5u;                 /* the [0x1587E7] >= 5 arm */
+  mr.render.sub.current_side = 1u;               /* side 0 != current side */
+  mr.render.sub.record[0x10] = 2u;               /* byte[0x1587E4] */
+  mr.render.sub.record[0x11] = 1u;               /* byte[0x1587E5] */
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.score[0] == 1u && mr.score[1] == 0u);   /* 0x89DED/0x89E00 */
+  assert(mr.render.sub.special == 1u);              /* [0x1587E8] */
+  assert(mr.match1d_event_id == 0xBAu);             /* 0x8F188(0xBA,0x20,..) */
+  assert(mr.render.sub.cursor_raw == 6u);           /* 5 -> 6, no %5 clear */
+  assert(mr.global_157a4c == 0u);                   /* arm 9 [0x157A4C]=0 */
+  assert(mr.act.id == 0 && mr.act.stage == 0u && mr.act.timer == 0);
+}
+
+/* The full 0 -> 9 drive (arm 0 install -> arm 1 whistle -> arm 2 contact ->
+ * arm 3 pan -> arm 4 clear -> arm 5 timeline -> arm 6 code -> arm 7/8 select ->
+ * arm 9 terminal). One wait gate is exercised per arm and the terminal is
+ * reached without any direct stage fixture. Mutation-RED: the pre-fix body
+ * stalls at stage 2 forever. */
+static void test_phase_1D_full_timeline_terminates(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 1;
+  mr.act.id = 7;
+  mr.act.stage = 0;
+  mr.actor_1587d4 = 1;
+  /* arm 0 -> 1; arm 1 holds below 0x78 */
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 1u);
+  assert(mr.entities.team[0].records[1].code == 0x20u);  /* the arm-0 install */
+  /* arm 1 -> 2 -> 3, where the pan/camera gate holds */
+  mr.state.tick_total = 0x78;
+  mr.entities.ball.pair.actor = 1;
+  mr.entities.ball.pair.ack = 1;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 3u && mr.ref_whistle == 0x1Eu);
+  /* arm 3 tail -> 4, arm 4 holds while a camera word is high */
+  mr.render.camera.speed = 1;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 4u);
+  /* arm 4 -> 5, arm 5 holds in the 0x45001 window */
+  mr.render.camera.speed = 0;
+  mr.state.tick_total = 0x40;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 5u);
+  /* arm 5 -> 6, arm 6 holds while the actor still carries 0x20 */
+  mr.state.tick_total = 0x78;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 6u);
+  /* the row-0x20 body runs elsewhere and drops the code: 6 -> 7 -> 8 -> 9 */
+  mr.entities.team[0].records[1].code = 0x19u;
+  mr.render.sub.cursor_raw = 5u;
+  mr.render.sub.current_side = 1u;
+  mr.render.sub.record[0x10] = 2u;
+  mr.render.sub.record[0x11] = 1u;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.id == 0);                        /* the act slot cleared */
+  assert(mr.act.stage == 0u && mr.act.timer == 0);
+  assert(mr.global_157a4c == 0u);                /* arm 9 */
+  assert(mr.score[0] == 1u && mr.score[1] == 0u);
+  assert(mr.match1d_event_id == 0xBAu);
+}
+
 /* Phase 0x1E / act 8 (FU-241 §6.3, M2 phase-23 T4): the body is now COUNTED —
  * the phase-table slot is registered (the de-compression), so the dispatcher
  * reaches the body (stage 0 -> 1 on the first call). */
@@ -1182,6 +1420,13 @@ int main(void) {
   test_phase_1D_wait_whistle();
   test_phase_1D_terminal();
   test_phase_1D_arm0_installs_row_20();
+  test_phase_1D_arm2_contact_wait();
+  test_phase_1D_arm3_4_camera_handshake();
+  test_phase_1D_arm5_timeline_windows();
+  test_phase_1D_arm6_code_gate();
+  test_phase_1D_arm8_no_winner_reset();
+  test_phase_1D_arm8_winner_terminal();
+  test_phase_1D_full_timeline_terminates();
   test_phase_1E_counted();
   test_phase_1E_sweep_selects();
   test_phase_1E_sweep_completes();

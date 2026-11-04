@@ -8130,3 +8130,73 @@ Prior sections above are not rewritten; this is the quoted correction.
   `test_engine_m2` output is byte-identical to the base commit (the golden
   `cmp` itself is ISO-gated and therefore not available here); no golden was
   edited.
+## Row-1d arm wave erratum (2026-11-04) — act 7 / phase `0x1D` arms 2..8 ported (the body reaches its terminal)
+
+**Scope/provenance.** Garden-variety arm port on the already-counted phase
+`0x1D` row; no new body, no new wiring, no census move (the phase table keeps
+`{0x1D, fifa96_match_action_phase_1D, ...}`, `78/78` bodies, `55/80` natural /
+`62/80` install-live). Every address below is a fresh Ghidra read of
+`/FIFA96.EXE` this round: `disassemble_bytes 0x89A40` (576 B) and `0x89C7D`
+(562 B) cover the full arm cascade; `disassemble_function` re-read `0x4BEC8`
+(`XOR EAX,EAX; RET`), `0x45001` (`AL = byte[0x1067EC] & 0xF0`), `0x4C374`
+(`word[0x157A68] = 0`), `0x741B4` (`(x ^ byte[0x157ABE]) & 1`), `0x897F4` (the
+free-record bind) and `0x4BDF8`/`0x4BD38` (the `0x1587D4` strip readers);
+`get_xrefs_to 0x1587E9` = 4 WRITE / 0 READ.
+
+- **The structural finding.** `0x89868` is a FALL-THROUGH cascade, not a table
+  of RETURN-terminated arms: a passing arm advances `[0x158829]` and runs the
+  next arm body in the same call (`0x899ED`->`0x899EE`, `0x89A48`->`0x89A4E`,
+  `0x89B11`->`0x89B16`, `0x89B4A`->`0x89B50`, `0x89B8E`->`0x89B94`,
+  `0x89BB0`->`0x89BB6`, `0x89E68`->`0x89E6E`). Arm 3 is the only exception:
+  both of its exits RETURN (`0x89AAE JMP 0x89EA6`; the `0x89AB3` tail ends in
+  its own `RET` at `0x89AE0..0x89AE9`), so arm 4 runs on the next call. The
+  port now mirrors the cascade with one `switch` in a `for (;;)` loop, so a
+  single granted-frame tick can walk the whole tail (including the arm-9
+  terminal on the arm-8 pass frame).
+- **The arms.** 2 `0x89A4E`: actor record vs `[0x158730]` (the ball-pair
+  actor, `mr->entities.ball.pair.actor`) and `byte[0x158746]` (the pair `ack`,
+  `0x7A2F0`). 3 `0x89A7A`: `[0x15781D]`/`[0x15781E]` = `goal_armed`/
+  `goal_zone` (header bindings at `match_run.h:886-904`) -> `0x651F0(6)` /
+  `0x974F0(0x5DC)` (sinks, FU194-L3), then stage 4 + RETURN; the `0x89AB3`
+  tail advances on `word[0x1577BE]` (camera.speed) OR `word[0x1577F0]`
+  (camera.event_param) and RETURNS. 4 `0x89AEA`: BOTH zero -> stage 5, falls
+  into 5. 5 `0x89B16`: `word[0x15881A] >= 0x3C`, and `>= 0x78` or
+  `0x45001()`; the derived cell is `state.tick_total` (the same substitute
+  arm 1 and phase `0x17` use) and the `0x45001` input cell `[0x1067EC]` has no
+  engine home (FU184-L3/FU188-L2 sibling), so the middle window holds. 6
+  `0x89B50`: actor code `+0x91 != 0x20`; the `[[actor]+0x7A6]+0x44` gate is
+  derived ready — the native ball record is the record-11 spill slot the pool
+  does not model (FU-142 OL-49) and its row-`0x1F` producer (`0x899CD`) is
+  FU194-L8. 7 `0x89B94`: `0x4BEC8` (constant 0) -> stage 8.
+- **Arm 8 (`0x89BB6..0x89E6D`), the substitution-strip selection block.** The
+  state cells are the native `0x1587D4` block that the engine already keeps as
+  the FU-152 R1 strip view `mr->render.sub`: `record[0..0x11]` =
+  `[0x1587D4..0x1587E5]` (the `FUN_0004BDF8` pair is `record[4]/record[5]` for
+  `cursor < 5` and `record[0x10]/record[0x11]` above it), `current_side` =
+  `byte[0x1587E6]`, `cursor_raw` = `byte[0x1587E7]`, `special` =
+  `byte[0x1587E8]`, `flags[i*2+side]` = `byte[0x1587DA+idx]`. Two arms: the
+  cursor `< 5` rank compares (`4-sel`, `+1` when the actor's side is the strip
+  side) and the `>= 5` number pair; the winner writes the score pair
+  `word[0x157AC5 + 2*idx] = 1 / word[0x157AC5 + 2*(idx^1)] = 0` (idx =
+  `winner ^ [0x157ABE]`), sets `[0x1587E8]`, posts `0x8F188(0xBA,0x20,rec or
+  team)` (recorded as `match1d_event_id`), clears `word[0x157A68]` via
+  `0x4C374(7)` and advances to 9. The no-winner arm calls
+  `0x897F4(side, (int8)[actor+0x8D]-1)` (the `match_run_free_record` bind),
+  copies `[0x1587CC+(side^1)*4]` into `[0x1587D4]` and resets the act to
+  stage 0 — this lands the FU217-L2 arm-8 rebind. The cursor rotates only when
+  the actor's side differs from the strip side, and a `% 5 == 0` crossing sets
+  it to 5 and clears the 10 flag bytes (`0x89D2C..0x89D77`).
+- **New cells.** `match1d_event_id` (the `0x8F188` request id; `0xBA`) on the
+  run and `render.sub.rank_side` (`[0x1587E9]`, write-only — 4 WRITE / 0 READ
+  fresh). Both are zeroed by init/begin (`reset_render` memsets the strip view).
+- **Legs after this wave.** The unported sinks `0x651F0`/`0x974F0` (arm 3) and
+  the `0x8F188` ring post (arm 8) stay FU194-L3/L7; `0x4C374` ignores its EAX
+  and only clears the reader-less `word[0x157A68]` (FU194-L3/L4); the `0x45001`
+  gate is the FU184-L3/FU188-L2 sibling; the record-11 ball `+0x44` is FU-142
+  OL-49; arm 9's native `[0x157AC0]=1` write remains FU209-L5 (unchanged this
+  round). Arm 1's `word[rec+0x65]` gates and arm 0's per-record row-3 install
+  remain the existing FU194-L7 arms.
+- **Gate and tape.** The targeted suite (`test_engine_match_act`, now with one
+  hold test per arm plus the full 0 -> 9 drive) and the full CTest run are
+  green; M1 `09b726b7…` and M2 `6aa2703b…` are byte-identical (`cmp`), no
+  re-pin.

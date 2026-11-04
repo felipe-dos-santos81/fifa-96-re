@@ -2260,6 +2260,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->bounce_1575d0 = 0;
   mr->match1a_event_id = 0;
   mr->match1a_anim = 0;
+  mr->match1d_event_id = 0;
   fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
   mr->match09_seq_flag_15877c = 0;    /* FU-178 arm 1: [0x15877C] */
   mr->match09_event_id = 0xFF;        /* FU-178: no row-09 event yet */
@@ -2436,6 +2437,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->bounce_1575d0 = 0;
   mr->match1a_event_id = 0;
   mr->match1a_anim = 0;
+  mr->match1d_event_id = 0;
   fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
   mr->match09_seq_flag_15877c = 0;
   mr->match09_event_id = 0xFF;
@@ -6687,89 +6689,307 @@ int fifa96_match_action_phase_1B(struct fifa96_match_run *mr) {
   return FIFA96_OK;                                   /* 0x8910D RET */
 }
 
-/* FU-194 §3/§6.1 (M2 phase-17 T5) + FU-208/FU-209 §6.4 (M2 phase-19 T2): the
- * phase-0x1D / act-7 row body — the native 10-arm set-piece timeline `0x89868`
- * (arms `0x898B4..0x89EAF`). Its phase-table slot is REGISTERED and COUNTED as
- * of T2: the T1 period-index roll (`global_157ac2 == 4`) drives the mode-0
- * sit-8 selector in `phase_drive`, and the clock-tail act tick dispatches this
- * body. The row is one coupled unit with action row 0x20 (arm 0 carries the
- * row-0x20 installer `0x899A2`), which stays a leg. Derived
- * stages: head `mr->act.timer += frame_delta` (0x89882/0x89899); stage 0
- * (0x898B4) clears `[0x15882A]`, writes phase 0x10 when `state.phase != 0x10`
- * (0x898B6..0x898DD — the FU194-L9 phase write), installs action row 0x19 on
- * the team base (`records[0]`, once per team — 0x89903/0x8990A), timer=0
- * stage->1; stage 1 (0x899EE)
- * fires the `0x974DC(0x1E)` whistle and sets `[0x15882A] = 1` once the shared
- * timeline reaches 0x78 (derived `state.tick_total`); stage 9 (0x89E6E) is the
- * terminal (no situation re-dispatch): clear the act slot and `[0x157A4C]`.
- * The coupled row-0x20 installer, the ball row-0x1F install (0x899CD) and the
- * `0x7A028` reset are FU194-L7/L8 legs (the actor `[0x1587D4]`/ball-record
- * producers have no engine cell; a fake install is forbidden); arms 2..8 stay
- * FU194-L3/L7 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+/* FU-209 §2 arm-2/6/8 helper: the native actor record `[0x1587D4]` (the head's
+ * `[ESP+8]` at 0x89876). Returns NULL when the cell is NONE or out of pool range
+ * — the derived guard for a path the native would take on a garbage pointer. */
+static struct fifa96_match_entity *match_1d_actor(struct fifa96_match_run *mr) {
+  if (mr->actor_1587d4 < 0 ||
+      mr->actor_1587d4 >=
+          (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return NULL;
+  return &mr->entities
+              .team[(uint32_t)mr->actor_1587d4 / FIFA96_MATCH_ENTITY_RECORDS]
+              .records[(uint32_t)mr->actor_1587d4 % FIFA96_MATCH_ENTITY_RECORDS];
+}
+
+/* FU-194 §3/§6.1 (M2 phase-17 T5) + FU-208/FU-209 §6.4 (M2 phase-19 T2) +
+ * FU-209 §2 (arms 2..8, this round): the phase-0x1D / act-7 row body — the
+ * native 10-arm set-piece timeline `0x89868` (arms `0x898B4..0x89EAF`, the CS
+ * arm table `0x89840`). Its phase-table slot is REGISTERED and COUNTED as of
+ * T2: the T1 period-index roll (`global_157ac2 == 4`) drives the mode-0 sit-8
+ * selector in `phase_drive`, and the clock-tail act tick dispatches this body.
+ * The row is one coupled unit with action row 0x20 (arm 0 carries the row-0x20
+ * installer `0x899A2`).
+ *
+ * FU-209 §2 (fresh `disassemble_bytes 0x89868`, 1608 B, 427 insns): the arms
+ * are a FALL-THROUGH CASCADE, not a set of RETURN-terminated cases — a passing
+ * arm advances `byte[0x158829]` and runs the next arm body in the SAME call; a
+ * failed wait gate returns through the shared epilogue `0x89EA6`. Arm 3 is the
+ * exception: both of its exits RETURN (`0x89AAE JMP 0x89EA6` and the `0x89AB3`
+ * tail's own RET), so arm 4 runs on the next call. The loop below mirrors that.
+ *
+ * Arm table (addresses fresh this round; full derivation FU-209 §2.1..§2.10):
+ *   0 `0x898B4` install frame: `[0x15882A]=0` (and `[0x157AB1]=0`, no engine
+ *     cell, OL-13), phase 0x10 when `state.phase != 0x10` (FU194-L9), row 0x19
+ *     on both team bases (`0x89903`/`0x8990A`, outside the 11-record loop) and
+ *     row 0x20 on the actor (`0x899A2`, deferred); timer 0, stage 1.
+ *   1 `0x899EE` whistle wait: the shared timeline `word[0x15881A]` (derived
+ *     `state.tick_total`) >= 0x78 -> `0x974DC(0x1E)`, `[0x15882A]=1`, stage 2.
+ *   2 `0x89A4E` actor/referee contact wait: the actor record == `[0x158730]`
+ *     (the ball-pair actor) and `byte[0x158746]` (the pair ack) != 0 -> stage 3.
+ *   3 `0x89A7A` restart-line gate: `[0x15781D]` (goal_armed) != 0 and
+ *     `[0x15781E]` (goal_zone) == 0 -> `0x651F0(6)`/`0x974F0(0x5DC)`, stage 4,
+ *     RETURN; else the `0x89AB3` raise-then-lower tail on `word[0x1577BE]`
+ *     (camera.speed) / `word[0x1577F0]` (camera.event_param) -> stage 4, RETURN.
+ *   4 `0x89AEA` both camera words zero -> stage 5, falls into 5.
+ *   5 `0x89B16` `word[0x15881A] >= 0x3C` and (`>= 0x78` or `0x45001()`) ->
+ *     stage 6, falls into 6.
+ *   6 `0x89B50` actor code (`+0x91`) != 0x20 and ball record `+0x44` ->
+ *     `0x4C374(0x1A)`, stage 7, falls into 7.
+ *   7 `0x89B94` `0x4BEC8()` (fresh: `XOR EAX,EAX; RET`, always ready) -> stage
+ *     8, falls into 8.
+ *   8 `0x89BB6..0x89E6D` the substitution-strip selection block -> event
+ *     `0x8F188(0xBA,0x20,...)`, `0x4C374(7)`, stage 9, falls into 9; the
+ *     no-winner arm rebinds the actor from `[0x1587CC+(side^1)*4]` and resets
+ *     to stage 0 (`0x89DCF`/`0x89DBB`, FU217-L2).
+ *   9 `0x89E6E` terminal (no situation re-dispatch): clear the act slot and
+ *     `[0x157A4C]`.
+ *
+ * Remaining legs: the `[0x15881A]` timeline word has no dedicated engine cell,
+ * so `state.tick_total` is the derived substitute arms 1/5 share with phase
+ * 0x17/0x1C; the `0x651F0`/`0x974F0` sinks (arm 3) are unported derived no-ops
+ * and the `0x8F188` event-ring post (arm 8) is the OL-27 leg, recorded by value
+ * as `match1d_event_id`; the
+ * `0x45001()` input gate (`byte[0x1067EC] & 0xF0`, no engine cell) is the
+ * FU184-L3/FU188-L2 sibling leg; `0x4C374` only clears `word[0x157A68]`
+ * (ignores its EAX, FU194-L3/L4, no reader); the ball record `[[actor]+0x7A6]`
+ * is the record-11 spill slot the pool does not model (FU-142 OL-49), so its
+ * `+0x44` gate is derived ready. Arm 9's native `[0x157AC0]=1` write stays the
+ * FU209-L5 leg. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta); /* 0x89882/0x89899 */
-  switch (mr->act.stage) {
-    case 0u:   /* arm 0 (0x898B4): the install frame */
-      mr->global_5882a = 0u;                       /* 0x898B4 clear [0x15882A] */
-      /* 0x898B4 also clears [0x157AB1] — an unported process flag with no engine
-       * cell (FU-89 §11 / FU-189 §3); leg (OL-13). */
-      if (mr->state.phase != 0x10u) {              /* 0x898B6 CMP [0x157A4A]>>24,0x10 */
-        (void)match_run_write_phase(mr, 0x10u);    /* 0x898CF..0x898DD FUN_000740A0(0x10) */
+  for (;;) {
+    switch (mr->act.stage) {
+      case 0u:   /* arm 0 (0x898B4): the install frame */
+        mr->global_5882a = 0u;                       /* 0x898B4 clear [0x15882A] */
+        /* 0x898B4 also clears [0x157AB1] — an unported process flag with no engine
+         * cell (FU-89 §11 / FU-189 §3); leg (OL-13). */
+        if (mr->state.phase != 0x10u) {              /* 0x898B6 CMP [0x157A4A]>>24,0x10 */
+          (void)match_run_write_phase(mr, 0x10u);    /* 0x898CF..0x898DD FUN_000740A0(0x10) */
+        }
+        /* 0x89903/0x8990A: install action row 0x19 on the team base (EBP) once
+         * per team. The native `CALL 0x7D9A4` sits OUTSIDE the 11-record ESI
+         * loop (whose only install is row 3 on inactive records — FU194-L7 leg);
+         * the engine convention maps a native team-base install to records[0]
+         * (the phase-8/9 arm, `fifa96_match_run_phase_arm`). */
+        for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+          (void)fifa96_match_entities_install(&mr->entities.team[t].records[0],
+                                              mr->state.phase, 0x19u, 0);
+        /* 0x899A2 (the coupled row-0x20 install on the actor record [0x1587D4]):
+         * the native `FUN_0007D9A4(rec, 0x20, 0, 0)` (deferred, stage 0, invoke
+         * 0). The target cell's producer — the sit-8 arm's `[0x1587CC+side*4] ->
+         * [0x1587D4]` bind (`0x8AE4B`) — now LANDS LIVE (FU-217/T3: the
+         * `match_run_free_record` selector + the `set_piece` sit-8 re-init, which
+         * runs before act 7's invoke-now dispatch on the same frame), so
+         * `mr->actor_1587d4` is a real free outfield record and this install
+         * fires: code 0x20 lands on the actor and action row 0x20 is COUNTED.
+         * The `actor_1587d4` gate is kept (a NONE cell — the pre-bind path — is a
+         * null no-op). 0x899CD (the ball-record row-0x1F install) and 0x7A028
+         * (the referee block reset) stay FU194-L7/L8 legs. */
+        {
+          struct fifa96_match_entity *actor = match_1d_actor(mr);
+          if (actor != NULL)
+            (void)fifa96_match_entities_install(actor, mr->state.phase, 0x20u, 0u);
+        }
+        mr->act.timer = 0;                           /* 0x899D7 */
+        mr->act.stage = 1u;                          /* 0x899ED */
+        continue;                                    /* falls into arm 1 */
+      case 1u:  /* arm 1 (0x899EE): the wait -> whistle + [0x15882A]=1 */
+        /* The native gates read word[rec+0x65] (unported record cells, FU194-L7)
+         * and the shared timeline word[0x15881A] (derived state.tick_total). */
+        if ((int32_t)mr->state.tick_total < 0x78) return FIFA96_OK;
+        mr->ref_whistle = 0x1Eu;                     /* 0x974DC(0x1E) */
+        mr->global_5882a = 1u;                       /* [0x15882A]=1 */
+        mr->act.timer = 0;
+        mr->act.stage = 2u;
+        continue;                                    /* falls into arm 2 */
+      case 2u: {  /* arm 2 (0x89A4E): the actor/referee contact wait */
+        /* 0x89A52: the actor record against the staged ball actor [0x158730]
+         * (both cells hold pool ids in the engine); 0x89A5E/0x89A65: the
+         * byte[0x158746] ack (the ball-pair stage's `ack`, written by 0x7A2F0). */
+        if (mr->actor_1587d4 != mr->entities.ball.pair.actor) return FIFA96_OK;
+        if (mr->entities.ball.pair.ack == 0u) return FIFA96_OK;
+        mr->act.timer = 0;                           /* 0x89A6D */
+        mr->act.stage = 3u;                          /* 0x89A74 */
+        continue;                                    /* falls into arm 3 */
       }
-      /* 0x89903/0x8990A: install action row 0x19 on the team base (EBP) once
-       * per team. The native `CALL 0x7D9A4` sits OUTSIDE the 11-record ESI
-       * loop (whose only install is row 3 on inactive records — FU194-L7 leg);
-       * the engine convention maps a native team-base install to records[0]
-       * (the phase-8/9 arm, `fifa96_match_run_phase_arm`). */
-      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
-        (void)fifa96_match_entities_install(&mr->entities.team[t].records[0],
-                                            mr->state.phase, 0x19u, 0);
-      /* 0x899A2 (the coupled row-0x20 install on the actor record [0x1587D4]):
-       * the native `FUN_0007D9A4(rec, 0x20, 0, 0)` (deferred, stage 0, invoke
-       * 0). The target cell's producer — the sit-8 arm's `[0x1587CC+side*4] ->
-       * [0x1587D4]` bind (`0x8AE4B`) — now LANDS LIVE (FU-217/T3: the
-       * `match_run_free_record` selector + the `set_piece` sit-8 re-init, which
-       * runs before act 7's invoke-now dispatch on the same frame), so
-       * `mr->actor_1587d4` is a real free outfield record and this install
-       * fires: code 0x20 lands on the actor and action row 0x20 is COUNTED.
-       * The `actor_1587d4` gate is kept (a NONE cell — the pre-bind path — is a
-       * null no-op). 0x899CD (the ball-record row-0x1F install) and 0x7A028
-       * (the referee block reset) stay FU194-L7/L8 legs. */
-      if (mr->actor_1587d4 >= 0 &&
-          mr->actor_1587d4 <
-              (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
-        struct fifa96_match_entity *actor =
-            &mr->entities
-                 .team[(uint32_t)mr->actor_1587d4 / FIFA96_MATCH_ENTITY_RECORDS]
-                 .records[(uint32_t)mr->actor_1587d4 % FIFA96_MATCH_ENTITY_RECORDS];
-        (void)fifa96_match_entities_install(actor, mr->state.phase, 0x20u, 0u);
+      case 3u: {  /* arm 3 (0x89A7A): the restart-line gate + the 0x89AB3 tail */
+        /* 0x89A81/0x89A8A: [0x15781D] = goal_armed, [0x15781E] = goal_zone. */
+        if (mr->goal_armed != 0u && mr->goal_zone == 0u) {
+          /* 0x89A8C/0x89A96: 0x651F0(6) (the sit dispatch) and 0x974F0(0x5DC)
+           * (the audio id). Both sinks are unported (FU194-L3); derived no-op. */
+          mr->act.timer = 0;                         /* 0x89AA0 */
+          mr->act.stage = 4u;                        /* 0x89AA8 */
+          return FIFA96_OK;                          /* 0x89AAE JMP 0x89EA6 */
+        }
+        /* 0x89AB3: the raise-then-lower handshake tail. Either camera word high
+         * advances to stage 4; both zero waits. word[0x1577BE]/word[0x1577F0]
+         * are the LIVE camera.speed/camera.event_param cells (FU-300 fix wave). */
+        if (mr->render.camera.speed == 0u && mr->render.camera.event_param == 0u)
+          return FIFA96_OK;                          /* 0x89AC5 JZ 0x89EA6 */
+        mr->act.timer = 0;                           /* 0x89AD4 */
+        mr->act.stage = 4u;                          /* 0x89ADB */
+        return FIFA96_OK;                            /* 0x89AE0..0x89AE9 RET */
       }
-      mr->act.timer = 0;                           /* 0x899D7 */
-      mr->act.stage = 1u;                          /* 0x899ED */
-      return FIFA96_OK;
-    case 1u:  /* arm 1 (0x899EE): the wait -> whistle + [0x15882A]=1 */
-      /* The native gates read word[rec+0x65] (unported record cells, FU194-L7)
-       * and the shared timeline word[0x15881A] (derived state.tick_total). */
-      if ((int32_t)mr->state.tick_total < 0x78) return FIFA96_OK;
-      mr->ref_whistle = 0x1Eu;                     /* 0x974DC(0x1E) */
-      mr->global_5882a = 1u;                       /* [0x15882A]=1 */
-      mr->act.timer = 0;
-      mr->act.stage = 2u;
-      return FIFA96_OK;
-    case 9u:  /* arm 9 (0x89E6E): the terminal (no situation re-dispatch) */
-      mr->global_157a4c = 0u;                      /* [0x157A4C]=0 */
-      /* The native [0x157AC0]=1 write (0x89E8C) is not mirrored here; the flag
-       * cell now exists (`mr->global_157ac0`, T1/FU-213) — this terminal's
-       * write-back stays the FU209-L5 leg. */
-      mr->act.id = 0;                              /* [0x158828] */
-      mr->act.stage = 0;                           /* [0x158829] */
-      mr->act.timer = 0;                           /* [0x158818] */
-      return FIFA96_OK;
-    default:
-      /* arms 2..8: the sinks (0x651F0/0x974F0/0x45001/0x4BEC8/0x4C374) and the
-       * arm-8 selection block (0x89BB6..0x89E6D) are unported; FU194-L3/L7. */
-      return FIFA96_OK;
+      case 4u:  /* arm 4 (0x89AEA): the camera-event clear wait */
+        if (mr->render.camera.speed != 0u) return FIFA96_OK;      /* 0x89AF4 */
+        if (mr->render.camera.event_param != 0u) return FIFA96_OK;/* 0x89B02 */
+        mr->act.timer = 0;                           /* 0x89B0A */
+        mr->act.stage = 5u;                          /* 0x89B11 */
+        continue;                                    /* falls into arm 5 */
+      case 5u:  /* arm 5 (0x89B16): the shared-timeline gate */
+        if ((int32_t)mr->state.tick_total < 0x3C) return FIFA96_OK; /* 0x89B21 */
+        if ((int32_t)mr->state.tick_total < 0x78) {
+          /* 0x89B2C CALL 0x45001 = `byte[0x1067EC] & 0xF0` (fresh 20-insn body).
+           * The cell has no engine home (the FU184-L3/FU188-L2 sibling leg), so
+           * the derived predicate is false and this middle window holds; the
+           * >= 0x78 arm below still advances. */
+          return FIFA96_OK;                          /* 0x89B33 JZ 0x89EA6 */
+        }
+        mr->act.timer = 0;                           /* 0x89B43 */
+        mr->act.stage = 6u;                          /* 0x89B4A */
+        continue;                                    /* falls into arm 6 */
+      case 6u: {  /* arm 6 (0x89B50): the code/ball gate */
+        struct fifa96_match_entity *actor = match_1d_actor(mr);
+        if (actor == NULL) return FIFA96_OK;         /* derived guard */
+        /* 0x89B50..0x89B5D: `dword[actor+0x8E]>>24` = byte[actor+0x91] (code). */
+        if (actor->code == 0x20u) return FIFA96_OK;  /* 0x89B60 JZ 0x89EA6 */
+        /* 0x89B66..0x89B6E: `byte[ballrec+0x44] == 0` waits. The native ball
+         * record is the record-11 spill slot `[[actor]+0x7A6]` (team base +
+         * 11*0xB2); the pool models records 0..10 only (FU-142 OL-49) and has no
+         * `+0x44` cell for it, so the derived value is ready (the row-0x1F
+         * installer `0x899CD` that would produce it is the FU194-L8 leg). */
+        /* 0x89B74 CALL 0x4C374(0x1A): `word[0x157A68] = 0`, a cell with no
+         * reader (FU194-L3/L4) -> derived no-op. */
+        mr->act.timer = 0;                           /* 0x89B88 */
+        mr->act.stage = 7u;                          /* 0x89B8E */
+        continue;                                    /* falls into arm 7 */
+      }
+      case 7u:  /* arm 7 (0x89B94): the 0x4BEC8 wait */
+        /* Fresh `disassemble_function 0x4BEC8` = `XOR EAX,EAX; RET` (2 insns):
+         * the wait gate is always ready. */
+        mr->act.timer = 0;                           /* 0x89BAA */
+        mr->act.stage = 8u;                          /* 0x89BB0 */
+        continue;                                    /* falls into arm 8 */
+      case 8u: {  /* arm 8 (0x89BB6..0x89E6D): the selection block */
+        /* FU-194 §7 (FU194-L7): the substitution-strip ranking block. Its state
+         * is the native 0x1587D4 block, which the engine keeps in `render.sub`
+         * (FU-152 §2.6/§3.2): `record[]` = bytes [0x1587D4..0x1587E5],
+         * `current_side` = byte[0x1587E6], `cursor_raw` = byte[0x1587E7],
+         * `special` = byte[0x1587E8], `rank_side` = byte[0x1587E9],
+         * `flags[i*2+side]` = byte[0x1587DA + i*2 + side]. */
+        struct fifa96_match_run_sub *sub = &mr->render.sub;
+        struct fifa96_match_entity *actor = match_1d_actor(mr);
+        int32_t winner = -1;                         /* EDI */
+        uint8_t side;                                /* byte[actorTeam+0x826] */
+        uint8_t sel = sub->cursor_raw;               /* byte[0x1587E7] */
+        if (actor == NULL) return FIFA96_OK;         /* derived guard */
+        side = (uint8_t)(mr->entities
+                             .team[(uint32_t)mr->actor_1587d4 /
+                                   FIFA96_MATCH_ENTITY_RECORDS]
+                             .side &
+                         1u);
+        sub->rank_side = 0xFFu;                      /* 0x89BC5 [0x1587E9]=0xFF */
+        if ((int8_t)sel >= 5) {
+          /* 0x89CA8: the cursor >= 5 arm. */
+          if (side != sub->current_side) {
+            int8_t p1 = (int8_t)sub->record[0x10];   /* byte[0x1587E4] */
+            int8_t p2 = (int8_t)sub->record[0x11];   /* byte[0x1587E5] */
+            if (p1 > p2) winner = 0;                 /* 0x89CD2 */
+            else if (p2 > p1) winner = 1;            /* 0x89CDA */
+            if (winner < 0) {                        /* 0x89CE2 JGE inverse */
+              sub->record[0x11] = 0u;                /* 0x89CE6 */
+              sub->record[0x10] = 0u;                /* 0x89CEC */
+            }
+          } else {
+            /* 0x89CF4: byte[0x1587E4 + current_side] picks the output side (the
+             * modeled domain of current_side is a side 0/1). */
+            sub->rank_side = (sub->record[0x10u + (sub->current_side & 1u)] != 0u)
+                                 ? side
+                                 : (uint8_t)(side ^ 1u);
+          }
+        } else {
+          /* 0x89BD4..0x89C1A: the per-side rank words. rank[side] = 4-sel and
+           * rank[side^1] = the same, +1 when the actor's side is the current
+           * strip side. */
+          int16_t rank[2];
+          int16_t base = (int16_t)(4 - (int32_t)(int8_t)sel);
+          int32_t a, b;
+          rank[side] = base;                         /* word[ESP + side*2] */
+          rank[side ^ 1u] = base;                    /* word[ESP + (side^1)*2] */
+          if (side == sub->current_side)             /* 0x89C12 CMP AX,BX */
+            rank[side ^ 1u] = (int16_t)(base + 1);   /* 0x89C19 INC */
+          /* 0x89C1E..0x89C55: the signed rank compares on the two strip numbers
+           * byte[0x1587D8+side] (the FUN_0004BDF8 pair, FU-152 §2.6). */
+          a = (int8_t)sub->record[4u + (side ^ 1u)];
+          b = (int8_t)sub->record[4u + side];
+          if (b > a + (int32_t)rank[side ^ 1u]) winner = side;       /* 0x89C44 */
+          else if (a > b + (int32_t)rank[side]) winner = side ^ 1u;  /* 0x89C55 */
+          /* 0x89C57..0x89CA3: the byte[0x1587E9] output-side pick. The cell is
+           * write-only (fresh `get_xrefs_to 0x1587E9` = 4 WRITE, 0 READ). */
+          if (a + 1 > b + (int32_t)rank[side])             /* 0x89C86 */
+            sub->rank_side = (uint8_t)(side ^ 1u);
+          else if (b > a + (int32_t)rank[side ^ 1u] - 1)   /* 0x89D0D */
+            sub->rank_side = side;
+        }
+        /* 0x89D12..0x89D77: the cursor rotation, only when the actor's side
+         * differs from the strip's current side. */
+        if (side != sub->current_side) {
+          uint8_t next = (uint8_t)(sub->cursor_raw + 1u); /* 0x89D2C INC */
+          if ((int8_t)next % 5 == 0) {                    /* 0x89D45 IDIV */
+            next = 5u;                                    /* 0x89D4F */
+            for (uint32_t i = 0; i < 5u; i++) {           /* 0x89D59..0x89D77 */
+              sub->flags[i * 2u] = 0u;
+              sub->flags[i * 2u + 1u] = 0u;
+            }
+          }
+          sub->cursor_raw = next;
+        }
+        if (winner < 0) {
+          /* 0x89D7E..0x89DDD: the no-winner reset. `FUN_000897F4(side,
+           * (int8)[actor+0x8D] - 1)` rebinds the side's free record (0x89832),
+           * then `[0x1587D4] = [0x1587CC + (side^1)*4]` (0x89DCF), stage 0 and
+           * timer 0. */
+          int32_t start = (int32_t)(int8_t)actor->active - 1; /* 0x89D82/0x89D8A */
+          mr->actor_1587cc[side] = match_run_free_record(mr, side, start);
+          mr->actor_1587d4 = mr->actor_1587cc[side ^ 1u];     /* 0x89DCF */
+          mr->act.stage = 0u;                                 /* 0x89DBB */
+          mr->act.timer = 0;                                  /* 0x89DC8 */
+          return FIFA96_OK;                                   /* 0x89DDD RET */
+        }
+        /* 0x89DDE..0x89E00: the winner. `FUN_000741B4(x)` = `(x ^ [0x157ABE]) &
+         * 1`; the native writes the score pair `word[0x157AC5 + 2*idx] = 1` and
+         * `word[0x157AC5 + 2*(idx^1)] = 0` (the FU-146 score words). */
+        {
+          uint32_t idx = ((uint32_t)winner ^ mr->side_swap) & 1u;
+          mr->score[idx] = 1u;
+          mr->score[idx ^ 1u] = 0u;
+        }
+        /* 0x89E08..0x89E1A: `[0x1587E8] = (actor record == [0x157A9F])`. */
+        sub->special = (mr->actor_1587d4 == mr->goal_record) ? 1u : 0u;
+        /* 0x89E43: `0x8F188(EAX=0xBA, EBX=0x20, EDX=actor record when
+         * [0x1587D4]==[0x157A9F], else the winner team base)`. The event-ring
+         * sink is unported (OL-27); the id is recorded. */
+        mr->match1d_event_id = 0xBAu;
+        /* 0x89E4D CALL 0x4C374(7): the word[0x157A68] clear (FU194-L3, no
+         * reader) -> derived no-op. */
+        mr->act.timer = 0;                           /* 0x89E61 */
+        mr->act.stage = 9u;                          /* 0x89E68 */
+        continue;                                    /* falls into arm 9 */
+      }
+      case 9u:  /* arm 9 (0x89E6E): the terminal (no situation re-dispatch) */
+        mr->global_157a4c = 0u;                      /* [0x157A4C]=0 */
+        /* The native [0x157AC0]=1 write (0x89E8C) is not mirrored here; the flag
+         * cell now exists (`mr->global_157ac0`, T1/FU-213) — this terminal's
+         * write-back stays the FU209-L5 leg. */
+        mr->act.id = 0;                              /* [0x158828] */
+        mr->act.stage = 0;                           /* [0x158829] */
+        mr->act.timer = 0;                           /* [0x158818] */
+        return FIFA96_OK;
+      default:
+        return FIFA96_OK;                            /* stage > 9: 0x898A2 JA 0x89EA6 */
+    }
   }
 }
 

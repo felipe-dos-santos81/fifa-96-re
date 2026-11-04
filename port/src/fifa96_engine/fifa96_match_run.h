@@ -232,6 +232,10 @@ int fifa96_match_run_replay_camera_set(struct fifa96_match_run *mr, uint32_t ind
 struct fifa96_match_run_sub {
   uint8_t active;
   uint8_t cursor_raw;      /* [0x1587E7] */
+  /* FU-209 §2.9 (act-7 arm 8): the write-only `[0x1587E9]` output-side byte
+   * the selection block computes (fresh `get_xrefs_to 0x1587E9` = 4 WRITE,
+   * 0 READ). Same-value home for the native cell that closes this block. */
+  uint8_t rank_side;       /* [0x1587E9] */
   uint8_t current_side;    /* [0x1587E3] >> 24 */
   uint8_t record_side;     /* (*[0x1587D4] + 0x826) */
   uint8_t mode;            /* [0x157A4A] >> 24 */
@@ -849,6 +853,11 @@ struct fifa96_match_run {
    * Cleared by init/begin. */
   uint8_t match1a_event_id;
   uint8_t match1a_anim;
+  /* FU-209 §2.9 (act-7 arm 8, phase-0x1D selection block): the event request
+   * `0x8F188(EAX=0xBA, EBX=0x20, EDX=rec/team)`. The command-ring sink itself
+   * stays the OL-27 leg, so the row records the id it would post (0xBA).
+   * Init/begin clear it. */
+  uint8_t match1d_event_id;
   int32_t predict_c44;
   int32_t predict_c48_x;
   int32_t predict_c48_y;
@@ -1857,10 +1866,20 @@ int fifa96_match_action_phase_1C(struct fifa96_match_run *mr);
  * situation re-dispatch): clear the act slot and `[0x157A4C]`. The coupled
  * row-0x20 installer, the ball row-0x1F install (0x899CD) and the `0x7A028`
  * reset are FU194-L8/L7 legs (the actor `[0x1587D4]` / ball-record producers are
- * unported; a fake install is forbidden); arms 2..8 (the
- * `0x651F0`/`0x974F0`/`0x45001`/`0x4BEC8`/`0x4C374` sinks and the arm-8
- * selection block `0x89BB6..0x89E6D`) stay FU194-L3/L7 legs. Returns FIFA96_OK,
- * or -FIFA96_ERR_INVALID for NULL `mr`. */
+ * unported; a fake install is forbidden).
+ *
+ * [FU-209 §2 arms 2..8, this round: the middle of the timeline is now ported as
+ * the native fall-through cascade — arm 2 (0x89A4E: the ball-pair actor/ack
+ * wait), arm 3 (0x89A7A: goal_armed/goal_zone + the 0x89AB3 camera-word
+ * handshake), arm 4 (0x89AEA: the camera clear wait), arm 5 (0x89B16: the
+ * shared-timeline gate), arm 6 (0x89B50: the actor code / ball +0x44 gate), arm
+ * 7 (0x89B94: the 0x4BEC8 wait), arm 8 (0x89BB6..0x89E6D: the substitution-strip
+ * selection block, the 0x8F188(0xBA,0x20,..) event, 0x4C374(7), and the
+ * no-winner [0x1587CC] rebind back to stage 0). Remaining legs: the unported
+ * 0x651F0/0x974F0/0x8F188 sinks (FU194-L3/L7), the 0x45001 input gate
+ * (FU184-L3/FU188-L2 sibling) and the record-11 ball record's +0x44 cell
+ * (FU-142 OL-49). Arm 9's native [0x157AC0]=1 write stays FU209-L5.] Returns
+ * FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_action_phase_1D(struct fifa96_match_run *mr);
 
 /* FU-241 §6.3 (M2 phase-23 T4; formerly FU-194 §4/§6.2): the phase-0x1E / act-8
