@@ -3303,7 +3303,12 @@ int fifa96_match_action_0A(struct fifa96_match_run *mr) {
                                      : 0u));
     found->speed71 = speed;                             /* word[+0x71] */
     found->vel73 = (int16_t)fifa96_camera_mul16(
-        (int32_t)speed, fifa96_entity_sine(a));         /* 0x795A4 */
+        (int32_t)speed, fifa96_entity_sine(a));         /* 0x81876/0x8187B */
+    /* 0x8187F..0x818B9: the second quarter-sine fold at angle+0x100. The
+     * native re-reads the same speed word through dword[+0x6F]>>16 (the
+     * `dword[addr]>>16 == word[addr+2]` alias: +0x6F + 2 = +0x71). */
+    found->vel75 = (int16_t)fifa96_camera_mul16(
+        (int32_t)speed, fifa96_entity_sine((int16_t)(a + 0x100)));
     /* 0x818B3: the anim install on self (row = +0x8E, frame = turn). */
     if (fifa96_match_run_record_anim_install(mr, e, (int32_t)r->type, turn) !=
         FIFA96_OK)

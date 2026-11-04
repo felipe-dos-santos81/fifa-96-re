@@ -2941,6 +2941,7 @@ static void test_action_0a_runs_body(void) {
   assert(fifa96_match_action_0A(&f.mr) == FIFA96_OK);
   assert(opp->speed71 == 6);
   assert(opp->vel73 == -6);
+  assert(opp->vel75 == 0);
   assert(f.mr.record.ran == 1u);
   assert(f.mr.record.timer89 == 0);
   assert(f.mr.record.stage92 == 1u);
@@ -2953,6 +2954,7 @@ static void test_action_0a_runs_body(void) {
   assert(fifa96_match_action_0A(&f.mr) == FIFA96_OK);
   assert(opp->speed71 == 6);
   assert(opp->vel73 == 0);
+  assert(opp->vel75 == 6);
 
   /* the distance reject on a fresh stage 0: self +0x93 = 0x10 and the reset */
   f.mr.record.stage92 = 0;

@@ -78,3 +78,25 @@ phase gate; NULL.
 port bounds it and leaves the tier at 0 (the phase-35 placement-limit
 convention). The native `0x8DCD4` dx word is recomputed from the same 16-bit
 position difference because the shared helper exposes only distance and dz.
+
+## 4. Erratum (2026-11-04) — the second fold and `+0x75`
+
+The §1 write list is incomplete. Fresh
+`disassemble_bytes 0x8187f..0x818b9` shows the second quarter-sine fold:
+
+```
+0x8187f MOV EAX,EBX                 ; the adjusted angle `a`
+0x81881 LEA ECX,[EAX+0x100]
+...
+0x818a4 MOV EBX,dword[EDI+0x6f]     ; the dword alias: +0x6F+2 = +0x71
+0x818a7 SAR EBX,0x10                ; -> the speed word
+0x818aa MOV EDX,EAX                 ; sine(a+0x100)
+0x818ac MOV EAX,EBX                 ; speed
+0x818ae CALL 0x795a4                ; Q16 multiply
+0x818b9 MOV word ptr [EDI+0x75],AX  ; vel75
+```
+
+So the nearest record receives **both** `vel73` (`0x81876`/`0x8187b`) and
+`vel75` (`0x818ae`/`0x818b9`), from the same speed word. The port now writes
+both; the fixture pins `+z -> vel73 -6, vel75 0` and
+`+x -> vel73 0, vel75 6`.
