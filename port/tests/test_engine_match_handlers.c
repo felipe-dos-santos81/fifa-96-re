@@ -1570,19 +1570,18 @@ static void test_phase_05_position_copy(void) {
   drop_fixture(&f);
 }
 
-/* FU-178/FU-190 §6.1 (phase-16 T5): row 0x0D's completion path — the row-09
- * arm-1 installer `0x80F61` (`MOV EDX,0xD; MOV EAX,ESI; XOR EBX,EBX;
- * CALL 0x7D9A4`, bytes `ba0d000000`/`e835caffff`) — stays unported (row-09 arm
- * 1 = FU178-L1; its gate producers `[0x15877C]`/`[rec+0x3D]`/`[rec+0x24]` and
- * helpers/sinks `0x8f188`/`0x8ed40`/`0x92820`/`0x7a490`/`0x8a3fc` are
- * unported), so the row stays `fn == NULL` / uncounted. */
-static void test_action_0d_arm1_installer_leg(void) {
+/* FU-178/FU-190 §6.1 + rows09-0c: row 0x0D's slot stays NULL/uncounted even
+ * though its sole installer `0x80F61` (`MOV EDX,0xD; MOV EAX,ESI; XOR EBX,EBX;
+ * CALL 0x7D9A4`) now runs — row-09 arm 1 is ported. The evidence records the
+ * ported installer and the open wiring decision (wiring flips the census
+ * numbers, AGENTS.md); the dispatch contract stays UNSUP. */
+static void test_action_0d_installer_now_ported_slot_null(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x0D];
   make_fixture(&f);
   assert(row->fn == NULL);
-  assert(strstr(row->evidence, "FU178-L1") != NULL);
   assert(strstr(row->evidence, "0x80F61") != NULL);
+  assert(strstr(row->evidence, "OL-22") != NULL);
   assert(action_expect[0x0D] == UNSUP);
   assert(fifa96_match_dispatch_action(&f.mr, 0x0D) == UNSUP);
   drop_fixture(&f);
@@ -3633,6 +3632,224 @@ static void test_action_0c_stage0_gates_and_foul_path(void) {
   drop_fixture(&f);
 }
 
+/* The action-0x0C stage table arms 1..6 (`0x81F4E/0x81FA7/0x8244B/0x8247D/
+ * 0x824CD/0x824F2`): the native fall-through (each advance lands on the next
+ * arm), the stage-1 anim-row retry, the stage-2 [0x14C30A] skip arm, the
+ * stage-3 act-id gate, the stage-4 timer + anim 0x0F install, the stage-5
+ * +0x44 gate and the stage-6 reset. */
+static void test_action_0c_stage_walk(void) {
+  struct fixture f;
+  struct fifa96_match_entity *b;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  b = &f.mr.entities.team[1].records[1];
+  b->active = 1;
+  b->code = 0x0C;
+  f.mr.record.entity_id = 12;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x00u;
+  f.mr.record.delta = 2;
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_y = 0;
+  f.mr.record.pos_z = 0x200;
+  f.mr.referee.contact_kind = 0;
+  f.mr.config.field_4c30a = 0;               /* 0x81FA7 -> 0x82310 */
+
+  /* 1 -> 2 -> 3 -> 4 in one dispatch; stage 4 waits on +0x89 >= 0x12C */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 4u);
+  assert(f.mr.record.timer89 == 0);
+  assert(b->skip_99 == 0u);                  /* 0x82310 */
+  assert(f.mr.match0c_event_id == 0x5Fu);    /* 0x82321 (kind 0) */
+
+  /* stage 1 holds while the foul anim rows 0x0D/0x52 are playing */
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x0Du;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1u);
+  f.mr.record.anim_id = 0x52u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1u);
+
+  /* stage 4: timer >= 0x12C installs anim 0x0F on self and falls into stage 5,
+   * which holds on the fresh row's +0x44 = 0 (row 0x0F flags & 1 = 0) */
+  f.mr.record.stage92 = 4;
+  f.mr.record.timer89 = 0x12C;
+  f.mr.record.delta = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(b->anim_id == 0x0Fu);               /* 0x824B0 0x6E598 */
+  assert(f.mr.record.row44 == 0u);
+  assert(f.mr.record.stage92 == 5u);
+
+  /* stage 5: +0x44 set -> the +0x98 clear and the stage-6 advance */
+  f.mr.record.stage92 = 5;
+  f.mr.record.row44 = 1;
+  b->skip_98 = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(b->skip_98 == 0u);                  /* 0x824D3 */
+  assert(f.mr.record.stage92 == 6u);
+
+  /* stage 6: the +0x89 > 0x3C wait then the 0x7DAB4 reset */
+  f.mr.record.stage92 = 6;
+  f.mr.record.timer89 = 0x3C;
+  f.mr.record.delta = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 6u);
+  f.mr.record.stage92 = 6;
+  f.mr.record.timer89 = 0x3D;
+  f.mr.record.delta = 0;
+  f.mr.record.active = 0;
+  b->active = 0;
+  b->code = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0xFFu);      /* 0x824FB */
+  drop_fixture(&f);
+}
+
+/* The action-0x0C stage-3 act-id gate (`0x8244B`: `[0x158828]` in {3, 8} ->
+ * retry; otherwise advance into stage 4). */
+static void test_action_0c_stage3_act_gate(void) {
+  struct fixture f;
+  struct fifa96_match_entity *b;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  b = &f.mr.entities.team[1].records[1];
+  b->active = 1;
+  b->code = 0x0C;
+  f.mr.record.entity_id = 12;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 3;
+  f.mr.record.anim_id = 0x00u;
+  f.mr.record.delta = 0;
+  f.mr.act.id = 3;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+  f.mr.act.id = 8;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+  f.mr.act.id = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 4u);         /* advanced; stage 4 waits */
+  drop_fixture(&f);
+}
+
+/* The action-0x0C stage-2 settings/RNG gate (`0x81FA7..0x81FBB`): with
+ * [0x14C30A] != 0 the RNG draw's low five bits select the swap terminal
+ * (`0x822DB`: +0x79 >>= 1 with the min-3 clamp, +0x93 = 0, event 0x61) and set
+ * +0x99 = 1; a nonzero draw skips the block. */
+static void test_action_0c_stage2_rng_gate(void) {
+  struct fixture f;
+  struct fifa96_match_entity *b;
+  struct fifa96_rng probe;
+  uint16_t draw = 0;
+  uint32_t seed;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  b = &f.mr.entities.team[1].records[1];
+  b->active = 1;
+  b->code = 0x0C;
+  f.mr.record.entity_id = 12;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 2;
+  f.mr.record.anim_id = 0x00u;
+  f.mr.record.delta = 0;
+  f.mr.referee.contact_kind = 0;
+  f.mr.config.field_4c30a = 1;               /* the settings gate is open */
+
+  /* find a seed whose first 0x92AC8 draw has (draw & 0x1F) == 0 */
+  for (seed = 0; seed < 4096u; seed++) {
+    fifa96_rng_seed(&probe, seed);
+    assert(fifa96_rng_step(&probe, &draw) == FIFA96_OK);
+    if ((draw & 0x1Fu) == 0u) break;
+  }
+  assert(seed < 4096u);
+  assert(fifa96_rng_seed(&f.mr.rng, seed) == FIFA96_OK);
+  b->timer79 = 10;
+  b->timer93 = 5;
+  b->skip_99 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(b->skip_99 == 1u);                  /* 0x81FC4 */
+  assert(b->timer79 == 5u);                  /* 0x822DB..0x822E7 */
+  assert(b->timer93 == 0u);                  /* 0x82302 */
+  assert(f.mr.record.stage92 == 4u);         /* 2 -> 3 -> 4 */
+
+  /* the min-3 clamp (0x822EB..0x822F0) */
+  for (seed = 0; seed < 4096u; seed++) {
+    fifa96_rng_seed(&probe, seed);
+    assert(fifa96_rng_step(&probe, &draw) == FIFA96_OK);
+    if ((draw & 0x1Fu) == 0u) break;
+  }
+  assert(fifa96_rng_seed(&f.mr.rng, seed) == FIFA96_OK);
+  f.mr.record.stage92 = 2;
+  b->timer79 = 4;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(b->timer79 == 3u);                  /* 4 >> 1 = 2 -> clamp 3 */
+
+  /* a draw with (draw & 0x1F) != 0 skips the swap block (+0x79 untouched) */
+  for (seed = 0; seed < 4096u; seed++) {
+    fifa96_rng_seed(&probe, seed);
+    assert(fifa96_rng_step(&probe, &draw) == FIFA96_OK);
+    if ((draw & 0x1Fu) != 0u) break;
+  }
+  assert(seed < 4096u);
+  assert(fifa96_rng_seed(&f.mr.rng, seed) == FIFA96_OK);
+  f.mr.record.stage92 = 2;
+  b->timer79 = 9;
+  b->timer93 = 7;
+  b->skip_99 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(b->timer79 == 9u);
+  assert(b->timer93 == 7u);
+  assert(b->skip_99 == 0u);
+  assert(f.mr.record.stage92 == 4u);
+  drop_fixture(&f);
+}
+
+/* The action-0x0C stage-2 event tail (`0x82317..0x8242E`): the registrar kind
+ * [0x15888C] = 2 emits 0x0B and then 0x10/0x0C from the contact point
+ * (|x| < 0x420 and the fouler side's z band). */
+static void test_action_0c_stage2_event_tail(void) {
+  struct fixture f;
+  struct fifa96_match_entity *b;
+  struct fifa96_match_entity *a;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  b = &f.mr.entities.team[1].records[1];
+  b->active = 1;
+  b->code = 0x0C;
+  a = &f.mr.entities.team[0].records[1];
+  a->active = 1;
+  f.mr.entities.team[0].side = 0;
+  f.mr.record.entity_id = 12;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 2;
+  f.mr.record.anim_id = 0x00u;
+  f.mr.record.delta = 0;
+  f.mr.config.field_4c30a = 0;
+  f.mr.referee.contact_kind = 2;             /* 0x15888C */
+  f.mr.referee.rec_first = 1;                /* A = [0x15888F] */
+  f.mr.referee.point[0] = 0;
+  f.mr.referee.point[2] = -0x800;            /* side-0 goal band */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.match0c_event_id == 0x10u);    /* the second emission wins */
+  assert(f.mr.record.stage92 == 4u);
+
+  /* out of the band -> 0x0C */
+  f.mr.record.stage92 = 2;
+  f.mr.referee.point[2] = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.match0c_event_id == 0x0Cu);
+
+  /* |x| >= 0x420 -> 0x0C regardless of z */
+  f.mr.record.stage92 = 2;
+  f.mr.referee.point[0] = 0x420;
+  f.mr.referee.point[2] = -0x800;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.match0c_event_id == 0x0Cu);
+  drop_fixture(&f);
+}
+
 /* The action-0x0B gates: the band window (0x20,0x70), the session gate on
  * arm 1, and the aligned-facing 0x59 dive choice. */
 static void test_action_0b_duel_gates_and_choice(void) {
@@ -3951,18 +4168,216 @@ static void test_action_09_clear_branch_detaches(void) {
   drop_fixture(&f);
 }
 
-/* Row 09 stages 1/2/3 are the unported arms (FU178-L1): the handler parks and
- * records the unported stage for observability (never a silent no-op). */
-static void test_action_09_unported_stage_marks(void) {
+/* Row 09 arm 1 (`0x80BFB..0x80FCB`, fresh this slice): the three head gates.
+ *  - `[0x15877C] != 0` -> advance (0x80C13);
+ *  - `byte[[rec+0x28]] != 0x11` -> advance;
+ *  - `byte[rec+0x3D] != 2` -> bare tail, no stage change.
+ * A null target takes 0x80FA4: flag clear -> retry; flag set -> event 0x5E. */
+static void test_action_09_arm1_head_gates(void) {
+  struct fixture f;
+  struct fifa96_match_entity *b;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  b = &f.mr.entities.team[0].records[1];
+  b->active = 1;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x11u;
+  f.mr.record.frame = 1;                     /* the +0x3D == 2 gate fails */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1);          /* retry */
+  assert(f.mr.match09_event_id == 0xFF);
+
+  f.mr.record.frame = 2;
+  f.mr.match09_seq_flag_15877c = 1;          /* 0x80BFB/0x80C02 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2);          /* 0x80C13 advance */
+  assert(f.mr.match09_event_id == 0xFF);
+
+  f.mr.match09_seq_flag_15877c = 0;
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x0Cu;               /* 0x80C0E: [[rec+0x28]] != 0x11 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2);
+
+  /* the null-target tail: no advance and no event with the flag clear */
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x11u;
+  f.mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.match09_event_id = 0xFF;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1);
+  assert(f.mr.match09_event_id == 0xFF);
+
+  /* ... and the flag-set arm of 0x80FA4 (event 0x5E) is shadowed: a set flag
+   * already takes the 0x80BFB head advance, and nothing between the two reads
+   * writes the flag, so 0x80FA4 only ever runs with it clear. */
+  f.mr.match09_seq_flag_15877c = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2);
+  assert(f.mr.match09_event_id == 0xFF);
+  drop_fixture(&f);
+}
+
+/* Row 09 arm 1 installs: the 0x0C install at 0x80EFA (invoke-now) and the 0x0D
+ * install at 0x80F61 (deferred). The 0x0C path is the aligned-facing branch
+ * (fold < 0x80) gated by `(draw & gate)`; the 0x0D path is the >= 0x80 facing
+ * branch gated by `(draw & 0x3F) < 3*desc_16`. Both register the contact
+ * (kind, A = rec, B = target, point = target.pos) through 0x8A3FC. */
+static void test_action_09_arm1_installs(void) {
+  struct fixture f;
+  struct fifa96_match_entity *b;
+  struct fifa96_match_entity *tgt;
+  struct fifa96_rng probe;
+  uint16_t draw = 0;
+  uint32_t seed;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  b = &f.mr.entities.team[0].records[1];
+  b->active = 1;
+  tgt = &f.mr.entities.team[1].records[1];
+  tgt->active = 1;
+  f.mr.entities.team[1].target = 12;         /* [[team+0x7A6]+0x7B2] */
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x11u;
+  f.mr.record.frame = 2;
+  f.mr.record.pos_x = 0x300;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.face7d = 0;
+  f.mr.record.desc_16 = 10;                  /* 12*10 + 0 < 0xFF -> gate 1 */
+  tgt->pos_x = 0x320;                        /* +x: 0xCD474 angle 0 */
+  tgt->pos_z = 0x200;
+  tgt->face7d = 0;                           /* the target-facing fold 0 */
+
+  /* seed the 0x92AC8 draw odd so the gate yields kind 1 */
+  for (seed = 0; seed < 64u; seed++) {
+    fifa96_rng_seed(&probe, seed);
+    assert(fifa96_rng_step(&probe, &draw) == FIFA96_OK);
+    if ((draw & 1u) != 0u) break;
+  }
+  assert(seed < 64u);
+  assert(fifa96_rng_seed(&f.mr.rng, seed) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(tgt->code == 0x0Cu);                /* the 0x80EFA install */
+  assert(tgt->stage92 == 0u);                /* EBX = 0 */
+  assert(f.mr.referee.contact_kind == 1u);   /* 0x8A3FC kind = the gate */
+  assert(f.mr.referee.rec_first == 1);       /* A = EBP */
+  assert(f.mr.referee.rec_second == 12);     /* B = ESI */
+  assert(f.mr.referee.point[0] == 0x320);
+  assert(f.mr.referee.point[2] == 0x200);
+  assert(f.mr.record.stage92 == 2u);         /* 0x80EFF advance */
+
+  /* the 0x0D branch: target-facing fold >= 0x80 and 3*desc_16 > (draw & 0x3F) */
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x11u;
+  f.mr.record.frame = 2;
+  f.mr.record.desc_16 = 30;                  /* 3*30 = 90 > 63 always */
+  f.mr.render.camera.pos_y = 0x20;           /* 0x80C92 -> the target block */
+  tgt->code = 0;                             /* clear the installer's guard */
+  tgt->face7d = 0x80;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(tgt->code == 0x0Du);                /* the 0x80F61 install */
+  assert(tgt->stage92 == 0u);                /* deferred, stage 0 */
+  assert(f.mr.match09_event_id == 0x5Du);    /* 0x80F4B event 0x5D */
+  assert(f.mr.record.stage92 == 2u);         /* 0x80F82 advance */
+  drop_fixture(&f);
+}
+
+/* Row 09 arm 2 (`0x80FCC..0x81039`): clear [0x15877C]; the anim template gate
+ * advances; the [team+0x7B2] holder re-selects via 0x8DE8C (point 0x157788 =
+ * the camera triple, skip index = the current target's +0x8D byte); the tail
+ * holds the stage. */
+static void test_action_09_arm2_reselect(void) {
+  struct fixture f;
+  struct fifa96_match_team *team;
+  struct fifa96_match_entity *b;
+  uint32_t i;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  team = &f.mr.entities.team[0];
+  b = &team->records[1];
+  for (i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    team->records[i].pos_x = 0x1000;
+    team->records[i].pos_z = 0x1000;
+  }
+  b->active = 1;
+  team->records[2].pos_x = 0x10;             /* the nearest to the camera */
+  team->records[2].pos_z = 0;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 2;
+  f.mr.record.anim_id = 0x11u;
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_z = 0;
+  team->target = 1;                          /* rec holds [team+0x7B2] */
+  f.mr.match09_seq_flag_15877c = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.match09_seq_flag_15877c == 0u); /* 0x80FD1 */
+  assert(team->target == 2);                 /* 0x8102A re-select */
+  assert(f.mr.record.stage92 == 2u);         /* the tail holds */
+
+  /* not the slot holder -> no re-select, still no advance */
+  team->target = 1;
+  f.mr.record.anim_id = 0x0Cu;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);         /* 0x80FE3 advance */
+  drop_fixture(&f);
+}
+
+/* Row 09 arm 3 (`0x8103A..0x8105B`): the 0x79B1C snap always runs; the
+ * +0x44 gate resets and, when the record is not the camera-tracked [0x1577CA],
+ * increments byte[0x15872F] (the pool ball's pos_counter_f). */
+static void test_action_09_arm3_snap_and_reset(void) {
+  struct fixture f;
+  struct fifa96_match_entity *b;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  b = &f.mr.entities.team[0].records[1];
+  b->active = 0;
+  b->code = 0;
+  f.mr.record.entity_id = 1;
+  f.mr.record.stage92 = 3;
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.target_x = 0x700;
+  f.mr.record.target_z = -0x700;
+  f.mr.record.row44 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x100);     /* 0x8103C 0x79B1C snap */
+  assert(f.mr.record.target_z == 0x200);
+  assert(f.mr.record.stage92 == 3);          /* 0x81045 tail */
+
+  f.mr.record.stage92 = 3;
+  f.mr.record.row44 = 1;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  f.mr.entities.ball.pos_counter_f = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0xFF);       /* match_row_reset */
+  assert(f.mr.entities.ball.pos_counter_f == 1u); /* 0x81056 */
+
+  f.mr.record.stage92 = 3;
+  f.mr.record.row44 = 1;
+  f.mr.render.camera.tracked = 1;            /* rec == [0x1577CA] */
+  f.mr.entities.ball.pos_counter_f = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.entities.ball.pos_counter_f == 0u);
+  drop_fixture(&f);
+}
+
+/* Row 09 stage > 3 is the 0x80A2A tail (no work, no stage change). */
+static void test_action_09_stage_above_range_tail(void) {
   struct fixture f;
   make_fixture(&f);
-  f.mr.record.entity_id = 0;
   f.mr.state.phase = 2;
-  f.mr.record.active = 1;
-  f.mr.record.stage92 = 2;             /* arm 1/2/3 */
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 4;
+  f.mr.record.pos_x = 0x123;
   assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
-  assert(f.mr.match09_leg_stage == 2); /* the disclosed unported arm */
-  assert(f.mr.record.stage92 == 2);    /* parked, not silently advanced */
+  assert(f.mr.record.stage92 == 4);
+  assert(f.mr.record.pos_x == 0x123);
   drop_fixture(&f);
 }
 
@@ -4802,6 +5217,10 @@ int main(void) {
   test_action_0e_stage2_else_arm_gate_retry();
   test_action_0b_duel_chain_installs_row_5e();
   test_action_0c_stage0_gates_and_foul_path();
+  test_action_0c_stage_walk();
+  test_action_0c_stage3_act_gate();
+  test_action_0c_stage2_rng_gate();
+  test_action_0c_stage2_event_tail();
   test_action_0b_duel_gates_and_choice();
   test_action_1E_runs_claim_place();
   test_action_10_runs_throw_in_body();
@@ -4831,7 +5250,7 @@ int main(void) {
   test_phase_0C_timer_accumulate_and_gate();
   test_phase_10_variant_table();
   test_phase_05_position_copy();
-  test_action_0d_arm1_installer_leg();
+  test_action_0d_installer_now_ported_slot_null();
   test_dead_2b_evidence();
   test_action_05_wired_carrier();
   test_action_05_claim_dirs_and_stages();
@@ -4868,7 +5287,11 @@ int main(void) {
   test_placement_counter_from_producer();
   test_action_09_placement_limit_velocity();
   test_action_09_clear_branch_detaches();
-  test_action_09_unported_stage_marks();
+  test_action_09_arm1_head_gates();
+  test_action_09_arm1_installs();
+  test_action_09_arm2_reselect();
+  test_action_09_arm3_snap_and_reset();
+  test_action_09_stage_above_range_tail();
   test_action_1b_stage0_latch_partial_clear();
   test_action_1b_wide_route_binds_pan();
   test_action_1b_replace_self_actor_reaches_emit();

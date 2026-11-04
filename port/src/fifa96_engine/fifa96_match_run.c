@@ -1448,6 +1448,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->desc_c = 0;     /* FU301: rec[+4][+0xC] (unlocated producer, staged 0) */
   r->desc_f = 0;     /* FU301: rec[+4][+0xF] */
   r->desc_1b = 0;    /* FU301: rec[+4][+0x1B] */
+  r->desc_16 = 0;    /* rows09-0c: rec[+4][+0x16] (FU178-L7/FU245-L3) */
   r->steer83 = 0;    /* FU302: +0x83 (written by the 0x76B28 port) */
   r->place_offset_x = e->place_offset_x;
   r->place_offset_z = e->place_offset_z;
@@ -2260,7 +2261,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->match1a_event_id = 0;
   mr->match1a_anim = 0;
   fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
-  mr->match09_leg_stage = 0;           /* T3/FU-178: no unported row-09 arm */
+  mr->match09_seq_flag_15877c = 0;    /* FU-178 arm 1: [0x15877C] */
+  mr->match09_event_id = 0xFF;        /* FU-178: no row-09 event yet */
+  mr->match0c_event_id = 0xFF;        /* FU-169: no row-0C event yet */
   /* FU302 (phase-28 T7): the row-0x1B wide-path observables and the
    * `[0x157823]`/`[0x157ACC]`/`[0x157AD0]` sit cells. */
   mr->match1b_hypot = 0;
@@ -2434,7 +2437,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->match1a_event_id = 0;
   mr->match1a_anim = 0;
   fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
-  mr->match09_leg_stage = 0;
+  mr->match09_seq_flag_15877c = 0;
+  mr->match09_event_id = 0xFF;
+  mr->match0c_event_id = 0xFF;
   /* FU302 (phase-28 T7): fresh wide-path observables + sit cells. */
   mr->match1b_hypot = 0;
   mr->match1b_pan_x = 0;

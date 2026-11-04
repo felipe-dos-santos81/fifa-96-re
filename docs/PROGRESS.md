@@ -3499,3 +3499,18 @@ stages `mr.score[0]/[1]` and pins the OL-81 width case (`0x0100`/`0` → `0x25`,
 unchanged in this slice — the controller runs the final re-pin (expected: row
 `0x25` joins the transcript, first diff frame 3299, 3224 lines, `state=` tags
 unchanged).
+- **rows09-0c (row `09` arms 1/2/3 + row `0C` stages 1..6).** Fresh
+  `disassemble_bytes` of `0x80BFB..0x81065` and `0x81F4E..0x8250B` closed both
+  numbered legs: the row-09 arm-1 `0x0C` install at `0x80EFA` (invoke-now) and
+  `0x0D` install at `0x80F61` (deferred), the arm-2 `0x8DE8C` re-select and the
+  arm-3 reset/counter; and the row-0C fall-through stages 1..6 (the
+  `0x14C30A`/`0x92AC8`/`+0x99` gate and `0x822DB` swap terminal, the
+  `0x82317` event ladder, the act-id `{3,8}` gate, the stage-4 anim-`0x0F`
+  install, the `+0x44` stage-5 gate and the stage-6 reset). `match09_leg_stage`
+  is retired; `[0x15877C]`/`[0x15872F]` are modelled as the run's
+  `match09_seq_flag_15877c` / `entities.ball.pos_counter_f`, and the event ids
+  as `match09_event_id`/`match0c_event_id`. Row `0D`'s sole installer is now
+  live but its dispatch slot stays NULL (wiring it moves the census numbers —
+  the open follow-up). Census unchanged (`78/78` bodies, `55/80` natural,
+  `62/80` install-live). No golden was edited; the no-ISO M1/M2 output is
+  byte-identical to the base commit.

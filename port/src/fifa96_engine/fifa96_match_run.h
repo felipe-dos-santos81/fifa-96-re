@@ -480,6 +480,11 @@ struct fifa96_match_run_record {
   int8_t desc_c;            /* rec[+4][+0xC] */
   int8_t desc_f;            /* rec[+4][+0xF] */
   int8_t desc_1b;           /* rec[+4][+0x1B] */
+  /* rows09-0c: the native `byte[[rec+4]+0x16]` read through the
+   * `dword[desc+0x13] >> 24` alias at `0x80EAB`/`0x80F24` (FU178-L7,
+   * FU245-L3) — the row-09 arm-1 RNG coefficient. Same FU301 descriptor
+   * class as desc_c/f/1b: producer unlocated, staged 0. */
+  int8_t desc_16;           /* rec[+4][+0x16] */
   int8_t dir_x;
   int8_t dir_z;
   /* FU-77 `FUN_0007BF20` shared-mover state (M2 interactive Task 1): the
@@ -772,12 +777,19 @@ struct fifa96_match_run {
    * (read cell -> step -> write cell — the machine is a view, not a second
    * copy; the native gate -> ladder -> clear -> dispatch order). */
   fifa96_keeper_cpu keeper_cpu;
-  /* M2 phase-15 T3 / FU-178: the row-09 stage an engine dispatch reached but
-   * did not implement (arms 1/2/3 = FU178-L1). 0 = none; 1/2/3 = the unported
-   * arm the handler parked at (the native advances/acts there). Written by
-   * `fifa96_match_action_09`, cleared by init; observability for the explicit
-   * unported path (never a silent no-op). */
-  uint8_t match09_leg_stage;
+  /* rows09-0c (FU-178 arm 1 / FU-245): the row-09 process cells.
+   *  - `match09_seq_flag_15877c` = the native `byte[0x15877C]`, the
+   *    row-09-internal sequence flag (writes `0x80BD3` arm 0 = 0,
+   *    `0x80DCC` arm 1 = 1, `0x80FD1` arm 2 = 0; reads `0x80BFB`/`0x80FA4`;
+   *    fresh `get_xrefs_to` = 7 with no writer outside row 09, FU178-L6).
+   *    Init/begin zero it.
+   *  - `match09_event_id` / `match0c_event_id` = the last `0x8F188` event id
+   *    the row would emit (0xFF = none; 0x80D71/0x80D9E/0x80FB1 for row 09,
+   *    0x82309/0x823A2/0x8242E/0x8232D for row 0C). The event ring/sinks are
+   *    unported (FU178-L3/FU169-L2); the ids are recorded, never faked. */
+  uint8_t match09_seq_flag_15877c;
+  uint8_t match09_event_id;
+  uint8_t match0c_event_id;
   /* FU302 (phase-28 T7): the row-0x1B wide-path completion — the seed + Blocks
    * A-G through the `0x71C94` seat (`0x77423`) and the install tree
    * (`0x77428..0x774D2`). The values the port computes but whose sinks are

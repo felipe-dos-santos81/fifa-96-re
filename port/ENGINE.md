@@ -8072,3 +8072,61 @@ byte-width model fails the first of those. `port/tests/test_engine_match_port_ce
 pins `6` blocked rows and `56` natural. The M2 golden is untouched in this
 slice; the controller does the final re-pin (expected: row `0x25` joins the
 transcript, first diff frame 3299, 3224 lines, `state=` tags unchanged).
+## rows09-0c — row `09` arms 1/2/3 + row `0C` stages 1..6 (errata to the FU178/FU169 entries above)
+
+Prior sections above are not rewritten; this is the quoted correction.
+
+- **Row `09` is now FULLY ported** (`0x80A00..0x81066`, table
+  `0x809F0 = {0x80A3F,0x80BFB,0x80FCC,0x8103A}`). Arm 1
+  (`0x80BFB..0x80FCB`, fresh `disassemble_bytes` this slice) lands the
+  `[0x15877C]` head gate, the `[[rec+0x28]]==0x11` template and
+  `[rec+0x3D]==2` frame gates, the `[0x157750]`/lane/`0x8DD70`-angle chain,
+  the `0x8ED40`/`0x8F188` event path (`[0x15877C]=1`), the
+  `0x8DCD4`/`0xCD474` target block, the `0x8A3FC` contact register, and both
+  second-order installs: **`0x0C` at `0x80EFA` (invoke-now)** and **`0x0D` at
+  `0x80F61` (deferred)**. Arm 2 (`0x80FCC`) and arm 3 (`0x8103A`) land their
+  gates, the `0x8DE8C` `[team+0x7B2]` re-select (point `0x157788` = the camera
+  triple, skip = the current target's `+0x8D`) and the `0x79B1C` snap +
+  `[0x15872F]` counter. `mr->match09_leg_stage` is retired; the native cells
+  `[0x15877C]`/`[0x15872F]` are modelled as
+  `match09_seq_flag_15877c` / `entities.ball.pos_counter_f`, and the event ids
+  as `match09_event_id`. **FU178-L1 is closed.**
+  - The head gate shadows the `0x80FA4` flag-set event-`0x5E` arm: a set flag
+    already advances at `0x80BFB`, so that arm is dead (kept literal).
+  - Legs: the cross-record invoke-now re-entry (the target's row-`0C` body runs
+    on its next frame-walk dispatch — the row-07 `match_kick_invoke_opponent`
+    precedent; a same-frame nested dispatch needs a record-staging helper);
+    `[rec+0x24]` (staged 0 = no owner); the `0x8ED40`/`0x8F188`/`0x92820`/
+    `0x7A490`/`0x974F0`/`0x651F0` sinks; `byte[[rec+4]+0x16]` (`desc_16`,
+    producer unlocated, staged 0, FU245-L3/FU256-L2).
+- **Row `0C` is now FULLY ported** (`0x81C90..0x8250B`, table
+  `0x81C74 = {0x81CDC,0x81F4E,0x81FA7,0x8244B,0x8247D,0x824CD,0x824F2}`).
+  The native arms **fall through** (each advance at `0x81F8F`/`0x82433`/
+  `0x82465`/`0x824B5`/`0x824DA` lands on the next arm; FU-245 §2's
+  "row-09 arms fall through" note is the erratum here — row `09`'s arms each
+  RET). The stage-0 foul tail's `0x81F48` advance likewise falls into arm 1.
+  Stages 1..6: the anim-`0x0D`/`0x52` retry, the `[0x14C30A]`/`0x92AC8`/`+0x99`
+  gate with the `0x822DB` swap terminal (`+0x79>>=1` min 3, `+0x93=0`,
+  event `0x61`) and the `0x82317` event ladder (`[0x15888C]` kind + the
+  `[0x158897]`/`[0x15889F]` point band), the act-id `{3,8}` stage-3 retry, the
+  stage-4 `+0x89 >= (+0x99 ? 0x4B0 : 0x12C)` → anim `0x0F` install, the
+  stage-5 `+0x44` gate, and the stage-6 `+0x89 > 0x3C` reset.
+  - Legs: the `0x14C360/0x14C3A0/0x14C3B0` swap-selection tables (every exit
+    reaches `0x822DB`, whose record effects are ported); the `[0x15888E]`
+    foul latch (staged 0); the `0x8F188` ring (`match0c_event_id`); the
+    `0x92040`/`0x651F0` sit sinks. **FU169-L4 is closed.**
+- **Row `0D`'s install is now live but its slot stays NULL.** `0x80F61` runs
+  inside the ported arm 1, so `fifa96_action_sequence_0d_step` is installed on
+  the target; the dispatch slot remains unwired because wiring it flips
+  `action_install 37→38` and must move the README/ENGINE census numbers in the
+  same commit (AGENTS.md). This is the remaining wiring decision, not a
+  producer leg.
+- **Census unchanged** (`78/78` bodies, `55/80` naturally wired, `62/80`
+  install-live): no body slot was added and no dispatch slot was wired.
+- **Gate.** `test_engine_match_handlers`, `test_engine_m1`, `test_engine_m2`
+  and the full CTest suite pass in the worktree; the three ISO-gated Python
+  tests (`test_patch`/`test_callers`/`test_vgt_capture`) skip only because
+  `data/game/FIFAPCCD96.iso` is not present. The no-ISO `test_engine_m1`/
+  `test_engine_m2` output is byte-identical to the base commit (the golden
+  `cmp` itself is ISO-gated and therefore not available here); no golden was
+  edited.
