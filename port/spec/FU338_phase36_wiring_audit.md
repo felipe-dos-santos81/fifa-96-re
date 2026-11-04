@@ -93,3 +93,30 @@ phase-36 audit legs; no count was lowered (the install-live definition is
 unchanged) and no producer was fabricated. The M2 acceptance tape forces phase
 `0x14` in its staged window, so its observed mask carries `0x28`/`0x2A`; that
 is test staging, not a natural producer, and it does not close the gap.
+
+## 5. Erratum (2026-11-04) — the phase-6 and phase-0x14 producer rows
+
+Two §4 producer notes are superseded by fresh reads; the row list itself is
+unchanged.
+
+**Phase `0x06` — the blocker is not `[0x158882]`.** That cell is the ball
+block's `+0x96`, written only by `FUN_0006E724` at `0x6E7E7` as
+`row[2] & 1`; the row-`0x49` flags byte is `0x00` (`0x10F193`), so at the
+`0x894A2` gate the flag equals `(contact_kind == 3)`. The real blocker is
+`[0x14C32A]`, the mode-4 Practise session byte set by the front-end
+`FUN_0001B7B8` path; the engine seeds it 0 with no writer. Phase `0x06`
+therefore stays a front-end-scoped leg, not a missing ball-row model.
+
+**Actions `0x28`/`0x2A` — the phase-`0x14` writer is `0x8B9CC`.** The ET
+chooser `FUN_0008B9CC` writes phase `0x14` at `0x8BAC1` from the probe cells
+`0x142FE0`/`0x142FE8` (getters `0x12230`/`0x12250`); only the season/cup
+front-end screens write non-zero values, and ordinary match setup zeroes them.
+The engine's `probe[4]` literal is now a real seam (`mr->probe_a/probe_b`);
+without a competition-setup producer the rows remain producer-blocked. The
+prior attribution to an "unmodelled `0x8BCCF` variable writer" is corrected:
+`0x8BCCF` is the phase-`0x13` writer only.
+
+**Action `0x25` — closeable from `mr->score`.** The native `0x8D76C/0x8D772`
+compare is the live 16-bit score pair `[0x157AC5]`/`[0x157AC7]`, which the
+engine already carries as `mr->score[0]/[1]`. The `ac5/ac7` low-byte mirror is
+test-only and must be retired; the honest fix is the full-word score compare.
