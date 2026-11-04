@@ -3611,3 +3611,12 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   (M2 v25 `ea18ee1d…`); census unchanged (`78/78`, `57/80`, `63/80`,
   `6` blocked); `make check` 112/112. The row-0x1C tail remains FU186-L2,
   now without its timer81 prerequisite.
+
+- **phase-41 act-9 phase write ownership (2026-11-04).** Moved the native
+  phase-0x15 write from the sit-0xC install arm into
+  `fifa96_match_action_phase_1F` stage 0, through the newly exported
+  `fifa96_match_run_write_phase` (`0x88FB0 CALL 0x740A0`). Act 9 remains
+  invoke-now, so the write still runs on the install call; the phase-0x15
+  state arm and stage-1/2 presentation sinks remain legs. Tests pin the
+  handler and tick paths. M1/M2 byte-identical (M2 v25 `ea18ee1d…`); census
+  unchanged (`78/78`, `57/80`, `63/80`, `6` blocked); `make check` 112/112.

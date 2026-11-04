@@ -19,8 +19,6 @@
 
 /* FU-145 S2: the shared phase write (definition in the phase-driver
  * section below; used by begin/reset paths above it). */
-static int match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase);
-
 /* FU-70 §1.2 slot tables (flat 0x11064E direction map and the animation chain
  * T1 0x10E1DC -> T2 0x10E1EC / T3 0x10E1F5). */
 static const uint8_t match_run_slot_map[16] = {
@@ -2816,8 +2814,10 @@ int fifa96_match_run_record_phase_walk(struct fifa96_match_run *mr, uint8_t phas
  * native leaves [0x15781E] alone, but it is consumed only while armed and
  * the camera reset 0x7026C refreshes it, so the extra clear is
  * observer-clean). Returns 0 or the setter's error. */
-static int match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
-  int rc = fifa96_match_state_set_phase(&mr->state, phase);
+int fifa96_match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
+  int rc;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  rc = fifa96_match_state_set_phase(&mr->state, phase);
   if (rc != 0) return rc;
   mr->phase_machine.state = phase;
   mr->phase_machine.phase = phase;
@@ -2846,7 +2846,7 @@ static int match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
  * commit (its caller keeps that step, matching `0x88E82` before `0x88E87`). */
 int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
-  (void)match_run_write_phase(mr, FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  (void)fifa96_match_run_write_phase(mr, FIFA96_MATCH_RUN_KICKOFF_PHASE);
   (void)fifa96_match_phase_machine_kickoff(mr);
   match_run_entity_drain(mr);
   return 0;
@@ -2988,7 +2988,7 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
                                           0u, probe, &out);
       if (rc != FIFA96_OK) return rc;
       if (out.phase != FIFA96_ACTION_PHASE_NONE) {
-        rc = match_run_write_phase(mr, out.phase);
+        rc = fifa96_match_run_write_phase(mr, out.phase);
         if (rc != 0) return rc;
       }
       /* FU-195 §4/§6.1 (M2 phase-17 T6): the native FUN_0008B9CC tail (0x8BAE7
@@ -3034,7 +3034,7 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
                                         0u, probe, &out);
     if (rc != FIFA96_OK) return rc;
     if (out.phase != FIFA96_ACTION_PHASE_NONE) {
-      rc = match_run_write_phase(mr, out.phase);
+      rc = fifa96_match_run_write_phase(mr, out.phase);
       if (rc != 0) return rc;
     }
     rc = fifa96_match_act_dispatch(mr, out.act, 0u, 1);
@@ -3241,7 +3241,7 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
    * (FUN_000888FC, the unported phase-row bodies, OL-13/OL-78) stays
    * unported. */
   if (out.phase != FIFA96_ACTION_PHASE_NONE) {
-    rc = (fifa96_err_t)match_run_write_phase(mr, out.phase);
+    rc = (fifa96_err_t)fifa96_match_run_write_phase(mr, out.phase);
     if (rc != 0) return (int)rc;
     rc = (fifa96_err_t)fifa96_match_run_phase_arm(mr, out.phase);
     if (rc != 0) return (int)rc;
@@ -3255,8 +3255,9 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
    * the clock-tail tick (`fifa96_match_act_tick`) then advances it each granted
    * frame. The ad-hoc `ref_machine = REF_RESTART` route (the FU175-L7
    * double-run) is retired — the act slot is the single owner. Act 9 (sit 0xC,
-   * FU-170 §7) writes phase 0x15 on the controlled side (`0x88F9A`..`0x88FB0`)
-   * and installs act 9 **invoke-now**: the native sit-0xC arm is
+   * FU-170 §7) installs act 9 **invoke-now**; the phase-0x1F stage-0 handler
+   * owns the phase-0x15 write (`0x88F9A`..`0x88FB0`, moved there in phase 41).
+   * The native sit-0xC arm is
    * `0x8AF0E MOV EBX,1 / 0x8AF13 MOV EAX,9 / 0x8AF18 XOR EDX,EDX /
    * 0x8AF1A CALL 0x888FC`, so `0x8892E TEST BX,BX` passes and `0x88937 CALL
    * dword[0x158808]` runs the phase-0x1F stage-0 body on the install call.
@@ -3269,9 +3270,6 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
    * sit-0xC dispatch does not touch `[0x15B6C0]`. */
   if (out.act == 2u) {
     mr->ref_restart_stage = out.stage;
-  } else if (out.act == 9u) {
-    rc = (fifa96_err_t)match_run_write_phase(mr, 0x15u);
-    if (rc != 0) return (int)rc;
   }
   if (out.act != FIFA96_ACTION_PHASE_NONE) {
     /* Act 2 is invoke-now (the stage-0 hand-off runs on this call). Act 7 is
@@ -3498,7 +3496,7 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
      * [0x15882B]=0xFF are therefore deferred to the sweep terminal. */
     mr->store_15882c = side;
     mr->store_15882b = situation;
-    rc = match_run_write_phase(mr, 0u);
+    rc = fifa96_match_run_write_phase(mr, 0u);
     if (rc != 0) return rc;
     return fifa96_match_act_dispatch(mr, 8, 0, 1);
   }
@@ -3837,7 +3835,7 @@ static int match_run_screen_post(struct fifa96_match_run *mr) {
     rc = fifa96_match_run_score_event(mr, (uint32_t)side, probe);
     if (rc < 0) return rc;
   }
-  rc = match_run_write_phase(mr, 0);          /* 0x93DB2 FUN_000740A0(0,0) */
+  rc = fifa96_match_run_write_phase(mr, 0);          /* 0x93DB2 FUN_000740A0(0,0) */
   if (rc < 0) return rc;
   return 1;
 }
@@ -6326,7 +6324,7 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
    * per-team FUN_0008D098 arms, so the arm installs on the request's side. */
   if (out->phase_write != 0xFFu) {
     mr->phase_machine.side_controlled = out->phase_side;
-    rc = match_run_write_phase(mr, out->phase_write);
+    rc = fifa96_match_run_write_phase(mr, out->phase_write);
     if (rc != 0) return rc;
     rc = fifa96_match_run_phase_arm(mr, out->phase_write);
     if (rc != 0) return rc;
@@ -6396,7 +6394,7 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     /* 0x8935A: FUN_000740A0(0xA, fouled side) — the side lands in [0x157AAF]
      * before the arm. */
     mr->phase_machine.side_controlled = (uint8_t)((mr->referee.rec_first_side ^ 1u) & 1u);
-    rc = match_run_write_phase(mr, 0x0Au);
+    rc = fifa96_match_run_write_phase(mr, 0x0Au);
     if (rc != 0) return rc;
     mr->ref_restart_stage = 1u;
     return 1;
@@ -6433,7 +6431,7 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     /* 0x89590..0x895AC: team byte of [0x15888F] ^ 1 passed to FUN_000740A0
      * (the fouled side) before the phase-7/6 taker arm gates on it. */
     mr->phase_machine.side_controlled = (uint8_t)((mr->referee.rec_first_side ^ 1u) & 1u);
-    rc = match_run_write_phase(mr, phase);
+    rc = fifa96_match_run_write_phase(mr, phase);
     if (rc != 0) return rc;
     rc = fifa96_match_run_phase_arm(mr, phase);
     if (rc != 0) return rc;
@@ -6644,7 +6642,7 @@ int fifa96_match_action_phase_1A(struct fifa96_match_run *mr) {
       if (rec->team >= FIFA96_MATCH_ENTITY_TEAMS) return FIFA96_OK;
       mr->phase_machine.side_controlled =
           (uint8_t)mr->entities.team[rec->team].side;       /* [[rec]+0x826] */
-      (void)match_run_write_phase(mr, 0x0Bu);
+      (void)fifa96_match_run_write_phase(mr, 0x0Bu);
       (void)fifa96_match_run_phase_arm(mr, 0x0Bu);
       (void)fifa96_match_entities_install(rec, 0x0Bu, 0x17u, 0u);
       mr->act.timer = 0;
@@ -6788,7 +6786,7 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
         /* 0x898B4 also clears [0x157AB1] — an unported process flag with no engine
          * cell (FU-89 §11 / FU-189 §3); leg (OL-13). */
         if (mr->state.phase != 0x10u) {              /* 0x898B6 CMP [0x157A4A]>>24,0x10 */
-          (void)match_run_write_phase(mr, 0x10u);    /* 0x898CF..0x898DD FUN_000740A0(0x10) */
+          (void)fifa96_match_run_write_phase(mr, 0x10u);    /* 0x898CF..0x898DD FUN_000740A0(0x10) */
         }
         /* 0x89903/0x8990A: install action row 0x19 on the team base (EBP) once
          * per team. The native `CALL 0x7D9A4` sits OUTSIDE the 11-record ESI

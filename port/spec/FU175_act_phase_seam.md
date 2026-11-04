@@ -530,3 +530,13 @@ stays NULL (FU181-L1).
 fixture stages two acts; FU175-L4/L5/L6 carried unchanged. **FU175-L7** (the
 act-2/`ref_machine` double-run once phase 0x18 lands — minted in the final-review
 fix round) is noted at the seam in `fifa96_match_run.c`.
+
+## Phase-41 erratum — the stage-0 phase-0x15 owner (2026-11-04)
+
+The act-9/phase-0x1F stage-0 body now owns the native phase-0x15 write:
+`fifa96_match_action_phase_1F` calls the exported
+`fifa96_match_run_write_phase(mr, 0x15)`, and the sit-0xC arm no longer writes
+the phase before dispatching act 9. The write still occurs on the install call
+because act 9 is invoke-now. Stages 1/2 (`0x88FED`/`0x89064`) and the
+`0x73E28`/`0x73E08`/`0x93850`/`0x361B0`/`0x4C324` sinks stay FU181-L5 legs.
+M2 v25 is byte-identical; census unchanged.

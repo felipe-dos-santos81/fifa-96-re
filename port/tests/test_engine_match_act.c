@@ -18,8 +18,9 @@
  *     `[0x15882A]=1` (`0x890C4`) and clears the act slot
  *     (`0x890D3..0x890DE`).
  *
- * The derived engine keeps the FU-170 §7 model: the sit-0xC arm performs the
- * stage-0 phase-0x15 write and installs act 9 with invoke=1 — the native arm is
+ * The derived engine keeps the FU-170 §7 model: the sit-0xC arm installs act 9
+ * with invoke=1; the phase-0x1F stage-0 handler owns the phase-0x15 write —
+ * the native arm is
  * `0x8AF0E MOV EBX,1 / 0x8AF13 MOV EAX,9 / 0x8AF18 XOR EDX,EDX / 0x8AF1A CALL
  * 0x888FC`, so `0x88937 CALL dword[0x158808]` runs the phase-0x1F stage-0 body
  * on the install call. The begin-time install is one-shot: the native
@@ -77,15 +78,16 @@ static void test_dispatch_installs_and_latches(void) {
  * (the live caller). Act 9 -> phase 0x1F -> the derived body runs its stage-0
  * clear and advances to the stage-3 wait; act 1 -> phase 0x17 (registered by
  * M2 phase-18 T4) runs its stage-0 kickoff entry (the phase-1 write). The
- * derived sit-0xC arm keeps the stage-0 phase-0x15 write (FU-170 §7), so the
- * handler body itself does not write the phase. */
+ * phase-0x1F handler body owns the stage-0 phase-0x15 write (FU-170 §7). */
 static void test_dispatch_invoke_runs_handler(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   mr.global_5882a = 1u;
   mr.state.frame_delta = 2;
   assert(fifa96_match_act_dispatch(&mr, 9, 0, 1) == FIFA96_OK);
+  assert(fifa96_match_run_write_phase(NULL, 0x15u) == -FIFA96_ERR_INVALID);
   assert(mr.global_5882a == 0u);             /* 0x88F9A stage-0 clear */
+  assert(mr.state.phase == 0x15u);           /* the stage-0 write */
   assert(mr.act.stage == 3u);                /* stages 1/2 compressed */
   assert(mr.act.id == 9 && mr.act.timer == 2);
   /* act 1 resolves to phase 0x17, registered by T4 (FU-203): the invoke runs
@@ -113,7 +115,7 @@ static void test_sit0c_install_invokes_stage0(void) {
   mr.running = 1;
   assert(fifa96_match_run_screen_install(&mr, 0, 0, 0) == 0);
   assert(mr.screen_leg == 0 && mr.screen_step == 1u);  /* SETUP0 ran */
-  assert(mr.state.phase == 0x15u);      /* the sit-0xC controlled-side write */
+  assert(mr.state.phase == 0x15u);      /* the stage-0 phase write */
   assert(mr.act.id == 9);               /* act 9 installed (0x8890A) */
   assert(mr.act.stage == 3u);           /* stage 0 ran on the install call */
   assert(mr.global_5882a == 0u);        /* 0x88F9A */
@@ -153,6 +155,7 @@ static void test_tick_timer_and_completion(void) {
   }
   assert(mr.act.timer == 58);                 /* 29 * 2, still short of 0x3C */
   assert(mr.act.stage == 3u);                 /* stage 0 ran on the first tick */
+  assert(mr.state.phase == 0x15u);            /* stage-0 phase write */
   assert(mr.global_5882a == 0u && mr.act9_gate == 0u);
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* 60 */
   assert(mr.global_5882a == 1u);              /* 0x890C4 */

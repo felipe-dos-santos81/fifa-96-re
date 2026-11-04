@@ -1570,6 +1570,14 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
  * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
 
+/* FU-145 §3 / FU-170 §7 / FU-181: the shared native `FUN_000740A0` phase
+ * write (the `[0x157A4D]` switch byte, the `[0x157A4A]` setter, the
+ * `phase_machine` mirror, the phase-2 pan clear and the two-team
+ * `FUN_0008D098` walk). Exported so the act-9 phase-0x1F stage 0 owns the
+ * phase-0x15 write natively instead of the sit-0xC install arm. Returns 0 or
+ * the setter error; NULL -> -FIFA96_ERR_INVALID. */
+int fifa96_match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase);
+
 /* FU-191 §2/§9 (M2 phase-17 T1): the native per-record phase walk
  * `FUN_0008D098`'s loop (`0x8D0F2..0x8D166`) — the second caller of the phase
  * table (FU175-L1). For `team`'s 11 records (stride `0xB2`), skip the
@@ -1577,7 +1585,7 @@ int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
  * row's handler through `fifa96_match_dispatch_phase_record(mr, phase, rec, -1)`
  * (the native `0x8D107 CALL 0x6D920` stages `[rec+0x1C] = 0x110794[phase]` and
  * `0x8D110 CALL dword[ECX+0x1C]` invokes it with the EAX=rec/EDX=&rec[0x4D]/
- * EBX=-1 ABI). `match_run_write_phase` calls it for both teams after every phase
+ * EBX=-1 ABI). `fifa96_match_run_write_phase` calls it for both teams after every phase
  * write (the native `FUN_000740A0` `0x740C8`/`0x740DB`), **gated on
  * `fifa96_match_phase_table[phase].fn != NULL`** so it is a structural no-op
  * until a per-record body lands (FU-191 §10; the gap vs the native
@@ -1670,7 +1678,7 @@ int fifa96_match_run_formation_sort(struct fifa96_match_run *mr, uint32_t team);
 /* FU-184 §5/§7 T2-2 (phase-16 T2): the shared kickoff phase entry, factored
  * out of `fifa96_match_run_begin` (`:2213-2224`). Runs the native `0x740A0`
  * sequence for the kickoff phase 1: the phase-1 latch
- * (`match_run_write_phase`), the per-team `FUN_0008D098` state-1 arm
+ * (`fifa96_match_run_write_phase`), the per-team `FUN_0008D098` state-1 arm
  * (`fifa96_match_phase_machine_kickoff`) and the entity drain that consumes
  * the arm's slot-merge request. begin calls it between the formation seed/slot
  * bind and the `FUN_00073E08` placement commit, matching the native order; the

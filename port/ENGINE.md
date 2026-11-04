@@ -8388,3 +8388,19 @@ byte-identical: M1 `09b726b7…`, M2 v25 `ea18ee1d…`; `make check` **112/112**
 Census unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live, 6
 blocked, action 38/45, phase 25/35**. The row-0x1C tail remains FU186-L2; this
 only removes its `timer81` prerequisite.
+
+## Phase 41 — act-9 stage-0 phase-0x15 ownership (2026-11-04)
+
+The phase-0x1F/act-9 stage-0 body now owns the native phase write:
+`fifa96_match_action_phase_1F` calls the exported
+`fifa96_match_run_write_phase(mr, 0x15)` (`0x88FB0 EAX=0x15 CALL 0x740A0`).
+The sit-0xC install arm no longer writes phase 0x15 before dispatch; act 9 is
+still invoke-now, so the write runs on the same install call. This closes the
+ownership divergence recorded by FU170/FU175 without changing the phase-0x15
+state arm or the stage-1/2 sinks.
+
+`test_engine_match_act` now asserts the phase write from the handler path and
+the act-9 tick path. M1/M2 are byte-identical: M1 `09b726b7…`, M2 v25
+`ea18ee1d…`; `make check` **112/112**. Census unchanged: **78/78 bodies,
+57/80 natural, 63/80 install-live, 6 blocked, action 38/45, phase 25/35**.
+FU181-L5 stages 1/2 and the presentation sinks remain legs.

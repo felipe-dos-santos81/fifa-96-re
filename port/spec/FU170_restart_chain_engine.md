@@ -496,3 +496,14 @@ idle step 4, latch clear) and the `M2_POST_RESTART_FRAMES` tail. Mutation-RED
 verified: bypassing the PHASE hold fails the screen-step pin; shifting the
 stage-3 threshold by three steps fails the 96-step pin. M2 v14 byte-exact
 (`./build/test_engine_m2 | cmp -`); M1 unmoved; `make check` 109/109.
+
+## Phase-41 erratum — the act-9 stage-0 phase write is handler-owned (2026-11-04)
+
+The “MISSING” row and the sit-0xC-arm description above are superseded for
+the phase-0x15 write. `fifa96_match_action_phase_1F` stage 0 now calls the
+exported `fifa96_match_run_write_phase(mr, 0x15)` (the native
+`0x88FB0 EAX=0x15 CALL 0x740A0`); the sit-0xC install arm no longer writes the
+phase before dispatch. The write still runs on the install call because act 9
+is invoke-now, and the M2 v25 transcript is byte-identical. The phase-0x15
+state arm `0x8D040[0x15]=0x8D77B` remains a numbered leg; stage 1/2 sinks
+remain FU181-L5.
