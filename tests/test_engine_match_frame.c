@@ -6804,14 +6804,21 @@ static void test_engine_referee_offside_chain(void) {
   assert(mr.referee.point[1] == 0x234);
   assert(mr.incident_x == 0 && mr.incident_y == 0x234 &&
          mr.incident_z == 0x3C0);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_OFFSIDE);
+  /* phase-36 R9: the act-6 row is the single owner; the direct ref_machine
+   * route is retired. Reception dispatches act 6 invoke-now (stage 0). */
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.act.id == 6u && mr.act.stage == 1u);
   assert(mr.state.phase == 0x0Au);               /* offside stage 0 */
   assert(mr.ref_whistle == 0x1Eu);
   assert(mr.ref_speech == 0x15u);                /* the kind-3 0x8F188(0x15) */
-  /* stage 1 gate, then stage 2 dispatches situation 9 -> the act-2 hand-off */
-  assert(fifa96_match_run_referee_step(&mr) == 1);
-  assert(mr.referee.stage == 2u);
-  assert(fifa96_match_run_referee_step(&mr) == 1);
+  /* the per-frame referee step no longer advances the sequence */
+  assert(fifa96_match_run_referee_step(&mr) == 0);
+  assert(mr.act.id == 6u && mr.act.stage == 1u);
+  /* the clock-tail act tick advances stage 1, then stage 2 dispatches
+   * situation 9 -> the act-2 hand-off */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 2u);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.act.id == 8u && mr.state.phase == 0u);   /* FU-241: deferred to act 8 */
   match_frame_act8_sweep(&mr);
   assert(mr.act.id == 2);
@@ -6945,7 +6952,8 @@ static void test_offside_reachable_from_live_receive(void) {
   match_live_receive_offside_stage(&mr);
   mr.config.field_4c2f2 = 1u;                      /* offside enabled */
   assert(fifa96_match_run_ball_receive(&mr, 3, &vec, 0x100) == FIFA96_OK);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_OFFSIDE);  /* 0x7A448 fired */
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);  /* phase-36: direct route retired */
+  assert(mr.act.id == 6u && mr.act.stage == 1u);   /* 0x7A448 fired -> act 6 */
   assert(mr.referee.contact_kind == 3u);           /* the kind-3 offside event */
   assert(mr.ref_whistle == 0x1Eu);
   assert(mr.ref_speech == 0x15u);

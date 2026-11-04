@@ -118,8 +118,8 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
  * The M2 phase-23 T4 row 0x1E (act-8 restart sweep) is wired/counted (FU-241). */
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP,
-    /* 14 */ UNSUP, FIFA96_OK, NOTF,  FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK,
+    /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP,
+    /* 14 */ UNSUP, FIFA96_OK, NOTF,  FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK,
     /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x1E = M2 phase-23 T4 act-8 restart sweep (FU-241, de-compressed BX!=0); 0x1F/0x20/0x21/0x22 as before (FU-202/FU-195/FU-211) */
 };
 
@@ -2901,6 +2901,89 @@ static void test_action_06_ball_height_reads_camera_y(void) {
   drop_fixture(&f);
 }
 
+/* Action row 0x0A (phase-36, fresh `0x81738..0x81905`): the ball-relative
+ * run/placement body. Mutation-RED: the `> 0x50` reject must set the self
+ * `+0x93` timer and reset; the stage-0 success must write the nearest
+ * `+0x71`/`+0x73` pair and advance self; stage 1 must reset only when the
+ * `+0x44` ack is set. */
+static void test_action_0a_runs_body(void) {
+  struct fixture f;
+  struct fifa96_match_entity *self;
+  struct fifa96_match_entity *opp;
+  make_fixture(&f);
+  f.mr.state.phase = 2u;
+  self = &f.mr.entities.team[0].records[1];
+  opp = &f.mr.entities.team[1].records[1];
+  self->active = 1;
+  self->byte9d = 0;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *o = &f.mr.entities.team[1].records[i];
+    o->pos_x = 0x1000;               /* park every other opponent far away */
+    o->pos_z = 0;
+    o->skip_98 = 0;
+    o->skip_9a = 0;
+    o->active = 1;
+  }
+  opp->desc_d = 0;
+  opp->pos_x = 0;                    /* the unique nearest: distance 0x30 */
+  opp->pos_z = 0x30;                 /* +z: angle 0, turn 0x18, sine(-0x100) */
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x0A;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.face7d = 0;
+  f.mr.record.type = 0;
+  self->desc_d = 0;
+  /* stage 0: nearest at +x, angle 0 -> turn 0x18, sine(-0x100) = -0x10000;
+   * tier 6, so speed = 6 and vel = -6. */
+  assert(fifa96_match_action_0A(&f.mr) == FIFA96_OK);
+  assert(opp->speed71 == 6);
+  assert(opp->vel73 == -6);
+  assert(f.mr.record.ran == 1u);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.stage92 == 1u);
+
+  /* the other axis (+x) is the native angle 0x100: turn 0x18 with the base
+   * -0x100 subtracts to 0, so the sine fold leaves the velocity at 0. */
+  f.mr.record.stage92 = 0;
+  opp->pos_x = 0x30;
+  opp->pos_z = 0;
+  assert(fifa96_match_action_0A(&f.mr) == FIFA96_OK);
+  assert(opp->speed71 == 6);
+  assert(opp->vel73 == 0);
+
+  /* the distance reject on a fresh stage 0: self +0x93 = 0x10 and the reset */
+  f.mr.record.stage92 = 0;
+  f.mr.record.ran = 0;
+  opp->pos_x = 0x60;
+  self->timer93 = 0;
+  self->skip_99 = 0;
+  assert(fifa96_match_action_0A(&f.mr) == FIFA96_OK);
+  assert(self->timer93 == 0x10);
+  assert(f.mr.record.stage92 == self->stage92);   /* the reset was installed */
+  assert(f.mr.record.stage92 != 1u);
+  assert(f.mr.record.ran == 0u);
+
+  /* stage 1: the +0x44 ack gate */
+  f.mr.record.stage92 = 1;
+  f.mr.record.row44 = 0;
+  assert(fifa96_match_action_0A(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1u);
+  f.mr.record.row44 = 1;
+  assert(fifa96_match_action_0A(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 != 1u);              /* the reset ran */
+
+  /* the phase gate: outside phase 2 the row resets */
+  f.mr.state.phase = 1u;
+  f.mr.record.stage92 = 0;
+  assert(fifa96_match_action_0A(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 != 1u);
+  assert(fifa96_match_action_0A(NULL) == -FIFA96_ERR_INVALID);
+  drop_fixture(&f);
+}
+
 static void test_phase_rows_dispatch_per_classification(void) {
   struct fixture f;
   make_fixture(&f);
@@ -4797,6 +4880,7 @@ int main(void) {
   test_action_16_stage2_reset();
   test_action_24_runs_body();
   test_action_24_face_constant_vector();
+  test_action_0a_runs_body();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

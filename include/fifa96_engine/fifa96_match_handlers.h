@@ -48,6 +48,44 @@ struct fifa96_match_handler {
   const char *evidence;       /* FU-137 §6 classification or open-leg marker */
 };
 
+/* The port-coverage census (phase-36). The dispatch tables above answer "does a
+ * live engine path reach this row?"; this table answers the stricter
+ * reverse-engineering question first: "does every native slot that HAS a body
+ * have a C implementation?" The two body-less slots are the phase-0x16 INT3
+ * sentinel and the action-0x2B shared row-29 epilogue `RET` at `0x87738`.
+ * `fn` is the match-signature implementation when one exists; `body` names the
+ * C symbol for the loader-shaped bodies whose native call shape differs
+ * (action `0x0D/0x27/0x29/0x2C`, the formation rows `0x01/0x11/0x12`). */
+enum fifa96_match_port_kind {
+  FIFA96_MATCH_PORT_NONE = 0,
+  FIFA96_MATCH_PORT_BODY = 1,
+  FIFA96_MATCH_PORT_NO_BODY = 2
+};
+
+#define FIFA96_MATCH_PORT_ACTION 0u
+#define FIFA96_MATCH_PORT_PHASE 1u
+#define FIFA96_MATCH_PORT_SLOTS \
+  (FIFA96_MATCH_ACTION_ROWS + FIFA96_MATCH_PHASE_ROWS) /* 80 */
+#define FIFA96_MATCH_PORT_NATIVE_ROWS (FIFA96_MATCH_PORT_SLOTS - 2u) /* 78 */
+
+struct fifa96_match_port_row {
+  uint8_t domain;             /* FIFA96_MATCH_PORT_ACTION / _PHASE */
+  uint8_t code;               /* native slot code */
+  uint8_t kind;               /* enum fifa96_match_port_kind */
+  fifa96_match_handler_fn fn; /* match-signature body, NULL for loader-shaped */
+  const char *body;           /* C symbol implementing the native entry */
+};
+
+extern const struct fifa96_match_port_row
+    fifa96_match_port_table[FIFA96_MATCH_PORT_SLOTS];
+
+/* Derived census helpers: the number of native-body slots with a C body, the
+ * number of body-less slots, and the number of dispatch rows whose `fn` is
+ * non-NULL (the runtime-wiring metric). */
+unsigned fifa96_match_port_bodies(void);
+unsigned fifa96_match_port_no_body(void);
+unsigned fifa96_match_port_wired(void);
+
 /* The two native tables enumerated in FU-136 §2/§3 and re-verified in FU-137
  * §1. `fn` is NULL for every row at the Task 4 commit (0 ported); later
  * clusters fill their rows here. */
@@ -113,6 +151,24 @@ int fifa96_match_dispatch_phase_record(struct fifa96_match_run *mr, uint8_t phas
  * -FIFA96_ERR_INVALID (NULL `mr`). */
 int fifa96_match_phase_02(struct fifa96_match_run *mr);
 
+/* The ported phase-`0x13`/`0x14` camera-scatter body `0x6E244..0x6E32A`
+ * (FU-83 §3.1 / FU-192 §2.10; fresh phase-36 disassembly): the side gate, the
+ * inactive cell copy with the `ac2 < 4 && side == 0` z negation, and the
+ * active four-draw scatter (`d % 0x90` magnitude/sign pairs; z negated by the
+ * same gate, x never). The body is ported but the phase-table slots stay NULL:
+ * phase `0x13` is live and the body consumes the shared RNG stream, so wiring
+ * needs the measured M2 re-pin. */
+int fifa96_match_phase_13(struct fifa96_match_run *mr);
+
+/* The `FUN_0008D098` case-`0x13/0x14` scatter producer `0x8D693..0x8D722`
+ * (phase-36): `ac2 >= 4` writes the fixed side-signed `+/-0x2D0` / `0x5A0`;
+ * below 4 it draws `d % 0x1E0` magnitude/sign pairs into `[0x10F364]` /
+ * `[0x10F368]` with `z += 0x5A0`. The `0x651F0(0xD)` sink is a leg. Not called
+ * from the live walk (the draws would move the tape); the producer is exported
+ * for direct unit testing and the live re-pin slice. */
+int fifa96_match_phase_machine_scatter(struct fifa96_match_run *mr,
+                                       uint32_t team_index);
+
 /* FU-192 §2.1–§2.7 (M2 phase-17 T3): the remaining distinct per-record phase
  * bodies of the `0x00–0x15` family, each reading the walk cursor
  * (`mr->phase_walk_rec`) and writing the target triple, exactly as the native
@@ -169,6 +225,19 @@ int fifa96_match_phase_10(struct fifa96_match_run *mr);
  * FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range
  * `mr->record.entity_id`. */
 int fifa96_match_action_03(struct fifa96_match_run *mr);
+
+/* The ported action row-0x0A body (FU-76 §2; fresh phase-36 disassembly
+ * `0x81738..0x81905`): the ball-relative run/placement machine. The phase-2
+ * gate, stage 0 (nearest, `> 0x50` reject, `0x8DCD4` distance/dx/dz, the
+ * `0xCD474` bearing fold, the `0x10F394` tier byte OR the self `+0x9D` high
+ * byte into `+0x71`, the `0x114E04` sine fold through `0x795A4` into `+0x73`,
+ * the `0x6E598` anim install) and stage 1 (`+0x44` ack -> `0x7DAB4` reset) are
+ * ported. The row is **ported but not wired**: the only install site `0x7CE1A`
+ * lives in the `0x7CDD8` cluster, which is absent from all eight collision
+ * tables and whose address occurs nowhere in the image (phase-36 R2), so no
+ * native originator exists. The body is exported for direct unit testing.
+ * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for a NULL `mr`/missing record. */
+int fifa96_match_action_0A(struct fifa96_match_run *mr);
 
 /* The ported action row-0x17 body (FU-181 §2): the line-up walk
  * `0x84730..0x849AF`. Its action-table slot (`fifa96_match_action_table[0x17]`)

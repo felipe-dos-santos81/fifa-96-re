@@ -86,11 +86,19 @@ derived from one binary (`FIFA96.EXE`):
 ## Completion percentage (README title)
 
 - The README title percentage is **derived, never hand-tuned**:
-  `floor(100 × wired / total)` over the match-action dispatch census — the
-  "N/M action rows wired" headline in `docs/ENGINE.md` (currently 60/80 → 75%).
-- Whenever a task changes the wired count (new rows wired, or a re-count of
-  the census), recompute it and update the README title **in the same
-  commit**, keeping it consistent with the ENGINE.md census line.
+  `floor(100 × ported_native_bodies / native_body_slots)` over the
+  **port-coverage** census — `fifa96_match_port_table[80]` and
+  `tests/test_engine_match_port_census.c` (currently 78/78 → 100%).
+- The denominator excludes the two body-less slots by design: phase `0x16`
+  (the loader INT3 sentinel, native `0`) and action `0x2B` (`0x87738`, the
+  shared row-29 epilogue `RET`). A body-less slot is never counted; a ported
+  body is counted even when it has no live producer (the rows-27/29/2C
+  precedent). The port table is the authority; the test refuses a
+  dispatch/port `fn` mismatch.
+- The **wired** count is a separate, stricter ENGINE.md headline
+  (`N/80` dispatch slots; currently 62/80). Whenever a task adds a body or
+  wires a row, recompute both numbers and update the README title + the
+  ENGINE.md headline **in the same commit**.
 - The status narrative lives in `docs/PROGRESS.md` (moved out of the README);
   update it when a slice closes, and keep `docs/ENGINE.md` as the
   engine-level gates/legs record.

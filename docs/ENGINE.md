@@ -5,7 +5,8 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-60/80 dispatch rows wired (37 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1E, 0x1F, 0x21, 0x20, 0x22
+78/78 native dispatch bodies ported (100%) — 62/80 dispatch slots wired
+(37 action + the wired phase rows 0x02, 0x0D, 0x10, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -265,8 +266,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **60/80 rows wired** (37 action + the phase rows
-  `0x02`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1E`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **62/80 dispatch slots wired** (37 action + the phase rows
+  `0x02`/`0x0D`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1C`/`0x1D`/`0x1E`/`0x1F`/`0x20`/`0x21`/`0x22` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
@@ -7956,3 +7957,77 @@ no recompute (AGENTS.md's derived rule).
   unarmed mirror); the **undriven half-time stall** (FU328-L4: phase 12 →
   phase 1 at step 13805, clock 120 s, no transition through step 160 000 — the
   row-01 kickoff release / the FU-84 per-frame driver).
+
+## M2 phase-36 register (FU334…FU338; 2026-11-04) — the completion census: 78/78 native dispatch bodies ported (100%), 62/80 wired
+
+**Scope/provenance.** The phase-36 spec
+`docs/superpowers/specs/2026-11-04-fifa96-m2-phase36-completion-design.md` and
+the recon-ahead plan
+`docs/superpowers/plans/2026-11-04-fifa96-m2-phase36-recon-ahead.md`; the
+thirteen read-only recon reports under `/tmp/opencode/recon/` (R1a/R1b/R2…R12)
+fanned out in parallel. The four evidence docs are FU-334 (action `0x0A`),
+FU-335 (phases `0x13/0x14`), FU-336 (phase `0x1B`) and FU-337 (the census);
+FU-338 is the wiring + natural-reach audit. This section is append-only; the
+phase-35 text above stands as written.
+
+- **The metric split (FU-337).** The dispatch tables answer "is the row
+  wired?"; the new `fifa96_match_port_table[80]` answers "does every native
+  slot that has a body have a C implementation?". Native census: 45 action +
+  35 phase = 80 slots; **2 body-less slots** — action `0x2B`
+  (`0x1106E0[0x2B] = 0x87738`, the shared row-29 epilogue `RET`) and phase
+  `0x16` (`0x110794[0x16] = 0`, the loader INT3 sentinel). **78 native-body
+  slots**; all 78 now have a body. The README title is
+  `floor(100 * 78 / 78) = 100`; the wired metric is separate:
+  `62/80 = 77%` (or `62/78 = 79%` of native-body slots). The census test
+  `tests/test_engine_match_port_census.c` prints
+  `port-census: bodies 78/78 no-body 2 wired 62/80 (100%) action 37/45 phase 25/35`
+  and refuses a dispatch/port `fn` mismatch.
+- **The three missing bodies.** **Action `0x0A`** (`0x81738..0x81905`, not
+  `..0x818F5`; FU-334): the phase-2 gate, stage 0 nearest / `> 0x50` reject /
+  `0x8DCD4` distance / `0xCD474` bearing / `0x10F394` tier OR the self `+0x9D`
+  high byte into `+0x71` / `0x114E04` sine through `0x795A4` into `+0x73` /
+  `0x6E598` anim on self, stage 1 `+0x44` ack. The installer cluster `0x7CDD8`
+  is absent from all eight collision tables and its address occurs nowhere in
+  the image, so the row is ported-but-not-wired (DEAD originator). **Phases
+  `0x13/0x14`** (`0x6E244..0x6E32A`; FU-335): the side gate, the inactive
+  cell copy with the `ac2 < 4 && side == 0` z negation, and the active
+  **four**-draw scatter (two magnitude/sign pairs; x never negated; writes only
+  `+0x4D`/`+0x55`). The `FUN_0008D098` case-`0x13/0x14` producer
+  `0x8D693..0x8D722` is ported as `fifa96_match_phase_machine_scatter`; the
+  cells `0x10F364/0x10F368` are not produced on the live walk yet because the
+  body consumes the shared RNG stream and phase `0x13` is on the tape (the
+  measured re-pin is the carry). **Phase `0x1B`** (`0x890EC..0x8910D`;
+  FU-336): the 34-byte pure act-slot reset (word timer, id, stage, handler;
+  no CALL, no phase write). A fresh 11-site `CALL 0x888FC` census passes no
+  EAX=5 and the 27 `FUN_000740A0` sites emit no phase `0x1B`; the row is
+  ported-but-dormant.
+- **The wiring wave (FU-338).** **Phase `0x0D`** is wired to the shared reset
+  `fifa96_match_phase_00`: the action-row-`0x1A` stage-2 sit-7 emit
+  (`0x76A90`, ported as `set_piece(mr, 7, ...)`) reaches
+  `match_run_write_phase(0x0D)` + the `0x8D65D` arm; the earlier NULL verdict
+  predates the phase-28 T5 row-1A wiring. **Phase `0x1C`** is wired to
+  `fifa96_match_action_phase_1C`: the offside reception now dispatches act 6
+  invoke-now (`0x8A784/0x8A789` kind-3 arm) and the clock-tail act tick
+  advances it; the duplicate `ref_machine`/`referee_step` route is retired.
+  Census `60/80 → 62/80` (+1 phase `0x0D`, +1 phase `0x1C`). Both are
+  tape-neutral: the golden carries no phase-`0x0D` frame and the offside enable
+  `field_4c2f2` defaults 0.
+- **The natural-reach audit.** A fresh source audit of the 60 pre-wave wired
+  rows found seven counted rows whose producer is currently structurally
+  blocked in the engine: action `0x25` (the `ac5 != ac7` discriminator is
+  test-only), action `0x28`/`0x2A` (the phase-`0x14` chooser arm is unfed; the
+  M2 tape's forced phase `0x14` window is test staging, not a natural
+  producer), phase `0x06` (the `contact_kind != 3` arm is unreachable while the
+  unmodelled `[0x158882]` flag is 0), action `0x13`/`0x1F` (their only
+  installer is the dead phase 6) and phase `0x1F` (the begin act-9 seat is
+  zeroed before the first tick). They remain counted under the project's **installer-live**
+  definition; FU-338 §4 names each gap and the minimal staging fix. No count
+  was lowered and no producer was fabricated.
+- **Gate and tape.** `make check` **112/112** (strict `-Wall -Wextra -Werror`,
+  ASan/UBSan; the new census test is #112). M1 `09b726b7…` (22 004 B, 691
+  lines) and M2 `6aa2703b…` (295 087 B, 6 522 lines) are byte-identical
+  (`cmp`); no re-pin, no frame diff, no `state=` change. The README title moves
+  `75% → 100%` under the port-coverage derivation; the ENGINE headline keeps
+  both numbers. The seven natural-reach gaps, the R1a producer/re-pin legs,
+  R8-L1/L2 and the FU193-L4 residual / FU285-L6 second sit-7 producer are the
+  carried legs.

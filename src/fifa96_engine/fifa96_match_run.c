@@ -6631,6 +6631,21 @@ int fifa96_match_action_phase_1C(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* FU-83 §2 / FU-195 §5 (phase-36, fresh `0x890EC..0x8910D`): the phase-0x1B /
+ * act-5 pure act-slot reset. Four stores only: word `[0x158818]` (timer),
+ * byte `[0x158828]` (id), byte `[0x158829]` (stage), dword `[0x158808]`
+ * (handler; derived from id in the port). No CALL, no phase write; the native
+ * clobbers AH but no engine cell mirrors that. The phase-table slot stays NULL:
+ * a fresh 11-site `CALL 0x888FC` census passes no EAX=5 and all 27
+ * `FUN_000740A0` sites emit no phase 0x1B, so the row is ported-but-dormant. */
+int fifa96_match_action_phase_1B(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->act.timer = 0;                                  /* 0x890F1 word */
+  mr->act.id = 0;                                     /* 0x890F8 */
+  mr->act.stage = 0;                                  /* 0x89100 */
+  return FIFA96_OK;                                   /* 0x8910D RET */
+}
+
 /* FU-194 §3/§6.1 (M2 phase-17 T5) + FU-208/FU-209 §6.4 (M2 phase-19 T2): the
  * phase-0x1D / act-7 row body — the native 10-arm set-piece timeline `0x89868`
  * (arms `0x898B4..0x89EAF`). Its phase-table slot is REGISTERED and COUNTED as
@@ -7017,10 +7032,10 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
   mr->incident_x = mr->referee.point[0];
   mr->incident_y = mr->referee.point[1];
   mr->incident_z = mr->referee.point[2];
-  mr->ref_machine = FIFA96_MATCH_RUN_REF_OFFSIDE;
-  mr->referee.sequence = FIFA96_REF_SEQ_ACT6;
-  mr->referee.stage = 0;
-  rc = fifa96_match_run_referee_step(mr);     /* FUN_000888FC(6,..,1) */
+  /* phase-36 R9: the offside machine is the act-6 producer; dispatch the row
+   * invoke-now (the native 0x8A784/0x8A789 kind-3 arm). The retired direct
+   * `ref_machine`/`referee_step` route would double-run the same sequence. */
+  rc = fifa96_match_act_dispatch(mr, 6, 0, 1);  /* FUN_000888FC(6,..,1) */
   if (rc < 0) return rc;
   /* The native 0x8F188(0x15) request (0x8A743) precedes the act-6 invocation
    * and the step's head clears the request slots, so re-assert it after the
@@ -7031,9 +7046,6 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
 }
 
 int fifa96_match_run_referee_step(struct fifa96_match_run *mr) {
-  struct fifa96_ref_sequence_out out;
-  uint8_t machine;
-  int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
   mr->ref_whistle = 0;
   mr->ref_speech = 0;
@@ -7047,17 +7059,7 @@ int fifa96_match_run_referee_step(struct fifa96_match_run *mr) {
     else mr->referee.offside_suppress =
         (uint16_t)(mr->referee.offside_suppress - d);
   }
-  switch (mr->ref_machine) {
-    case FIFA96_MATCH_RUN_REF_OFFSIDE:
-      machine = mr->ref_machine;
-      rc = fifa96_ref_offside_sequence_step(&mr->referee, &out);
-      if (rc < 0) return rc;
-      rc = match_run_ref_apply(mr, &out);
-      if (rc < 0) return rc;
-      if (out.done != 0u && mr->ref_machine == machine)
-        mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
-      return 1;
-    default:
-      return 0;
-  }
+  /* phase-36 R9: the act-6 phase row owns the offside sequence; the former
+   * REF_OFFSIDE arm here was the duplicate driver and is retired. */
+  return 0;
 }

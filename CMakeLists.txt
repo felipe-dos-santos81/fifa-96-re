@@ -586,6 +586,14 @@ target_link_options(test_engine_match_handlers PRIVATE -fsanitize=address,undefi
 add_test(NAME test_engine_match_handlers COMMAND test_engine_match_handlers
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_executable(test_engine_match_port_census tests/test_engine_match_port_census.c)
+target_link_libraries(test_engine_match_port_census PRIVATE fifa96_engine)
+target_include_directories(test_engine_match_port_census PRIVATE src)
+target_compile_options(test_engine_match_port_census PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_port_census PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_match_port_census COMMAND test_engine_match_port_census
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_executable(test_engine_match_entities tests/test_engine_match_entities.c)
 target_link_libraries(test_engine_match_entities PRIVATE fifa96_engine)
 target_include_directories(test_engine_match_entities PRIVATE src)

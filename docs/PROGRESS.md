@@ -3430,3 +3430,45 @@ README title stays `75%`. T2 is test-side; T3 and this close-out are docs-only;
 the production change is the producer + the row-09 correction. The trace sink
 stayed default-off outside the acceptance run; the artefacts are
 `docs/screens/p35-l2-*`.
+
+## M2 phase-36 — the completion census (2026-11-04)
+
+The port surface is complete: **78/78 native dispatch bodies ported (100%)**,
+with **62/80 dispatch slots wired**. The two numbers are now separate by
+design. The dispatch tables answer runtime wiring; the new
+`fifa96_match_port_table[80]` answers reverse-engineering completeness. Two
+slots have no native body at all — action `0x2B` is the shared row-29 epilogue
+`RET` at `0x87738`, and phase `0x16` is the loader's zero/INT3 sentinel — so
+the native-body denominator is 78, not 80.
+
+The last three bodies landed in parallel recon slices:
+
+- **action `0x0A`** (`0x81738..0x81905`, FU-334): the ball-relative
+  run/placement machine. The only installer cluster (`0x7CDD8`) is absent from
+  all eight collision tables and its address occurs nowhere in the image, so the
+  body is ported and unit-tested but the slot stays NULL.
+- **phases `0x13/0x14`** (`0x6E244..0x6E32A`, FU-335): the camera-scatter
+  body (side gate, inactive copy, active **four**-draw scatter) plus the
+  `0x8D693..0x8D722` producer. The body consumes the shared RNG stream and
+  phase `0x13` is live on the tape, so the slots stay NULL until the measured
+  re-pin; the producer is exported and fixture-pinned.
+- **phase `0x1B`** (`0x890EC..0x8910D`, FU-336): the 34-byte pure act-slot
+  reset. No EAX=5 invoker and no phase-`0x1B` writer; ported-but-dormant.
+
+Two live rows joined the wired set:
+
+- **phase `0x0D`** — the action-row-`0x1A` stage-2 sit-7 emit
+  (`set_piece(7, ...)`) makes the shared reset body live; the earlier NULL
+  verdict predated the phase-28 T5 wiring.
+- **phase `0x1C`** — the offside reception is now the single act-6 owner
+  (`fifa96_match_act_dispatch(mr, 6, 0, 1)`); the duplicate
+  `ref_machine`/`referee_step` route is retired.
+
+The new `tests/test_engine_match_port_census.c` derives and prints the census,
+asserts 78 bodies + 2 no-body slots, and refuses a dispatch/port mismatch. The
+fresh natural-reach audit of the 60 pre-wave rows found seven counted rows
+whose producers are structurally blocked (action `0x25/0x28/0x2A/0x13/0x1F`,
+phase `0x06/0x1F`); they stay counted under the installer-live definition and
+are named as producer legs in FU-338 §4. M1 `09b726b7…` and M2 `6aa2703b…`
+are byte-identical; `make check` is 112/112. The README title moves to 100%
+under the port-coverage derivation, with the wired count reported separately.

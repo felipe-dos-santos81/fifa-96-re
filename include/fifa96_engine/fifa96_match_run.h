@@ -1774,6 +1774,14 @@ int fifa96_match_action_phase_17(struct fifa96_match_run *mr);
  * forbidden). Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_action_phase_1A(struct fifa96_match_run *mr);
 
+/* The ported phase-0x1B / act-5 pure act-slot reset `0x890EC..0x8910D`
+ * (FU-83 §2 / FU-195 §5; fresh phase-36 disassembly): timer, id, stage and the
+ * derived handler cleared; no phase write, no CALL. The phase-table slot stays
+ * NULL (no EAX=5 invoker and no phase-0x1B writer), so the row is
+ * ported-but-dormant. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL
+ * `mr`. */
+int fifa96_match_action_phase_1B(struct fifa96_match_run *mr);
+
 /* FU-193 §4/§6.3 (M2 phase-17 T4): the phase-0x1C / act-6 row body — the
  * pre-restart timeline (native `0x89110`, ends `0x89213`). Its phase-table slot
  * (`fifa96_match_phase_table[0x1C]`) is **NULL** — the row is not counted —

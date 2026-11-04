@@ -5776,7 +5776,7 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 37u && phase_wired == 23u);  /* 60/80 = 75% (phase-28 T5: +action 0x1A) */
+    assert(action_wired == 37u && phase_wired == 25u);  /* 62/80 (phase-36: +phase 0x0D/0x1C) */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -5794,7 +5794,7 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x09].fn != NULL);
     assert(fifa96_match_phase_table[0x0A].fn != NULL);
     assert(fifa96_match_phase_table[0x0C].fn != NULL);
-    assert(fifa96_match_phase_table[0x0D].fn == NULL);  /* final-review C1: never live-written (situation-7 producer FU-146 unported) */
+    assert(fifa96_match_phase_table[0x0D].fn == fifa96_match_phase_00);  /* phase-36: the row-1A sit-7 emit is live (FU-261/FU-300) */
     assert(fifa96_match_phase_table[0x0F].fn != NULL);
     assert(fifa96_match_phase_table[0x15].fn != NULL);
     /* the not-written / double-wire / RNG rows stay NULL (T3). */
@@ -5809,7 +5809,7 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x20].fn != NULL);  /* T3: situation-0 producer live (FU202) */
     assert(fifa96_match_phase_table[0x17].fn != NULL);  /* T4: the native act-1 route is live (the phase-0x20 terminal -> sit 1 -> act 1; FU-203) */
     assert(fifa96_match_phase_table[0x1A].fn == NULL);  /* T4: ported, no act-4 producer (FU193-L3) */
-    assert(fifa96_match_phase_table[0x1C].fn == NULL);  /* T4: ported, no act-6 producer + offside double-model (FU193-L4) */
+    assert(fifa96_match_phase_table[0x1C].fn == fifa96_match_action_phase_1C);  /* phase-36 R9: the offside act-6 producer is the single owner */
     assert(fifa96_match_phase_table[0x1D].fn != NULL);  /* T2 (FU-208/209): phase 0x1D COUNTED — sit-8 (global_157ac2==4) -> act 7 -> phase 0x1D, producer-live via phase_drive */
     assert(fifa96_match_phase_table[0x1E].fn != NULL);  /* T4 (FU-241): phase 0x1E de-compressed — the act-8 sweep registered + the bx!=0 fallback dispatches act 8 */
     assert(fifa96_match_phase_table[0x21].fn != NULL);  /* T6: act-0xB extra-time-clear, producer-live via phase_drive (FU-195 §6.1) */
@@ -6151,7 +6151,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 37u && phase_wired == 23u);    /* 60/80 = 75% (phase-28 T5: +action 0x1A) */
+    assert(action_wired == 37u && phase_wired == 25u);    /* 62/80 (phase-36: +phase 0x0D/0x1C) */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);

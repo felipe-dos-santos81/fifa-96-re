@@ -454,15 +454,109 @@ static void test_phase_1A_end_block(void) {
   assert(mr.state.phase == 0x0Au);     /* the act-2 phase-0x18 stage 0 wrote it */
 }
 
-/* Phase 0x1C / act 6 (FU-193 §4): the pre-restart timeline. Its slot is NULL
- * (uncounted — no act-6 producer; the offside machine is the existing driver,
- * a double-model, FU193-L4). The body wraps the already-ported
- * `fifa96_ref_offside_sequence_step` (the native 0x89110). */
-static void test_phase_1C_not_counted(void) {
+/* Phase 0x13/0x14 (phase-36, fresh `0x6E244..0x6E32A`): the camera-scatter
+ * body. Mutation-RED: the side gate, the inactive z negation, the active
+ * four-draw scatter and the no-negation x write each fail if dropped. */
+static void test_phase_13_inactive(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  struct fifa96_rng rng_before;
+  fifa96_match_run_init(&mr);
+  rec = &mr.entities.team[0].records[1];
+  rec->team = 0;
+  rec->active = 0;
+  rec->target_x = 0x111;
+  rec->target_y = 0x222;
+  rec->target_z = 0x333;
+  mr.phase_walk_active = 1;
+  mr.phase_walk_rec = rec;
+  mr.phase_machine.side_controlled = 0;   /* team[0].side == 0 */
+  mr.global_157ac2 = 2;
+  mr.global_10f364 = 0x1234;
+  mr.global_10f368 = 0xC8;
+  rng_before = mr.rng;
+  assert(fifa96_match_phase_13(&mr) == FIFA96_OK);
+  assert(rec->target_x == 0x1234);
+  assert(rec->target_y == 0x222);          /* +0x51 is untouched */
+  assert(rec->target_z == -0xC8);          /* ac2 < 4 && side == 0 */
+  assert(memcmp(&rng_before, &mr.rng, sizeof rng_before) == 0);
+  mr.global_157ac2 = 4;
+  assert(fifa96_match_phase_13(&mr) == FIFA96_OK);
+  assert(rec->target_z == 0xC8);           /* ac2 >= 4: no negation */
+  assert(fifa96_match_phase_13(NULL) == -FIFA96_ERR_INVALID);
+}
+
+static void test_phase_13_active(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  fifa96_match_run_init(&mr);
+  rec = &mr.entities.team[0].records[1];
+  rec->team = 0;
+  rec->active = 1;
+  rec->target_x = 0x111;
+  rec->target_y = 0x222;
+  rec->target_z = 0x333;
+  mr.phase_walk_active = 1;
+  mr.phase_walk_rec = rec;
+  mr.phase_machine.side_controlled = 0;
+  mr.global_157ac2 = 2;
+  mr.global_10f364 = 0;
+  mr.global_10f368 = 0x5A0;
+  fifa96_rng_seed(&mr.rng, 0);
+  assert(fifa96_match_phase_13(&mr) == FIFA96_OK);
+  assert(rec->target_z == -0x5F0);         /* 0x5A0 + 0x50, negated */
+  assert(rec->target_x == 0x1F);
+  assert(rec->target_y == 0x222);
+  /* the same staged cells with ac2 = 4 keep the magnitude and flip the sign */
+  mr.global_157ac2 = 4;
+  fifa96_rng_seed(&mr.rng, 0);
+  assert(fifa96_match_phase_13(&mr) == FIFA96_OK);
+  assert(rec->target_z == 0x5F0);
+  assert(rec->target_x == 0x1F);
+  /* the side gate leaves the target and the RNG untouched */
+  mr.phase_machine.side_controlled = 1;
+  rec->target_x = 0x111;
+  rec->target_z = 0x333;
+  assert(fifa96_match_phase_13(&mr) == FIFA96_OK);
+  assert(rec->target_x == 0x111 && rec->target_z == 0x333);
+}
+
+/* The `FUN_0008D098` scatter producer `0x8D693..0x8D722`. */
+static void test_phase_scatter_producer(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_phase_table[0x1C].fn == NULL);
-  assert(fifa96_match_dispatch_phase(&mr, 0x1Cu) == -FIFA96_ERR_UNSUPPORTED);
+  fifa96_rng_seed(&mr.rng, 0);
+  mr.global_157ac2 = 2;
+  assert(fifa96_match_phase_machine_scatter(&mr, 0) == FIFA96_OK);
+  assert(mr.global_10f364 == 0x20);
+  assert(mr.global_10f368 == 0x61F);
+  assert(fifa96_match_phase_machine_scatter(&mr, 1) == FIFA96_OK);
+  assert(mr.global_10f364 == -0x2D);
+  assert(mr.global_10f368 == 0x5C3);
+  {
+    uint16_t next = 0;
+    assert(fifa96_rng_step(&mr.rng, &next) == FIFA96_OK);
+    assert(next == 0xD483);
+  }
+  fifa96_rng_seed(&mr.rng, 0);
+  mr.global_157ac2 = 4;
+  assert(fifa96_match_phase_machine_scatter(&mr, 0) == FIFA96_OK);
+  assert(mr.global_10f364 == -0x2D0 && mr.global_10f368 == 0x5A0);
+  assert(fifa96_match_phase_machine_scatter(&mr, 1) == FIFA96_OK);
+  assert(mr.global_10f364 == 0x2D0 && mr.global_10f368 == 0x5A0);
+  assert(fifa96_match_phase_machine_scatter(NULL, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_phase_machine_scatter(&mr, 2) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x1C / act 6 (FU-193 §4 + phase-36 R9): the pre-restart timeline is
+ * WIRED. The offside machine is the act-6 producer; the body wraps the
+ * already-ported `fifa96_ref_offside_sequence_step` (native 0x89110).
+ * Mutation-RED: a NULL slot returns UNSUPPORTED. */
+static void test_phase_1C_counted(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x1C].fn == fifa96_match_action_phase_1C);
+  assert(fifa96_match_dispatch_phase(&mr, 0x1Cu) == FIFA96_OK);
 }
 
 /* Phase 0x1C stage 0 (0x89142): write phase 0xA (0x89156), whistle (0x974DC) and
@@ -867,6 +961,48 @@ static void test_phase_1B_leg_no_invoker(void) {
   assert(mr.state.phase == 0u);         /* no handler ran */
 }
 
+/* Phase 0x0D (phase-36 R7): the row-1A stage-2 sit-7 emit makes
+ * `set_piece(7, ...)` live; the shared reset body is the writer's per-record
+ * walk. Mutation-RED: a NULL slot leaves the targets at the sentinels. */
+static void test_phase_0D_wired(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x0D].fn == fifa96_match_phase_00);
+  rec = &mr.entities.team[0].records[1];
+  rec->pos_x = 0x111;
+  rec->pos_y = 0x222;
+  rec->pos_z = 0x333;
+  rec->target_x = 0x444;
+  rec->target_y = 0x555;
+  rec->target_z = 0x666;
+  mr.phase_walk_active = 1;
+  mr.phase_walk_rec = rec;
+  assert(fifa96_match_dispatch_phase(&mr, 0x0Du) == FIFA96_OK);
+  assert(rec->target_x == 0x111);
+  assert(rec->target_y == 0x222);
+  assert(rec->target_z == 0x333);
+  assert(fifa96_match_run_set_piece(&mr, 7u, 0u, 0u) == 0);
+  assert(mr.state.phase == 0x0Du);
+}
+
+/* The phase-0x1B body `0x890EC..0x8910D` (phase-36): the four-store pure
+ * act-slot reset. Mutation-RED: dropping any store leaves the staged value. */
+static void test_phase_1B_body_reset(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 5;
+  mr.act.stage = 2;
+  mr.act.timer = 0x2A;
+  mr.state.phase = 0x11;
+  assert(fifa96_match_action_phase_1B(&mr) == FIFA96_OK);
+  assert(mr.act.id == 0u);
+  assert(mr.act.stage == 0u);
+  assert(mr.act.timer == 0);
+  assert(mr.state.phase == 0x11u);       /* no phase write */
+  assert(fifa96_match_action_phase_1B(NULL) == -FIFA96_ERR_INVALID);
+}
+
 /* FU-243 §4.2/§6 (M2 phase-23 T2): row 0x25 is COUNTED. The prior FU189-L2
  * "row 25 has NO static installer" verdict is REFUTED — the ECX-carried bulk
  * installer `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25 -> FUN_0008CEB8`) installs code
@@ -982,7 +1118,10 @@ int main(void) {
   test_phase_1A_dormant();
   test_phase_1A_install();
   test_phase_1A_end_block();
-  test_phase_1C_not_counted();
+  test_phase_13_inactive();
+  test_phase_13_active();
+  test_phase_scatter_producer();
+  test_phase_1C_counted();
   test_phase_1C_stage0();
   test_phase_1C_terminal();
   test_phase_1D_registered();
@@ -1002,7 +1141,9 @@ int main(void) {
   test_phase_22_body_direct();
   test_phase_22_registered();
   test_phase_22_producer_live_via_phase_drive();
+  test_phase_0D_wired();
   test_phase_1B_leg_no_invoker();
+  test_phase_1B_body_reset();
   test_row_25_counted();
   test_row_25_body_direct();
   test_action_15_dispatches();
