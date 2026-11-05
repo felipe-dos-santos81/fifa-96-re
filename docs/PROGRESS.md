@@ -3865,3 +3865,26 @@ close-out below).
   A6-L1 kick/effect id map, A6-L2 commentary-driven goal audio, A6-L3 crowd
   event/team machine, A6-L4 CRD music, A6-L5 commentary, A6-L6 channel
   volumes, A6-L9 unported whistle sinks.
+
+- **P4 HUD, pause and full-time result (playable SDL, 2026-11-05).** The live
+  HUD now uses the native colour rule from A4: bar source `0x00..0xFD` opaque,
+  `0xFE` shades the destination (nearest-half-luma palette table), `0xFF`
+  transparent; text outline 0 and body `render.hud_ink` (palette max-min
+  near-white, 30 on the staging palette). Geometry, names, score/period/clock
+  cells are unchanged. The whole HUD change is gated on `mr->live_start`
+  (default 0 for the M2 tape), so M1 `09b726b7…` and M2 v29 `7c3874f7…` stay
+  byte-identical and no re-pin was taken. ESC in a live match now pauses via
+  the native pace hold and draws a PAUSED plate (RETURN resume, X/Backspace
+  quit to menu); full time resolves OVER -> POST and holds the FULL TIME panel
+  (staged names, score, period, ENTER: MENU) for 500 engine steps (~5 s), with
+  ENTER/ESC skipping. On run end the engine resets the front-end (Game Select,
+  queue/`match_start`/team handoff cleared, LANG/font and native-menu flag
+  preserved), and a second match starts live. Pause/POST/panel are labelled
+  stand-ins for the unported native mode-7 screen and screen-3 timer/overlay
+  armer. New tests pin the palette/text indices, live pause/POST gating and
+  the front-end reset. `make check` 115/115; M1/M2 exact. Windowed
+  `DISPLAY=:1` screenshots: `/tmp/opencode/play/p4-pause.png`,
+  `p4-resumed.png`, `p4-result.png`, `p4-menu-return.png`,
+  `p4-second-match.png`. Legs: P4-L1 native pause menu, P4-L2 POST timer/
+  period-overlay armer, P4-L3 shade-table derivation, P4-L4 text ramp,
+  P4-L5 STACcovr's source-art crowd separation, P4-L6 full-time period label.

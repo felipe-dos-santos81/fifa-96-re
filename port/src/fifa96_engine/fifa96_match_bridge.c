@@ -29,6 +29,7 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
   const int live = eng->surface != NULL && !eng->cfg.headless;
   int rc = fifa96_match_run_set_live_start(mr, live);
   if (rc != 0) return rc;
+  eng->match_esc_held = 0;   /* FU-343 P4: fresh pause edge latch */
   rc = fifa96_match_run_begin(mr, eng, selector);
   if (rc != 0) return rc;
   eng->frontend.match_start = 0;   /* consumed: no instant re-entry */

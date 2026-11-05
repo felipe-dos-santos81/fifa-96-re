@@ -64,6 +64,16 @@ struct fifa96_surface;
  * filters into a 10-byte local; the engine keeps a little headroom). */
 #define FIFA96_MATCH_HUD_NAME_MAX 16
 
+/* FU-343 (P4): the live HUD text body fallback and the live POST dwell. The
+ * native body operand is palette byte 0xFF (A4 §4.1); the staged palette makes
+ * 0xFF green, so the live draw uses the palette-derived near-white instead and
+ * this constant is only the no-palette default (30 = the staging measured
+ * (236,232,236)). The POST dwell is measured in engine steps (one 10 ms PIT
+ * tick each): 500 = the 5 s stand-in for the unported native screen-3 timer
+ * (A5 §1.2, leg A5-L1). */
+#define FIFA96_MATCH_HUD_INK_DEFAULT 0x1Eu
+#define FIFA96_MATCH_RUN_POST_DWELL_TICKS 500u
+
 /* Derived period lengths in whole seconds (FU-62 §4.6: the clock compares
  * `period_seconds == [0x5881A]` for periods 0/1 and `[0x5881C]` for periods
  * 2/3, both = `[0x4C1D1]` minutes × 60/20). The default settings half-length
@@ -409,6 +419,18 @@ struct fifa96_match_run_render {
   struct fifa96_sprite_frame hud_bar;
   uint16_t hud_bar_height;
   uint8_t hud_bar_ready;
+  /* FU-343 (P4): the live HUD colour seam (A4 §1.3/§4.1/§4.2). The native bar
+   * pixel rule is `0x00..0xFD` opaque, `0xFE` = remap the DESTINATION through
+   * the palette-pool shade table `[0x14BF2C]`, `0xFF` transparent; the native
+   * text operands are outline 0x00 / body 0xFF. The staged palette makes body
+   * 0xFF green, so `hud_ink` is the palette index closest to near-white (the
+   * max-min scan, A4 §4.1) and `hud_shade[256]` is the derived nearest-entry
+   * halving stand-in for the unported shade table (A4 §4.2). Both are staged
+   * from the final palette by fifa96_match_run_stage/_stage_pitch. Non-live
+   * draws keep the legacy FU-148 operands, so M1/M2 stay byte-identical. */
+  uint8_t hud_ink;
+  uint8_t hud_shade[256];
+  uint8_t hud_colors_ready;
   char hud_name[2][FIFA96_MATCH_HUD_NAME_MAX];
   /* FU-152 §4.1 (P4): the residual presenter rows. All zero at rest, so a
    * fresh/fixtured run draws exactly the FU-148 HUD (the M2 tape is
@@ -654,6 +676,14 @@ struct fifa96_match_run {
   FILE *cam_trace;                               /* the FIFA96_CAMERA_TRACE sink (NULL = off) */
   uint32_t cam_trace_frame;                      /* the run-relative granted-frame index */
   int running;                                   /* begin/end balance */
+  /* FU-343 (P4): the live pause/POST presentation state. `paused` is the
+   * pace-hold flag (the native mode-7 pause holds the 30 Hz pace, A5 §3.1;
+   * the panel itself is a labelled stand-in); `post_timer` is the POST screen
+   * dwell in engine steps and `post_skip` is the ENTER/ESC skip edge. All
+   * default 0 and are live_start-gated, so the M2 tape never enters them. */
+  uint8_t paused;
+  uint16_t post_timer;
+  uint8_t post_skip;
   struct fifa96_input input;                     /* FU-61 player-0 edge/held model */
   uint8_t input_state[FIFA96_INPUT_PLAYERS];     /* last sampled FU-61 state (slot input) */
   fifa96_control_slot slot;                      /* FU-70 slot bound to player 0 */
@@ -1359,6 +1389,33 @@ void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *
  * not live). */
 int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_seconds,
                                 uint16_t extra_seconds);
+
+/* FU-343 (P4): the live pause toggle. Saving through the native pace hold
+ * (A5 §3.2: no granted frames -> the frame body and clock stop); the panel is
+ * the engine stand-in for the unported mode-7 screen (leg P4-L1). Live-only:
+ * a non-live run (the M2 tape and direct-begin fixtures) returns
+ * -FIFA96_ERR_UNSUPPORTED and mutates nothing, keeping the tape byte-static.
+ * `paused` is idempotent. Returns 0, -FIFA96_ERR_INVALID (NULL),
+ * -FIFA96_ERR_STATE (run not live) or -FIFA96_ERR_UNSUPPORTED (not live). */
+int fifa96_match_run_set_paused(struct fifa96_match_run *mr, int paused);
+
+/* FU-343 (P4): skip the live POST dwell (ENTER/ESC on the FULL TIME panel).
+ * Sets `post_skip`; the next run step requests the lifecycle exit and runs the
+ * existing run_end path. Live-gated like set_paused; a non-live run returns
+ * -FIFA96_ERR_UNSUPPORTED and mutates nothing. Returns 0,
+ * -FIFA96_ERR_INVALID (NULL), -FIFA96_ERR_STATE (run not live) or
+ * -FIFA96_ERR_UNSUPPORTED (not live). */
+int fifa96_match_run_result_continue(struct fifa96_match_run *mr);
+
+/* FU-343 (P4): derive the live HUD colours from a 768-byte RGB palette.
+ * `ink` = the index maximising min(r,g,b) (first on ties; A4 §4.1's near-white
+ * scan) and `shade[i]` = the palette entry nearest half the source colour
+ * (squared RGB distance, first on ties), with `shade[0] = 0` pinned to the
+ * native shade table's zero entry. NULL palette falls back to
+ * FIFA96_MATCH_HUD_INK_DEFAULT and `shade[i] = i >> 1`; NULL out pointers are
+ * ignored. Exposed so the derivation is unit-pinned. */
+void fifa96_match_run_hud_colors_from_palette(const uint8_t palette[768],
+                                              uint8_t *ink, uint8_t shade[256]);
 
 /* FU-72 §2.4 plain increment: one side's goal word (`INC word [side*2 +
  * 0x57AC5]`). Since FU-146 S3 the eleven FUN_00093944 call sites (the
@@ -2508,10 +2565,13 @@ int fifa96_match_run_resolve(struct fifa96_match_run *mr);
 /* One engine step of the run: drives the lifecycle only (the frame body runs
  * on the registered 100 Hz tick hook). 0 while live; the end result
  * (1 = post-exit) when the step exits, either from a staged EXIT or from a
- * period-end OVER, which this step drives through fifa96_match_run_resolve
- * (OVER -> POST -> EXIT -> end, compressed into this step; POST screen pacing
- * is an open leg); or a -fifa96_err_t. After the step has ended the run,
- * further steps return -FIFA96_ERR_STATE. */
+ * period-end OVER, which this step drives through fifa96_match_run_resolve;
+ * or a -fifa96_err_t. Non-live runs keep the one-step compression
+ * (OVER -> POST -> EXIT -> end). FU-343 (P4): a live run instead holds the
+ * POST screen for FIFA96_MATCH_RUN_POST_DWELL_TICKS engine steps with the
+ * match pace held (the frame body stops), then requests the exit through the
+ * same lifecycle; `fifa96_match_run_result_continue` skips the dwell. After
+ * the step has ended the run, further steps return -FIFA96_ERR_STATE. */
 int fifa96_match_run_step(struct fifa96_match_run *mr);
 
 /* Tear the match down through the lifecycle and clear the engine linkage.

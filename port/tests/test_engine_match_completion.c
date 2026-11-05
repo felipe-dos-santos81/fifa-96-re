@@ -740,6 +740,101 @@ static void test_phase_13_14_rng_gate(void) {
   }
 }
 
+/* FU-343 (P4): the live pause is the native pace hold (no granted frames ->
+ * the frame body and clock stop); resume releases it. Non-live runs refuse the
+ * toggle, keeping the M2 tape and the direct-begin fixtures byte-static. */
+static void test_live_pause_holds_pace(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_live_start(&mr, 1) == 0);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.paused == 0 && mr.pace.hold == 0);
+
+  assert(fifa96_match_run_set_paused(&mr, 1) == 0);
+  assert(mr.paused == 1 && mr.pace.hold == 1);
+  uint32_t seconds = mr.state.total_seconds;
+  for (int i = 0; i < 300; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.total_seconds == seconds);      /* the clock did not advance */
+
+  assert(fifa96_match_run_set_paused(&mr, 0) == 0);
+  assert(mr.paused == 0 && mr.pace.hold == 0);
+  for (int i = 0; i < TICKS_PER_SECOND; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.total_seconds == seconds + 1);
+
+  assert(fifa96_match_run_end(&mr) >= 0);
+  drop_fixture(f);
+
+  /* Non-live gating: both P4 controls refuse and mutate nothing. */
+  struct fixture f2 = make_fixture(10000000ull);
+  struct fifa96_match_run plain;
+  fifa96_match_run_init(&plain);
+  assert(fifa96_match_run_begin(&plain, f2.engine, 0) == 0);
+  assert(fifa96_match_run_set_paused(&plain, 1) == -FIFA96_ERR_UNSUPPORTED);
+  assert(plain.paused == 0 && plain.pace.hold == 0);
+  assert(fifa96_match_run_result_continue(&plain) == -FIFA96_ERR_UNSUPPORTED);
+  assert(plain.post_skip == 0);
+  assert(fifa96_match_run_end(&plain) >= 0);
+  drop_fixture(f2);
+}
+
+/* FU-343 (P4): a live OVER holds the POST screen for the dwell with the pace
+ * held, then exits through the existing run_end path; result_continue skips
+ * the remaining dwell. */
+static void test_live_post_dwell_and_skip(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_live_start(&mr, 1) == 0);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+
+  mr.lc.screen = FIFA96_MATCH_SCREEN_OVER;
+  assert(fifa96_match_run_step(&mr) == 0);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_POST);
+  assert(mr.pace.hold == 1);
+  assert(mr.post_timer == FIFA96_MATCH_RUN_POST_DWELL_TICKS);
+  assert(mr.running == 1);
+
+  /* The held POST screen is presented across steps (the render panel gate). */
+  assert(fifa96_match_run_step(&mr) == 0);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_POST);
+  assert(mr.post_timer == FIFA96_MATCH_RUN_POST_DWELL_TICKS - 1);
+  assert(mr.running == 1);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
+
+  /* ENTER/ESC skip: the next step requests the exit and ends the run. */
+  assert(fifa96_match_run_result_continue(&mr) == 0);
+  assert(mr.post_skip == 1);
+  assert(fifa96_match_run_step(&mr) >= 0);
+  assert(mr.running == 0);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(f.engine->match == NULL);
+  assert(mr.paused == 0 && mr.post_timer == 0 && mr.post_skip == 0);
+  drop_fixture(f);
+
+  /* The dwell itself expires: DWELL-1 more decrements reach 0 and end. */
+  struct fixture f2 = make_fixture(10000000ull);
+  struct fifa96_match_run mr2;
+  fifa96_match_run_init(&mr2);
+  assert(fifa96_match_run_set_live_start(&mr2, 1) == 0);
+  assert(fifa96_match_run_begin(&mr2, f2.engine, 0) == 0);
+  mr2.lc.screen = FIFA96_MATCH_SCREEN_OVER;
+  assert(fifa96_match_run_step(&mr2) == 0);
+  for (uint32_t i = 1; i < FIFA96_MATCH_RUN_POST_DWELL_TICKS; i++) {
+    assert(mr2.running == 1);
+    assert(fifa96_match_run_step(&mr2) == 0);
+    assert(mr2.post_timer == FIFA96_MATCH_RUN_POST_DWELL_TICKS - i);
+  }
+  assert(mr2.running == 1 && mr2.post_timer == 1);
+  assert(fifa96_match_run_step(&mr2) >= 0);
+  assert(mr2.running == 0);
+  assert(f2.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(f2.engine->match == NULL);
+  drop_fixture(f2);
+}
+
 /* v22 (M2 phase-22 T4, FU-234 §4.2/§4.3): the run's return to the front-end.
  * `fifa96_match_run_end` maps the native leave/teardown
  * (`[0x105FFC]=4`/`[0x107304]=3`) to the mode switch
@@ -810,6 +905,8 @@ int main(void) {
   test_et_rearm_index_bound();
   test_et_over_terminal_reached();
   test_phase_13_14_rng_gate();
+  test_live_pause_holds_pace();
+  test_live_post_dwell_and_skip();
   test_run_end_lands_frontend();
   test_mark_over_only_past_half_time();
   test_score_plumbing();

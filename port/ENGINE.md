@@ -9194,3 +9194,83 @@ settings sliders 0x11/0x12/0x13 (v1 fixed gains); **A6-L9** the unported
 `0x974DC(0x1E)` sinks (row-01/0x10/0x11/0x12/0x13 and the scanner) do not
 move `ref_whistle`. The SDL3 queue still has no backpressure and a failed
 device open remains silent (`platform_sdl3.c`, A6-L7; not changed here).
+
+## Phase 55 — P4: HUD, pause and full-time result (FU-343, 2026-11-05)
+
+P4 closes the playable loop (`docs/superpowers/specs/2026-11-05-fifa96-playable-sdl-design.md`,
+`docs/superpowers/plans/2026-11-05-fifa96-playable-sdl.md` Task 4) on top of
+the merged P1 live match and P2 front-end. A4 (`/tmp/opencode/play/A4-hud.md`)
+and A5 (`/tmp/opencode/play/A5-lifecycle.md`) are the recon sources.
+
+**HUD (A4 §1.3/§4.1/§4.2, no re-pin).** The geometry stays the native 60x41
+Frames.fsh frame 13 at `(x0+2, y1-41-2)` = `(2,197)` with the frame-4 height
+anchor, the P2 `render.hud_name[2]` rows, and the live score/period/clock
+cells (A4 §3). The live draw now applies the native bar pixel rule
+`0x00..0xFD` opaque, `0xFE` = shade the **destination**, `0xFF` transparent
+(`FUN_000D11CB` 0xD12DB.. / `FUN_000CEB9A` 0xCEBBC..), and the native two-pass
+text pair outline `0x00` / body = `hud_ink`. `hud_ink` is the palette index
+maximising `min(r,g,b)` (the A4 near-white scan; 30 = (236,232,236) on the
+measured staging palette); `hud_shade[256]` is the nearest palette entry to
+half the destination RGB (`shade[0] = 0`), the documented stand-in for the
+unported palette-pool table `[0x14BF2C]`/`0x114274`. Both are rebuilt from the
+final live palette by `fifa96_match_run_stage`/`_stage_pitch`.
+`fifa96_match_run_hud_colors_from_palette` is unit-pinned. The entire change is
+gated on `mr->live_start` (default 0 for the M2 tape and every direct-begin
+fixture); non-live frames keep the legacy FU-148 operands and 0-transparent
+bar, so **M1 `09b726b7…` and M2 v29 `7c3874f7…` are byte-identical** — no
+re-pin was needed or taken.
+
+**Pause (live-only stand-in over the faithful pace hold).** ESC in a live
+MATCH toggles `fifa96_match_run_set_paused`; the freeze is the native pace hold
+(`fifa96_match_pace_hold`: no granted frames, so the frame body and the FU-62
+clock stop — the native mode-7 drain/pace behaviour, A5 §3.1). The panel is a
+labelled stand-in for the unported mode-7 screen 0x3DE: a dark plate with
+"PAUSED", "ENTER: RESUME", "X: QUIT TO MENU" drawn with the staged HUD font.
+RETURN resumes; X/BACKSPACE stages `fifa96_match_lifecycle_request_exit`; a
+second ESC also resumes. The SDL backend re-presents held keys, so the engine
+latches the ESC 0->1 edge (`match_esc_held`); without it a held key would flap.
+Non-live runs return `-FIFA96_ERR_UNSUPPORTED` from the PAUSE/RESULT API and
+keep ESC = process quit.
+
+**Full time and return (live-only POST hold).** On a live run
+`fifa96_match_run_step` resolves OVER -> POST and holds the native screen 3 for
+`FIFA96_MATCH_RUN_POST_DWELL_TICKS` (500 engine steps = 5 s at the 10 ms
+engine tick) with the pace held; the render draws the FULL TIME panel (staged
+names, final score, `PERIOD <state.period+1>` mirroring the HUD cell, "ENTER:
+MENU") over the frozen pitch. ENTER/ESC (`fifa96_match_run_result_continue`)
+skips the dwell. The dwell/panel are stand-ins for the unported native screen-3
+timer and the period-overlay armer `FUN_00054104(0)` (A5-L1/A5-L2). The
+frame-loop `mark_over` tail is now gated on `lc.screen == ACTIVE`, so a held
+POST cannot be re-marked every tick; non-live runs keep the one-step
+OVER->POST->EXIT->end compression. When `run_end` clears `e->match`, the engine
+calls `fifa96_frontend_run_reset`, which re-seeds the library/menu model,
+queue, `match_start`, team handoff and `frames` while preserving the decoded
+LANG/font and the native-menu flag; the next step draws Game Select and a
+second match starts normally (measured twice).
+
+**Verification (2026-11-05).** `make check` 115/115. M1
+`./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt` exact
+(`09b726b7…`); M2 v29 exact (`7c3874f7…`). Windowed run on `DISPLAY=:1` with
+the retail ISO and a verification-only harness (2 s halves, audio step
+disabled in the harness only): HUD `BRA`/`GER` white-on-dark at `(2,197)`;
+pause and resume; X from pause returns to Game Select; full time holds the POST
+panel (score 0-0, period 3) for 500 steps and returns to Game Select; a second
+match starts live. Screenshots: `/tmp/opencode/play/p4-pause.png`,
+`p4-resumed.png`, `p4-result.png`, `p4-menu-return.png`, `p4-second-match.png`.
+
+**Legs.** **P4-L1** the native pause menu (mode 7, screen 0x3DE, event code 1;
+there is no static ESC binding) is unported — ESC/pause is the engine stand-in
+listed above. **P4-L2** the native POST screen-3 timer and the period-overlay
+armer `FUN_00054104(0)`/`FUN_000550E4` case 0 (the "FULL TIME" caption) are
+unported; the 500-step dwell and caption are stand-ins. **P4-L3** the live
+`0xFE` shade table is the palette nearest-half-luma derivation, not the native
+`0x114274` palette-pool contents (FU-148 leg 10/11). **P4-L4** the live text
+body is the palette near-white scan, not the native body byte 0xFF (green in
+the staged PALsys palette); the exact native text ramp stays OL-T11-71.
+**P4-L5** the crowd band's dark horizontal separation is source art, not a
+mapping bug: all three 64x64 `STACcovr` frames (indices 1/4/7) carry a
+two-tier stand with `uniq=1..2` rows at y=32/40, and the 56-row band maps 64
+source rows linearly; removing it would need an art/venue change, so it is
+recorded rather than patched. **P4-L6** the full-time period label mirrors the
+HUD cell (`state.period+1`, i.e. 3 after two regulation halves); a
+"completed halves" reading would be a separate display decision.

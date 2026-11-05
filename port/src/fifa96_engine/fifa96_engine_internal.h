@@ -36,6 +36,10 @@ struct fifa96_engine {
   struct fifa96_engine_clock clock;
   uint64_t last_ns;      /* now_ns() at the previous step; 0 before the first */
   uint32_t step_ticks;   /* PIT ticks fired by the most recent step */
+  /* FU-343 (P4): the live-match ESC edge latch. The SDL backend re-presents a
+   * held key with state 1 every poll, so the pause toggle acts on the 0->1
+   * transition only (otherwise holding ESC would flap pause). */
+  uint8_t match_esc_held;
 };
 
 /* M2 interactive Task 1: the FU-77 shared-mover tables pinned first-hand from

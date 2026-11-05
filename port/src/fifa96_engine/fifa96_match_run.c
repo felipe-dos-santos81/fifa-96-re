@@ -2199,6 +2199,14 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
     for (int i = 0; i < 256; i++)
       r->remap_team[team][i] = (uint8_t)(i == 0 ? 0xFF : i);
   r->team_remap_ready = 0;
+  /* FU-343 (P4): the live HUD colour defaults. The fallback body index is the
+   * staging-measured near-white (30); the shade table is a monotone halving
+   * until a palette stages (the live path always stages one via stage_pitch).
+   * `hud_colors_ready` records the palette-derived build. */
+  r->hud_ink = FIFA96_MATCH_HUD_INK_DEFAULT;
+  for (int i = 0; i < 256; i++) r->hud_shade[i] = (uint8_t)(i >> 1);
+  r->hud_shade[0] = 0;
+  r->hud_colors_ready = 0;
   for (int i = 0; i < (int)FIFA96_MATCH_RUN_RENDER_SLOTS; i++) r->entities[i].anim_turn = 1;
 }
 
@@ -2396,6 +2404,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->cam_trace = NULL;      /* FU313: the trace is off until begin opens it */
   mr->cam_trace_frame = 0;
   mr->running = 0;
+  mr->paused = 0;            /* FU-343 P4: no pause/POST hold at rest */
+  mr->post_timer = 0;
+  mr->post_skip = 0;
   mr->stage_owner = NULL;
   mr->meta_owner = NULL;   /* FU-199 §7.2: no OL-13 metadata loaded yet */
   memset(&mr->record, 0, sizeof mr->record);
@@ -2580,6 +2591,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->engine = eng;
   mr->ticks = 0;
   mr->steps = 0;
+  mr->paused = 0;                      /* FU-343 P4: fresh pause/POST state */
+  mr->post_timer = 0;
+  mr->post_skip = 0;
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;
@@ -5155,6 +5169,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * Ordering guard (phase-21 final review): a staged `request_exit` must not be
    * clobbered by EXIT->OVER (a staged EXIT wins). */
   if (fifa96_match_run_should_mark_over(mr) && mr->act.timer > 0x168 &&
+      mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
       !fifa96_match_lifecycle_should_exit(&mr->lc)) {
     rc = fifa96_match_lifecycle_mark_over(&mr->lc);
     if (rc != 0) return rc;
@@ -5175,6 +5190,31 @@ int fifa96_match_run_resolve(struct fifa96_match_run *mr) {
   return 0;
 }
 
+int fifa96_match_run_set_paused(struct fifa96_match_run *mr, int paused) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  if (!mr->live_start) return -FIFA96_ERR_UNSUPPORTED;
+  if (paused) {
+    mr->paused = 1;
+    (void)fifa96_match_pace_hold(&mr->pace);
+  } else {
+    mr->paused = 0;
+    (void)fifa96_match_pace_resume(&mr->pace);
+  }
+  return 0;
+}
+
+int fifa96_match_run_result_continue(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  if (!mr->live_start) return -FIFA96_ERR_UNSUPPORTED;
+  if (mr->lc.screen != FIFA96_MATCH_SCREEN_OVER &&
+      mr->lc.screen != FIFA96_MATCH_SCREEN_POST)
+    return 0;   /* nothing to skip: a harmless no-op on a live ACTIVE match */
+  mr->post_skip = 1;
+  return 0;
+}
+
 int fifa96_match_run_step(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
@@ -5182,13 +5222,36 @@ int fifa96_match_run_step(struct fifa96_match_run *mr) {
   if (fifa96_match_lifecycle_should_exit(&mr->lc)) return fifa96_match_run_end(mr);
   /* G1 live exit path: the frame body runs on the registered 100 Hz trampoline
    * during this engine step's clock advance, so a period end has just marked
-   * the FU-64 lifecycle OVER when the step runs. Drive the post-period chain
-   * through the single resolve entry (OVER -> POST -> EXIT -> run_end); the
-   * one-step compression is deliberate for G1 and POST screen pacing is an
-   * open leg for the Task 10 phase driver. Re-entry guard: resolve's run_end
-   * clears running and the engine linkage, so a later step returns
+   * the FU-64 lifecycle OVER when the step runs. The non-live path keeps the
+   * one-step compression through the single resolve entry
+   * (OVER -> POST -> EXIT -> run_end), byte-identical for the M2 tape.
+   * FU-343 (P4): a live run holds the native POST screen (screen 3) for
+   * FIFA96_MATCH_RUN_POST_DWELL_TICKS engine steps with the match pace held
+   * (the world/clock freeze); the FULL TIME panel is drawn by the render path.
+   * `result_continue` skips the dwell. The POST hold is the engine stand-in
+   * for the unported native screen-3 timer (leg P4-L2). Re-entry guard:
+   * run_end clears running and the engine linkage, so a later step returns
    * -FIFA96_ERR_STATE and the engine's MATCH dispatch leaves through its
    * !e->match arm instead of stepping an ended run. */
+  if (mr->live_start) {
+    if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER) {
+      (void)fifa96_match_lifecycle_resolve_over(&mr->lc);   /* OVER -> POST */
+      (void)fifa96_match_pace_hold(&mr->pace);              /* world freeze */
+      mr->post_timer = FIFA96_MATCH_RUN_POST_DWELL_TICKS;
+      /* Keep a skip staged in the same engine step (an ESC/ENTER edge on the
+       * OVER frame) so it is not swallowed by this transition; end/begin clear
+       * it for the next match. */
+      return 0;
+    }
+    if (mr->lc.screen == FIFA96_MATCH_SCREEN_POST) {
+      if (mr->post_timer != 0) mr->post_timer--;
+      if (mr->post_timer == 0 || mr->post_skip) {
+        (void)fifa96_match_lifecycle_request_exit(&mr->lc); /* POST -> EXIT */
+        return fifa96_match_run_end(mr);
+      }
+      return 0;
+    }
+  }
   if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER)
     return fifa96_match_run_resolve(mr);
   /* The frame body does NOT run here: the registered 100 Hz trampoline
@@ -5207,6 +5270,9 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   match_run_release_stage(mr);
   match_run_release_meta(mr);   /* FU-199 §7.2: drop the owned `.fmt` blobs */
   mr->running = 0;
+  mr->paused = 0;               /* FU-343 P4: fresh pause/POST state on reuse */
+  mr->post_timer = 0;
+  mr->post_skip = 0;
   if (eng) {
     if (eng->match == mr) eng->match = NULL;
     if (eng->mode == FIFA96_ENGINE_MODE_MATCH) eng->mode = FIFA96_ENGINE_MODE_FRONTEND;
@@ -5265,27 +5331,106 @@ static int match_run_draw_sprite(struct fifa96_surface *s, const fifa96_sprite_f
  * rounded the same way in FUN_00053240's zoomed branch. */
 #define MATCH_HUD_BAR_ZOOM 0xB800
 
+/* FU-343 (P4): derive the live HUD body index and the `0xFE` destination
+ * shade from the staged palette (A4 §4.1/§4.2). The body scan is the report's
+ * max-min near-white pick; the shade entry is the nearest palette colour to
+ * half the destination's RGB (squared distance, first on ties). The native
+ * shade table `0x114274` is built by the unported kit/palette translation
+ * (FU-148 leg 10/11), so this is the documented stand-in; `shade[0]` is pinned
+ * to the static table's zero entry (A4 §1.3). */
+void fifa96_match_run_hud_colors_from_palette(const uint8_t palette[768],
+                                              uint8_t *ink, uint8_t shade[256]) {
+  if (ink) {
+    int best = 0;
+    int best_min = -1;
+    if (palette) {
+      for (int i = 0; i < 256; i++) {
+        int r = palette[i * 3 + 0];
+        int g = palette[i * 3 + 1];
+        int b = palette[i * 3 + 2];
+        int m = r < g ? r : g;
+        if (b < m) m = b;
+        if (m > best_min) {
+          best_min = m;
+          best = i;
+        }
+      }
+    }
+    *ink = palette ? (uint8_t)best : FIFA96_MATCH_HUD_INK_DEFAULT;
+  }
+  if (shade) {
+    for (int i = 0; i < 256; i++) {
+      if (!palette) {
+        shade[i] = (uint8_t)(i >> 1);
+        continue;
+      }
+      int tr = palette[i * 3 + 0] / 2;
+      int tg = palette[i * 3 + 1] / 2;
+      int tb = palette[i * 3 + 2] / 2;
+      int best = 0;
+      long best_d = -1;
+      for (int j = 0; j < 256; j++) {
+        int dr = palette[j * 3 + 0] - tr;
+        int dg = palette[j * 3 + 1] - tg;
+        int db = palette[j * 3 + 2] - tb;
+        long d = (long)dr * dr + (long)dg * dg + (long)db * db;
+        if (best_d < 0 || d < best_d) {
+          best_d = d;
+          best = j;
+        }
+      }
+      shade[i] = (uint8_t)best;
+    }
+    shade[0] = 0;
+  }
+}
+
+static void match_run_hud_colors_refresh(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_render *r = &mr->render;
+  if (r->palette_ready) {
+    fifa96_match_run_hud_colors_from_palette(r->palette, &r->hud_ink, r->hud_shade);
+    r->hud_colors_ready = 1;
+  } else {
+    fifa96_match_run_hud_colors_from_palette(NULL, &r->hud_ink, r->hud_shade);
+    r->hud_colors_ready = 0;
+  }
+}
+
+static const struct fifa96_font *match_run_hud_font(
+    const struct fifa96_match_run_render *r) {
+  return r->window_zoomed ? &r->hud_font[1] : &r->hud_font[0];
+}
+
+static int match_run_hud_font_ready(const struct fifa96_match_run_render *r) {
+  const struct fifa96_font *font = match_run_hud_font(r);
+  return (r->window_zoomed ? r->hud_font_ready[1] : r->hud_font_ready[0]) != 0 &&
+         font->data != NULL;
+}
+
 /* The native FUN_000565BC gates (period < 4 via FUN_0004B5F4, not paused via
  * [0x14E688]) plus the asset-readiness mapping of the FUN_0001D940(6) /
  * [0x14E510] / [0x14E538] / [0x14E59C] gates (FU-148 §6.1 leg): the HUD needs
  * its staged bar and the font the window branch selects. The engine has no
  * replay sub-mode, so the [0x109A98]==0 idle gate is vacuous. */
 static int match_run_hud_ready(const struct fifa96_match_run_render *r) {
-  const struct fifa96_font *font = r->window_zoomed ? &r->hud_font[1] : &r->hud_font[0];
   return r->hud_bar_ready && r->hud_bar.pixels != NULL &&
-         (r->window_zoomed ? r->hud_font_ready[1] : r->hud_font_ready[0]) != 0 &&
-         font->data != NULL;
+         match_run_hud_font_ready(r);
 }
 
-/* The bar panel blit: zero source pixels stay transparent (the engine's
- * indexed-sprite convention), the destination rect is the native's
- * `size * factor >> 16` and the sampling is the derived nearest-neighbour
- * step `dst * src_w / dst_w` (FU-148 leg: the native FUN_0009B850 span
- * stepper is not decomposed). */
+/* The bar panel blit. FU-343 (P4): the live path applies the native pixel
+ * rule (A4 §1.3, FUN_000D11CB 0xD12DB.. / FUN_000CEB9A 0xCEBBC..):
+ *   0x00..0xFD opaque; 0xFE = shade the DESTINATION; 0xFF = transparent.
+ * The non-live path keeps the legacy FU-148 convention (0 transparent, every
+ * other byte literal) so the M2 tape is byte-identical. The destination rect
+ * is the native's `size * factor >> 16` and the sampling is the derived
+ * nearest-neighbour step `dst * src_w / dst_w` (FU-148 leg: the native
+ * FUN_0009B850 span stepper is not decomposed). */
 static void match_run_hud_bar(struct fifa96_surface *s,
-                              const struct fifa96_match_run_render *r, int bar_x,
+                              const struct fifa96_match_run *mr, int bar_x,
                               int bar_y) {
+  const struct fifa96_match_run_render *r = &mr->render;
   const fifa96_sprite_frame *bar = &r->hud_bar;
+  const int live = mr->live_start != 0;
   int dst_w = bar->width;
   int dst_h = bar->height;
   if (r->window_zoomed) {
@@ -5301,33 +5446,49 @@ static void match_run_hud_bar(struct fifa96_surface *s,
       size_t src_off = (size_t)src_y * bar->width + (size_t)src_x;
       if (src_off >= bar->pixel_len) continue;
       uint8_t v = bar->pixels[src_off];
-      if (v == 0) continue;
       int px = bar_x + dx;
       if (px < 0 || px >= s->width) continue;
-      s->indexed[(size_t)py * (size_t)s->width + (size_t)px] = v;
+      size_t dst_off = (size_t)py * (size_t)s->width + (size_t)px;
+      if (!live) {
+        if (v == 0) continue;            /* legacy FU-148 convention */
+        s->indexed[dst_off] = v;
+        continue;
+      }
+      if (v == 0xFFu) continue;          /* transparent */
+      if (v == 0xFEu) {                  /* destination shade */
+        uint8_t dst = s->indexed[dst_off];
+        s->indexed[dst_off] = r->hud_colors_ready ? r->hud_shade[dst]
+                                                  : (uint8_t)(dst >> 1);
+      } else {
+        s->indexed[dst_off] = v;         /* 0x00..0xFD opaque */
+      }
     }
   }
 }
 
-/* Colour-6 outline at (+1,+1) then colour-0 main (FUN_000A06FC's two-pass
- * text, FU-148 §1.5; the native colour ramp is leg). */
+/* Two-pass text: the shadow at (+1,+1) then the body at (x,y) (FUN_000A06FC,
+ * FU-148 §1.5). FU-343 (P4): the live HUD passes outline 0x00 / body
+ * `hud_ink`; the non-live passes keep the legacy colour-6 outline / colour-0
+ * body. The other presenters (sub/replay/overlay) keep the legacy operands. */
 static void match_run_hud_text(struct fifa96_surface *s, const fifa96_font *font,
-                               const char *str, int x, int y) {
-  (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x + 1, y + 1, 6);
-  (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x, y, 0);
+                               const char *str, int x, int y, uint8_t body,
+                               uint8_t shadow) {
+  (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x + 1, y + 1,
+                         shadow);
+  (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x, y, body);
 }
 
 /* FUN_00055BA8: centred cell text, `x += (cell_w-width)/2` (truncating),
  * `y += max(0,(cell_h-12)/2)`, then the outline/main pair. */
 static void match_run_hud_centered(struct fifa96_surface *s, const fifa96_font *font,
                                    const char *str, int cell_x, int cell_y, int cell_w,
-                                   int cell_h) {
+                                   int cell_h, uint8_t body, uint8_t shadow) {
   int w = fifa96_font_text_width(font, str);
   int x = cell_x + (cell_w - w) / 2;
   int y = cell_y;
   int pad = (cell_h - 12) / 2;
   if (pad > 0) y += pad;
-  match_run_hud_text(s, font, str, x, y);
+  match_run_hud_text(s, font, str, x, y, body, shadow);
 }
 
 /* The HUD pass: bar -> name0 -> name1 -> score0 -> score1 -> period -> clock
@@ -5340,7 +5501,9 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
   if (mr->state.period >= 4) return;              /* FUN_0004B5F4() < 4 */
 
   const int zoomed = r->window_zoomed;
-  const struct fifa96_font *font = zoomed ? &r->hud_font[1] : &r->hud_font[0];
+  const struct fifa96_font *font = match_run_hud_font(r);
+  const uint8_t body = mr->live_start ? r->hud_ink : 0x00;
+  const uint8_t shadow = mr->live_start ? 0x00 : 0x06;
   const int have_window = r->window.box.w > 0 && r->window.box.h > 0;
   int x0 = have_window ? r->window.box.x0 : 0;
   int y1 = have_window ? r->window.box.y1 : s->height;
@@ -5378,17 +5541,94 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
     clock_cell_w += zoomed ? 6 : 8;
   }
 
-  match_run_hud_bar(s, r, bar_x, bar_y);
-  match_run_hud_text(s, font, r->hud_name[0], x_left, y2);
-  match_run_hud_text(s, font, r->hud_name[1], x_left, y2 + row_pitch - 2);
+  match_run_hud_bar(s, mr, bar_x, bar_y);
+  match_run_hud_text(s, font, r->hud_name[0], x_left, y2, body, shadow);
+  match_run_hud_text(s, font, r->hud_name[1], x_left, y2 + row_pitch - 2, body, shadow);
   match_run_hud_text(s, font, score_buf[0],
-                     clock_x - fifa96_font_text_width(font, score_buf[0]), y2);
+                     clock_x - fifa96_font_text_width(font, score_buf[0]), y2, body,
+                     shadow);
   match_run_hud_text(s, font, score_buf[1],
                      clock_x - fifa96_font_text_width(font, score_buf[1]),
-                     y2 + row_pitch - 2);
-  match_run_hud_centered(s, font, period_buf, x0, cells_y, row_pitch - 1, row_pitch - 1);
+                     y2 + row_pitch - 2, body, shadow);
+  match_run_hud_centered(s, font, period_buf, x0, cells_y, row_pitch - 1, row_pitch - 1,
+                         body, shadow);
   match_run_hud_centered(s, font, clock_buf, x0 + (zoomed ? 0xE : 0x11), cells_y,
-                         clock_cell_w, row_pitch - 1);
+                         clock_cell_w, row_pitch - 1, body, shadow);
+}
+
+/* FU-343 (P4): the pause and FULL TIME panels. Both are engine stand-ins for
+ * the unported native presentation (A5 §3.1 mode 7/screen 0x3DE for pause;
+ * A5-L1/A5-L2 the POST timer and the period-overlay armer for the result).
+ * They draw only on the live path over the frozen pitch, using the staged HUD
+ * font and the live colour pair (body = palette near-white, shadow = 0). */
+#define MATCH_RUN_PAUSE_PANEL_W 150
+#define MATCH_RUN_PAUSE_PANEL_H 52
+#define MATCH_RUN_RESULT_PANEL_W 200
+#define MATCH_RUN_RESULT_PANEL_H 68
+
+static void match_run_panel_fill(struct fifa96_surface *s, int x, int y, int w, int h,
+                                 uint8_t border) {
+  int x0 = x < 0 ? 0 : x;
+  int y0 = y < 0 ? 0 : y;
+  int x1 = x + w;
+  int y1 = y + h;
+  if (x1 > s->width) x1 = s->width;
+  if (y1 > s->height) y1 = s->height;
+  if (x1 <= x0 || y1 <= y0) return;
+  for (int py = y0; py < y1; py++) {
+    uint8_t *row = s->indexed + (size_t)py * (size_t)s->width;
+    for (int px = x0; px < x1; px++)
+      row[px] = (py == y0 || py == y1 - 1 || px == x0 || px == x1 - 1) ? border : 0;
+  }
+}
+
+static void match_run_panel_text(struct fifa96_surface *s, const fifa96_font *font,
+                                 const char *str, int panel_x, int panel_w, int y,
+                                 uint8_t body, uint8_t shadow) {
+  int w = fifa96_font_text_width(font, str);
+  match_run_hud_text(s, font, str, panel_x + (panel_w - w) / 2, y, body, shadow);
+}
+
+static void match_run_draw_pause(const struct fifa96_match_run *mr,
+                                 struct fifa96_surface *s) {
+  const struct fifa96_match_run_render *r = &mr->render;
+  if (!match_run_hud_font_ready(r)) return;
+  const fifa96_font *font = match_run_hud_font(r);
+  const uint8_t ink = r->hud_colors_ready ? r->hud_ink : FIFA96_MATCH_HUD_INK_DEFAULT;
+  const int x = (s->width - MATCH_RUN_PAUSE_PANEL_W) / 2;
+  const int y = (s->height - MATCH_RUN_PAUSE_PANEL_H) / 2;
+  match_run_panel_fill(s, x, y, MATCH_RUN_PAUSE_PANEL_W, MATCH_RUN_PAUSE_PANEL_H, ink);
+  match_run_panel_text(s, font, "PAUSED", x, MATCH_RUN_PAUSE_PANEL_W, y + 7, ink, 0x00);
+  match_run_panel_text(s, font, "ENTER: RESUME", x, MATCH_RUN_PAUSE_PANEL_W, y + 22,
+                       ink, 0x00);
+  match_run_panel_text(s, font, "X: QUIT TO MENU", x, MATCH_RUN_PAUSE_PANEL_W, y + 37,
+                       ink, 0x00);
+}
+
+static void match_run_draw_result(const struct fifa96_match_run *mr,
+                                  struct fifa96_surface *s) {
+  const struct fifa96_match_run_render *r = &mr->render;
+  if (!match_run_hud_font_ready(r)) return;
+  const fifa96_font *font = match_run_hud_font(r);
+  const uint8_t ink = r->hud_colors_ready ? r->hud_ink : FIFA96_MATCH_HUD_INK_DEFAULT;
+  const int x = (s->width - MATCH_RUN_RESULT_PANEL_W) / 2;
+  const int y = (s->height - MATCH_RUN_RESULT_PANEL_H) / 2;
+  char score[64];
+  char period[24];
+  if (r->hud_name[0][0] && r->hud_name[1][0])
+    (void)snprintf(score, sizeof score, "%s %u - %u %s", r->hud_name[0],
+                   (unsigned)mr->score[0], (unsigned)mr->score[1], r->hud_name[1]);
+  else
+    (void)snprintf(score, sizeof score, "%u - %u", (unsigned)mr->score[0],
+                   (unsigned)mr->score[1]);
+  (void)snprintf(period, sizeof period, "PERIOD %u", (unsigned)mr->state.period + 1u);
+  match_run_panel_fill(s, x, y, MATCH_RUN_RESULT_PANEL_W, MATCH_RUN_RESULT_PANEL_H, ink);
+  match_run_panel_text(s, font, "FULL TIME", x, MATCH_RUN_RESULT_PANEL_W, y + 7, ink,
+                       0x00);
+  match_run_panel_text(s, font, score, x, MATCH_RUN_RESULT_PANEL_W, y + 22, ink, 0x00);
+  match_run_panel_text(s, font, period, x, MATCH_RUN_RESULT_PANEL_W, y + 37, ink, 0x00);
+  match_run_panel_text(s, font, "ENTER: MENU", x, MATCH_RUN_RESULT_PANEL_W, y + 52,
+                       ink, 0x00);
 }
 
 /* ------------------------------------------------------------------------- *
@@ -5732,7 +5972,7 @@ static void match_run_draw_sub_strip(const struct fifa96_match_run *mr,
     x = strip.row[side].x + ((max_w - scaled_w) >> 1);
     if (x < sub->x_clamp_lo + 2) x = sub->x_clamp_lo + 2;
     if (x + scaled_w > sub->x_clamp_hi) x = sub->x_clamp_hi - scaled_w - 2;
-    match_run_hud_text(s, font, sub->name[side], x, strip.row[side].y0);
+    match_run_hud_text(s, font, sub->name[side], x, strip.row[side].y0, 0x00, 0x06);
   }
 }
 
@@ -5752,7 +5992,7 @@ static void match_run_draw_replay(struct fifa96_match_run *mr,
       !fifa96_match_run_replay_blink_step(&r->replay, 1))
     return;
   match_run_hud_text(s, match_run_row_font(r), caption, r->replay.caption_x,
-                     r->replay.caption_y);
+                     r->replay.caption_y, 0x00, 0x06);
 }
 
 /* R3 (FUN_000550E4): the case row's staged lines; the per-case helpers and
@@ -5767,7 +6007,7 @@ static void match_run_draw_overlay(const struct fifa96_match_run *mr,
   for (int i = 0; i < 4; i++) {
     if (!overlay->lines[i][0]) continue;
     match_run_hud_text(s, match_run_row_font(r), overlay->lines[i], overlay->line_x[i],
-                       overlay->line_y[i]);
+                       overlay->line_y[i], 0x00, 0x06);
   }
 }
 
@@ -6064,6 +6304,15 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   match_run_draw_overlay(mr, s);
   match_run_draw_hud(mr, s);
   match_run_draw_ball_row(mr, s);
+  /* FU-343 (P4): the live pause / FULL TIME stand-in panels. Non-live runs
+   * never set `paused` or hold POST, so the tape's frames stay byte-identical. */
+  if (mr->live_start) {
+    if (mr->paused)
+      match_run_draw_pause(mr, s);
+    else if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
+             mr->lc.screen == FIFA96_MATCH_SCREEN_POST)
+      match_run_draw_result(mr, s);
+  }
   return 0;
 }
 
@@ -6700,6 +6949,9 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   r->hud_bar = hud_bar;
   r->hud_bar_height = hud_bar_height;
   r->hud_bar_ready = hud_bar_ready;
+  /* FU-343 (P4): derive the live HUD colours from the palette this stage
+   * captured; stage_pitch refreshes them again after the final live palette. */
+  match_run_hud_colors_refresh(mr);
   (void)fifa96_window_init(&r->window, s->width, s->height);
   (void)fifa96_window_define_full(&r->window, s->width, s->height);
   r->enabled = 1;
@@ -6859,6 +7111,9 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
   r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] = 0xFF;
   r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 2] = 0xFF;
   r->team_remap_ready = 1;
+  /* FU-343 (P4): the final live palette is now installed; derive the HUD body
+   * and 0xFE shade from it (the stage-time PALsys frame-2 values are stale). */
+  match_run_hud_colors_refresh(mr);
   return 0;
 }
 

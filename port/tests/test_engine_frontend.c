@@ -176,6 +176,42 @@ static void test_engine_mode(void) {
   fifa96_platform_destroy(plat);
 }
 
+/* FU-343 (P4): the post-match reset restores the Game Select screen and clears
+ * the handoff/queue state while preserving the decoded language and the
+ * native-menu enable flag (the assets are not re-read). */
+static void test_run_reset_after_match(void) {
+  struct fifa96_surface *s = fifa96_surface_create(320, 240);
+  struct fifa96_frontend_run fr;
+  assert(fifa96_frontend_run_init(&fr, s) == 0);
+  fifa96_frontend_run_enable_native(&fr, 1);
+  fr.menu.screen = FIFA96_MENU_SCREEN_TEAM_SELECT;
+  fr.match_start = 1;
+  fr.quit_requested = 1;
+  fr.team_selected = 1;
+  fr.formation[0] = 3;
+  fr.queue_len = 2;
+  fr.queue[0] = 8;
+  fr.queue[1] = -10;
+  fr.frames = 42;
+  const struct fifa96_lang lang_before = fr.lang;
+
+  assert(fifa96_frontend_run_reset(&fr, s) == 0);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+  assert(fr.match_start == 0 && fr.quit_requested == 0);
+  assert(fr.team_selected == 0 && fr.formation[0] == 0 && fr.formation[1] == 0);
+  assert(fr.team_id[0] == 0 && fr.team_id[1] == 0);
+  assert(fr.team_name[0][0] == '\0' && fr.team_code[0][0] == '\0');
+  assert(fr.queue_len == 0 && fr.frames == 0);
+  assert(fr.native_menu == 1);
+  assert(fr.phase == FIFA96_FRONTEND_PHASE_FRONTEND);
+  assert(fr.entry_state == 17);
+  assert(fr.lang.lang_owner == lang_before.lang_owner &&
+         fr.lang.font_owner == lang_before.font_owner);
+  assert(fifa96_frontend_run_reset(NULL, s) == -1);
+  assert(fifa96_frontend_run_reset(&fr, NULL) == -1);
+  fifa96_surface_destroy(s);
+}
+
 int main(void) {
   test_wrapper_contract();
   test_input_edges();
@@ -183,6 +219,7 @@ int main(void) {
   test_confirm_gate();
   test_menu_render();
   test_engine_mode();
+  test_run_reset_after_match();
   puts("test_engine_frontend OK");
   return 0;
 }

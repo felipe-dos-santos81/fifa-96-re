@@ -48,6 +48,15 @@ int fifa96_frontend_run_input(struct fifa96_frontend_run *fr, const fifa96_platf
                               size_t count);
 int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surface *s, int *quit);
 
+/* FU-343 (P4): reset the interactive front-end after a match ends, without
+ * discarding the decoded language/font or the native-menu enable flag. The
+ * library state machine, menu model, queue, match-start classification and
+ * team handoff are re-seeded exactly like fifa96_frontend_run_init, so the
+ * next step draws Game Select and a second match can start. `fr->lang` and
+ * `fr->native_menu` are preserved (the assets are not re-read). Returns 0, or
+ * -1 for NULL arguments. */
+int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surface *s);
+
 /* P2 test/engine seam: switch between the legacy FU-135 render (0) and the
  * native Game Select model (1). The engine enables it only for the
  * asset-backed interactive boot; tests may call it directly. */

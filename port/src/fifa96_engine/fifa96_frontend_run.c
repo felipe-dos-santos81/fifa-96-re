@@ -162,6 +162,30 @@ int fifa96_frontend_run_init(struct fifa96_frontend_run *fr, struct fifa96_surfa
   return 0;
 }
 
+int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surface *s) {
+  if (!fr || !s) return -1;
+  fifa96_frontend_init(&fr->frontend);
+  fifa96_menu_model_init(&fr->menu);
+  fr->surface = s;
+  fr->phase = fr->frontend.phase;
+  fr->queue_len = 0;
+  memset(fr->queue, 0, sizeof fr->queue);
+  fr->frames = 0;
+  fr->quit_requested = 0;
+  fr->match_start = 0;
+  fr->team_id[0] = 0;
+  fr->team_id[1] = 0;
+  memset(fr->team_name, 0, sizeof fr->team_name);
+  memset(fr->team_code, 0, sizeof fr->team_code);
+  memset(fr->formation, 0, sizeof fr->formation);
+  fr->team_selected = 0;
+  fr->selected_row = 0;
+  fr->entry_state = 0;
+  uint32_t state = 0;
+  if (fifa96_frontend_entry_state(&fr->frontend, &state) == 1) fr->entry_state = state;
+  return 0;
+}
+
 void fifa96_frontend_run_enable_native(struct fifa96_frontend_run *fr, int enable) {
   if (!fr) return;
   fr->native_menu = enable != 0;

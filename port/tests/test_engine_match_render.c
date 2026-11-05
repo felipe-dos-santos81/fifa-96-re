@@ -173,6 +173,12 @@ static void test_init_resets_render_state(void) {
   assert(mr.render.hud_bar.pixels == NULL && mr.render.hud_bar_ready == 0);
   assert(mr.render.hud_bar_height == 0);
   assert(mr.render.hud_name[0][0] == '\0' && mr.render.hud_name[1][0] == '\0');
+  /* FU-343 (P4): the live HUD colour defaults (fallback near-white 30, the
+   * monotone halving shade, no palette-derived build yet). */
+  assert(mr.render.hud_ink == FIFA96_MATCH_HUD_INK_DEFAULT);
+  assert(mr.render.hud_ink == 30);
+  assert(mr.render.hud_shade[0] == 0 && mr.render.hud_shade[0x80] == 0x40);
+  assert(mr.render.hud_colors_ready == 0);
 }
 
 static void test_null_and_disabled(void) {
@@ -1699,6 +1705,107 @@ static void test_hud_zoomed_uses_playfnt_layout(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* FU-343 (P4): the live HUD applies the native pixel rule and the derived
+ * near-white/black text pair (A4 §1.3/§4.1), while the non-live path keeps the
+ * legacy FU-148 operands the M2 tape pins. The bar fixture is 2x2:
+ *   [0x11][0x00]     0x11 = opaque, 0x00 = opaque black (not transparent),
+ *   [0xFE][0xFF]     0xFE = destination shade, 0xFF = transparent.
+ * The synthetic palette puts near-white at 30, 50% grey at 9 and the source
+ * destination pixel 0x7F at (200,200,200), so shade[0x7F] = 9. */
+static void test_hud_live_bar_and_text_indices(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  f.mr.live_start = 1;
+  f.mr.render.hud_name[0][0] = '1';
+  f.mr.render.hud_name[0][1] = '2';
+  f.mr.render.hud_name[0][2] = '\0';
+  f.mr.render.hud_name[1][0] = '3';
+  f.mr.render.hud_name[1][1] = '4';
+  f.mr.render.hud_name[1][2] = '\0';
+
+  uint8_t palette[768];
+  memset(palette, 0, sizeof palette);
+  palette[30 * 3 + 0] = 236; palette[30 * 3 + 1] = 232; palette[30 * 3 + 2] = 236;
+  palette[9 * 3 + 0] = 100;  palette[9 * 3 + 1] = 100;  palette[9 * 3 + 2] = 100;
+  palette[0x7F * 3 + 0] = 200; palette[0x7F * 3 + 1] = 200; palette[0x7F * 3 + 2] = 200;
+  uint8_t ink = 0;
+  uint8_t shade[256];
+  fifa96_match_run_hud_colors_from_palette(palette, &ink, shade);
+  assert(ink == 30);                     /* max-min near-white scan */
+  assert(shade[0] == 0);                 /* native table's zero entry */
+  assert(shade[0x7F] == 9);              /* nearest half-luma entry */
+  f.mr.render.hud_ink = ink;
+  memcpy(f.mr.render.hud_shade, shade, sizeof shade);
+  f.mr.render.hud_colors_ready = 1;
+
+  f.bar_pixels[0] = 0x11;
+  f.bar_pixels[1] = 0x00;
+  f.bar_pixels[2] = 0xFE;
+  f.bar_pixels[3] = 0xFF;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+
+  /* Bar pixel rule. 0x00 is opaque black, 0xFE shades the destination (the
+   * pre-bar 0x7F), 0xFF leaves it untouched. */
+  assert(f.s->indexed[197 * 320 + 2] == 0x11);
+  assert(f.s->indexed[197 * 320 + 3] == 0x00);
+  assert(f.s->indexed[198 * 320 + 2] == 9);
+  assert(f.s->indexed[198 * 320 + 3] == 0x7F);
+  /* Text: body 30 (near-white), shadow 0 at +1/+1. */
+  assert(f.s->indexed[199 * 320 + 6] == 30);
+  assert(f.s->indexed[200 * 320 + 7] == 0);
+  assert(f.s->indexed[209 * 320 + 6] == 30);
+  assert(f.s->indexed[210 * 320 + 7] == 0);
+  /* Score/period/clock cells use the same pair. */
+  assert(f.s->indexed[199 * 320 + 48] == 30);
+  assert(f.s->indexed[200 * 320 + 49] == 0);
+  assert(f.s->indexed[224 * 320 + 4] == 30);
+  assert(f.s->indexed[225 * 320 + 5] == 0);
+  assert(f.s->indexed[224 * 320 + 24] == 30);
+
+  /* A NULL palette keeps the documented fallbacks. */
+  fifa96_match_run_hud_colors_from_palette(NULL, &ink, shade);
+  assert(ink == FIFA96_MATCH_HUD_INK_DEFAULT);
+  assert(shade[0] == 0 && shade[0x80] == 0x40);
+  fifa96_surface_destroy(f.s);
+}
+
+/* FU-343 (P4): the live pause/FULL TIME panels draw a dark plate with the
+ * derived ink border over the frozen frame. The synthetic font only carries
+ * digits, so this pins the plate geometry, not the caption glyphs. */
+static void test_live_pause_and_result_panels(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  f.mr.live_start = 1;
+  f.mr.render.hud_ink = 30;
+  f.mr.render.hud_colors_ready = 1;
+
+  /* Pause panel: 150x52 at ((320-150)/2, (240-52)/2) = (85,94). */
+  f.mr.paused = 1;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[94 * 320 + 85] == 30);   /* border corner */
+  assert(f.s->indexed[94 * 320 + 86] == 30);   /* top border row */
+  assert(f.s->indexed[95 * 320 + 86] == 0);    /* dark fill */
+  assert(f.s->indexed[100 * 320 + 100] == 0);
+
+  /* FULL TIME panel: 200x68 at ((320-200)/2, (240-68)/2) = (60,86). The
+   * result draw is keyed on the lifecycle screen, not the phase. */
+  f.mr.paused = 0;
+  f.mr.lc.screen = FIFA96_MATCH_SCREEN_POST;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[86 * 320 + 60] == 30);
+  assert(f.s->indexed[86 * 320 + 61] == 30);
+  assert(f.s->indexed[87 * 320 + 61] == 0);
+  assert(f.s->indexed[100 * 320 + 100] == 0);
+
+  /* Non-live: neither panel may draw (the M2 tape gate). */
+  f.mr.live_start = 0;
+  f.mr.paused = 1;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[94 * 320 + 85] == 0x7F);
+  assert(f.s->indexed[100 * 320 + 100] == 0x7F);
+  fifa96_surface_destroy(f.s);
+}
+
 /* ---- FU-152 §4.1 (P4): presentation residual rows --------------------- */
 
 static void test_replay_state_helpers(void) {
@@ -2116,6 +2223,8 @@ int main(void) {
   test_hud_names_absent_and_wide_scores();
   test_hud_gates();
   test_hud_zoomed_uses_playfnt_layout();
+  test_hud_live_bar_and_text_indices();
+  test_live_pause_and_result_panels();
   test_replay_state_helpers();
   test_replay_step_machine();
   test_replay_camera_set();

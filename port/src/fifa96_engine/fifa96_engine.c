@@ -74,6 +74,16 @@ static int engine_key_mapped(int32_t raw_code) {
   }
 }
 
+/* FU-343 (P4): a batch-level press test. The SDL backend re-presents a held key
+ * with state 1 on every poll, so callers that need an edge track the previous
+ * batch themselves (the match ESC latch does). */
+static int engine_keys_down(const fifa96_platform_key *keys, int count,
+                            int32_t raw_code) {
+  for (int i = 0; i < count; i++)
+    if (keys[i].state == 1 && keys[i].raw_code == raw_code) return 1;
+  return 0;
+}
+
 /* P3: start match audio on the first MATCH step with a live run. The banks are
  * borrowed from the cache (created here when boot had no intro asset), and a
  * missing ISO/bank is a soft failure: the match stays silent and playable.
@@ -240,40 +250,82 @@ int fifa96_engine_step(struct fifa96_engine *e) {
     }
   } else if (e->mode == FIFA96_ENGINE_MODE_MATCH) {
     /* Poll one input batch per step (the FRONTEND pattern) and feed it to the
-     * run's FU-61/FU-70 input path; QUIT leaves the engine and is never a
-     * match key. The clock advance above fired the run's 100 Hz tick hook once
-     * per PIT tick, driving one frame-body pace tick per 10 ms; this dispatch
-     * consumes the lifecycle state (exit staging). */
+     * run's FU-61/FU-70 input path. FU-343 (P4): on a live run ESC is the
+     * pause/resume toggle (ACTIVE) or the FULL TIME skip (OVER/POST), never a
+     * process quit; the headless/non-live path keeps ESC = quit so the M2 tape
+     * and the direct-begin fixtures are unchanged. The SDL backend re-presents
+     * held keys, so the toggle is edge-triggered (`match_esc_held`). The clock
+     * advance above fired the run's 100 Hz tick hook once per PIT tick, driving
+     * one frame-body pace tick per 10 ms; this dispatch consumes the lifecycle
+     * state (exit staging). */
     fifa96_platform_key keys[32];
     int n = 0;
     if (e->plat->poll(e->plat->self, keys, 32, &n) != 0) return -1;
+    const int esc_down = engine_keys_down(keys, n, FIFA96_ENGINE_KEY_QUIT);
+    const int esc_edge = esc_down && !e->match_esc_held;
+    e->match_esc_held = (uint8_t)(esc_down != 0);
     if (e->match) (void)fifa96_match_run_input(e->match, keys, (size_t)n);
-    for (int i = 0; i < n; i++) {
-      if (keys[i].state == 1 && keys[i].raw_code == FIFA96_ENGINE_KEY_QUIT) {
-        e->quit = 1;
-        e->mode = FIFA96_ENGINE_MODE_QUIT;
-        break;
+    if (e->match && e->match->live_start) {
+      if (esc_edge) {
+        if (e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE) {
+          (void)fifa96_match_run_set_paused(e->match, e->match->paused ? 0 : 1);
+        } else if (e->match->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
+                   e->match->lc.screen == FIFA96_MATCH_SCREEN_POST) {
+          (void)fifa96_match_run_result_continue(e->match);
+        }
+        /* EXIT: the staged exit is consumed by run_step below. */
+      }
+      for (int i = 0; i < n; i++) {
+        if (keys[i].state != 1) continue;
+        int32_t raw = keys[i].raw_code;
+        if (raw == FIFA96_ENGINE_KEY_QUIT) continue;   /* handled above */
+        if (e->match->paused) {
+          if (raw == FIFA96_ENGINE_KEY_CONFIRM)
+            (void)fifa96_match_run_set_paused(e->match, 0);
+          else if (raw == FIFA96_ENGINE_KEY_DECLINE)
+            (void)fifa96_match_lifecycle_request_exit(&e->match->lc);
+        } else if ((e->match->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
+                    e->match->lc.screen == FIFA96_MATCH_SCREEN_POST) &&
+                   raw == FIFA96_ENGINE_KEY_CONFIRM) {
+          (void)fifa96_match_run_result_continue(e->match);
+        }
+      }
+    } else {
+      for (int i = 0; i < n; i++) {
+        if (keys[i].state == 1 && keys[i].raw_code == FIFA96_ENGINE_KEY_QUIT) {
+          e->quit = 1;
+          e->mode = FIFA96_ENGINE_MODE_QUIT;
+          break;
+        }
       }
     }
     if (e->mode == FIFA96_ENGINE_MODE_MATCH) {
       if (!e->match) {
         e->mode = FIFA96_ENGINE_MODE_FRONTEND;
+        (void)fifa96_frontend_run_reset(&e->frontend, e->surface);
       } else {
         if (!e->cfg.headless && !e->audio.active)
           (void)engine_match_audio_begin(e);
         if (fifa96_match_run_step(e->match) < 0) return -1;
-        /* P3: the run step above has applied this frame's whistle writer, so
-         * the audio cue edge is sampled after it (the clock already advanced
-         * the 100 Hz pump before this dispatch). */
-        if (!e->cfg.headless && e->audio.active && e->match)
-          (void)fifa96_match_audio_step(&e->audio, e->match, e->plat,
-                                        e->step_ticks);
-        /* One presentation pass per presented frame: recompose the indexed
-         * match canvas before the surface->planes conversion below. The run
-         * no-ops while rendering is disabled (the Task 12-14 fixtures). */
-        if (e->mode == FIFA96_ENGINE_MODE_MATCH &&
-            fifa96_match_run_render(e->match, e->surface) != 0)
-          return -1;
+        /* FU-343 (P4): run_step may have ended the match (exit staging, the
+         * POST dwell or the skip). Restore the front-end Game Select screen
+         * before its first draw and stop the audio; the last match frame stays
+         * presented for this step. */
+        if (!e->match || e->mode != FIFA96_ENGINE_MODE_MATCH) {
+          (void)fifa96_frontend_run_reset(&e->frontend, e->surface);
+        } else {
+          /* P3: the run step above has applied this frame's whistle writer, so
+           * the audio cue edge is sampled after it (the clock already advanced
+           * the 100 Hz pump before this dispatch). */
+          if (!e->cfg.headless && e->audio.active)
+            (void)fifa96_match_audio_step(&e->audio, e->match, e->plat,
+                                          e->step_ticks);
+          /* One presentation pass per presented frame: recompose the indexed
+           * match canvas before the surface->planes conversion below. The run
+           * no-ops while rendering is disabled (the Task 12-14 fixtures). */
+          if (fifa96_match_run_render(e->match, e->surface) != 0)
+            return -1;
+        }
       }
     }
   }
