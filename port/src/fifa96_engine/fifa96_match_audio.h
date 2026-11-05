@@ -13,10 +13,12 @@
  *  - SFX id space and banks: FU-43 §1/§3.2. /SOUND/SFX_GAME.BNK carries ids
  *    1..31; /SOUND/CHN_*.BNK carries the looping chants 33..58.
  *  - whistle: 0x974DC(0x1E) -> 0x65CC0 -> 0xA7705(id, volume) -> 0xA7728 ->
- *    0xA780E (FU-229 §1, FU-51 §4/§5). The eight staged match writes become
- *    `mr->ref_whistle = 0x1E` (fifa96_match_run.c:6635/6718/7156/7437/7444/
- *    7470/7477/7484); this module plays one cue on a rising/any-change edge of
- *    that observation slot.
+ *    0xA780E (FU-229 §1, FU-51 §4/§5). The eight staged match writes
+ *    (`match_run_ref_apply`, `match_run_ref_step_restart`, the act-0x1D wait
+ *    arm and `fifa96_match_action_phase_21/22`) stage `mr->ref_whistle = 0x1E`
+ *    and increment `mr->whistle_seq`; this module plays one cue per sequence
+ *    change. The counter is what makes a clear + re-set inside one frame body
+ *    audible (the level byte alone reads unchanged at the audio step).
  *  - crowd: the native ambience machine FUN_00091F60/FUN_000920C0 selects a CHN
  *    id per event (FU-49 §1.10/§1.11). The engine has no team identity, so the
  *    generic CHN_GEN1 id 55 is the recorded default (A6-L3); its EACS loop
@@ -40,8 +42,11 @@
  *  - A6-L5: commentary (PHR_* phrase banks, ref_speech unimplemented).
  *  - A6-L6: channel/master volume model ([0x55D00..], [0x15FD6], settings
  *    0x11/0x12/0x13); v1 uses the fixed gains below.
+ *  - A6-L8: intro video companion audio (`fifa96_intro.c` discards the
+ *    `1SNh`/`1SNd` chunks, FU-35 §1); this match slice does not touch the
+ *    intro, so it is out of scope here.
  *  - A6-L9: the unported 0x974DC(0x1E) sinks (row-01/0x10/0x11/0x12/0x13 and
- *    the scanner) do not move ref_whistle, so they stay unheard.
+ *    the scanner) do not move ref_whistle/whistle_seq, so they stay unheard.
  */
 
 #define FIFA96_MATCH_AUDIO_RATE 22050u
@@ -52,6 +57,10 @@
 #define FIFA96_MATCH_AUDIO_CROWD_VOLUME 0x60u
 #define FIFA96_MATCH_AUDIO_CUE_VOLUME 0x7Fu
 #define FIFA96_MATCH_AUDIO_MASTER 0x7Fu
+/* Bound on the whistle writes consumed per audio step. A frame body stages at
+ * most a couple of 0x1E writes; the cap keeps a re-based/garbage counter from
+ * turning one step into an unbounded cue burst. */
+#define FIFA96_MATCH_AUDIO_MAX_WHISTLE_BURST 4u
 
 struct fifa96_match_run;
 
@@ -62,7 +71,8 @@ struct fifa96_match_audio {
   struct fifa96_sfx_id_table ids; /* SFX_GAME ids 1..31, skipping empty slots */
   int16_t pcm[2 * FIFA96_MATCH_AUDIO_CHUNK];
   uint64_t acc;              /* rate-weighted remainder (frames * 100) */
-  uint8_t last_whistle;      /* previous ref_whistle observation */
+  uint8_t last_whistle;      /* previous ref_whistle observation (fallback) */
+  uint32_t last_whistle_seq; /* previous whistle_seq observation */
   uint32_t last_score;       /* previous score[0] + score[1] (goal edge) */
   int crowd_voice;           /* armed CHN loop voice, -1 before/if absent */
   int have_sfx;              /* SFX_GAME parsed */
@@ -85,11 +95,14 @@ int fifa96_match_audio_start(struct fifa96_match_audio *a,
                              const uint8_t *crowd, size_t crowd_len);
 
 /* One engine step. `ticks` is the PIT ticks the clock advanced (0 is legal:
- * cue edges are still consumed, no PCM is submitted). Plays the whistle on a
- * ref_whistle change, the A6-L2 goal stand-in on a score increase, re-arms the
- * crowd loop if its voice was stolen, then renders
- * floor(frames accumulated) frames in chunked audio_submit calls. With no bank
- * parsed it returns without touching the platform. */
+ * cue edges are still consumed, no PCM is submitted). Plays one whistle cue
+ * per `whistle_seq` change (usually one per staged write; two writes inside
+ * one frame body fire two cues), with the `ref_whistle` level change kept as
+ * the compatibility fallback for fixtures that stage the byte directly. The
+ * A6-L2 goal stand-in fires on a score increase, the crowd loop is re-armed if
+ * its voice was stolen, then floor(frames accumulated) frames are rendered in
+ * chunked audio_submit calls. With no bank parsed it returns without touching
+ * the platform. */
 int fifa96_match_audio_step(struct fifa96_match_audio *a,
                             struct fifa96_match_run *mr,
                             fifa96_platform *plat, uint32_t ticks);

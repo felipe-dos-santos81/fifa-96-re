@@ -13,6 +13,9 @@
  *    non-silent;
  *  - a ref_whistle change plays one whistle cue with a nonzero gain, the same
  *    held value does not repeat, and a clear/re-set fires again;
+ *  - the durable whistle_seq counter increments only at the native 0x1E
+ *    writers, makes a clear+re-set inside one step audible, and fires one cue
+ *    per pending write (two writes -> two cues);
  *  - a score increase fires the A6-L2 goal stand-in once.
  *
  * ISO-gated: without data/game/FIFAPCCD96.iso the retail half prints SKIP and
@@ -84,6 +87,35 @@ static void test_no_assets_is_silent(void) {
   free(mr);
 }
 
+/* FU-343 (P3 fix): the counter is the durable whistle edge. Init/begin zero
+ * it, the native 0x1E writers increment it once each, and the referee step's
+ * frame-head clear is a level clear (not an assertion), so it must not move
+ * the counter. */
+static void test_whistle_seq_counter(void) {
+  struct fifa96_match_run mr;
+  memset(&mr, 0xAA, sizeof mr);
+  fifa96_match_run_init(&mr);
+  assert(mr.whistle_seq == 0u);
+  assert(mr.ref_whistle == 0u);
+
+  /* phase 21 stage 0 is a native 0x974DC(0x1E) writer. */
+  assert(fifa96_match_action_phase_21(&mr) == FIFA96_OK);
+  assert(mr.ref_whistle == FIFA96_MATCH_AUDIO_WHISTLE_ID);
+  assert(mr.whistle_seq == 1u);
+  /* phase 22 stage 0 is the second writer shape; stage 0 again after the
+   * referee step's level clear. */
+  mr.ref_whistle = 0u;                 /* the referee clear (no counter) */
+  mr.act.stage = 0u;
+  assert(fifa96_match_action_phase_22(&mr) == FIFA96_OK);
+  assert(mr.ref_whistle == FIFA96_MATCH_AUDIO_WHISTLE_ID);
+  assert(mr.whistle_seq == 2u);
+
+  uint32_t seq = mr.whistle_seq;
+  assert(fifa96_match_run_referee_step(&mr) == 0);
+  assert(mr.ref_whistle == 0u);
+  assert(mr.whistle_seq == seq);       /* the clear is not an assertion */
+}
+
 static void test_retail_banks(void) {
   struct fifa96_asset_table *assets = NULL;
   assert(fifa96_asset_mount_file(AUDIO_ISO_PATH, &assets) == FIFA96_OK);
@@ -109,6 +141,7 @@ static void test_retail_banks(void) {
   assert(a.active == 1 && a.have_sfx == 1 && a.have_crowd == 1);
   assert(a.ids.bank[FIFA96_MATCH_AUDIO_WHISTLE_ID] == &a.sfx);
   assert(a.ids.bank[FIFA96_MATCH_AUDIO_GOAL_ID] == &a.sfx);
+  assert(a.last_whistle_seq == mr->whistle_seq);   /* seeded, no kickoff cue */
   assert(a.crowd_voice >= 0 && a.crowd_voice < FIFA96_MIXER_VOICES);
   assert(fifa96_mixer_voice_active(&a.mixer, a.crowd_voice) == 1);
   assert(a.mixer.voices[a.crowd_voice].loop == 1);
@@ -144,6 +177,29 @@ static void test_retail_banks(void) {
   assert(fifa96_match_audio_step(&a, mr, &plat, 1) == 0);
   assert(a.whistle_cues == cues + 2u);
 
+  /* FU-343 (P3 fix): the durable counter. A clear + re-set inside one frame
+   * body leaves ref_whistle at 0x1E, so the level edge alone misses it; the
+   * run's whistle_seq write makes it observable. */
+  uint32_t seq_cues = a.whistle_cues;
+  uint32_t seq_before = mr->whistle_seq;
+  mr->ref_whistle = 0;                 /* the referee frame-head clear */
+  mr->whistle_seq++;                   /* one native 0x974DC(0x1E) write */
+  mr->ref_whistle = FIFA96_MATCH_AUDIO_WHISTLE_ID;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 1) == 0);
+  assert(a.whistle_cues == seq_cues + 1u);
+  assert(a.last_whistle_seq == seq_before + 1u);
+  /* A held level/sequence does not repeat. */
+  assert(fifa96_match_audio_step(&a, mr, &plat, 1) == 0);
+  assert(a.whistle_cues == seq_cues + 1u);
+  /* Two staged writes between audio steps fire two cues. */
+  mr->whistle_seq += 2u;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 1) == 0);
+  assert(a.whistle_cues == seq_cues + 3u);
+  assert(a.last_whistle_seq == seq_before + 3u);
+  assert(a.last_whistle_voice >= 0 && a.last_whistle_voice < FIFA96_MIXER_VOICES);
+  assert(a.last_whistle_gain != 0u);
+  assert(fifa96_mixer_voice_active(&a.mixer, a.last_whistle_voice) == 1);
+
   /* Goal stand-in (A6-L2): score increase fires id 15 once. */
   assert(a.goal_cues == 0);
   mr->score[0] = 1;
@@ -160,6 +216,7 @@ static void test_retail_banks(void) {
 
 int main(void) {
   test_no_assets_is_silent();
+  test_whistle_seq_counter();
   if (iso_present()) {
     test_retail_banks();
   } else {

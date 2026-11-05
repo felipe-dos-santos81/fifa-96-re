@@ -65,6 +65,7 @@ int fifa96_match_audio_start(struct fifa96_match_audio *a,
   /* Seed the observation edges from the live run so a value left over from a
    * previous match cannot fire a spurious cue at kickoff. */
   a->last_whistle = mr ? mr->ref_whistle : 0u;
+  a->last_whistle_seq = mr ? mr->whistle_seq : 0u;
   a->last_score = mr ? (uint32_t)mr->score[0] + (uint32_t)mr->score[1] : 0u;
   (void)match_audio_parse_sfx(a, sfx, sfx_len);
   if (match_audio_parse_crowd(a, crowd, crowd_len)) match_audio_arm_crowd(a);
@@ -108,12 +109,23 @@ int fifa96_match_audio_step(struct fifa96_match_audio *a,
   if (!a->have_sfx && !a->have_crowd) return 0;   /* no assets: stay silent */
   if (!mr || !plat) return -(int)FIFA96_ERR_INVALID;
 
-  /* Whistle: the staged slot is cleared by the referee step each granted
-   * frame (fifa96_match_run.c:7663) and the writers above run later in the
-   * frame, so a change is a cue. The pump runs at 100 Hz while the frame body
-   * can run less often; the byte comparison keeps a held slot from repeating. */
+  /* Whistle: `whistle_seq` is the durable edge. The run increments it at every
+   * native 0x974DC(0x1E) write, so a clear + re-set inside one frame body is
+   * still observable (the byte alone reads unchanged). Consume the pending
+   * writes, normally one; two writes between audio steps fire two cues. A
+   * lowered counter means the run was reset (a fresh match), not 2^32 writes.
+   * The byte comparison stays as the compatibility fallback for fixtures that
+   * stage `ref_whistle` directly; a held slot does not repeat. */
+  uint32_t seq = mr->whistle_seq;
+  uint32_t pending = seq - a->last_whistle_seq;
+  if (seq < a->last_whistle_seq) pending = 0u;   /* fresh run, not a wrap */
+  if (pending > FIFA96_MATCH_AUDIO_MAX_WHISTLE_BURST)
+    pending = FIFA96_MATCH_AUDIO_MAX_WHISTLE_BURST;
+  for (uint32_t i = 0; i < pending; i++) match_audio_play_whistle(a);
   uint8_t whistle = mr->ref_whistle;
-  if (whistle != 0u && whistle != a->last_whistle) match_audio_play_whistle(a);
+  if (pending == 0u && whistle != 0u && whistle != a->last_whistle)
+    match_audio_play_whistle(a);
+  a->last_whistle_seq = seq;
   a->last_whistle = whistle;
 
   /* Goal edge: score[0] + score[1] increase (A6-L2 stand-in). */
