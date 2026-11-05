@@ -736,11 +736,17 @@ int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int3
  * `FUN_0008CF60` over `0x1588A4` and `0x1590D9`). Unlike the act-1 kickoff
  * entry the ball position copies the staged `pool->ball.target_*` triple
  * instead of the `0x1E0/0` spawn (`0x8C294..0x8C296`), forces y = 0
- * (`0x8C299`), zeroes the speed/velocity words (`0x8C272/0x8C2A6/0x8C2AD/
- * 0x8C2B4`) and clears the heading/metric state; the shared `FUN_0008CF60`
- * loop then commits/faces/selects every record (row 43 latch + frame 0). The
- * `0x79F3C` ring place is skipped by the native phase gate
- * `byte[0x1106C3 + 0x15] == 0`, so this entry does not call it. NULL `pool` ->
+ * (`0x8C299`), zeroes the ordinary-branch speed/velocity words (`0x8C2A6` ->
+ * `[0x158848]` speed, `0x8C2AD` -> `[0x15884C]` vel_z, `0x8C2B4` ->
+ * `[0x15884A]` vel_x; the `0x8C272/0x8C279/0x8C280` trio is the session
+ * arm's same triple) and clears the heading/metric state; the shared
+ * `FUN_0008CF60` loop then commits/faces/selects every record (row 43 latch +
+ * frame 0). The `0x79F3C` ring place is skipped by the native phase gate
+ * `byte[0x1106C3 + 0x15] == 0`, so this entry does not call it. The native
+ * loop's per-record `0x6D920` re-stage and `CALL [rec+0x1C]` phase body are
+ * not repeated here (FU342-L2): for a non-`skip_9a` record the just-run
+ * phase-write walk applied the same `0x110794[0x15] = 0x6DCC8` scaling, but a
+ * `skip_9a` record would commit a stale target. NULL `pool` ->
  * -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_restart_place(struct fifa96_match_entities *pool,
                                         int32_t cam_x, int32_t cam_y,

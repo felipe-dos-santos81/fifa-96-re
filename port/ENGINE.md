@@ -8886,3 +8886,70 @@ Restart pins: `gate-phase15` 96 -> 100, `phase4-phase15` 100 -> 103,
 0x06 (wired, dormant under the v29 placement). M1 `09b726b7…` exact. Census
 unchanged: **78/78 bodies, 58/80 natural, 64/80 install-live, 6 blocked,
 action 38/45, phase 26/35**; `make check` green.
+
+## Phase 53 close-out register (FU-342, 2026-11-05)
+
+Final register for the act-9 stage-0 wave. The T1/T2 sections above stand; this
+is the consolidated outcome, the two measured re-pins, the census and the
+carried legs. The evidence record is
+`port/spec/FU-342_act9_stage0_sinks.md`.
+
+**T1 — camera reset + present bind (FU-342, `c238316`).**
+`fifa96_camera_init` now stages the native pan constants `pan_decay = 10`,
+`pan_rate_hi = 16`, `pan_rate_lo = 24` (`0x7011C/0x7013D/0x70146`) instead of
+zeros, and act-9 stage 0 calls it at `0x88FA0`. New `mr->present_side`
+(`[0x1074A4]`) and `fifa96_match_run_present_bind` port `0x4C324` (the mode
+`[0x157AC2] >= 4` + live `[0x1587D4]` arm through `fifa96_action_duel_bind`
+and `FUN_00036200(0)`, else the sign-extended `[0x1587E3]>>24` fallback),
+called last in stage 0. M2 re-pins **v28**
+`bd6ac7a796b9020ef9196495e66c2e77947413b4467a5fb6d2d62e4231702995`
+(295087 B, 6522 lines; first differing line 422, 6101 lines differ, all
+hash-only; state set/counts unchanged). M1 `09b726b7…` exact.
+
+**T2 — `0x73E28` + non-seeding `0x73E08` (FU-342, `5f44a94`).**
+`fifa96_match_run_act9_reset` ports `FUN_00073E28` cell-for-cell (the phase/
+prev/`global_157a4c` bytes, the `0x157A60/5C` Q8 cells, the `0x157A73`
+focus comment, goal/controlled NONE, `0x157A6C/6A/64`, `0x157AAB = 0xFF`, the
+`0x157A6D` `0xB0`/`0xA0` anchor, `0x157AB0`, `0x157A6F`, the full
+`0x7F144` `0x158724..0x15872F` possession block and the `0x7A028` pair block
+with flags `0x20`/code 2). `fifa96_match_entities_restart_place` ports the
+non-seeding `FUN_00073E08` (ball := the staged `pool->ball.target_*` x/z, y = 0,
+the ordinary-branch speed/velocity words cleared, row 3; the shared `0x8CF60`
+commit/face/anim/row43/frame-0 loop; no `0x79F3C` ring place at phase 0x15).
+Stage 0 runs gate clear -> `0x700F4` -> `0x73E28` -> `0x740A0` -> `0x73E08` ->
+`0x4C324` -> timer 0. M2 re-pins **v29**
+`7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f`
+(295089 B, 6522 lines; first differing line 9; 6514 lines differ — 6501
+hash-only + 13 hash+state; state set/counts 0x304, 1x950, 2x2194, 4x303, 12x3,
+19x2640, 20x20, 21x103; +2 bytes from ten state-tag width changes — six +1,
+four −1 — plus three equal-width changes, with no line change; half markers
+m 845/849, ET anchors unchanged). Restart pins: `gate-phase15` 96 -> 100,
+`phase4-phase15` 100 -> 103, `restart-phase4` 303; act timer 2 -> 0. The final
+dispatch mask loses row 0x06 (wired, dormant under the v29 placement). M1
+`09b726b7…` exact.
+
+**T3 — close-out (FU-342, this commit).** Docs/comments only, no behavior
+change: the `restart_place` field comments are un-crossed (`0x8C2A6` speed
+`[0x158848]`, `0x8C2AD` vel_z `[0x15884C]`, `0x8C2B4` vel_x `[0x15884A]`, the
+ordinary branch), the `0x7F144` range is `0x158724..0x15872F`, the height
+anchor is stated as mode + `0x70` (`0x702F8` returns EAX and preserves EDX),
+the `0x8CF60` `0x6D920`/`[rec+0x1C]` residual and the `skip_9a` caveat are the
+named FU342-L2 leg, the M2 v29 header states the +2-byte cause, and the
+scripted-pan witness print reports the measured single-`0x90` shape
+(`second_stop_step == -1`). M1 `09b726b7…` and M2 v29 `7c3874f7…` are
+byte-identical; census unchanged.
+
+**Census (final).** **78/78** bodies, **58/80** natural, **64/80**
+install-live, **6** blocked, action **38/45**, phase **26/35**.
+
+**Carried legs.** FU342-L1 — the act-tick ordering (native `0x8AF38` before
+`0x8D8EC`; the engine tick follows the entity chain; the begin-order cause is
+FU170-L10). FU342-L2 — the `0x8CF60` per-record `0x6D920`/`CALL [rec+0x1C]`
+residual; the phase-write walk covers non-`skip_9a` records, so a `skip_9a`
+record would commit a stale target. FU342-L3 — the `0x8C24C` `[0x14C32A] != 0`
+session arm (`0x1C80`/`0x2C40`). FU342-L4 — the `0x700F4` `0x92820(0,0x24)`
+sound and `0x70074`/`0x6D870` place recompute. FU342-L5 — `0x53DC4`.
+FU342-L6 — `0x36208`. FU342-L7 — the FU326-L4 `0x1104AB` init row. The
+`0x8D040[0x15] = 0x8D77B` walk arm stays the FU170-L2 residual; the act-9
+stage-1/2 gates stay FU170-L1 (the original FU-181 §7 item 5), not the
+phase-53 stage-0 scope. `make check` green (112/112).

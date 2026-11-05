@@ -162,7 +162,7 @@ static void test_act9_stage0_resets_match_cells(void) {
   assert(mr.camera_height_157a6d == 0xB0);              /* 0x157A6D */
   assert(mr.flag_157ab0 == 0u);                         /* 0x157AB0 */
   assert(mr.camera_override_157a6f == 0);               /* 0x157A6F */
-  /* 0x7F144: the possession/carrier block 0x158724..2C. */
+  /* 0x7F144: the possession/carrier block 0x158724..0x15872F. */
   assert(mr.entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);
   assert(mr.entities.ball.pos_index == 0u && mr.entities.ball.pos_rotation == 0u &&
          mr.entities.ball.pos_dir_x == 0 && mr.entities.ball.pos_dir_z == 0 &&

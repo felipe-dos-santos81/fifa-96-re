@@ -525,3 +525,35 @@ pins: `gate-phase15` 96 -> 100, `phase4-phase15` 100 -> 103,
 recompute legs and the `0x4C324` recorder latch remain the legs above. M1
 `09b726b7…` exact; census unchanged (78/78, 58/80, 64/80, 6 blocked, action
 38/45, phase 26/35).
+
+## Phase-53 T3 close-out erratum — range, anchor call, stage-0 scope (2026-11-05)
+
+The T2 erratum above is corrected in two places by fresh reads this session
+(`disassemble_bytes 0x7F144`, `0x702F8`, `0x73E9B`).
+
+**The `0x7F144` block is `0x158724..0x15872F`, not `..0x15872C`.** The T2
+erratum wrote `0x7F144 = 0x158724..0x15872C`. Fresh `0x7F144` bytes store the
+dword at `0x158724` (`0x7F149`) **and** the eight bytes `0x158728`, `0x158729`,
+`0x15872B`, `0x15872A`, `0x15872C` (`0x7F167`), `0x15872D` (`0x7F16D`),
+`0x15872E` (`0x7F173`) and `0x15872F` (`0x7F179`). The full block is
+`0x158724..0x15872F`; the trailing three bytes are real stores, not padding.
+
+**The height anchor is mode + 0x70, not the `0x702F8` return + 0x70.** The T2
+erratum wrote `[0x157A6D] = 0x702F8(mode) + 0x70` and called `0x702F8` the
+camera-height mode selector whose return is not modelled. Fresh `0x702F8` is
+`PUSH EDX; MOVSX EDX,AX; ...; POP EDX; RET` — it returns in **EAX** and
+preserves **EDX**. The caller `0x73EAB MOVSX EAX,DX` passes the mode in AX,
+`0x73EAE CALL 0x702F8`, then `0x73EB3 ADD EDX,0x70` adds `0x70` to the
+preserved mode in EDX; `0x73EB8 MOV word[0x157A6D],DX` stores `0xB0`/`0xA0`.
+The helper's EAX return is not consumed by this caller.
+
+**Stage-0 scope closed.** The phase-53 L5 scope (the design spec's act-9
+stage-0 sinks) is closed by FU-342: `0x700F4`, `0x73E28`, the landed `0x740A0`
+write, `0x73E08` and `0x4C324` run live in the native order, with the M2
+v28/v29 re-pins. This does **not** close §7 item 5 above (the act-9 stage-1/2
+gates, FU170-L1); that text remains a different, open leg. The remaining legs
+are FU342-L1 (act-tick order), L2 (`0x8CF60` `0x6D920`/`[rec+0x1C]` residual,
+incl. the `skip_9a` stale-target caveat), L3 (`0x8C24C` session arm), L4
+(`0x700F4` sound/place recompute), L5 (`0x53DC4`), L6 (`0x36208`) and L7
+(FU326-L4 init row). M1 `09b726b7…` exact; census unchanged (78/78, 58/80,
+64/80, 6 blocked, action 38/45, phase 26/35).

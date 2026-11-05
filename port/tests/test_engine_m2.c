@@ -35,7 +35,8 @@
  * and the non-seeding placement commit (`0x88FBD CALL 0x73E08`,
  * `fifa96_match_entities_restart_place`) are now live. The reset zeroes the
  * frame delta before the same-frame stage-3 head add, so the act timer starts
- * at 0 (was 2) and the post-goal restart window shifts +4 frames. Because the
+ * at 0 (was 2); the post-goal state window moves +3 frames (`21` 100 -> 103,
+ * phase-4 entry +3) while the gate-phase15 pin moves +4. Because the
  * engine's derived screen install runs after kickoff (`begin`, FU170-L10), the
  * act-9 placement also commits the phase-0x15 walk's re-scaled targets at
  * begin: the begin pins move (t0r0 -2376 -> -2706, t1r0 2508 -> 2706, t0r8
@@ -47,7 +48,12 @@
  * m 845 -> 849); the ET anchors stay 2502/3402/4302 and the terminal
  * 6502/6503. State-tag set/counts: 0x304, 1x953->950, 2x2193->2194,
  * 12x4->3, 19x2640, 20x20, 21x100->103, 4x303. Length 295087 -> 295089
- * bytes; new sha `7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f`.
+ * bytes with no line change: the 13 hash+state lines carry ten state-tag
+ * width changes — six +1 (lines 470..472 `4/1-0` -> `21/1-0`, lines 850..852
+ * `1/1-0` -> `12/1-0`) and four -1 (lines 846..849 `12/1-0` -> `2/1-0`) —
+ * plus three equal-width changes (lines 773..775 `2/1-0` -> `4/1-0`), for a
+ * net +2 characters over the fixed 6522 lines; new sha
+ * `7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f`.
  * The restart pins move: gate-phase15 96 -> 100, phase4-phase15 100 -> 103,
  * restart-phase4 303 (unchanged); the final dispatch mask loses row 0x06
  * (wired, dormant under the v29 placement) and keeps 0x25. The ordering
@@ -2500,8 +2506,9 @@ struct m2_result {
  * The A4/A5 pan-window/lockout pair lives on the driven claim/offset passes
  * (FU322's erratum 2). The FU313 follow window/lockout form stays waived on
  * this tape (the row-04 event's height is 0, so the follow cannot open —
- * E16/FU317; FU322-L11). The scripted pre-producer control remains the
- * two-pan X-only witness; Y stays 0. */
+ * E16/FU317; FU322-L11). The scripted pre-producer control is the measured
+ * single-0x90 X-only witness after v29 (the pre-v29 two-pan shape is gone);
+ * Y stays 0. */
 struct m2_stage_capture {
   uint32_t calls;        /* the FU282 ladder gate fired (the seam was entered) */
   uint32_t select_calls; /* fifa96_keeper_cpu_stage_select returned OK */
@@ -2565,8 +2572,10 @@ static int m2_stage_capture_ladder(void *ctx,
  * camera event at all (measured: 0 departures in 6 000 steps), so the run
  * stages `timer79`/`timer7b` = 0 at the match-begin seam beside the existing
  * `+0x43 = 0`; the natural pass above carries the producer-conditioned pan,
- * this control keeps the pre-producer pan shape pinned. The claim walks the
- * place 0 -> 0x90 -> 0x120 over two one-shot row-04 pans; Y and Z remain 0. */
+ * this control keeps the pre-producer pan shape pinned. Before v29 the claim
+ * walked the place 0 -> 0x90 -> 0x120 over two one-shot row-04 pans; the v29
+ * begin placement leaves the measured single 0x90 pan (`second_stop_step ==
+ * -1`). Y and Z remain 0. */
 struct m2_pan {
   int match_start_step;
   int phase2_step;
@@ -4507,8 +4516,10 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
  * camera's near field. The natural pass above carries the phase-35
  * producer-conditioned pan; this control stages `timer79`/`timer7b` = 0 at
  * the match-begin seam (with the existing `+0x43 = 0`) and keeps the
- * pre-producer two-pan shape pinned. It is a scripted, one-shot, X-only,
- * Y-less witness, never a natural open-play claim. */
+ * pre-producer pan shape pinned. Since v29 the measured shape is the single
+ * 0x90 pan (`second_stop_step == -1`; the old two-pan 0x90 -> 0x120 shape is
+ * gone). It is a scripted, one-shot, X-only, Y-less witness, never a natural
+ * open-play claim. */
 static void run_scripted_pan_witness(struct m2_pan *pan) {
   static fifa96_platform_key tape[M2_KEYS_LEN];
   struct fifa96_platform_null_config pcfg;
@@ -7291,11 +7302,12 @@ int main(void) {
     fprintf(stderr,
             "test_engine_m2 pan witness: scripted claim/kick (PRE-PRODUCER "
             "CONTROL: copied tape, cutscene isolated, timer79/timer7b = 0) "
-            "place 0 -> 0x%X -> 0x%X at steps %d/%d (first motion %d, "
-            "tracked %d), Y=0, %u granted frames\n",
-            (unsigned)0x90, (unsigned)0x120, nat.pan.first_stop_step,
-            nat.pan.second_stop_step, nat.pan.first_pan_step,
-            nat.pan.first_tracked, (unsigned)nat.pan.granted_frames);
+            "place 0 -> 0x%X at step %d (single pan; second stop %d = none, "
+            "the pre-v29 two-pan shape), first motion %d, tracked %d, Y=0, "
+            "%u granted frames\n",
+            (unsigned)0x90, nat.pan.first_stop_step, nat.pan.second_stop_step,
+            nat.pan.first_pan_step, nat.pan.first_tracked,
+            (unsigned)nat.pan.granted_frames);
   if (with_iso)
     fprintf(stderr,
             "test_engine_m2 natural claim pass: phase 2 at step %d, claim f=%d "

@@ -1687,7 +1687,7 @@ int fifa96_match_run_present_bind(struct fifa96_match_run *mr);
  * stage-0 match/camera state reset called between the `0x700F4` camera reset
  * and the `0x740A0` phase write:
  *  - `[0x157AA7]` dword = 0 (the unported deepest-keeper record pointer home
- *    `keeper_deepest_157aa7`);
+ *    `deepest_keeper_157aa7`);
  *  - bytes `[0x157A4C]`/`[0x157A4E]`/`[0x157A4D]` = 0 (`global_157a4c` and the
  *    phase pair `state.prev_phase`/`state.phase`, plus their FU-142a mirror);
  *  - dwords `[0x157A60]`/`[0x157A5C]` = 0 (the saved Q8 clock accumulator
@@ -1703,13 +1703,16 @@ int fifa96_match_run_present_bind(struct fifa96_match_run *mr);
  *    `[0x157A6A]` = 0 (`referee.offside_suppress`), word `[0x157A64]` = 0
  *    (`state.frame_delta`, the same-frame stage-head add cell);
  *  - byte `[0x157AAB]` = 0xFF (`flag_157aab`);
- *  - word `[0x157A6D] = 0x702F8([0x14C2F6] == 0 ? 0x40 : 0x30) + 0x70` =
- *    0xB0/0xA0 (`camera_height_157a6d`; `[0x14C2F6]` is
- *    `difficulty_14c2f6`, the image default 0);
+ *  - word `[0x157A6D] = mode + 0x70`, mode = `[0x14C2F6] == 0 ? 0x40 : 0x30`
+ *    = 0xB0/0xA0 (`camera_height_157a6d`; `[0x14C2F6]` is
+ *    `difficulty_14c2f6`, the image default 0). `0x702F8` is called with the
+ *    mode in AX; fresh bytes show it returns in EAX but preserves EDX, so the
+ *    caller's `0x73EB3 ADD EDX,0x70` adds to the mode, not to the return; the
+ *    EAX result is not consumed;
  *  - byte `[0x157AB0]` = 0 (`flag_157ab0`) and dword `[0x157A6F]` = 0
  *    (`camera_override_157a6f`);
  *  - `0x73ECD CALL 0x7F144`: the possession/carrier block
- *    `0x158724..0x15872C` = `ball.carrier` NONE + the eight `pos_*` bytes 0;
+ *    `0x158724..0x15872F` = `ball.carrier` NONE + the eight `pos_*` bytes 0;
  *  - `0x73ED2 CALL 0x7A028`: the ball-pair block `0x158730..0x158746` via
  *    `fifa96_ball_pair_clear` (flags 0x20, code 2, tails 0).
  * Returns FIFA96_OK or -FIFA96_ERR_INVALID (NULL). */

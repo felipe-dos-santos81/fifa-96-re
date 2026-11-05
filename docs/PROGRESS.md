@@ -3761,3 +3761,38 @@ close-out below).
   and the slot `+0x24` reader. M1 `09b726b7…` and M2 `54f44987…` stay
   byte-identical; census unchanged (`78/78`, `58/80`, `64/80`, 6 blocked,
   action 38/45, phase 26/35); `make check` 112/112.
+
+- **phase-53 act-9 stage-0 sinks (FU181-L5 / FU-342, 2026-11-05).** The native
+  act-9 stage-0 body `0x88F81..0x88FE7` now runs its sinks in order: the
+  `0x88F9A` gate clear, the `0x700F4` camera reset (the constant-zero
+  `[0x10F328/2C/30]` triple; `fifa96_camera_init` now stages the native pan
+  constants 10/16/24 and `tracked = NONE`), the `0x73E28` match/camera reset
+  (`fifa96_match_run_act9_reset`, cell-for-cell: phase/prev/`global_157a4c`,
+  the `0x157A60/5C` Q8 cells, the `0x157A73` focus comment, goal/controlled
+  NONE, the frame-delta zero, the `0xB0/0xA0` height anchor, the full
+  `0x7F144` `0x158724..0x15872F` possession block and the `0x7A028` pair
+  block), the landed `0x740A0(0x15)` write, the non-seeding `0x73E08`
+  placement (`fifa96_match_entities_restart_place`: ball := the staged
+  `target_*` x/z, y = 0, the ordinary-branch speed/velocity words cleared, the
+  shared `0x8CF60` commit/face/anim/row43/frame-0 loop, no ring place at phase
+  0x15), the `0x4C324` present bind (`mr->present_side` = `[0x1074A4]`), and
+  the `0x88FE0` timer zero. Two measured re-pins: **v28**
+  `bd6ac7a796b9020ef9196495e66c2e77947413b4467a5fb6d2d62e4231702995`
+  (295087 B; first diff 422, 6101 lines all hash-only, state strata unchanged)
+  and **v29**
+  `7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f`
+  (295089 B; first diff 9, 6514 = 6501 hash-only + 13 hash+state; state counts
+  `1` 953→950, `2` 2193→2194, `12` 4→3, `21` 100→103; the +2 bytes are ten
+  state-tag width changes — six +1, four −1 — plus three equal-width changes,
+  no line change; restart pins 96→100/100→103/303, act timer 2→0). M1
+  `09b726b7…` exact; census unchanged (**78/78** bodies, **58/80** natural,
+  **64/80** install-live, **6** blocked, action **38/45**, phase **26/35**);
+  `make check` 112/112. Legs: FU342-L1 act-tick ordering (native `0x8AF38`
+  before `0x8D8EC`; begin order FU170-L10), L2 the `0x8CF60`
+  `0x6D920`/`[rec+0x1C]` residual (a `skip_9a` record would commit a stale
+  target), L3 the `0x8C24C` session arm, L4 the `0x700F4`
+  `0x92820`/`0x70074`/`0x6D870` sub-effects, L5 `0x53DC4`, L6 `0x36208`, L7
+  the FU326-L4 `0x1104AB` init row. Docs: new
+  `port/spec/FU-342_act9_stage0_sinks.md`, FU-181/FU-170 Task-3 errata, and
+  this register. The `0x8D040[0x15] = 0x8D77B` walk arm stays the FU170-L2
+  residual; the act-9 stage-1/2 gates stay FU170-L1.

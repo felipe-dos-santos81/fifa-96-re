@@ -743,9 +743,13 @@ int fifa96_match_entities_restart_place(struct fifa96_match_entities *pool,
   pool->ball.x = target_x;          /* 0x8C294 MOVSD x */
   pool->ball.y = 0;                 /* 0x8C299 [0x158810] = 0 */
   pool->ball.z = target_z;          /* 0x8C296 MOVSD z */
-  pool->ball.vel_x = 0;             /* 0x8C2A6 word [0x158848] */
+  /* Fresh `0x8C24C` bytes: the ordinary `[0x14C32A] == 0` branch zeroes the
+   * three words at `0x8C2A6` -> speed `[0x158848]`, `0x8C2AD` -> vel_z
+   * `[0x15884C]` and `0x8C2B4` -> vel_x `[0x15884A]` (the `0x8C272/79/80`
+   * trio is the session arm's same triple, not this branch). */
+  pool->ball.speed = 0;             /* 0x8C2A6 word [0x158848] */
   pool->ball.vel_z = 0;             /* 0x8C2AD word [0x15884C] */
-  pool->ball.speed = 0;             /* 0x8C2B4 word [0x15884A] */
+  pool->ball.vel_x = 0;             /* 0x8C2B4 word [0x15884A] */
   pool->ball.heading = 0;           /* the 0x8C068 metric/heading arm */
   pool->ball.target_heading = 0;
   pool->ball.visual_dir = 3;        /* the 0x6E724 row-3 install posture */

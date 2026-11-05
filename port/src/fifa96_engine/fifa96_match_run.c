@@ -3009,14 +3009,16 @@ int fifa96_match_run_act9_reset(struct fifa96_match_run *mr) {
   mr->referee.offside_suppress = 0;                  /* 0x73E85 word [0x157A6A] */
   mr->state.frame_delta = 0;                         /* 0x73E8E word [0x157A64] */
   mr->flag_157aab = 0xFFu;                           /* 0x73E95 byte [0x157AAB] */
-  /* 0x73E9B..0x73EB8: `0x702F8([0x14C2F6] == 0 ? 0x40 : 0x30)` then +0x70. The
-   * native `0x702F8` call itself is the camera height-mode selector; its
-   * derived stand-in is the `[0x14C2F6]` mode read (the return value is not
-   * modelled, only the anchor it feeds). */
+  /* 0x73E9B..0x73EB8: mode = `[0x14C2F6] == 0 ? 0x40 : 0x30` (EDX), then
+   * `CALL 0x702F8` and `ADD EDX,0x70`. Fresh `0x702F8` bytes show the helper
+   * returns in EAX and preserves EDX (PUSH EDX / POP EDX), so the stored
+   * anchor is mode + 0x70 = 0xB0/0xA0; the helper's EAX return is not
+   * consumed by this caller. */
   mr->camera_height_157a6d = (int16_t)((mr->difficulty_14c2f6 == 0 ? 0x40 : 0x30) + 0x70);
   mr->flag_157ab0 = 0;                  /* 0x73EC1 byte [0x157AB0] */
   mr->camera_override_157a6f = 0;       /* 0x73EC7 dword [0x157A6F] */
-  /* 0x73ECD CALL 0x7F144: the possession/carrier block 0x158724..0x15872C. */
+  /* 0x73ECD CALL 0x7F144: the full possession/carrier block 0x158724..0x15872F
+   * (fresh bytes: the dword at 0x158724 plus the eight bytes 0x158728..0x15872F). */
   mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;   /* 0x158724 pointer */
   mr->entities.ball.pos_index = 0;      /* 0x158728 */
   mr->entities.ball.pos_rotation = 0;   /* 0x158729 */

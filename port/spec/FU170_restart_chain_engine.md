@@ -561,3 +561,22 @@ the derived screen install runs after kickoff, so the act-9 placement commits
 the phase-0x15 re-scaled targets at begin (the M2 begin pins move, and the
 live carrier fixture stages the measured pre-v29 coda pose to keep its
 row-04/05 chain live). M1 `09b726b7…` exact; census unchanged.
+
+## Phase-53 T3 erratum — the stage-0 sinks landed (2026-11-05)
+
+The **stage-0 sink list** of FU170-L2 is closed. `0x700F4` (camera reset), the
+`0x73E28` match/camera reset, the non-seeding `0x73E08` placement and the
+`0x4C324` presentation bind are live at act-9 stage 0 in the native order, and
+M2 carries the measured v28/v29 re-pins; the FU-342 record owns the evidence.
+The same leg's **phase-0x15 walk arm** `0x8D040[0x15] = 0x8D77B` (also
+FU165-L8) is **not** closed and remains the FU170-L2 residual; this erratum
+does not claim it. FU170-L1 (the stage-1/2 compression) is untouched.
+
+The new numbered legs are FU342-L1 (act-tick ordering: native `0x8AF38` before
+`0x8D8EC`; the engine tick follows the entity chain), L2 (the `0x8CF60`
+`0x6D920`/`CALL [rec+0x1C]` per-record residual; a `skip_9a` record would
+commit a stale target), L3 (the `0x8C24C` `[0x14C32A] != 0` session arm), L4
+(the `0x700F4` `0x92820` sound and `0x70074`/`0x6D870` place recompute), L5
+(`0x53DC4`), L6 (`0x36208`) and L7 (the FU326-L4 `0x1104AB` init row). The
+begin-order cause stays FU170-L10. M1 `09b726b7…` exact; census unchanged
+(78/78, 58/80, 64/80, 6 blocked, action 38/45, phase 26/35).
