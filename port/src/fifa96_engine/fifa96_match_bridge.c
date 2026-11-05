@@ -1,3 +1,4 @@
+#include <string.h>
 #include "fifa96_engine/fifa96_match_bridge.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
 
@@ -31,6 +32,21 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
   rc = fifa96_match_run_begin(mr, eng, selector);
   if (rc != 0) return rc;
   eng->frontend.match_start = 0;   /* consumed: no instant re-entry */
+  /* P2 handoff (A3 §3.2): when the native Team Select screen started the
+   * match, stage the chosen formations and the derived 3-letter HUD names.
+   * The native producers are FUN_0008EA70 (the formation id writer) and the
+   * team-block name triple (FUN_00011BEC, P2-L4: the roster id is carried but
+   * has no consumer yet). Both run after begin, when the run is live. */
+  if (eng->frontend.team_selected) {
+    for (uint32_t side = 0; side < 2; side++) {
+      (void)fifa96_match_run_set_formation(mr, side, eng->frontend.formation[side]);
+      memset(mr->render.hud_name[side], 0, sizeof mr->render.hud_name[side]);
+      size_t len = strlen(eng->frontend.team_code[side]);
+      if (len > sizeof mr->render.hud_name[side] - 1)
+        len = sizeof mr->render.hud_name[side] - 1;
+      if (len != 0) memcpy(mr->render.hud_name[side], eng->frontend.team_code[side], len);
+    }
+  }
   /* Stage the derived default pair so a live match renders (G1 Finding 2:
    * make game kept render.enabled == 0). A staging failure is not fatal — no
    * mounted ISO, an absent bank or an undecodable container leaves the run

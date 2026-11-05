@@ -111,8 +111,10 @@ static size_t mt_build_shpi(uint8_t *buf, size_t cap) {
 
 static uint64_t draw_hash(struct fifa96_surface *s, uint32_t entry_state, int row, int cursor) {
   fifa96_surface_clear(s, 0);
-  struct fifa96_menu_state st = {.entry_state = entry_state, .selected_row = row,
-                                 .cursor_on = cursor};
+  struct fifa96_menu_state st = {0};
+  st.entry_state = entry_state;
+  st.selected_row = row;
+  st.cursor_on = cursor;
   fifa96_menu_art_draw(s, &st);
   return fifa96_surface_hash(s);
 }
@@ -157,7 +159,10 @@ static void test_draw_differs_from_clear(void) {
   fifa96_surface_clear(s, 0);
   uint64_t cleared = fifa96_surface_hash(s);
   assert(fifa96_menu_art_init(NULL) == 0);
-  struct fifa96_menu_state st = {.entry_state = 17, .selected_row = 3, .cursor_on = 1};
+  struct fifa96_menu_state st = {0};
+  st.entry_state = 17;
+  st.selected_row = 3;
+  st.cursor_on = 1;
   fifa96_menu_art_draw(s, &st);
   assert(fifa96_surface_hash(s) != cleared);
   fifa96_surface_destroy(s);
@@ -176,7 +181,9 @@ static void test_empty_asset_table_falls_back(void) {
 
 static void test_null_args(void) {
   assert(fifa96_menu_art_init(NULL) == 0);
-  struct fifa96_menu_state st = {0, 0, 0};
+  struct fifa96_menu_state st = {0};
+  st.entry_state = 0;
+  st.selected_row = 0;
   fifa96_menu_art_draw(NULL, &st);
   struct fifa96_surface *s = fifa96_surface_create(320, 240);
   assert(s != NULL);
@@ -199,8 +206,7 @@ static void test_zero_length_options_inv(void) {
   fifa96_asset_unmount(t);
 }
 
-static void test_engine_boot_uses_asset_table(void) {
-  uint8_t shpi[64];
+static void test_engine_boot_uses_asset_table(void) {  uint8_t shpi[64];
   size_t shpi_len = mt_build_shpi(shpi, sizeof shpi);
   uint8_t image[MT_LEN];
   mt_build_iso(image, sizeof image, shpi, shpi_len);
@@ -244,6 +250,48 @@ static void test_engine_boot_uses_asset_table(void) {
   assert(remove(path) == 0);
 }
 
+static int ma_file_exists(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return 0;
+  fclose(f);
+  return 1;
+}
+
+/* P2: MOD2.POG frame 0 decodes through record -> SHPI -> frame + palette and
+ * becomes the native Game Select background. ISO-gated so the ISO-less suite
+ * keeps its hash-only fallback checks. */
+static void test_native_art_uses_mod2(void) {
+  if (!ma_file_exists("data/game/FIFAPCCD96.iso")) {
+    puts("SKIP test_engine_menu_art MOD2 (no ISO)");
+    return;
+  }
+  struct fifa96_asset_table *t = NULL;
+  assert(fifa96_asset_mount_file("data/game/FIFAPCCD96.iso", &t) == FIFA96_OK);
+  struct fifa96_surface *s = fifa96_surface_create(320, 240);
+  assert(s != NULL);
+
+  assert(fifa96_menu_art_init_native(t) == 0);
+  struct fifa96_menu_state st = {0};
+  st.screen = FIFA96_MENU_SCREEN_GAME_SELECT;
+  st.item_count = 1;
+  st.selected_item = 0;
+  st.items[0].col = 1;
+  st.items[0].row = 0;
+  st.items[0].label = "Friendly";
+  fifa96_surface_clear(s, 0);
+  fifa96_menu_art_draw(s, &st);
+  uint64_t native_hash = fifa96_surface_hash(s);
+
+  assert(fifa96_menu_art_init(NULL) == 0);
+  fifa96_surface_clear(s, 0);
+  fifa96_menu_art_draw(s, &st);
+  uint64_t fallback_hash = fifa96_surface_hash(s);
+  assert(native_hash != fallback_hash);
+
+  fifa96_surface_destroy(s);
+  fifa96_asset_unmount(t);
+}
+
 int main(void) {
   test_fallback_hash();
   test_fallback_deterministic();
@@ -253,6 +301,7 @@ int main(void) {
   test_null_args();
   test_zero_length_options_inv();
   test_engine_boot_uses_asset_table();
+  test_native_art_uses_mod2();
   puts("test_engine_menu_art OK");
   return 0;
 }
