@@ -1508,6 +1508,295 @@ static void test_row08_stage2(void) {
   assert(out.reset == 0 && out.byte_15872f_set == 0);
 }
 
+/* ===== M2 phase-52 Task 1 / FU-75 L4.5: the control-selection switch =====
+ *
+ * Fixture expectations are computed by hand from R12 §1 (the fresh
+ * `disassemble_bytes 0x7D1D4..0x7D363` of `FUN_0007D1D4`, RET at 0x7D35E),
+ * never from the port. The metric values below are the `0x8DC68`
+ * max + 3/8*min octagon: (0x100,0) = 0x100, (0x400,0x400) = 0x580,
+ * (0x80,0x80) = 0xB0. */
+
+#define SELECT_NONE FIFA96_OUTFIELD_SELECT_NONE
+
+static fifa96_outfield_select_state select_state(void) {
+  fifa96_outfield_select_state s;
+  memset(&s, 0, sizeof s);
+  s.rec_id = 3;
+  s.team_base = 0;
+  s.pos_x = 0;
+  s.pos_z = 0;
+  s.lane_x = 0x200;
+  s.controlled_id = SELECT_NONE;
+  s.target_id = SELECT_NONE;
+  s.spawn_id = SELECT_NONE;
+  s.recv_id = SELECT_NONE;
+  s.record0_gate = 1;
+  s.phase = 2;
+  s.side = 0;
+  s.camera_y = 0;
+  /* anchor/lead/slot bytes are zero from the memset */
+  return s;
+}
+
+/* 0x7D1DF..0x7D1EF: `rec == [0x157A83]` returns 0 before the tail. */
+static void test_select_self(void) {
+  static const fifa96_action_duel_candidate mates[1] = {
+      {0x10, 0, 0, 0, 0, 0},
+  };
+  fifa96_outfield_select_state s = select_state();
+  fifa96_outfield_select_out out;
+  s.mates = mates;
+  s.mate_count = 1;
+  s.controlled_id = s.rec_id;   /* the self gate */
+  s.target_id = 4;              /* not the team target: the lane gate cannot answer */
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 0 && out.switched == 0);
+  assert(out.new_controlled == SELECT_NONE && out.reject_157ac == 0);
+  assert(out.clear_team_7cb == 0 && out.slot_clear == 0);
+
+  /* Same state with a different controlled record: the search switches, so a
+   * removed self check makes the assertion above RED. */
+  s.controlled_id = 5;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 1 && out.switched == 1 && out.new_controlled == 0);
+}
+
+/* 0x7D1F0..0x7D240: the two-arm distance gate. */
+static void test_select_distance_gate(void) {
+  static const fifa96_action_duel_candidate mates[1] = {
+      {0x10, 0, 0, 0, 0, 0},
+  };
+  fifa96_outfield_select_state s = select_state();
+  fifa96_outfield_select_out out;
+  s.mates = mates;
+  s.mate_count = 1;
+  s.target_id = s.rec_id;       /* the team's own +0x7B2 target */
+
+  /* low arm (camera y < 0x50, threshold 0xC0): below rejects, at proceeds. */
+  s.camera_y = 0;
+  s.lane_x = 0xBF;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 0 && out.switched == 0 && out.reject_157ac == 0);
+  s.lane_x = 0xC0;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 1 && out.switched == 1 && out.new_controlled == 0);
+
+  /* the camera arm boundary: 0x4F is still the low arm. */
+  s.camera_y = 0x4F;
+  s.lane_x = 0xBF;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 0);
+
+  /* high arm (camera y >= 0x50, threshold 0x120). */
+  s.camera_y = 0x50;
+  s.lane_x = 0x11F;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 0 && out.switched == 0);
+  s.lane_x = 0x120;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 1 && out.switched == 1);
+
+  /* a non-target record always proceeds, even under the low threshold. */
+  s.camera_y = 0;
+  s.lane_x = 0;
+  s.target_id = 4;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 1 && out.switched == 1);
+
+  /* the lane word is sign-extended (`SAR 0x10`), so -1 is under 0xC0. */
+  s.target_id = s.rec_id;
+  s.lane_x = -1;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 0 && out.switched == 0 && out.reject_157ac == 0);
+}
+
+/* 0x7D2AE..0x7D300: arm A (set-piece record live, phase 3/4/7) searches from
+ * rec+0x59 with the side-matched `+0x8D` skip. */
+static void test_select_search_a(void) {
+  static const fifa96_action_duel_candidate mates[7] = {
+      {0x100, 0, 0, 0, 0, 0},       /* 0: nearest from the rec position */
+      {0x10, 0, 0, 0, 0, 0},        /* 1: nearest, but the arm-A skip target */
+      {0x400, 0x400, 0, 0, 0, 0},   /* 2: nearest from the anchor triple */
+      {0, 0, 1, 0, 0, 0},           /* 3: holder, skipped by NSEARCH */
+      {0, 0, 0, 1, 0, 0},           /* 4: +0x98, skipped */
+      {0, 0, 0, 0, 1, 0},           /* 5: +0x9A, skipped */
+      {0, 0, 0, 0, 0, 1},           /* 6: team+0x7BF, skipped */
+  };
+  fifa96_outfield_select_state s = select_state();
+  fifa96_outfield_select_out out;
+  uint8_t phase;
+  s.mates = mates;
+  s.mate_count = 7;
+  s.anchor_x = 0x400;           /* arm B would pick index 2 */
+  s.anchor_z = 0x400;
+  s.spawn_id = 5;
+  s.spawn_side = 0;
+  s.side = 0;
+  s.spawn_8d = 1;               /* skip index 1 when the sides match */
+
+  for (phase = 0; phase < 8; phase++) {
+    s.phase = phase;
+    assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+    if (phase == 3 || phase == 4 || phase == 7) {
+      /* arm A: origin rec+0x59, skip 1 -> index 0 (0x100 beats 0x580). */
+      assert(out.new_controlled == 0 && out.switched == 1);
+      assert(out.triple_x == 0x400 && out.triple_z == 0x400);
+    } else {
+      /* arm B: origin the anchor triple -> index 2 at distance 0. */
+      assert(out.new_controlled == 2 && out.switched == 1);
+    }
+  }
+
+  /* The sides differ: the native skip is -1 (`0x7D2F9`), so index 1 wins. */
+  s.phase = 3;
+  s.spawn_side = 1;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.new_controlled == 1 && out.switched == 1);
+
+  /* `+0x8D` is a sign-extended byte; -1 matches no record index. */
+  s.spawn_side = 0;
+  s.spawn_8d = -1;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.new_controlled == 1 && out.switched == 1);
+
+  /* `[team+0x829] == 0` gates record 0 out of the search (`0x8DBA2`). */
+  s.spawn_8d = 1;
+  s.record0_gate = 0;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.new_controlled == 2);
+
+  /* No staged set-piece record: arm B even at phase 3. */
+  s.spawn_id = SELECT_NONE;
+  s.record0_gate = 1;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.new_controlled == 2 && out.switched == 1);
+}
+
+/* 0x7D241..0x7D2AD + 0x7D31B: arm B searches from the anchor triple displaced
+ * by the slot direction bytes `<<7`, else the camera lead words `<<4`. */
+static void test_select_search_b(void) {
+  static const fifa96_action_duel_candidate mates[5] = {
+      {0, 0, 0, 0, 0, 0},           /* 0 */
+      {0x80, -0x80, 0, 0, 0, 0},    /* 1: slot-arm triple */
+      {0x40, -0x40, 0, 0, 0, 0},    /* 2: lead-arm triple */
+      {0x100, 0, 0, 0, 0, 0},       /* 3: one-byte slot arm */
+      {0x140, 0, 0, 0, 0, 0},       /* 4: anchor + lead */
+  };
+  fifa96_outfield_select_state s = select_state();
+  fifa96_outfield_select_out out;
+  s.mates = mates;
+  s.mate_count = 5;
+
+  /* Slot arm: either byte non-zero; both are added sext8 << 7. */
+  s.slot_anim_b = 1;
+  s.slot_anim_c = -1;
+  s.lead_x = 4;
+  s.lead_z = 4;                 /* if the lead arm were taken: (0x40, 0x40) */
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.triple_x == 0x80 && out.triple_z == -0x80);
+  assert(out.new_controlled == 1 && out.switched == 1);
+
+  /* Both slot bytes zero: the lead fallback, sext16 << 4. */
+  s.slot_anim_b = 0;
+  s.slot_anim_c = 0;
+  s.lead_x = 4;
+  s.lead_z = -4;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.triple_x == 0x40 && out.triple_z == -0x40);
+  assert(out.new_controlled == 2 && out.switched == 1);
+
+  /* One non-zero slot byte still takes the slot arm (the `JNZ` OR), and the
+   * other byte adds zero (not the lead word). */
+  s.slot_anim_b = 2;
+  s.slot_anim_c = 0;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.triple_x == 0x100 && out.triple_z == 0);
+  assert(out.new_controlled == 3 && out.switched == 1);
+
+  /* The anchor is the base: anchor + lead << 4. */
+  s.slot_anim_b = 0;
+  s.slot_anim_c = 0;
+  s.anchor_x = 0x100;
+  s.anchor_y = 0x20;
+  s.anchor_z = 0x40;
+  s.lead_x = 4;
+  s.lead_z = -4;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.triple_x == 0x140 && out.triple_z == 0);
+  assert(out.new_controlled == 4 && out.switched == 1);
+}
+
+/* 0x7D305..0x7D30F: the result equal to [0x1587AC] returns 0. */
+static void test_select_reject_157ac(void) {
+  static const fifa96_action_duel_candidate mates[2] = {
+      {0x10, 0, 0, 0, 0, 0},        /* 0 */
+      {0x20, 0, 0, 0, 0, 0},        /* 1 */
+  };
+  fifa96_outfield_select_state s = select_state();
+  fifa96_outfield_select_out out;
+  s.mates = mates;
+  s.mate_count = 2;
+
+  /* The pick is index 0 (id team_base+0); the staged receiver is the same. */
+  s.recv_id = 0;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 0 && out.reject_157ac == 1);
+  assert(out.switched == 0 && out.new_controlled == SELECT_NONE);
+  assert(out.clear_team_7cb == 0 && out.slot_clear == 0);
+
+  /* A different staged receiver does not reject. */
+  s.recv_id = 1;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 1 && out.reject_157ac == 0 && out.switched == 1);
+  assert(out.new_controlled == 0);
+
+  /* The native compares record pointers, so the unstaged cell (0) rejects
+   * the no-result pointer (0) too. */
+  s.recv_id = SELECT_NONE;
+  s.mates = NULL;
+  s.mate_count = 0;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 0 && out.reject_157ac == 1 && out.switched == 0);
+  assert(out.new_controlled == SELECT_NONE);
+}
+
+/* 0x7D332..0x7D35E: the swap request and the tail, plus the no-result return. */
+static void test_select_success_swap(void) {
+  static const fifa96_action_duel_candidate mates[4] = {
+      {0, 0, 1, 0, 0, 0},           /* 0: holder */
+      {0x30, 0, 0, 0, 0, 0},        /* 1: the nearest free record */
+      {0x60, 0, 0, 0, 0, 0},        /* 2 */
+      {0, 0, 0, 0, 1, 0},           /* 3: +0x9A excluded */
+  };
+  static const fifa96_action_duel_candidate holders[2] = {
+      {0, 0, 1, 0, 0, 0},
+      {0x10, 0, 1, 0, 0, 0},
+  };
+  fifa96_outfield_select_state s = select_state();
+  fifa96_outfield_select_out out;
+  s.mates = mates;
+  s.mate_count = 4;
+  s.rec_id = 13;                /* team 1, index 2 */
+  s.team_base = 11;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 1 && out.switched == 1 && out.reject_157ac == 0);
+  assert(out.new_controlled == 12);   /* team_base 11 + the picked index 1 */
+  assert(out.clear_team_7cb == 1 && out.slot_clear == 1);
+
+  /* No candidate: the search's NONE pointer is non-equal to the staged
+   * receiver, so the body returns 1 and writes nothing. */
+  s.mates = holders;
+  s.mate_count = 2;
+  s.recv_id = 5;
+  assert(fifa96_outfield_select_step(&s, &out) == FIFA96_OK);
+  assert(out.ret == 1 && out.switched == 0 && out.reject_157ac == 0);
+  assert(out.new_controlled == SELECT_NONE);
+  assert(out.clear_team_7cb == 0 && out.slot_clear == 0);
+
+  assert(fifa96_outfield_select_step(NULL, &out) == ROW04_INVALID);
+  assert(fifa96_outfield_select_step(&s, NULL) == ROW04_INVALID);
+}
+
 int main(void) {
   test_table_accessors();
   test_rule_match();
@@ -1544,6 +1833,12 @@ int main(void) {
   test_row08_scan_user_arm();
   test_row08_scan_radius();
   test_row08_stage2();
+  test_select_self();
+  test_select_distance_gate();
+  test_select_search_a();
+  test_select_search_b();
+  test_select_reject_157ac();
+  test_select_success_swap();
   puts("test_outfield: all assertions passed");
   return 0;
 }

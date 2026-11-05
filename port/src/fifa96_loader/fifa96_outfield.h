@@ -1,6 +1,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include "fifa96_loader/fifa96_action_handlers.h"
 #include "fifa96_loader/fifa96_err.h"
 
 #define FIFA96_OUTFIELD_CODE_COUNT 5
@@ -340,6 +341,86 @@ typedef struct fifa96_outfield_row04_out {
 
 fifa96_err_t fifa96_outfield_row04_step(const fifa96_outfield_row04_state *state,
                                         fifa96_outfield_row04_out *out);
+
+/* ===== M2 phase-52 Task 1 / FU-75 L4.5: the control-selection switch =====
+ *
+ * The native released-row handler `FUN_0007D1D4` (`0x7D1D4..0x7D35E`, RET at
+ * `0x7D35E`; recon R12 §1, whose fresh `disassemble_bytes 0x7D1D4..0x7D363`
+ * is the evidence base) is
+ * the "select the nearest player" switch (also the direct-arm target of the
+ * `0x7CB03` pre-gate). The body in native order (byte/word widths as read):
+ *   - `0x7D1DF` `rec == [0x157A83]` -> return 0 (no self reselection; the
+ *     `XOR EAX,EDX` zeroes the return and skips the `0x7D355 MOV EAX,1`);
+ *   - `0x7D1F0` the camera-height-keyed lane gate: `dword[0x157750] < 0x50`
+ *     selects threshold `0xC0`, else `0x120`; reject (return 0) only when
+ *     `word[rec+0x6B]` (`lane_x`, signed) is below the threshold AND
+ *     `rec == [team+0x7B2]` (the team's controlled target);
+ *   - `0x7D241` target triple = the `0x157788/8C/90` anchor; when the slot's
+ *     `+0x20`/`+0x21` bytes (the `[slot+0x1D]>>24`/`[slot+0x1E]>>24` aliases,
+ *     `slot.anim_b`/`anim_c`) are not both zero, add `sext8(each) << 7` to
+ *     X/Z; otherwise add `sext16(word[0x1577C0/0x1577C2]) << 4` (the
+ *     `[0x1577BE]>>16`/`[0x1577C0]>>16` alias);
+ *   - `0x7D2AE` arm A when `[0x1587A8] != 0` and the phase `[0x157A4A]>>24`
+ *     is 3/4/7: NSEARCH from `rec+0x59` (the record's own word position) with
+ *     skip `sext8([[0x1587A8]+0x8D])` when the sides (`+0x826`) match, else
+ *     -1; otherwise arm B from the triple with skip -1. Both pass the rec's
+ *     team block and fallback 0 (ECX is zero at both call sites);
+ *   - `0x7D305` the result filter: equal to `[0x1587AC]` -> return 0 (the
+ *     staged receiver is refused); no result -> return 1 (nothing written);
+ *     otherwise the `0x786A0(rec, result)` swap request, `[team+0x7CB] = 0`
+ *     and the `0x78B00([result+0x20])` slot-clear request -> return 1.
+ *
+ * Identity is carried as absolute pool ids (`NONE` = -1); the native record
+ * pointers are not modelled by this layer. `team_base` is the record's team
+ * block base id, so a `mates[]` index maps to `team_base + index` (the
+ * engine's `team * 11`). `spawn_id`/`recv_id` are the unmodelled
+ * `[0x1587A8]`/`[0x1587AC]` cells (the `is_1578a8`/`is_1578ac` state
+ * family, OL-72), `NONE` when the native cell holds 0; the native `CMP
+ * EBX,[0x1587AC]` therefore rejects the both-0 case too. `spawn_8d` carries
+ * the `[[0x1587A8]+0x8D]` skip index literally (R12 §6 leg 1). The helper
+ * only reports the swap/clear requests: the engine binder applies
+ * `fifa96_action_duel_swap`, the slot rebind and the team timer. NULL
+ * `state`/`out` -> -FIFA96_ERR_INVALID; a NULL `mates`/zero `mate_count`
+ * makes the search return NONE (the row-04 convention for the unmodelled
+ * low-memory block). */
+#define FIFA96_OUTFIELD_SELECT_RECORDS 11u
+#define FIFA96_OUTFIELD_SELECT_NONE (-1)
+
+typedef struct fifa96_outfield_select_state {
+  int32_t rec_id;         /* native EAX: the record (absolute pool id) */
+  int32_t team_base;      /* the record's team block base id (`[rec]`) */
+  int16_t pos_x, pos_z;   /* rec +0x59/+0x61 word position (arm-A origin) */
+  int16_t lane_x;         /* word rec+0x6B (0x7D1F9/0x7D21D), signed */
+  int32_t controlled_id;  /* [0x157A83]; NONE when the cell is 0 */
+  int32_t target_id;      /* [team+0x7B2]; NONE when the cell is 0 */
+  int32_t spawn_id;       /* [0x1587A8]; NONE when the cell is 0 (is_1578a8) */
+  int32_t recv_id;        /* [0x1587AC]; NONE when the cell is 0 (is_1578ac) */
+  uint8_t spawn_side;     /* [[0x1587A8]+0x826] */
+  int8_t spawn_8d;        /* [[0x1587A8]+0x8D], the arm-A skip index (signed) */
+  uint8_t record0_gate;   /* [team+0x829] != 0 (NSEARCH record-0 gate) */
+  uint8_t phase;          /* [0x157A4A]>>24 */
+  uint8_t side;           /* rec's team +0x826 */
+  int32_t camera_y;       /* dword [0x157750] (signed compare) */
+  int32_t anchor_x, anchor_y, anchor_z; /* 0x157788/8C/90 */
+  int16_t lead_x, lead_z; /* word[0x1577C0], word[0x1577C2] */
+  int8_t slot_anim_b;     /* slot +0x20 (the [slot+0x1D]>>24 byte alias) */
+  int8_t slot_anim_c;     /* slot +0x21 (the [slot+0x1E]>>24 byte alias) */
+  const fifa96_action_duel_candidate *mates; /* the rec's team block */
+  uint32_t mate_count;
+} fifa96_outfield_select_state;
+
+typedef struct fifa96_outfield_select_out {
+  uint8_t ret;            /* the native handler return 0/1 (stops the scan) */
+  uint8_t switched;       /* the 0x786A0(rec, result) swap request ran */
+  uint8_t reject_157ac;   /* the result was [0x1587AC] -> return 0 (0x7D307) */
+  int32_t new_controlled; /* the picked absolute id, or NONE */
+  uint8_t clear_team_7cb; /* [team+0x7CB] = 0 (0x7D33B) */
+  uint8_t slot_clear;     /* 0x78B00([result+0x20]) request (0x7D348) */
+  int32_t triple_x, triple_z; /* the built target triple (informative) */
+} fifa96_outfield_select_out;
+
+fifa96_err_t fifa96_outfield_select_step(const fifa96_outfield_select_state *state,
+                                         fifa96_outfield_select_out *out);
 
 /* ===== M2 playability-legs Task 2 / OL-70a: row 08 record-visible body =====
  *

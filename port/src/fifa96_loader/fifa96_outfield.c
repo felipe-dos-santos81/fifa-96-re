@@ -720,6 +720,97 @@ half_line:                                             /* 0x7EE4B */
   return FIFA96_OK;
 }
 
+/* ===== M2 phase-52 Task 1 / FU-75 L4.5: the control-selection switch =====
+ *
+ * `FUN_0007D1D4` (`0x7D1D4..0x7D35E`, recon R12 §1). The instruction-by-
+ * instruction derivation and the field semantics live on the declaration in
+ * `fifa96_outfield.h`; the labels below follow R12 §1. */
+fifa96_err_t fifa96_outfield_select_step(const fifa96_outfield_select_state *state,
+                                         fifa96_outfield_select_out *out) {
+  fifa96_action_duel_search_in in;
+  int32_t triple_x;
+  int32_t triple_z;
+  int32_t index = FIFA96_OUTFIELD_SELECT_NONE;
+  int32_t threshold;
+  uint8_t arm_a;
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  out->new_controlled = FIFA96_OUTFIELD_SELECT_NONE;
+
+  /* 0x7D1DF..0x7D1EF: `rec == [0x157A83]` returns 0 (the XOR zeroes EAX and
+   * skips the tail's MOV EAX,1). */
+  if (state->rec_id == state->controlled_id) return FIFA96_OK;
+
+  /* 0x7D1F0..0x7D240: the camera-height-keyed lane gate. `JGE` on the lane
+   * word is signed; `CMP dword[0x157750],0x50` is a signed dword compare. */
+  threshold = state->camera_y < 0x50 ? 0xC0 : 0x120;
+  if ((int32_t)state->lane_x < threshold && state->rec_id == state->target_id)
+    return FIFA96_OK;
+
+  /* 0x7D241..0x7D2AD: the target triple. The slot arm fires when either
+   * direction byte is non-zero and adds both `sext8(byte) << 7`; the lead
+   * fallback adds `sext16(word) << 4` to X/Z (Y is copied but never read). */
+  triple_x = state->anchor_x;
+  triple_z = state->anchor_z;
+  if (state->slot_anim_b != 0 || state->slot_anim_c != 0) {   /* 0x7D254 JZ */
+    triple_x += (int32_t)state->slot_anim_b * 0x80;           /* 0x7D266 SHL 7 */
+    triple_z += (int32_t)state->slot_anim_c * 0x80;           /* 0x7D27B SHL 7 */
+  } else {                                                    /* 0x7D286 */
+    triple_x += (int32_t)state->lead_x * 0x10;                /* 0x7D28C SHL 4 */
+    triple_z += (int32_t)state->lead_z * 0x10;                /* 0x7D29C SHL 4 */
+  }
+  out->triple_x = triple_x;
+  out->triple_z = triple_z;
+
+  /* 0x7D2AE..0x7D32C: arm A (set-piece record live and phase 3/4/7) searches
+   * from the record's own position with the side-matched skip; arm B searches
+   * from the triple with skip -1. Both pass ECX = 0 (no fallback). */
+  memset(&in, 0, sizeof in);
+  in.record0_gate = state->record0_gate;
+  in.fallback = 0;                                           /* 0x7D2F2/0x7D325 */
+  arm_a = (state->spawn_id != FIFA96_OUTFIELD_SELECT_NONE &&
+           (state->phase == 3u || state->phase == 4u || state->phase == 7u))
+              ? 1u
+              : 0u;
+  if (arm_a != 0u) {
+    in.x = state->pos_x;                                     /* 0x7D2E5 rec+0x59 */
+    in.z = state->pos_z;                                     /* rec+0x61 */
+    in.skip_index = state->spawn_side == state->side         /* 0x7D2E8 */
+                        ? (int16_t)state->spawn_8d           /* 0x7D2EC */
+                        : (int16_t)-1;                       /* 0x7D2F9 */
+  } else {
+    in.x = (int16_t)(uint16_t)triple_x;                      /* 0x7D31B ESP+0 */
+    in.z = (int16_t)(uint16_t)triple_z;                      /* ESP+8 */
+    in.skip_index = (int16_t)-1;                             /* 0x7D31B BX */
+  }
+  if (state->mates != NULL && state->mate_count != 0u) {
+    if (fifa96_action_duel_search(&in, state->mates, state->mate_count, &index) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+  }
+  if (index != FIFA96_OUTFIELD_SELECT_NONE)
+    out->new_controlled = state->team_base + index;
+
+  /* 0x7D305..0x7D30F: `CMP EBX,[0x1587AC]` rejects the staged receiver. The
+   * native compares record pointers, so the unstaged (0) cell equals the
+   * no-result (0) pointer too — mirrored here by the NONE/NONE compare. */
+  if (out->new_controlled == state->recv_id) {
+    out->reject_157ac = 1;
+    out->new_controlled = FIFA96_OUTFIELD_SELECT_NONE;
+    return FIFA96_OK;
+  }
+
+  /* 0x7D32E: no result -> return 1 with nothing written. */
+  out->ret = 1;
+  if (out->new_controlled == FIFA96_OUTFIELD_SELECT_NONE) return FIFA96_OK;
+
+  /* 0x7D332..0x7D348: the 0x786A0 swap request, [team+0x7CB] = 0 and the
+   * 0x78B00 slot clear (applied by the engine binder). */
+  out->switched = 1;
+  out->clear_team_7cb = 1;
+  out->slot_clear = 1;
+  return FIFA96_OK;
+}
+
 /* `FUN_000795A4` (`0x795A4..0x795B2`, first-hand): EAX = a, EDX = b, the
  * signed 32x32 product + 0x8000 shifted right 16, the low word returned (the
  * row-08 scan passes the loop offset and the folded sine value). */
