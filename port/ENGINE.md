@@ -8767,6 +8767,10 @@ FU-71 announce table / `0x71C94` tracked tails / **FU303-L12** no-slot
 whole); phase-52 act-9 stage-0 camera/placement sinks (FU181-L5); the six
 un-dispatchable action rows and dead phase rows from R9.
 
+> Superseded by the Phase 53 close-out register (2026-11-05): the carried
+> "phase-52 act-9 stage-0 camera/placement sinks (FU181-L5)" entry is closed
+> for the stage-0 scope; only the act-9 stage-1/2 gates remain FU170-L1.
+
 ## Phase 52 — the control-selection switch (`0x7D1D4`, FU-75 L4.5, 2026-11-05)
 
 FU-75 L4.5 is closed. The native input-row handler `FUN_0007D1D4`
@@ -8844,7 +8848,7 @@ with a live `[0x1587D4]` record -> the record team's `+0x826` side through
 sign-extended; called last in stage 0. The bind cell has no engine reader. The
 `0x700F4` sound (`0x92820(0,0x24)`), the `0x70074`/`0x6D870` place recompute
 and the `0x4C324` `FUN_00053DC4` recorder latch stay named legs (no fake
-producer). Fixtures: the stage-0 order in
+producer). Fixtures: the stage-0 sinks/final cells in
 `test_engine_match_act::test_act9_stage0_camera_and_present_bind` (gate clear
 -> camera zero + tracked NONE + pan constants -> phase 0x15 -> present bind),
 the `fifa96_camera_init` pan/tracked cells in `test_camera`, and both

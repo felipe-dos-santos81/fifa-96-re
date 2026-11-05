@@ -131,3 +131,7 @@ Measured M2 (R7 §3; base v26):
   inside `0x700F4` (legs; no consumers on the tape).
 - The `0x36200` consumer (`0x36208`, unported).
 - The player-visible register and the `PCCD.POG`/`PCDB` data slice.
+
+**Erratum (phase-53 T3, 2026-11-05).** The possession-block range in §2
+(`0x158724..2C`) is superseded: fresh `0x7F144` bytes clear
+`0x158724..0x15872F` (see FU-342 §3 and the FU-181 T3 erratum).

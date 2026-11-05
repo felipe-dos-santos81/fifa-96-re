@@ -6,7 +6,7 @@ Tasks 1–2 land in `c238316` (v28) and `5f44a94` (v29); this Task-3 record is t
 docs-only close-out. Every binary claim below is a fresh first-hand Ghidra MCP read on program
 **`/FIFA96.EXE`** (case-sensitive; scripts disabled) this session:
 `disassemble_bytes` `0x88F81` (103 B), `0x700F4` (`0x700F4..0x702F4`), `0x70074`
-(`0x70074..0x700F3`), `0x702F8` (`0x702F8..0x7031E`), `0x73E28`
+(`0x70074..0x700F3`), `0x702F8` (`0x702F8..0x70346`), `0x73E28`
 (`0x73E28..0x73EDC`), `0x73E08` (`0x73E08..0x73E27`), `0x8C24C`
 (`0x8C24C..0x8C2CE`), `0x8C068` (head), `0x8CF60` (`0x8CF60..0x8CFAB`),
 `0x6D920` (`0x6D920..0x6D9C1`), `0x7F144` (`0x7F144..0x7F180`), `0x7A028`
@@ -157,11 +157,14 @@ The reset stores, in native order:
 (`MOV EDX,0x40`), `eb 05` (JMP), `ba 30 00 00 00` (`MOV EDX,0x30`),
 `0f bf c2` (`MOVSX EAX,DX`), `e8 45 c4 ff ff` (`CALL 0x702F8`),
 `83 c2 70` (`ADD EDX,0x70`), `30 c9` (`XOR CL,CL`),
-`66 89 15 6d 7a 15 00` (`MOV word[0x157A6D],DX`). Fresh `0x702F8` is
-`PUSH EDX; MOVSX EDX,AX; ...; POP EDX; RET` and returns in EAX, so the caller's
-`ADD EDX,0x70` adds to the **mode in EDX** (preserved by the callee), not to the
-EAX return; the anchor is `0xB0`/`0xA0` and the helper result is unused here.
-The engine's `[0x14C2F6] == 0 ? 0x40 : 0x30` plus `0x70` is exact.
+`66 89 15 6d 7a 15 00` (`MOV word[0x157A6D],DX`). Fresh `0x702F8`
+(`0x702F8..0x70346`, `RET` at `0x70346`; the next function starts at `0x70348`)
+is `PUSH EDX; MOVSX EDX,AX; ...; POP EDX; RET` and returns in EAX, so the
+caller's `ADD EDX,0x70` adds to the **mode in EDX** (preserved by the callee),
+not to the EAX return; the anchor is `0xB0`/`0xA0` and the helper result is
+unused here. The `0x70324 MOV EDX,[0x157748]` table path joins at `0x70342`
+and is restored by `0x70345 POP EDX` before the `0x70346 RET`. The engine's
+`[0x14C2F6] == 0 ? 0x40 : 0x30` plus `0x70` is exact.
 
 **The two sub-resets.**
 
@@ -380,10 +383,15 @@ f 676, event f 675; the scripted pan witness is the single `0x90` stop
    table-index residual on both the init and `fifa96_camera_event_set` paths.
 
 Documented stand-ins, not new legs: the `0x157A73 = 0x15774C` focus store is
-the engine's live camera triple; the `0x8C068(0x32)` heading/metric update is
-represented by the cleared heading/target_heading/metric cells (the same
-commit zeroes the velocity inputs); the `0x157A60` saved Q8 cell has no
-save/restore caller in the engine.
+the engine's live camera triple; the `0x157A60` saved Q8 cell has no
+save/restore caller in the engine. The `0x8C068(0x32)` heading/metric update
+is **not** ported: the native body also derives heading/visual_dir from the
+ball-vs-camera geometry and writes `0x15885A/5E/52/862`, and `0x8C24C` does
+**not** zero the metric triple. The engine's cleared heading/target_heading/
+metric cells are a stand-in, not an equivalence; the pre-existing
+**FU148-L14.8.c** leg owns the `0x158862` head-error producer, and the row
+install is the FU158/FU84 row machine (see FU342-L2 for the per-record
+residual).
 
 ## 9. Census and goldens
 

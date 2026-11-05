@@ -731,7 +731,7 @@ int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int3
  * act 9, the same phase gate `fifa96_match_entities_camera_place` applies.
  * `[0x14C32A] != 0` (the Practise session) takes the fixed `0x1C80/0x2C40`
  * spawn instead; that branch is the unported session arm and this entry is the
- * ordinary-match one (leg FU181-L5.b). NULL `pool` -> -FIFA96_ERR_INVALID. */
+ * ordinary-match one (leg FU342-L3). NULL `pool` -> -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_restart_place(struct fifa96_match_entities *pool,
                                         int32_t cam_x, int32_t cam_y,
                                         int32_t cam_z) {
