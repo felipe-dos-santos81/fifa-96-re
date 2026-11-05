@@ -656,8 +656,10 @@ static void test_et_over_terminal_reached(void) {
  *   (c) the tape-shaped `ac2 < 4` write adds the producer's own four draws per
  *       team (`0x8D693..0x8D722`, `write_phase` walk -> scatter per team);
  *   (d) phase `0x14` stays NULL — no live writer — and dispatches UNSUPPORTED.
- * Mutation-RED: NULLing the slot un-gates the walk and the (b)/(c) draw counts
- * drop to zero (the `write_phase` walk is gated on `fn != NULL`). */
+ * Mutation-RED: NULLing the slot gates the walk off (the `write_phase` walk is
+ * gated on `fn != NULL`), so the (b)/(c) draw counts drop to zero. A future
+ * phase-`0x14` writer must also wire the slot, not just feed the seam
+ * (FU-340 §6 erratum). */
 static uint32_t rng_draws_between(struct fifa96_rng from, struct fifa96_rng to) {
   struct fifa96_rng probe = from;
   uint16_t value = 0;

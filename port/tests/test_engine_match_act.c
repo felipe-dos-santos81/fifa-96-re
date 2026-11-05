@@ -641,12 +641,17 @@ static void test_phase_scatter_producer(void) {
 }
 
 /* Phase 0x13 write seam (phase-51 T1/FU-340): `fifa96_match_run_write_phase`
- * runs the native `FUN_0008D098` order — walk team 0, scatter team 0, walk
+ * runs the engine's walk-then-scatter seam — walk team 0, scatter team 0, walk
  * team 1, scatter team 1 — so (a) the body reads the cells left by the
  * previous write, and (b) the team-1 scatter overwrites the team-0 pair before
- * the next body run. `ac2 = 4` keeps the producer draw-free so the cell deltas
- * are exact. Mutation-RED: moving the scatter to `machine_step` (per frame) or
- * dropping either team call changes the cells/targets below. */
+ * the next body run. The native `FUN_0008D098` order is
+ * team[`side_controlled`] then team[`side_controlled ^ 1`]
+ * (`0x740C8`/`0x740DB`); M2's writes carry side 0, so this fixture's 0 -> 1
+ * order coincides (the side-1 swap is FU-340 §6's carried leg). `ac2 = 4`
+ * keeps the producer draw-free so the cell deltas are exact. Mutation-RED:
+ * moving the scatter to `machine_step` (per frame) changes the cells/targets
+ * below; dropping a team's scatter is caught by the m2 40-draw rider (32 body
+ * + 8 producer), not by this cell fixture. */
 static void test_phase_13_write_seam(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;

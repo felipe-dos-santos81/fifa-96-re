@@ -714,3 +714,28 @@ appearance pair) remain unmodelled: the **R51-L1** release catalogue, whose
 ordinary-play reach is the **R51-L2** runtime leg. Because that release is
 unproven, phase `0x06` and actions `0x13`/`0x1F` stay in
 `fifa96_match_port_blocked` with the corrected reason.
+
+## Phase-51 T5 erratum (2026-11-04) — the kind-proxy item, not all of FU166-L6
+
+**Scope correction.** The phase-51 T4 erratum above is titled:
+
+> ## Phase-51 T4 erratum (2026-11-04) — the `[0x158882]` kind proxy is closed
+
+Only the **kind-proxy item** is closed. FU166-L6 as a whole is **not** closed:
+the `0x8948D` decision-word check (a read-before-write callee-local, R3 §4),
+the camera-word gates (`word[0x15883A].hi > 0x20`, `word[0x158816].hi < 0x78`,
+`word[0x158848] != 0`) and the `0x895E6` teardown poke remain open. The source
+and test shorthand "FU166-L6 closed" is therefore corrected to "FU166-L6
+kind-proxy item closed" (`fifa96_match_run.h`, `test_engine_match_frame.c`).
+
+**The same-frame ball-row install clause is ruled out statically.** The act-2
+stage-2 body (`0x893E2..0x89487`) and the stage-3 gate (`0x894A2`) run one
+frame apart: the byte-0 split leaves the stage byte at 3, and the next driver
+call (`FUN_0008AF38` `0x8B669`/`0x8B672`) re-enters at `table[3]`. A ball-row
+install in that gap would have to come from the ball machine's row timers,
+which are >= `0x40` frames, so no same-frame install can flip the latch at the
+decision (spec §2.4; R1 §2.4 + R3 §2). The phase-6/action-`0x13`/`0x1F`
+blocked reasons now name only the **kind 3 at stage 2 -> kind != 3 at stage 3**
+transition and the **mode-4 Practise** term (`[0x14C32A]`); the unmodelled
+release writers (`0x887D5`/`0x8C2CE`/`0x6FF37`/`0x6FF85`) remain the R51-L1
+catalogue / R51-L2 runtime legs.

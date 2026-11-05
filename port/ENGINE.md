@@ -8676,3 +8676,86 @@ runtime).
 Census unchanged: **78/78 bodies, 58/80 natural, 64/80 install-live, 6
 blocked, action 38/45, phase 26/35**; `make check` **112/112**. Golden: M1
 `09b726b7…` exact, M2 v27 `54f44987…` byte-identical (`cmp`); no re-pin.
+
+## Phase 51 close-out register (T1–T5, 2026-11-04)
+
+Final register for the natural-reach + fidelity wave. The per-task sections
+above stand; this is the consolidated outcome, the measured re-pin, the
+census, and the carried-leg list.
+
+**T1 — phase `0x13` wiring (FU-340, `f0762e1`).** The ported
+`0x6E244..0x6E32A` scatter body is live: `fifa96_match_phase_table[0x13] =
+{0x13, fifa96_match_phase_13, …}`, and `fifa96_match_run_write_phase` runs the
+`FUN_0008D098` case-`0x13/0x14` producer (`0x8D693..0x8D722`) after each team's
+walk — the native once-per-write cadence (the two `FUN_000740A0` xrefs
+`0x740C8`/`0x740DB`), never per frame. Phase `0x14` stays `NULL` (no live
+writer). M2 re-pins **v27**
+`54f4498755a74f0945266c66c59164a239ebf1f5fd60d0f78e416fe5316d44fd`
+(295087 B, 6522 lines; first differing line **3185**, **3338/6522** lines,
+all hash-only, `state=` set/counts unchanged). Draw split: **32 body + 8
+producer = 40 per write**, `96 body + 24 producer = 120` for the tape's three
+writes (the m2 rider pins 32 and 40 per write; 120 is `3 × 40`, golden-pinned).
+The per-frame `machine_step` variant is rejected by measurement (first diff
+852, 5671 lines, sha `09642d40…`) and by the two-xref cadence.
+
+**T2 — action row `0x03` arm fidelity (FU-341, `66fe985`).** The special arm
+`0x7E1CE..0x7E223` now reads `FUN_0008DCD4`'s `out[1] = (int16_t)(0x780 −
+pos_x)` through the `dword[ESP]>>16` alias (`0x7E201`/`0x7E204`), not the 2-D
+metric; `FUN_00079B58`'s `+0x99` guard is applied at guard A and the arm; the
+idle-core counter takes the mover-shaped `move_attr = distance << 16`
+(`0x7E2E0`); the team `+0x7C3` last-defender cell (`0x7C741..0x7C770`, reset
+`0x8C399`) feeds the clamp's opponent selector (`0x7E360`/`0x7E383`); and slot
+branch B lands `fifa96_action_move_target` (`0x79C20` -> `0x7D3E4` clamps)
+with the native `0x7E27C JMP 0x7E3A6` tail. **The row-`0x03` slot stays
+`NULL`**: R11 ruled the `FUN_0008C418` clamp bounds `PCCD.PDB`-data-blocked
+(R51-T2b-defer), so wiring is the carried **FU177-L1** leg. M1/M2
+byte-identical; census unchanged. Tests: the dx/guard/counter/branch-B/
+opponent-selector fixtures (the phase-2 SET/NONE twin and the phase-1 floor
+discriminator are the T5 precision additions), plus the entity writer/reset/
+reader units.
+
+**T3 — wire row `0x03` — deferred.** R11 §1.6: the role-band line
+percentages come from the `PCCD.POG` `PCDB` payload; the port has no payload
+codec. The portable sub-inputs landed in T2; wiring waits the PCCD/PCDB decode
+slice (FU177-L1). Cost if wrong: row `0x03` waits one data slice; no code is
+thrown away.
+
+**T4 — FU-71 leg 9.6 far-wall damp/event arm (FU-71, `2b27b94`).** The
+`0x719A0..0x71B98` non-mirror branch is ported as `fifa96_camera_wall_arm`:
+both threshold chains, the `shift_step` damps, flag-0 vel/speed, flag-1 seed +
+`0x974DC(1..3)` announce + `0x71C94`, and the `prev_x/prev_z` cells. The
+dispatch bit is the front-end **INVISIBLE WALLS** option (Disabled = 0, the
+image default). The natural M2 camera never reaches the outer gate, so **M2
+stays byte-identical** (v27 `54f44987…`). Twenty-eight hand mutations; the
+announce table `0x71400..0x718A4`, the `0x71C94` tracked tails (FU167-L5/
+FU168-L3) and the FU303-L12 `fifa96_camera_event_dir` no-slot branch stay
+legs.
+
+**T5 — phase-6 stage-3 latch + blocked reasons (FU-166/FU-338, `d23df1a`).**
+`mr->ball_row_flag_158882` now models the native ball-row latch
+(`[0x158882]` = `0x1587EC+0x96` = `row_flags & 1`, writer `0x6E7E7`, reset
+`0x73D3A`): written at the stage-1 (native stage-2) body as
+`(contact_kind == 3)` for both sessions, and the stage-3 gate is
+`flag || kind == 3 || session != 0`. The RED-first test
+(`test_engine_referee_restart_stage3_latch`) proves the kind-3-at-stage-2 ->
+kind-1-at-stage-3 decision, and the T5 term-2 case pins kind 1 latched 0 ->
+kind 3 at the decision (phase 7). **The three rows stay blocked; blocked stays
+6.** The same-frame ball-install clause is ruled out statically (one-frame gap,
+ball-row timers `>= 0x40`, spec §2.4); the reason now names only the kind-3 ->
+kind-≠3 transition and the mode-4 Practise term. M1/M2 byte-identical.
+
+**Final census.** `78/78` bodies (README title `100%`), **58/80 natural**,
+**64/80 install-live**, **6 blocked**, action **38/45**, phase **26/35**;
+README status `58/80 (64/80 install-live)`; `make check` **112/112**. M1
+`09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd`
+exact; M2 v27 `54f44987…` byte-identical (`cmp`).
+
+**Carried legs.** Phase `0x14` producer and its slot wire (the seam is gated
+on `fn != NULL`); the phase-`0x13` `0x651F0(0xD)` sink; row `0x03` wiring
+FU177-L1 (PCCD.PDB clamp bounds), the counter one-pass lead **FU341-L1**, the
+`reset_lane` begin seed **FU341-L3**, and the branch-B `timer79` stand-in;
+FU-71 announce table / `0x71C94` tracked tails / **FU303-L12** no-slot
+`fifa96_camera_event_dir`; phase-6 release writers (R51-L1/L2) and the
+`0x8948D` stale-local read (the remaining FU166-L6 residuals, not L6 as a
+whole); phase-52 act-9 stage-0 camera/placement sinks (FU181-L5); the six
+un-dispatchable action rows and dead phase rows from R9.

@@ -147,3 +147,49 @@ would force a second re-pin.
 - **The action-row per-record seam** (`match_row_phase_call`, row 15 `0x87D29`)
   can dispatch the phase-`0x13` body inside a dwell. It does not on M2; a future
   `0x13` dwell with a dispatched row 03/15 adds four draws per record.
+
+## Errata (phase-51 T5, 2026-11-04)
+
+Append-only corrections from the Task 2/5 review round; no prior section is
+rewritten.
+
+1. **The phase-`0x14` seam is gated on the slot too.** Quoted from §6:
+
+   > The slot stays `NULL`; the write seam is already 0x14-shaped,
+   > so a future competition-setup producer needs no further wiring.
+
+   **Corrected.** The walk/scatter calls sit inside the
+   `fifa96_match_phase_table[phase].fn != NULL` gate in
+   `fifa96_match_run_write_phase` (`match_run.c:2853`). A future phase-`0x14`
+   producer must therefore **also wire the `0x14` slot** (`fn =
+   fifa96_match_phase_14` or the derived body); feeding `probe_a/probe_b`
+   alone leaves the seam a structural no-op. The `0x14` slot remains `NULL`
+   today because the probe cells have no live competition-setup writer.
+
+2. **The native walk order is side-first, not 0-then-1.** Quoted from §2:
+
+   > ```
+   > walk team 0 -> scatter team 0 -> walk team 1 -> scatter team 1   (0x13/0x14)
+   > ```
+
+   **Corrected.** Fresh `0x740A0..0x740E0` bytes show `0x740B1 MOVSX EAX,DX`
+   (the caller's side), `0x740BA` stores it to `[0x157AAF]`, `0x740C0` builds
+   `0x1588A4 + side*0x835`, `0x740C5 XOR DL,0x1`, then the two calls
+   `0x740C8 CALL 0x8D098` (team[side]) and `0x740DB CALL 0x8D098`
+   (team[side^1]). The engine's `fifa96_match_run_write_phase` has no side
+   argument and walks team 0 then team 1. M2's three `write_phase(0x13)`
+   calls carry `side_controlled = 0`, so the tape order coincides and the
+   golden is unaffected; a future side-1 write would swap the cell/install
+   order. **Carried leg** (off-tape, no M2 impact).
+
+3. **The riders pin 40 per write; 120 is the three-write total.** Quoted from
+   §3/§5:
+
+   > `8 producer draws per write, 120 shared draws per run`
+   > ... the `ac2 < 4` replay measures **40** (32 + 8).
+
+   **Corrected.** The in-tree m2 rider measures **32 body draws** and **40
+   shared draws for one tape-shaped write** (`ac2 < 4`). It does **not** count
+   120: 120 is `3 × 40` for the tape's three writes and is pinned by the v27
+   golden sha, not by a rider. The docs state both numbers; the "riders pin
+   40/120" shorthand overstates the rider coverage.

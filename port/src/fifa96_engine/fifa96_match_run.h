@@ -981,7 +981,9 @@ struct fifa96_match_run {
    * request (`0x71B5B`). 0 = no call (no event, or the entry `speed <= 5`
    * skip), 1 = entry speed 6..8, 2 = 9..0xA, 3 = > 0xA. The audio sink itself
    * is unported (OL-27 family); the request is recorded, never faked (the
-   * `match1b_sound_id` convention). Cleared by init/begin. */
+   * `match1b_sound_id` convention). This is the last request written, not a
+   * per-frame event: there is no frame-tail reset, so the cell holds the most
+   * recent announce until init/begin clears it. */
   uint8_t camera_arm_announce;
   /* FU-173 §4.2 (phase-14 T3): the goal-record cell the byte-0 phase-5
    * celebration arm reads — the native `[0x157A9F]` pointer (the goal
@@ -996,7 +998,8 @@ struct fifa96_match_run {
   uint8_t situation_id;
   uint8_t situation_pending;
   uint8_t session_gate_14c32a;
-  /* FU166-L6 closed (phase-51 T4; R1 §2.4 + R3 §2): `[0x158882]` is the ball
+  /* FU166-L6 kind-proxy item closed (phase-51 T4; R1 §2.4 + R3 §2; the other
+   * L6 residuals stay legs): `[0x158882]` is the ball
    * block's (base `0x1587EC`) `+0x96` byte = `row_flags & 1`, written by
    * `FUN_0006E724` (`0x6E7E7 MOV [ESI+0x96],AL`, `AL = row[2] & 1`) at every
    * ball anim-row install. The act-2 stage-2 body installs the row from

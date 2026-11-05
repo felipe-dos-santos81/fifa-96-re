@@ -400,3 +400,15 @@ consuming chain and its visible consequence.
 Wave review verdict: OK — `0x157824` is 2 WRITEs in `FUN_000703E8` (fresh-verified); the per-cell verdicts are coherent.
 
 **Verdict:** GO — `0x157824` = 2 WRITEs in `FUN_000703E8` fresh-verified; the per-cell verdicts are coherent.
+
+## Phase-51 T5 appended leg
+
+* **FU303-L12 — the `fifa96_camera_event_dir` no-slot branch
+  (`0x71D70..0x71DBA`).** The native record-pointer/slot pair at `0x71D70`/
+  `0x71D7D` routes a NULL `[rec+0x20]` to the `0x71DBA` bearing oct, which
+  writes `[0x157815]` from the camera velocity words (`0x1577C0`/`0x1577BE`,
+  `CALL 0x8DD70`). The port returns early on `has_slot == 0` and leaves the
+  setter default 0. Pre-existing; newly exercised by the phase-51 T3 wall arm
+  (`fifa96_camera_wall_arm` -> `fifa96_camera_event_set`), which never fires on
+  the natural M2 tape. No code change this phase; owner the FU303 visible-motion
+  family (`0x157815` producer/consumer).

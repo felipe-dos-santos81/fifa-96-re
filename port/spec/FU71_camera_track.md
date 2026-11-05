@@ -624,3 +624,40 @@ already beyond the chains), the `[0x5781E]` refresh at the other `0x700F4`
 call sites, the `0x71C94` tracked-tail cells ([0x158777], `[0x1577CE+side*4]`,
 `rec+0x9B`, `[[rec]+0x7A6]+0x7BF/+0x7CB`; FU167-L5/FU168-L3) and triple word 0
 `0x1577B8` (FU168-L2, no consumer).
+
+## Carried leg (phase-51 T5) — the `fifa96_camera_event_dir` no-slot branch
+
+The phase-51 T3 wall arm newly exercises the pre-existing setter tail. Fresh
+`0x71D70..0x71DE1` bytes:
+
+```
+0x71D70 85 ed            TEST EBP,EBP          ; the record pointer
+0x71D72 0f 84 69 00 00 00 JZ 0x71DE1
+0x71D78 8b 7d 20         EDI = [rec+0x20]      ; the actor slot
+0x71D7D 74 3b            JZ 0x71DBA            ; NULL slot -> the bearing oct
+0x71D7F 66 0f be 57 20   DX = [EDI+0x20]       ; slot dir_x
+0x71D84 66 0f be 47 21   AX = [EDI+0x21]       ; slot dir_z
+0x71D89 66 85 d2         TEST DX,DX
+0x71D8C 75 05            JNZ 0x71D93           ; the 0x10E169 compass row
+0x71D8E 66 85 c0         TEST AX,AX
+0x71D91 74 14            JZ 0x71DA7
+...
+0x71DBA 8b 15 c0 77 15 00 EDX = [0x1577C0]      ; the bearing oct
+0x71DC0 a1 be 77 15 00   EAX = [0x1577BE]
+0x71DC5 c1 fa 10         SAR EDX,0x10
+0x71DC8 c1 f8 10         SAR EAX,0x10
+0x71DCB e8 a0 bf 01 00   CALL 0x8DD70
+0x71DD0 98               CWDE
+0x71DD1 83 c0 40         ADD EAX,0x40
+0x71DD4 25 ff 03 00 00   AND EAX,0x3FF
+0x71DD9 c1 f8 07         SAR EAX,0x7
+0x71DDC a2 15 78 15 00   [0x157815] = AL
+```
+
+So a record with `[rec+0x20] == 0` does **not** stop at the setter default:
+`0x71D7D JZ 0x71DBA` runs the bearing oct and writes `[0x157815]`. The port's
+`fifa96_camera_event_dir` returns early on `has_slot == 0`, leaving the
+`0x71D6A` default 0. This is a pre-existing divergence, not introduced by the
+wall arm; the natural M2 camera never reaches the arm, so M1/M2 are unaffected.
+Recorded as the FU303-family **FU303-L12**, to be settled with the FU303
+visible-motion cells (the `0x157815` producer/consumer family).

@@ -8051,10 +8051,11 @@ unsigned fifa96_match_port_install_live(void) {
  * retired. Install-live rows whose natural producer is structurally unproven:
  *  - actions `0x13`/`0x1F`: their only installer is the phase-6 arm
  *    (`0x8D4A2` -> `0x8D532`/`0x8D569`). The arm is reachable only via the
- *    stage-3 latch (kind 3 at stage 2, non-3 at stage 3), the mode-4 Practise
- *    term (`[0x14C32A]`; only `FUN_00032DE0`/hub case 8 passes mode 4) or a
- *    same-frame ball-row install during the armed hold; no ordinary-play
- *    witness (the latch-release catalogue is R51-L1, runtime R51-L2).
+ *    stage-3 latch when the ball-row kind transitions kind 3 at stage 2 to
+ *    kind != 3 at stage 3, or via the mode-4 Practise term (`[0x14C32A]`;
+ *    only `FUN_00032DE0`/hub case 8 passes mode 4); no ordinary-play witness
+ *    (the latch-release catalogue is R51-L1, runtime R51-L2; FU-338 §8 rules
+ *    the same-frame install out statically).
  *  - phase `0x06`: the same latch reason. `[0x158882]` is the ball block's
  *    `+0x96` = `row_flags & 1` with a real writer (`FUN_0006E724` `0x6E7E7`;
  *    reset clear `0x73D3A`), latched by the act-2 stage-2 body as "kind was
@@ -8065,8 +8066,9 @@ unsigned fifa96_match_port_install_live(void) {
 const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS] = {
   {FIFA96_MATCH_PORT_ACTION, 0x0D},  /* phase-38: installer gate unproduced */
-  {FIFA96_MATCH_PORT_ACTION, 0x13},  /* phase_arm(6) only; stage-3 latch, no
-                                      * ordinary-play witness */
+  {FIFA96_MATCH_PORT_ACTION, 0x13},  /* phase_arm(6) only; kind 3 at stage 2 ->
+                                      * non-3 at stage 3; no ordinary-play
+                                      * witness */
   {FIFA96_MATCH_PORT_ACTION, 0x1F},  /* same */
   {FIFA96_MATCH_PORT_ACTION, 0x28},  /* phase-0x14 chooser arm unfed */
   {FIFA96_MATCH_PORT_ACTION, 0x2A},  /* same */

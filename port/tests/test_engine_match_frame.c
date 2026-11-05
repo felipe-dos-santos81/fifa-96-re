@@ -6803,7 +6803,8 @@ static void test_engine_referee_restart_default_gate_split(void) {
   assert(mr.entities.team[1].records[1].code != 0x12u);
 }
 
-/* Phase-51 T4 (R1 §2.4 + R3 §2, FU-166 L6 closed): the stage-3 latch.
+/* Phase-51 T4 (R1 §2.4 + R3 §2, FU166-L6 kind-proxy item closed): the
+ * stage-3 latch.
  *
  * The native stage-2 body (0x893E2..0x89487) installs the ball anim row from
  * the contact kind — the keep/reroll arm `0x89401/0x8941D` (rows 0/0x62..0x65,
@@ -6877,6 +6878,35 @@ static void test_engine_referee_restart_stage3_latch(void) {
   assert(mr.state.phase == 0x0Au);       /* no decision phase write */
   assert(mr.ref_speech == 0u);
   assert(mr.entities.team[1].records[1].code != 0x13u);
+  assert(mr.entities.team[0].records[0].code != 0x1Fu);
+
+  /* term-2 isolation (phase-51 T5): kind 1 at the stage-2 body latches 0, then
+   * kind 3 at the stage-3 decision. The gate passes on `contact_kind == 3`
+   * alone (`0x894B2/0x894B5`), so the phase-7 write proves the second OR term
+   * is live; a latch-only gate would hold at stage 2. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;
+  mr.session_gate_14c32a = 0;
+  mr.situation_pending = 1;
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
+  assert(mr.referee.contact_kind == 1u);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);
+  match_frame_act8_sweep(&mr);
+  assert(mr.act.id == 2u && mr.ref_restart_stage == 1u);
+  assert(mr.state.phase == 0x0Au);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* latch 0 + the split */
+  assert(mr.ball_row_flag_158882 == 0u);
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);
+  mr.referee.contact_kind = 3u;          /* the term-2 input at the decision */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
+  assert(mr.state.phase == 7u);          /* kind == 3 alone passes the gate */
+  assert(mr.act.id == 0u);               /* the terminal cleared the act slot */
+  assert(mr.ref_speech == 0x2Au);        /* the phase-7 speech */
+  assert(mr.entities.team[1].records[1].code != 0x13u);  /* not the 6 arm */
   assert(mr.entities.team[0].records[0].code != 0x1Fu);
 }
 

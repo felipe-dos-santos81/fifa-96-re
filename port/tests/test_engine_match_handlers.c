@@ -117,7 +117,9 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
  * 0x22 (act-0xC extra-time-SET) is wired/counted (FU-211; the live extra-time
  * flag producer T1/FU-213 installs act 0xC), and the M2 phase-20 T2 row 0x10 is
  * wired/counted (FU-222; the live phase-0x1D arm-0 writer `match_run.c:6130`).
- * The M2 phase-23 T4 row 0x1E (act-8 restart sweep) is wired/counted (FU-241). */
+ * The M2 phase-23 T4 row 0x1E (act-8 restart sweep) is wired/counted (FU-241).
+ * The phase-51 T1 row 0x13 (the native `0x6E244..0x6E32A` scatter body) is
+ * wired/counted (FU-340; `write_phase(0x13)` runs the walk + scatter seam). */
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK,
@@ -1397,20 +1399,66 @@ static void test_action_03_slot_branch_b(void) {
   assert(f.mr.record.timer7b == 0x12u);
 
   /* the fall-through: phase 1 skips branch A, writes the dir target, then the
-   * camera + phase-1 clamp tail (`0x7E3A6` -> `0x7E3CA`) runs. Side 1 floors
-   * target_z at +0x20, so a `0x180` dir target survives while the stale
-   * `target_z = 0` of the old stub would have become 0x20. */
+   * camera + phase-1 clamp tail (`0x7E3A6` -> `0x7E3CA`) runs. The branch-B
+   * move target is -0xB10 (`-0xB00 - 0x80` clamped); side 1 then floors
+   * target_z at +0x20 (`0x7E3FD..0x7E407`). A `return` after `timer7b`
+   * would leave -0xB10, so the floor is the discriminator (T5 precision). */
   f.mr.state.phase = 1u;
   f.mr.entities.team[0].side = 1;
   f.mr.record.pos_x = 0;
-  f.mr.record.pos_z = 0x100;
+  f.mr.record.pos_z = -0xB00;
   f.mr.record.dir_x = 0;
-  f.mr.record.dir_z = 1;
+  f.mr.record.dir_z = -1;
   f.mr.record.target_x = 0x111;                      /* stale */
   f.mr.record.target_z = 0;                          /* stale */
   assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
   assert(f.mr.record.target_x == 0);
-  assert(f.mr.record.target_z == 0x180);             /* survived the floor */
+  assert(f.mr.record.target_z == 0x20);              /* -0xB10 raised by the floor */
+  assert(f.mr.record.timer7b == 0x12u);              /* the copy still ran */
+  drop_fixture(&f);
+}
+
+/* FU-341 (phase-51 T5): the phase-2 clamp's opponent selector — the sibling
+ * team's `+0x7C3` record's `[rec+0x61]` (`0x15989C`/`0x159067`, fresh bytes
+ * `0x7E360`/`0x7E383`). With the cell set, the side-0 clamp clips target_z to
+ * `opponent_z - 0x60` (`0x7E36B..0x7E373`); with NONE the declared default
+ * anchor leaves the side clamp unable to clip. Mutation-RED: dropping the
+ * opponent read leaves 0x200 in the SET case; a fabricated NONE anchor fails
+ * the twin. */
+static void test_action_03_phase2_opponent_clip(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  f.mr.entities.team[0].side = 0;
+  f.mr.entities.team[0].intercept = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.session_gate_14c32a = 0;
+  f.mr.state.phase = 2u;
+  f.mr.record.entity_id = 0;
+  f.mr.record.has_slot = 0;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0x100;
+  f.mr.record.pos_y = 0;
+  e = &f.mr.entities.team[0].records[0];
+  e->team = 0;
+  e->phase_meta = NULL;
+  e->timer79 = 0x20;
+
+  /* the sibling's last defender is record 3 at pos_z 0 -> the side-0 clamp
+   * clips 0x200 to 0 - 0x60. */
+  f.mr.entities.team[1].last_defender7c3 = 3;
+  f.mr.entities.team[1].records[3].pos_z = 0;
+  f.mr.record.target_z = 0x200;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_z == -0x60);             /* 0x7E373 */
+  assert(f.mr.record.target_x == 0);
+
+  /* NONE twin: the native pointer is guaranteed, so the engine's unset cell
+   * is the declared no-clip anchor; 0x200 survives. */
+  f.mr.entities.team[1].last_defender7c3 = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.record.target_z = 0x200;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_z == 0x200);
   drop_fixture(&f);
 }
 
@@ -6227,6 +6275,7 @@ int main(void) {
   test_action_03_skip_99_guard();
   test_action_03_counter_move_attr();
   test_action_03_slot_branch_b();
+  test_action_03_phase2_opponent_clip();
   test_last_defender7c3_dispatch_site();
   test_phase_02_source_pair_scales();
   test_record_phase_walk_scans_and_skips();

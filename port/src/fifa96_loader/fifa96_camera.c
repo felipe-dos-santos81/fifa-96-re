@@ -975,7 +975,10 @@ static int32_t camera_dir_row(int32_t dir_x, int32_t dir_z) {
 int fifa96_camera_event_dir(fifa96_camera *cam, int has_slot, int32_t dir_x,
                             int32_t dir_z) {
   if (!cam) return -FIFA96_ERR_INVALID;
-  /* 0x71d70: no actor sub-object (`[rec+0x20] == 0`) leaves the 0x71d6a 0. */
+  /* 0x71d70/0x71d7d: a NULL slot (`[rec+0x20] == 0`) falls through the native
+   * 0x71DBA bearing oct; the port's early return keeps the 0x71d6a default 0
+   * (the divergence is the carried FU303-family leg FU303-L12, phase-51 T5;
+   * the natural M2 tape never reaches the wall arm). */
   if (!has_slot) return FIFA96_OK;
   /* 0x71d89/0x71d93: a non-zero dir pair takes the 0x10E169 compass row. */
   if (dir_x != 0 || dir_z != 0) {

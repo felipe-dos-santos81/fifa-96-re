@@ -619,3 +619,26 @@ armed at stage 3. The engine models the split (`ref_restart_stage = 2`) and
 `test_engine_referee_restart_default_gate_split` supersedes the round-1 test.
 The full re-entry catalogue is FU166-L6 (FU-166 status append).
 
+
+## Erratum (2026-11-04, phase-51 T4/T5) — the `[0x158882]` latch
+
+**Supersedes erratum 7's "carried 0" reading and the legs-table row
+"new `[0x158882]` producer | new — carried 0 (erratum 7)".** Quoted from
+erratum 7:
+
+> 7. **`[0x158882]` decision gate (new leg).** The `0x894A2` gate reads
+>    `[0x158882]` first; the fresh operand census finds one read and no direct
+>    write site, so the port carries it 0 and proceeds on
+>    `kind == 3 || session gate`.
+
+**Corrected.** `[0x158882]` has a writer: it is the ball block's
+(`0x1587EC`) `+0x96` byte = `row_flags & 1`, written by `FUN_0006E724`
+(`0x6E7E7 MOV [ESI+0x96],AL`) at every ball anim-row install and cleared by
+the match reset (`0x73D3A`). The act-2 stage-2 body installs the row from the
+contact kind before the byte-0 split, so at `0x894A2` the cell is
+`(contact_kind == 3)` **as of the stage-2 body**. The engine models that latch
+(`mr->ball_row_flag_158882`, phase-51 T4) and gates on all three terms
+(`flag || kind == 3 || session != 0`). The remaining native release writers
+(`0x887D5` reset row 3, `0x8C2CE` kickoff row 0, `0x6FF37`/`0x6FF85`
+appearance pair) and the `0x8948D` stale-local decision-word read stay legs
+(R51-L1/L2, R3 §4); the act-2 gate is no longer "unreachable machinery".

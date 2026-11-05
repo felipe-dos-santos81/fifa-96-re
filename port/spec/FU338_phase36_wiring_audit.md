@@ -194,3 +194,22 @@ and from §6:
 The census does not move: `78/78` bodies, `58/80` natural, `64/80`
 install-live, `6` blocked, action `38/45`, phase `26/35`. The M2 transcript
 stays byte-identical (`54f44987…`) and M1 `09b726b7…` exact.
+
+## 8. Erratum (2026-11-04, phase-51 T5) — the same-frame install clause
+
+**Supersedes item 4 of §7 only.** Quoted:
+
+> 4. **Why the rows stay blocked.** The phase-6 arm (`0x8D4A2`) is reachable
+>    only via the stage-3 latch (kind 3 at stage 2, non-3 at stage 3), the
+>    mode-4 Practise term, or a same-frame ball-row install during the armed
+>    hold; there is **no ordinary-play witness**.
+
+**Corrected.** A same-frame ball-row install cannot bridge the decision: the
+act-2 stage-2 body and the stage-3 gate are one frame apart (the byte-0 split
+leaves the stage byte at 3 and the next driver call re-enters at `table[3]`),
+and the ball machine's row timers are `>= 0x40` frames (spec §2.4; R1 §2.4 +
+R3 §2). The honest blocked reason is therefore only the **kind 3 at stage 2
+-> kind != 3 at stage 3** transition and the **mode-4 Practise** term
+(`[0x14C32A]`); the unmodelled release writers (`0x887D5`/`0x8C2CE`/
+`0x6FF37`/`0x6FF85`) remain the R51-L1 catalogue / R51-L2 runtime legs. The
+row set and `FIFA96_MATCH_PORT_BLOCKED_ROWS 6` are unchanged.

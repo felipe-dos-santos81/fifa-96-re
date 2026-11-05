@@ -3543,7 +3543,8 @@ sinks (`0x651F0`/`0x974F0`/`0x8F188`), `0x4C374`'s reader-less
 `word[0x157A68]`, the `0x45001` gate, the ball-record `+0x44` and arm 9's
 `[0x157AC0]` write-back (FU209-L5) remain the carried legs. The `55/80`
 figure in this close-out predates the row-`0x25` and phase-`0x1F` producers;
-current is **57/80 natural, 62/80 install-live, five blocked**.
+current is **58/80 natural, 64/80 install-live, six blocked** (phase-51
+close-out below).
 - **phase-0x1F one-shot invoke (2026-11-04).** The native sit-0xC install uses
   `0x8AF0E EBX=1` and invokes act 9 in the install frame; the engine now passes
   `invoke=1` for act 9. This closes phase `0x1F` in the natural-reach census
@@ -3716,3 +3717,29 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   64/80 install-live, 6 blocked, action 38/45, phase 26/35**; M1
   `09b726b7…` exact; `make check` 112/112. Residual legs: the `0x651F0(0xD)`
   sink and the phase-`0x14` probe producer.
+
+- **phase-51 close-out (T2–T5, 2026-11-04).** The phase-51 wave lands its
+  remaining four slices. **T2 (FU-341):** the row-`0x03` special arm now reads
+  the real `0x7E201` dx gate (`FUN_0008DCD4` `out[1]`, not the 2-D metric),
+  applies the `FUN_00079B58` `+0x99` guard at both inlined sites, passes the
+  mover-shaped counter `move_attr` (`distance << 16`), fills the clamp's
+  opponent selector from the team `+0x7C3` cell (`0x7C741..0x7C770`, reset
+  `0x8C399`), and lands slot branch B (`fifa96_action_move_target` +
+  `0x7E27C JMP 0x7E3A6`). The slot stays `NULL`: R11 rules the
+  `FUN_0008C418` clamp bounds `PCCD.PDB` data-blocked (R51-T2b-defer), so
+  wiring is the carried FU177-L1 leg. **T3** is therefore deferred to the
+  PCCD/PCDB decode slice. **T4 (FU-71):** the leg-9.6 far-wall damp/event arm
+  `0x719A0..0x71B98` is ported (`fifa96_camera_wall_arm`, the INVISIBLE WALLS
+  dispatch bit, both chains, the `0x974DC` announce and `0x71C94`); the natural
+  tape never reaches it, so M2 stays byte-identical. **T5 (FU-166/FU-338):**
+  the phase-6 stage-3 gate models the native `[0x158882]` latch
+  (`ball_row_flag_158882 = kind==3 at stage 2`) and the blocked reasons now
+  name only the kind-3 -> kind-≠3 transition and the mode-4 Practise term —
+  the same-frame install clause is ruled out statically; the three rows stay
+  blocked (6). The T5 test sweep adds the phase-2 opponent-selector SET/NONE
+  twin, the phase-1 floor discriminator, and the latch-0 + kind-3-at-decision
+  term-2 case. Census unchanged at the final phase-51 numbers: **78/78 bodies,
+  58/80 natural, 64/80 install-live, 6 blocked, action 38/45, phase 26/35**;
+  M1 `09b726b7…` and M2 v27 `54f44987…` byte-identical; `make check` 112/112.
+  Docs: new `port/spec/FU-341_row03_arm_fidelity.md`, FU-340/FU-338/FU-166/
+  FU-150/FU-287/FU-71/FU303 append-only errata, and this register.
