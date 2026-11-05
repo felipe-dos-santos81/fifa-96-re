@@ -948,6 +948,299 @@ static void test_update_walk_landing_pan(void) {
   assert(b.pan_counter == 0);       /* no landing edge */
 }
 
+/* FU-71 leg 9.6 (phase-52 T4): `fifa96_camera_wall_arm` — the native
+ * `0x718A9..0x71B98` far-wall damp/event arm (first-hand
+ * `disassemble_bytes 0x719A0`, 148 instructions, plus the shared 0x71972 tail).
+ * Every fixture below pins an exact native branch edge; the expected velocity
+ * damps are `0x8DC50(NEG,1)` values and the expected speeds are
+ * `0xCD514` (`fifa96_entity_hypot`) over the stored pair. */
+static fifa96_camera wall_camera(int32_t x, int32_t y, int32_t z, int16_t vx,
+                                 int16_t vz, uint16_t speed, uint16_t param) {
+  fifa96_camera cam = fresh_camera();
+  cam.pos_x = x;
+  cam.pos_y = y;
+  cam.pos_z = z;
+  cam.vel_x = vx;
+  cam.vel_z = vz;
+  cam.speed = speed;
+  cam.event_param = param;
+  return cam;
+}
+
+/* 0x718A9 inner word gate + 0x719A0 head gate. */
+static void test_wall_arm_gate_and_head(void) {
+  fifa96_camera_wall_event ev;
+  fifa96_camera cam;
+
+  /* 0x718A9: (int16)|camZ|_w > 0xB10 || (int16)|camX|_w > 0x720. */
+  cam = wall_camera(0, 0, 0xB10, 0, 0x10, 3, 1);
+  memset(&ev, 0xAA, sizeof ev);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_z == 0x10 && cam.speed == 3);    /* no tail store either */
+  assert(ev.seed_x == 0 && ev.seed_z == 0 && ev.height == 0 && ev.announce == 0);
+  cam = wall_camera(0x720, 0, 0, 0, 0, 3, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.speed == 3);
+
+  /* 0x719A0: both cells zero -> return before the flag/seed init (no store). */
+  cam = wall_camera(0, 0, 0xB11, 7, 9, 0, 0);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == 7 && cam.vel_z == 9 && cam.speed == 0);
+
+  /* Either live cell passes the head to the flag-0 tail: chain A/B both
+   * skipped at |z|=0xB11 / |x|=0, so the same pair is stored and the speed
+   * is recomputed by 0x71988. */
+  cam = wall_camera(0, 0, 0xB11, 0, 0, 0, 1);     /* event_param live */
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.speed == 0);                          /* hypot(0,0) */
+  cam = wall_camera(0, 0, 0xB11, 0, 5, 5, 0);     /* speed live */
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_z == 5 && cam.speed == 5);
+}
+
+/* Chain A (Z), 0x719CF..0x71A5A: the length gate, the height/prev corridor
+ * damp, the threshold formula and both sign arms. */
+static void test_wall_arm_z_chain_edges(void) {
+  fifa96_camera_wall_event ev;
+  fifa96_camera cam;
+
+  /* |z| = 0xE73 is below the 0xE74 length gate: the chain is skipped. */
+  cam = wall_camera(0, 0x10, 0xE73, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_z == 8 && cam.speed == 8);
+
+  /* |z| = 0xE74, height = 0x24: threshold, t = ((0)>>1)+0x24 = 0x24 = height
+   * (0x71A32 JL is strict), so the event fires; the damp registers are dead. */
+  cam = wall_camera(0, 0x24, 0xE74, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == -0x180 && ev.seed_x == 0);
+  assert(ev.height == 0x64);
+  assert(cam.vel_z == 8 && cam.speed == 8);       /* vel/speed not stored */
+
+  /* t = 0x24 at |z| = 0xE75; height 0x25 misses by one, height 0x24 hits. */
+  cam = wall_camera(0, 0x25, 0xE75, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_z == 8 && cam.speed == 8);
+  cam = wall_camera(0, 0x24, 0xE75, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == -0x180 && ev.height == 0x64);
+
+  /* t = ((2)>>1)+0x24 = 0x25 at |z| = 0xE76 (height 0x25 hits exactly). */
+  cam = wall_camera(0, 0x25, 0xE76, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == -0x180 && ev.height == 0x65);
+
+  /* height < 0x24: the corridor damp 0x719F5 runs only while |prevZ| < 0xE74
+   * (vel_z = shift_step(-8,1) = -4, then speed = hypot(0,-4) = 4). */
+  cam = wall_camera(0, 0x23, 0xE80, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_z == -4 && cam.speed == 4);
+  cam.prev_z = 0xE73;
+  cam.vel_z = 8;
+  cam.speed = 8;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_z == -4 && cam.speed == 4);
+
+  /* |prevZ| = 0xE74 takes the threshold instead, even at height < 0x24. */
+  cam = wall_camera(0, 0x23, 0xE80, 0, 8, 8, 1);
+  cam.prev_z = 0xE74;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == -0x180);
+  cam.prev_z = -0xE74;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+
+  /* height = 0x24 bypasses the prev check (0x719E1 JGE, chain A's `>=`). */
+  cam = wall_camera(0, 0x24, 0xE80, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == -0x180 && ev.height == 0x64);
+
+  /* Negative camera Z: t is the fixed 0x20 and the seed flips to +0x180.
+   * prevZ = 0xE74 selects the threshold branch at height < 0x24. */
+  cam = wall_camera(0, 0x20, -0xE74, 0, 8, 8, 1);
+  cam.prev_z = 0xE74;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == 0x180 && ev.height == 0x60);
+  cam = wall_camera(0, 0x22, -0xE74, 0, 8, 8, 1);   /* t = 0x20 < 0x22 */
+  cam.prev_z = 0xE74;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_z == 8 && cam.speed == 8);
+
+  /* The 32-bit magnitude is re-read as its sign-extended low word: |z| with a
+   * 0x0E74 low word passes the gate and subtracts to zero. */
+  cam = wall_camera(0, 0x24, 0x10E74, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == -0x180 && ev.height == 0x64);
+  /* Low word 0x0E00 < 0xE74 -> skipped. */
+  cam = wall_camera(0, 0x24, 0x10E00, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+}
+
+/* Chain B (X), 0x71A5D..0x71AF0 and the 0x71AF2 small-X overshoot: the strict
+ * `height > 0x24` corridor test, the positive-side fixed 0x20, both seeds and
+ * the 0x6D4 lower band. */
+static void test_wall_arm_x_chain_edges(void) {
+  fifa96_camera_wall_event ev;
+  fifa96_camera cam;
+
+  /* |x| = 0x8BC, height 0x24: 0x71A76 JG is false, |prevX| = 0 < 0x8BC, so
+   * the 0x71B1B damp runs (vel_x = shift_step(-0x10,1) = -8). */
+  cam = wall_camera(0x8BC, 0x24, 0, 0x10, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == -8 && cam.speed == 8);
+
+  /* height = 0x25 takes the threshold: t = 0x20 (camX >= 0) < 0x25, no event
+   * and no damp -> the same pair is stored. */
+  cam = wall_camera(0x8BC, 0x25, 0, 0x10, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == 0x10 && cam.speed == 0x10);
+
+  /* |prevX| = 0x8BC takes the threshold at height 0x20: t = 0x20 = height. */
+  cam = wall_camera(0x8BC, 0x20, 0, 0x10, 0, 0x10, 1);
+  cam.prev_x = 0x8BC;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_x == -0x180 && ev.seed_z == 0);
+  assert(ev.height == 0x60);
+  assert(cam.vel_x == 0x10 && cam.speed == 0x10);   /* dead damp registers */
+  cam.prev_x = -0x8BC;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+
+  /* t = 0x20 < height, no event, no damp (the threshold arm does not damp). */
+  cam = wall_camera(0xBC0, 0x26, 0, 0x10, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == 0x10 && cam.speed == 0x10);
+
+  /* Negative camera X: the threshold uses the distance formula and the seed
+   * flips to +0x180. |x| = 0x8BC -> t = 0x24; |x| = 0x8C0 -> t = 0x26. */
+  cam = wall_camera(-0x8BC, 0x24, 0, 0x10, 0, 0x10, 1);
+  cam.prev_x = 0x8BC;                              /* threshold, not damp */
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_x == 0x180 && ev.height == 0x64);
+  cam = wall_camera(-0x8C0, 0x26, 0, 0x10, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);  /* t = 0x24+2 = 0x26 */
+  assert(ev.seed_x == 0x180 && ev.height == 0x66);
+  cam = wall_camera(-0x8C0, 0x27, 0, 0x10, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);  /* t = 0x26 < 0x27 */
+  assert(cam.vel_x == 0x10 && cam.speed == 0x10);
+
+  /* Small-X 0x71AF2: 0x6D4 <= |x| < 0x8BC, height < 0x1E, |prevX| < 0x6D4.
+   * The 0x718A9 gate needs |z| > 0xB10 on this band (|x| <= 0x720 there). */
+  cam = wall_camera(0x6D4, 0x1D, 0xB20, 0x10, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == -8 && cam.speed == 8);
+  cam = wall_camera(0x6D4, 0x1E, 0xB20, 0x10, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == 0x10 && cam.speed == 0x10);
+  cam = wall_camera(0x6D4, 0x1D, 0xB20, 0x10, 0, 0x10, 1);
+  cam.prev_x = 0x6D4;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == 0x10 && cam.speed == 0x10);
+  cam = wall_camera(0x6D3, 0x1D, 0xB20, 0x10, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == 0x10 && cam.speed == 0x10);
+  cam = wall_camera(0x8BB, 0x1D, 0, 0x10, 0, 0x10, 1);
+  cam.prev_x = 0x6D4;                              /* 0x6D4 is not < 0x6D4 */
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == 0x10 && cam.speed == 0x10);
+}
+
+/* Both chains can flag the same frame: two laterals, one event, and the
+ * entry speed still drives the announce bucket. */
+static void test_wall_arm_both_chains(void) {
+  fifa96_camera_wall_event ev;
+  fifa96_camera cam = wall_camera(0x900, 0x20, -0xE80, 0x10, 0x10, 0x20, 0);
+  cam.prev_x = 0x8BC;            /* chain B threshold instead of the damp */
+  cam.prev_z = 0xE74;            /* chain A threshold instead of the damp */
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_x == -0x180 && ev.seed_z == 0x180);
+  assert(ev.height == 0x60);
+  assert(ev.announce == 3);      /* entry speed 0x20 > 0xA */
+  assert(cam.vel_x == 0x10 && cam.vel_z == 0x10);   /* no store on flag 1 */
+}
+
+/* 0x71B37..0x71B5B: `speed <= 5` skips the 0x974DC call; the args are 1, 2, 3
+ * for 6..8, 9..0xA, >0xA. The bucket reads the entry speed word (sign
+ * extended), never the damped pair. */
+static void test_wall_arm_announce_buckets(void) {
+  fifa96_camera_wall_event ev;
+  fifa96_camera cam;
+  static const struct {
+    uint16_t speed;
+    uint8_t announce;
+  } buckets[] = {
+      {0, 0}, {5, 0}, {6, 1}, {8, 1}, {9, 2}, {0xA, 2}, {0xB, 3}, {0x30, 3},
+      {0x8005, 0},   /* the native MOVSX DI reads the word as negative */
+  };
+  for (size_t i = 0; i < sizeof buckets / sizeof buckets[0]; i++) {
+    cam = wall_camera(0x8BC, 0x20, 0, 0, 0, buckets[i].speed, 1);
+    cam.prev_x = 0x8BC;          /* the threshold arm -> an event */
+    assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+    assert(ev.announce == buckets[i].announce);
+  }
+  /* A flag-0 damp never announces, and the stored speed is the recomputed
+   * length of the damped pair, not the entry speed. */
+  cam = wall_camera(0x8BC, 0x10, 0, 0x10, 0, 9, 0);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(ev.announce == 0);
+  assert(cam.vel_x == -8 && cam.speed == 8);
+}
+
+/* The word truncation traps: a 32-bit magnitude whose low word sign-extends
+ * negative is < every positive bound, and the prev checks use the full dword. */
+static void test_wall_arm_width_traps(void) {
+  fifa96_camera_wall_event ev;
+  fifa96_camera cam;
+
+  /* |z| word 0x8000 is negative -> chain A skipped; chain B still fires. */
+  cam = wall_camera(0x8BC, 0x20, 0x18000, 0, 0, 0x10, 1);
+  cam.prev_x = 0x8BC;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_x == -0x180 && ev.seed_z == 0);
+
+  /* |x| word 0x8000 is negative -> chain B (and small-X) skipped. */
+  cam = wall_camera(0x18000, 0x24, 0xE80, 0, 0, 0x10, 1);
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == -0x180 && ev.seed_x == 0);
+
+  /* |prevZ| = 0x80000000 negates to itself and reads negative -> the corridor
+   * damp runs; 0x7FFFFFFF passes the threshold branch instead. */
+  cam = wall_camera(0, 0x10, 0xE80, 0, 8, 8, 1);
+  cam.prev_z = (int32_t)0x80000000;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_z == -4 && cam.speed == 4);
+  cam = wall_camera(0, 0x10, 0xE80, 0, 8, 8, 1);
+  cam.prev_z = 0x7FFFFFFF;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 1);
+  assert(ev.seed_z == -0x180);
+
+  /* The same dword rule in chain B's prev check. */
+  cam = wall_camera(0x8BC, 0x10, 0, 0x10, 0, 0x10, 1);
+  cam.prev_x = (int32_t)0x80000000;
+  assert(fifa96_camera_wall_arm(&cam, &ev) == 0);
+  assert(cam.vel_x == -8 && cam.speed == 8);
+}
+
+static void test_wall_arm_invalid(void) {
+  fifa96_camera_wall_event ev;
+  fifa96_camera cam = wall_camera(0, 0, 0x1000, 0, 8, 8, 1);
+  assert(fifa96_camera_wall_arm(NULL, &ev) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_wall_arm(&cam, NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* 0x73756/0x7375b..0x7375d: the integrator copies the live triple to
+ * 0x157758/5C/60, so prev_x/prev_z join prev_y unconditionally (before the
+ * pause test). */
+static void test_update_walk_captures_prev_triple(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 1, 2, 3);
+  assert(cam.prev_x == 0 && cam.prev_y == 0 && cam.prev_z == 0);
+  cam.paused = 1;                   /* the capture precedes the pause return */
+  cam.pos_x = 0x11;
+  cam.pos_y = 0x22;
+  cam.pos_z = 0x33;
+  assert(fifa96_camera_update(&cam, 4, 0, 0) == FIFA96_OK);
+  assert(cam.prev_x == 0x11 && cam.prev_y == 0x22 && cam.prev_z == 0x33);
+}
+
 /* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08 — the
  * per-record camera event FUN_0007BF20's tail (0x7C8FC) runs for every
  * record. First-hand body 0x70C08..0x70DDD (disassemble_bytes this task). */
@@ -1851,6 +2144,14 @@ int main(void) {
   test_pan_step_invalid();
   test_update_walk_gate();
   test_update_walk_landing_pan();
+  test_update_walk_captures_prev_triple();
+  test_wall_arm_gate_and_head();
+  test_wall_arm_z_chain_edges();
+  test_wall_arm_x_chain_edges();
+  test_wall_arm_both_chains();
+  test_wall_arm_announce_buckets();
+  test_wall_arm_width_traps();
+  test_wall_arm_invalid();
   test_record_event_reflect_and_event();
   test_record_event_height_ramp();
   test_record_event_chaser_ramp_param_one();

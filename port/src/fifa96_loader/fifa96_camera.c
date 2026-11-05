@@ -16,6 +16,8 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->pos_y = y;
   cam->pos_z = z;
   cam->prev_y = 0;                    /* [0x15775C] starts clear */
+  cam->prev_x = 0;                    /* [0x157758] */
+  cam->prev_z = 0;                    /* [0x157760] */
   cam->target_x = x;
   cam->target_y = y;
   cam->target_z = z;
@@ -79,8 +81,12 @@ int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
   int16_t gate_speed;
   if (!cam) return -FIFA96_ERR_INVALID;
   /* FU316-L2: 0x73756/0x7375b copies the camera triple to 0x157758 before
-   * the pause check; its +4 dword is the landing cell 0x15775C. */
+   * the pause check; its +4 dword is the landing cell 0x15775C. The 0x7375d
+   * third MOVSD leaves the camera Z in the far-wall arm's prev cell as well
+   * (FU-71 leg 9.6). */
+  cam->prev_x = cam->pos_x;
   cam->prev_y = cam->pos_y;
+  cam->prev_z = cam->pos_z;
   if (cam->paused) {
     cam->follow_speed = (int16_t)cam->speed;
     return FIFA96_OK;
@@ -195,6 +201,113 @@ int fifa96_camera_reflect(fifa96_camera *cam, int input_bit0, int transition_act
 
 int fifa96_camera_out_of_bounds(int32_t x, int32_t z) {
   return (camera_abs(x) > 0x6C0) || (camera_abs(z) > 0xAB0);
+}
+
+/* FU-71 leg 9.6 (phase-52 T4): the sign-extended low word of a 32-bit
+ * magnitude — the native `MOV word[ESP+..], AX` / `MOVSX` pair at
+ * `0x7136C`/`0x71383` re-read as words (`dword[ESP+0xE] >> 16`). A magnitude
+ * whose low word sign-extends negative (`>= 0x8000`) therefore fails the
+ * chain's positive bound. */
+static int16_t camera_abs_word(int32_t value) {
+  uint32_t magnitude = (uint32_t)value;
+  if (value < 0) magnitude = 0u - magnitude;
+  return (int16_t)(uint16_t)magnitude;
+}
+
+/* The two native damp sites (`0x719F5` chain A, `0x71B1B` chain B) share the
+ * shape `NEG reg; MOV EDX, 1; MOVSX EAX, reg16; CALL 0x8DC50`. The 16-bit NEG
+ * matters only at 0x8000 (`NEG` leaves it 0x8000 and `MOVSX` reads -0x8000). */
+static int16_t camera_damp_half(int16_t value) {
+  int16_t negated = (int16_t)(uint16_t)(0u - (uint16_t)value);
+  return (int16_t)fifa96_camera_shift_step((int32_t)negated, 1);
+}
+
+int fifa96_camera_wall_arm(fifa96_camera *cam, fifa96_camera_wall_event *out) {
+  int32_t height;      /* dword[0x157750] */
+  int16_t abs_x_w;     /* (int16)word[|camX|] */
+  int16_t abs_z_w;     /* (int16)word[|camZ|] */
+  int16_t height_word;
+  int16_t vel_x;
+  int16_t vel_z;
+  int16_t seed_x = 0;
+  int16_t seed_z = 0;
+  uint16_t event_height = 0;
+  int flag = 0;
+  if (!cam || !out) return -FIFA96_ERR_INVALID;
+  out->seed_x = 0;
+  out->seed_z = 0;
+  out->height = 0;
+  out->announce = 0;
+  /* 0x718A9: the inner word gate (the caller has already passed the outer
+   * 0x73B70 bounds check). */
+  abs_z_w = camera_abs_word(cam->pos_z);
+  abs_x_w = camera_abs_word(cam->pos_x);
+  if (!(abs_z_w > 0xB10 || abs_x_w > 0x720)) return 0;
+  /* 0x719A0: both live cells zero -> return before the flag/seeds init. */
+  if ((int16_t)cam->event_param == 0 && (int16_t)cam->speed == 0) return 0;
+  height = cam->pos_y;
+  height_word = (int16_t)(uint16_t)height;
+  vel_x = cam->vel_x;
+  vel_z = cam->vel_z;
+  /* Chain A (Z), 0x719CF..0x71A5A. */
+  if (abs_z_w >= 0xE74) {
+    if (height < 0x24 && camera_abs(cam->prev_z) < 0xE74) {
+      /* 0x719F5: the corridor damp; the flag stays clear. */
+      vel_z = camera_damp_half(vel_z);
+    } else {
+      int16_t delta = (int16_t)(uint16_t)(abs_z_w - 0xE74);
+      int32_t t = cam->pos_z < 0 ? 0x20 : (int32_t)(int16_t)((delta >> 1) + 0x24);
+      if (t >= height) {
+        flag = 1;
+        seed_z = cam->pos_z > 0 ? -0x180 : 0x180;
+        event_height = (uint16_t)((uint16_t)height_word + 0x40u);
+      }
+    }
+  }
+  /* Chain B (X), 0x71A5D..0x71AF0; the 0x71AF2 small-X overshoot shares the
+   * `0x71B1B` damp. Note the corridor test is the strict `height > 0x24`
+   * (chain A uses `>=`) and the fixed 0x20 sits on the positive side. */
+  if (abs_x_w >= 0x8BC) {
+    if (height > 0x24 || camera_abs(cam->prev_x) >= 0x8BC) {
+      int16_t delta = (int16_t)(uint16_t)(abs_x_w - 0x8BC);
+      int32_t t = cam->pos_x >= 0 ? 0x20 : (int32_t)(int16_t)((delta >> 1) + 0x24);
+      if (t >= height) {
+        flag = 1;
+        seed_x = cam->pos_x > 0 ? -0x180 : 0x180;
+        event_height = (uint16_t)((uint16_t)height_word + 0x40u);
+      }
+    } else {
+      vel_x = camera_damp_half(vel_x);
+    }
+  } else if (abs_x_w >= 0x6D4 && height < 0x1E &&
+             camera_abs(cam->prev_x) < 0x6D4) {
+    vel_x = camera_damp_half(vel_x);
+  }
+  /* 0x71B2C: flag 0 takes the shared 0x71972 tail. */
+  if (!flag) {
+    /* 0x71972..0x71990: store the register pair, then overwrite the speed word
+     * with the CD514 length. No arm/zone clear. */
+    cam->vel_x = vel_x;
+    cam->vel_z = vel_z;
+    cam->speed = (uint16_t)fifa96_entity_hypot((int32_t)vel_x, (int32_t)vel_z);
+    return 0;
+  }
+  /* 0x71B37..0x71B5B: the 0x974DC announce request. `speed <= 5` skips the
+   * call entirely (`0x71B3D JLE 0x71B60`); the bucket args are 1/2/3. */
+  {
+    int16_t entry_speed = (int16_t)cam->speed;
+    if (entry_speed > 0xA) {
+      out->announce = 3;
+    } else if (entry_speed > 8) {
+      out->announce = 2;
+    } else if (entry_speed > 5) {
+      out->announce = 1;
+    }
+  }
+  out->seed_x = seed_x;
+  out->seed_z = seed_z;
+  out->height = (int16_t)event_height;
+  return 1;
 }
 
 /* ------------------------------------------------------------------------- *

@@ -1957,6 +1957,7 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
   mr->goal_snap_z = 0;
+  mr->camera_arm_announce = 0;         /* FU-71 leg 9.6: no 0x974DC request */
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
@@ -2318,6 +2319,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
   mr->goal_snap_z = 0;
+  mr->camera_arm_announce = 0;         /* FU-71 leg 9.6: no 0x974DC request */
   mr->goal_record = FIFA96_MATCH_ENTITY_NONE;   /* FU-173 §4.2: no scan yet */
   mr->goal_record_side = 0;
   mr->situation_id = 0;
@@ -2508,6 +2510,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
   mr->goal_snap_z = 0;
+  mr->camera_arm_announce = 0;         /* FU-71 leg 9.6: no 0x974DC request */
   mr->goal_record = FIFA96_MATCH_ENTITY_NONE;   /* FU-173 §4.2: no scan yet */
   mr->goal_record_side = 0;
   mr->situation_id = 0;
@@ -3341,13 +3344,56 @@ int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z) {
   return bits == 0;                        /* 0x700E8..0x700EB TEST/SETZ */
 }
 
-/* FU316-L9: the native `0x718A9..0x71972` mirror is reached on the armed
- * path and on both disarmed fail paths (`0x713A0` phase fail, `0x713C0`
- * armer-gate fail). It mirrors only when `[0x5781E] == 0` (the engine
- * `goal_zone`) and input bit 0 is set; otherwise the unported angle arm
- * (FU-71 leg 9.6) runs and this helper is a no-op. */
-static int match_run_goal_mirror(struct fifa96_match_run *mr) {
-  if (fifa96_camera_reflect(&mr->render.camera, mr->render.input_bit0,
+/* FU-71 leg 9.6 (phase-52 T4): the native `0x718A9` boundary body. The
+ * `0x718EF`/`0x718FF` dispatch selects the far-wall damp/event arm
+ * (`0x719A0..0x71B98`) when `[0x15781E] != 0` (the engine `goal_zone`) or the
+ * dispatch input bit 0 is clear — the front-end INVISIBLE WALLS option row 2
+ * (`Disabled` = 0), image-default 0, so the arm is the default path. The
+ * mirror (`0x71908..0x71972`, FU316-L9) stays the option-enabled path: zone 0
+ * and input bit 0 set. The gate is reached on the armed path and on both
+ * disarmed fail paths (`0x713A0` phase fail, `0x713C0` armer-gate fail). */
+static int match_run_goal_boundary(struct fifa96_match_run *mr) {
+  struct fifa96_camera *cam = &mr->render.camera;
+  if (mr->goal_zone != 0u || mr->render.input_bit0 == 0) {
+    fifa96_camera_wall_event ev;
+    int32_t tracked;
+    int rc;
+    /* 0x71B85: `EAX = [0x1577CA]` is read before FUN_00071C94's 0x700F4
+     * subset resets the cell (`0x70258`). */
+    tracked = cam->tracked;
+    rc = fifa96_camera_wall_arm(cam, &ev);
+    if (rc < 0) return rc;
+    if (rc == 0) return 0;                  /* head return / gate / flag 0 */
+    /* 0x71B5B: the 0x974DC request. The audio sink is unported; the engine
+     * records the request (the `match1b_sound_id` convention). */
+    mr->camera_arm_announce = ev.announce;
+    /* 0x71C94 (0x71CC3 FUN_000700F4 + 0x70544 ramp). 0x71C99 bails with
+     * `[0x157A6C] != 0`: no reset, no bind, no zone refresh (`event_set`
+     * returns 1 on the engine `event_suspended` cell). */
+    rc = fifa96_camera_event_set(cam, ev.seed_x, ev.seed_z, ev.height, 0);
+    if (rc < 0) return rc;
+    if (rc != FIFA96_OK) return 0;
+    {
+      /* 0x71D03..0x71D27: a non-NULL tracked record re-binds and arms the dir
+       * byte (0x71D70 checks the record's +0x20 slot; a NULL record skips the
+       * whole block, leaving the 0x700F4 clear). */
+      if (tracked != FIFA96_CAMERA_TRACKED_NONE &&
+          tracked >= 0 &&
+          tracked < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+        uint32_t t = (uint32_t)tracked / FIFA96_MATCH_ENTITY_RECORDS;
+        const struct fifa96_match_entity *e =
+            &mr->entities.team[t]
+                 .records[(uint32_t)tracked % FIFA96_MATCH_ENTITY_RECORDS];
+        (void)fifa96_camera_event_dir(cam, e->has_slot, e->dir_x, e->dir_z);
+        (void)fifa96_camera_set_tracked(cam, tracked);     /* 0x71D27 */
+      }
+      /* 0x7026C: FUN_000700F4 refreshes [0x15781E] from the camera triple. */
+      mr->goal_zone = (uint8_t)fifa96_match_goal_zone(cam->pos_x, cam->pos_y,
+                                                      cam->pos_z);
+    }
+    return 1;
+  }
+  if (fifa96_camera_reflect(cam, mr->render.input_bit0,
                             mr->goal_zone != 0 ? 1 : 0) != 0) {
     mr->goal_armed = 0;
     mr->goal_zone = 0;
@@ -3358,17 +3404,17 @@ static int match_run_goal_mirror(struct fifa96_match_run *mr) {
 
 int fifa96_match_goal_arm(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
-  if (mr->goal_armed) return match_run_goal_mirror(mr);
+  if (mr->goal_armed) return match_run_goal_boundary(mr);
   /* 0x71390..0x713A0: phase 2/0x10; any other phase still reaches the
-   * 0x718A9 mirror gate (the native `JNZ 0x718A9`). */
+   * 0x718A9 boundary gate (the native `JNZ 0x718A9`). */
   if (mr->state.phase != 2u && mr->state.phase != 0x10u)
-    return match_run_goal_mirror(mr);
+    return match_run_goal_boundary(mr);
   /* 0x713A6..0x713C0: |camZ|_w > 0xB20 || |camX|_w > 0x730 (the word
    * truncation trap is reproduced by match_run_goal_abs_word). A failed gate
-   * also reaches 0x718A9, where the tighter 0xB10/0x720 mirror can fire. */
+   * also reaches 0x718A9, where the tighter 0xB10/0x720 gate can fire. */
   if (!(match_run_goal_abs_word(mr->render.camera.pos_z) > (int16_t)0xB20 ||
         match_run_goal_abs_word(mr->render.camera.pos_x) > (int16_t)0x730))
-    return match_run_goal_mirror(mr);
+    return match_run_goal_boundary(mr);
   /* 0x713DB..0x713EC: arm, freeze the snapshot triple (y forced 0), then
    * 0x713F2 the goal-mouth classifier over the live camera triple. The
    * native also latches [0x157ACB] at 0x713E6 (leg L7: dropped, its only

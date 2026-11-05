@@ -5720,6 +5720,143 @@ static void test_goal_arm_reflect_clear(void) {
   assert(mr.goal_armed == 0 && mr.render.camera.pos_z == 0x1300);
 }
 
+/* FU-71 leg 9.6 (phase-52 T4): the far-wall damp/event arm through the public
+ * `fifa96_match_goal_arm` boundary gate. The native `0x718EF`/`0x718FF`
+ * dispatch selects `0x719A0..0x71B98` when `goal_zone != 0` or input bit 0 is
+ * clear (the INVISIBLE WALLS option, default Disabled); the mirror stays the
+ * zone-0/bit-set path. */
+static void test_goal_arm_wall_arm(void) {
+  struct fifa96_match_run mr;
+
+  /* The 0x718EF/0x718FF dispatch is an OR: a set zone takes the arm even with
+   * input bit 0 set (the mirror is the zone-0 + bit-set path only). */
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  mr.render.input_bit0 = 1;
+  fifa96_camera_init(&mr.render.camera, -0x8C0, 0x26, 0);
+  mr.render.camera.speed = 9;
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.camera_arm_announce == 2);
+  assert(mr.render.camera.event_param == 0x66);
+  assert(mr.goal_zone == 0);                      /* the 0x7026C refresh */
+
+  /* ... and a clear input bit takes the arm with zone 0 (the default option,
+   * INVISIBLE WALLS Disabled): no mirror, no goal_armed/zone clear. */
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 0;
+  mr.render.input_bit0 = 0;
+  fifa96_camera_init(&mr.render.camera, -0x8C0, 0x26, 0);
+  mr.render.camera.speed = 0x30;
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.goal_armed == 1);
+  assert(mr.camera_arm_announce == 3);
+  assert(mr.render.camera.event_param == 0x66);
+  assert(mr.render.camera.pos_x == -0x8C0);        /* no mirror */
+
+  /* Head gate 0x719A0: zone set but both live cells zero -> no writes. */
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.goal_armed == 1 && mr.goal_zone == 1);
+  assert(mr.render.camera.pos_z == 0x1300);
+  assert(mr.camera_arm_announce == 0);
+
+  /* Input bit 0 clear (default): the arm, not the mirror; still the head
+   * return with both cells zero. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 1;
+  mr.render.input_bit0 = 0;
+  fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.goal_armed == 0 && mr.goal_zone == 0);
+  assert(mr.render.camera.pos_z == 0x1300);
+
+  /* A flagged frame through the public arm: |x| = 0x8C0 on the negative side
+   * with height 0x26 > 0x24 takes chain B's threshold (t = 0x26) -> the
+   * 0x71C94 event: event_param = height + 0x40, the tracked record re-binds
+   * and arms the dir byte, the 0x700F4 classifier refreshes goal_zone, and
+   * the 0x974DC request is the >0xA bucket 3. Nothing clears goal_armed. */
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  fifa96_camera_init(&mr.render.camera, -0x8C0, 0x26, 0);
+  mr.render.camera.speed = 0x30;
+  mr.render.camera.tracked = 13;                  /* team 1, record 2 */
+  mr.entities.team[1].records[2].has_slot = 1;
+  mr.entities.team[1].records[2].dir_x = 1;
+  mr.entities.team[1].records[2].dir_z = 0;
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.goal_armed == 1);                     /* the arm never clears */
+  assert(mr.goal_zone == 0);                      /* x = -0x8C0 classifier */
+  assert(mr.camera_arm_announce == 3);
+  assert(mr.render.camera.event_param == 0x66);   /* 0x26 + 0x40 */
+  assert(mr.render.camera.tracked == 13);         /* 0x71D27 re-store */
+  assert(mr.render.camera.dir_157815 == 2);       /* compass[0][2] (x=1,z=0) */
+  assert(mr.render.camera.event_step_x != 0);     /* the 0x70544 ramp */
+  assert(mr.render.camera.event_step_z == 0);
+
+  /* The disarmed phase-fail path also reaches the arm (0x713A0 -> 0x718A9):
+   * zone 1 with a live speed fires chain B without arming. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 1;
+  mr.goal_zone = 1;
+  fifa96_camera_init(&mr.render.camera, -0x8C0, 0x26, 0);
+  mr.render.camera.speed = 9;
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.goal_armed == 0);
+  assert(mr.render.camera.event_param == 0x66);
+  assert(mr.camera_arm_announce == 2);            /* speed 9 -> bucket 2 */
+
+  /* Flag-0 tail through the public arm: the 0x719F5 Z damp stores
+   * vel_z = -4 and speed = 4; event_param/zone/armed are untouched. */
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  fifa96_camera_init(&mr.render.camera, 0, 0x10, 0xE80);
+  mr.render.camera.vel_z = 8;
+  mr.render.camera.speed = 8;
+  mr.render.camera.event_param = 0x10;
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.render.camera.vel_z == -4);
+  assert(mr.render.camera.speed == 4);
+  assert(mr.render.camera.event_param == 0x10);
+  assert(mr.goal_armed == 1 && mr.goal_zone == 1);
+  assert(mr.camera_arm_announce == 0);
+
+  /* 0x71C99: a suspended pan bails inside 0x71C94 — the 0x974DC request was
+   * already posted (recorded), but no reset/bind/zone refresh runs. */
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  fifa96_camera_init(&mr.render.camera, -0x8C0, 0x26, 0);
+  mr.render.camera.speed = 0x30;
+  mr.render.camera.event_suspended = 1;
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.camera_arm_announce == 3);
+  assert(mr.render.camera.event_param == 0);       /* no 0x700F4/0x70544 */
+  assert(mr.goal_zone == 1);                       /* no 0x7026C refresh */
+  assert(mr.goal_armed == 1);
+
+  /* M2 link regression: the scripted-goal state (z = 0xB28, v = (0,5),
+   * speed 5) is inside every chain, so the flag-0 tail rewrites the same pair
+   * and speed = hypot(0,5) = 5. */
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  fifa96_camera_init(&mr.render.camera, 0, 0x20, 0xB28);
+  mr.render.camera.vel_z = 5;
+  mr.render.camera.speed = 5;
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.render.camera.vel_z == 5);
+  assert(mr.render.camera.speed == 5);
+  assert(mr.goal_armed == 1 && mr.goal_zone == 1);
+  assert(mr.camera_arm_announce == 0);
+}
+
 /* FU-145 S2: the clock-tail gate and scanner (`FUN_0008AF38 0x8B623..0x8B643`
  * -> `FUN_00088940`). Armed + phase 2/0x10 + `|goal_snap_z| > 0xB20` + zone
  * != 0 queues situation 6 through `fifa96_match_run_goal_queue`; the queued id
@@ -10687,6 +10824,7 @@ int main(void) {
   test_goal_zone_classifier();
   test_goal_arm_gates_and_snapshot();
   test_goal_arm_reflect_clear();
+  test_goal_arm_wall_arm();
   test_goal_scan_queue_and_fallback();
   test_goal_phase2_write_clears_arm();
   test_set_piece_queue_ids();

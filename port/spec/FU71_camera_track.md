@@ -568,3 +568,59 @@ phase/armer-gate fail paths. `match_run_goal_mirror` runs the ported
 `fifa96_camera_reflect` with `transition_active = goal_zone != 0`, matching
 the native `0x718EF`/`0x718FF` gates; the `0x720..0x730` gap mirrors without
 arming. The angle arm `0x719A0..0x71B98` (FU-71 leg 9.6) remains unported.
+
+## Phase-52 note — leg 9.6 landed: the far-wall damp/event arm (2026-11-04)
+
+Leg 9.6 is closed. `fifa96_camera_wall_arm` (loader camera) ports the whole
+non-mirror branch `0x719A0..0x71B98` of `FUN_0007131C`, reached from the
+`0x718A9` gate; `fifa96_match_goal_arm` dispatches it on
+`[0x5781E] != 0 || ((word[0x4C1D4]|word[0x4C1D6]) & 1) == 0` and keeps the
+`0x71908..0x71972` mirror for `[0x5781E] == 0` with input bit 0 set.
+
+Fresh `disassemble_bytes 0x719A0` (504 B) is **148 instructions**, not 571
+(the 571 in §6 counts the whole `FUN_0007131C`). The body is not an angle
+reflection: it is a far-wall damp/event arm producing fixed ±`0x180` seeds and
+calling `0x71C94`; the only trig is the `0xCD514` length (the shared flag-0
+tail's `speed`, and the event triple's unused word 0).
+
+Errata against §6 and the earlier leg text:
+
+* `0x7198D`'s `0xCD514` is the **length** (`fifa96_entity_hypot`), i.e. the
+  `[0x577BE]` speed word, not a heading (§6's "heading; not ported" is the
+  same helper, now ported).
+* The dispatch bit is the front-end option row 2 **INVISIBLE WALLS**
+  (`0x1C9BC` reads the value cell `0x10527C`; `0x10513C` -> `0x10069C`,
+  values `0x1006AC` Disabled / `0x1006B8` Enabled), not a gameplay input.
+  Disabled (0) is the image default, so the arm is the default branch.
+* The announce (`0x71B37`) is **skipped for `speed <= 5`** (`0x71B3D JLE
+  0x71B60`); the request values are 1 for 6..8, 2 for 9..0xA, 3 for >0xA. The
+  earlier `1 + {s<=5:0,...}` formula is wrong at `s <= 5` (no call at all).
+* Chain A's negative-side threshold is the fixed `0x20` *before* the height
+  compare, so `pos_z < 0` only flags when `height <= 0x20` (`0x71A32 JL` is
+  strict); chain A's corridor bypass is `height >= 0x24` while chain B's is
+  the strict `height > 0x24`, and the fixed `0x20` sits on chain B's
+  non-negative side.
+* The chain magnitudes are the **sign-extended low words** of the 32-bit
+  absolute camera positions (`0x7136C`/`0x71383` word stores re-read through
+  the adjacent-word alias), while the threshold subtraction's 16-bit `CWDE`
+  makes only the low word matter; a magnitude with word `>= 0x8000` reads
+  negative and skips the chain. The `prev` checks use the full dword after a
+  32-bit `NEG` (`0x80000000` stays negative and reads "small").
+* Both chains can flag the same frame (two laterals). For a non-negative
+  camera X an X event additionally needs `height > 0x24` or
+  `|prevX| >= 0x8BC` (otherwise the chain damps).
+* Small-X (`0x71AF2`) requires the `0x718A9` gate, so `|z| > 0xB10` on the
+  `0x6D4..0x720` X band.
+
+The engine records the `0x974DC` request in `fifa96_match_run.camera_arm_announce`
+(the audio sink stays unported) and adds `prev_x`/`prev_z` beside `prev_y`
+(`0x73756`/`0x7375b..0x7375d` copies the camera triple to `0x157758/5C/60`).
+M1 `09b726b7…` / M2 v27 `54f44987…` stay byte-identical; census unchanged.
+
+Still open after this slice: the announce table `0x71400..0x718A4` (including
+the same-call armer->arm fall-through at `0x714DA`/`0x71513`/`0x71530`/
+`0x7154D`, which can fire the arm one frame earlier on a first-arm frame
+already beyond the chains), the `[0x5781E]` refresh at the other `0x700F4`
+call sites, the `0x71C94` tracked-tail cells ([0x158777], `[0x1577CE+side*4]`,
+`rec+0x9B`, `[[rec]+0x7A6]+0x7BF/+0x7CB`; FU167-L5/FU168-L3) and triple word 0
+`0x1577B8` (FU168-L2, no consumer).

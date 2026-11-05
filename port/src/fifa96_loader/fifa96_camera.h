@@ -11,6 +11,16 @@ typedef struct fifa96_camera {
    * (`0x73756`). `0x737C8..0x737DA` admits the pan step when
    * `prev_y > 0 && pos_y <= 0` even if the timer has not passed its limit. */
   int32_t prev_y;
+  /* FU-71 leg 9.6 (phase-52 T4): the native `[0x157758]`/`[0x157760]` cells —
+   * the previous frame's camera X/Z. `0x73756` calls `FUN_00072AC4` and the
+   * three `MOVSD` at `0x7375b..0x7375d` copy the whole live triple
+   * `0x15774C/50/54` to `0x157758/5C/60`, so `prev_x`/`prev_z` are captured
+   * with `prev_y` in `fifa96_camera_update_walk`. The far-wall arm reads them
+   * in its corridor checks (`|prevZ| >= 0xE74`, `|prevX| >= 0x8BC`,
+   * `|prevX| >= 0x6D4`). Init zeroes them; the native init 0x700F4 is silent
+   * on the prev triple, so the image-default zero is the fresh value. */
+  int32_t prev_x;
+  int32_t prev_z;
   int32_t target_x, target_y, target_z;
   int32_t anchor_x, anchor_y, anchor_z;
   int32_t anchor2_x, anchor2_y, anchor2_z;
@@ -109,6 +119,51 @@ int fifa96_camera_set_tracked(fifa96_camera *cam, int32_t id);
 int fifa96_camera_target(const fifa96_camera *cam, int16_t *x, int16_t *z);
 int fifa96_camera_reflect(fifa96_camera *cam, int input_bit0, int transition_active);
 int fifa96_camera_out_of_bounds(int32_t x, int32_t z);
+
+/* FU-71 leg 9.6 (phase-52 T4): the far-wall damp/event arm, the native
+ * `0x718A9..0x71B98` non-mirror branch of `FUN_0007131C`. Reached from the
+ * `0x718A9` gate (`(int16)|camZ|_w > 0xB10 || (int16)|camX|_w > 0x720`) when
+ * `[0x15781E] != 0` (`0x718EF`) or `((word[0x14C1D4]|word[0x14C1D6]) & 1) ==
+ * 0` (`0x718FF`) — the dispatch bit is the front-end option row 2
+ * (INVISIBLE WALLS: 0 = Disabled = this arm, 1 = Enabled = the mirror), so the
+ * arm is the **default** path and the mirror is the option-enabled one.
+ *
+ * Body (first-hand `disassemble_bytes 0x719A0`, 148 instructions):
+ *  - head `0x719A0`: `event_param == 0 && speed == 0` returns with no writes;
+ *  - chain A (Z) `0x719CF..0x71A5A`: `(int16)|camZ|_w >= 0xE74`; when
+ *    `height < 0x24` and `|prevZ| < 0xE74` it damps `vel_z =
+ *    shift_step((int16)(-vel_z), 1)` instead; otherwise the threshold
+ *    `t = 0x20` for `camZ < 0` else `((int16)((int16)(|camZ|_w - 0xE74)) >> 1)
+ *    + 0x24` must satisfy `t >= height`, then `seed_z = ±0x180` and the
+ *    travel height `= (int16)(word[pos_y] + 0x40)`;
+ *  - chain B (X) `0x71A5D..0x71AF0`: `(int16)|camX|_w >= 0x8BC`; damps when
+ *    `height <= 0x24` and `|prevX| < 0x8BC`, else the threshold `t = 0x20` for
+ *    `camX >= 0` else the distance formula, `t >= height` -> `seed_x = ±0x180`;
+ *  - small X `0x71AF2`: `0x6D4 <= |camX|_w < 0x8BC && height < 0x1E &&
+ *    |prevX| < 0x6D4` damps `vel_x` (no flag change);
+ *  - tail `0x71B2C`: flag 0 -> the `0x71972` store pair + `speed =
+ *    (uint16)hypot(vel_x, vel_z)`; flag 1 -> `0x71B37` announce (the `0x974DC`
+ *    request is 1 for entry speed 6..8, 2 for 9..0xA, 3 for >0xA, and skipped
+ *    for <= 5) then the `0x71B60..0x71B8A` seed triple and `0x71C94` call.
+ *
+ * The seed pair is two laterals: `word[1] = seed_x`, `word[2] = seed_z`; the
+ * native also stores `word[0] = CD514(seed_z, seed_x)` at `0x1577B8`, which no
+ * consumer reads (FU168-L2), so it is not computed here.
+ *
+ * Returns 1 when the flag fired (the three chain outputs are filled and the
+ * damped velocity words are **discarded**, exactly like the native, whose
+ * `0x71C94` resets the camera and re-derives the velocities from the seeds),
+ * 0 for the head return, a failed `0x718A9` gate, or the flag-0 tail (which
+ * already stores `vel_x`/`vel_z` and the recomputed `speed`), and
+ * -FIFA96_ERR_INVALID on NULL. */
+typedef struct fifa96_camera_wall_event {
+  int16_t seed_x;    /* chain B lateral (±0x180), 0 when unset */
+  int16_t seed_z;    /* chain A lateral (±0x180), 0 when unset */
+  int16_t height;    /* the 0x71C94 EBX arg = (int16)(word[pos_y] + 0x40) */
+  uint8_t announce;  /* the 0x974DC request: 0 = none, else 1..3 */
+} fifa96_camera_wall_event;
+
+int fifa96_camera_wall_arm(fifa96_camera *cam, fifa96_camera_wall_event *out);
 
 /* M2 phase-11 T1 (FU-148 §14.5 / L14.7): FUN_00070B94 (`0x70B94..0x70C05`,
  * first-hand `disassemble_bytes`) — the camera-height producer behind the

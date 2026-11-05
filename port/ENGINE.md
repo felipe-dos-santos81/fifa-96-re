@@ -8588,3 +8588,52 @@ Census: **78/78 bodies, 58/80 natural, 64/80 install-live, 6 blocked, action
 `test_phase_13_14_rng_gate` (4 × active; +8 for the producer), the m2 rider
 (32 body draws, 40 with the producers), `test_phase_13_write_seam` and the
 census pins.
+
+## Phase 52 — far-wall damp/event arm (FU-71 leg 9.6, 2026-11-04)
+
+FU-71 leg 9.6 is landed: `fifa96_camera_wall_arm` (loader camera) ports the
+native `0x719A0..0x71B98` non-mirror branch of `FUN_0007131C` (fresh
+`disassemble_bytes 0x719A0`: 148 instructions + the shared `0x71972` tail),
+and `fifa96_match_goal_arm` now dispatches the `0x718A9` gate on
+`goal_zone != 0 || render.input_bit0 == 0` to that arm instead of the no-op.
+The dispatch bit is **not** a gameplay input: it is the front-end option row 2
+**INVISIBLE WALLS** (`0x1C9BC` reads the value cell `0x10527C`; row descriptor
+`0x10513C` -> `0x10069C`, values `0x1006AC` Disabled / `0x1006B8` Enabled).
+Disabled = 0 is the image default, so the arm is the default path and the
+mirror stays the option-enabled (zone 0, bit set) path.
+
+Ported: the `0x719A0` head gate; chain A (Z) `0x719CF` with the `0xE74` length
+gate, the `height < 0x24`/`|prevZ| < 0xE74` `0x8DC50` corridor damp, the
+`t >= height` threshold (fixed `0x20` on the negative side) and the ±`0x180`
+seed; chain B (X) `0x71A5D` with the strict `height > 0x24` corridor test, its
+threshold (`0x20` on the non-negative side) and seed; the small-X `0x71AF2`
+damp (`0x6D4 <= |x| < 0x8BC`, `height < 0x1E`, `|prevX| < 0x6D4`); the flag-0
+`0x71972` velocity/speed store (`speed = (uint16)0xCD514`, the port's
+`fifa96_entity_hypot`); and the flag-1 `0x71B37` announce (the `0x974DC`
+request is **skipped for `speed <= 5`**, else 1/2/3 for 6..8/9..0xA/>0xA) with
+the `0x71C94` event (`fifa96_camera_event_set`, the tracked dir/re-bind tail,
+and the `0x700F4` `0x7026C` goal-zone refresh). The engine records the
+`0x974DC` request in the new `camera_arm_announce` cell (the sink itself stays
+the OL-27 leg). `prev_x`/`prev_z` are new camera cells captured beside
+`prev_y` at `0x73756/0x7375b..0x7375d`.
+
+M2 stays byte-identical (v27 `54f44987…`, M1 `09b726b7…`): the natural tape
+never calls the armer, and the scripted goal (`|z| = 0xB28..0xB48`, `x = 0`,
+`vel = (0,5)`) sits inside every chain, so the flag-0 tail rewrites the same
+pair and `speed = hypot(0,5) = 5`. Residual legs: the same-call
+armer->arm fall-through (`0x714DA`/`0x71513`/`0x71530`/`0x7154D`; the
+announce table `0x71400..0x718A4` is still unported), the `[0x15781E]`
+refresh at the other `0x700F4` callers, the `0x71C94` tracked-tail cells
+(FU167-L5/FU168-L3) and the dropped triple word 0 (FU168-L2).
+
+Tests: `test_camera` pins both chains' exact threshold edges (flag 0 and flag
+1), the `speed <= 5` announce skip, the 1/2/3 bucket edges, the
+width-truncation traps and the prev-triple capture; `test_engine_match_frame`
+pins the public dispatch (zone/bit combinations), the event request cell
+(`camera_arm_announce`, `event_param`, tracked/dir, the zone refresh, the
+ramp step pair) and the M2 link no-op. Twenty-eight hand mutations across
+every branch and the engine wiring either fail these tests or, in one case
+(a chain seed's `> 0` vs `>= 0`), are provably equivalent because a zero
+camera word cannot pass the length gate. Census unchanged:
+**78/78 bodies, 58/80 natural, 64/80 install-live, 6 blocked, action 38/45,
+phase 26/35**; `make check` **112/112**.

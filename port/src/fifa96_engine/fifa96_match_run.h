@@ -315,8 +315,13 @@ struct fifa96_match_run_render {
   int input_bit2;
   /* FU-145 S2 (0x718FF): the boundary reflect arm's input bit 0 — the native
    * tests `(word[0x14C1D4] | word[0x14C1D6]) & 1` (the per-side range words
-   * FU-139 reads; image-zero). The runtime producer path is landed (phase-10
-   * T2: the front-end options editor FUN_0001C728 -> the eight config cells ->
+   * FU-139 reads; image-zero). Fresh (FU-71 leg 9.6, phase-52 T4): the bit is
+   * the front-end option **row 2 = INVISIBLE WALLS** (`Disabled` = 0,
+   * `Enabled` = 1: `FUN_0001C9BC` sets the range word bit from the value cell
+   * `[0x10527C]`, the editor row `0x10513C` -> `0x10069C`). Clear takes the
+   * far-wall damp/event arm; set takes the mirror (when `goal_zone == 0`).
+   * The runtime producer path is landed (phase-10 T2: the front-end options
+   * editor FUN_0001C728 -> the eight config cells ->
    * `fifa96_input_range_words`; the engine derives this bit in
    * `fifa96_match_run_set_input_options`). No front-end staging runs on the
    * tape, so the cell keeps the caller-staged default 0, mirroring
@@ -972,6 +977,12 @@ struct fifa96_match_run {
   int32_t goal_snap_x;
   int32_t goal_snap_y;
   int32_t goal_snap_z;
+  /* FU-71 leg 9.6 (phase-52 T4): the far-wall arm's `0x974DC` announce
+   * request (`0x71B5B`). 0 = no call (no event, or the entry `speed <= 5`
+   * skip), 1 = entry speed 6..8, 2 = 9..0xA, 3 = > 0xA. The audio sink itself
+   * is unported (OL-27 family); the request is recorded, never faked (the
+   * `match1b_sound_id` convention). Cleared by init/begin. */
+  uint8_t camera_arm_announce;
   /* FU-173 §4.2 (phase-14 T3): the goal-record cell the byte-0 phase-5
    * celebration arm reads — the native `[0x157A9F]` pointer (the goal
    * scanner's selected possession record). The engine store is the pool id
@@ -1995,24 +2006,30 @@ int fifa96_match_action_phase_22(struct fifa96_match_run *mr);
 int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z);
 
 /* FU-145 §3 item 1 (S2): the boundary pan armer `FUN_0007131C`
- * (`0x71390..0x713F7` arm body; the already-armed reflect arm
- * `0x718A9..0x7190E`). Called once per granted frame by
+ * (`0x71390..0x713F7` arm body; the already-armed boundary gate
+ * `0x718A9..0x71B98`). Called once per granted frame by
  * `fifa96_match_run_frame` when `fifa96_camera_out_of_bounds` holds (the
  * native track call gate `0x73B70..0x73B9B`). When disarmed and the phase is
  * 2/0x10 and `|camera.pos_z|_w > 0xB20 || |camera.pos_x|_w > 0x730` (the
  * native stores the absolute values as words and compares the sign-extended
  * low words), it sets `goal_armed`, freezes `goal_snap_*` := the camera triple
  * with y zeroed, and stores `goal_zone` = `fifa96_match_goal_zone`.
- * When already armed it runs the reflect arm: with `goal_zone == 0` and
- * `render.input_bit0` set it calls `fifa96_camera_reflect` and clears
- * `goal_armed`/`goal_zone` when the mirror fires (the native clears before
- * the mirror; zone != 0 or a clear input takes the unported angle arm, FU-71
- * leg 9.6, with no clear). The same `0x718A9` mirror gate is reached on both
+ * The `0x718A9` boundary gate is reached on the armed path and on both
  * disarmed fail paths (`0x713A0` phase fail, `0x713C0` armer-gate fail,
- * FU316-L9): the `0x720`/`0xB10` gate can mirror in the `0x720..0x730` gap
- * without arming. The pan itself is the camera track (FU-71; the pan producer
- * is leg L1/S4); the fixture seam is the camera velocity pair.
- * Returns 1 when it armed, cleared, or mirrored, 0 for a no-op,
+ * FU316-L9: the `0x720`/`0xB10` gate can fire in the `0x720..0x730` gap
+ * without arming). It dispatches on `goal_zone != 0 || render.input_bit0 == 0`
+ * to the far-wall damp/event arm (`fifa96_camera_wall_arm`, the native
+ * `0x719A0..0x71B98`; FU-71 leg 9.6 — the default path, since the input bit is
+ * the INVISIBLE WALLS option and Disabled is 0), otherwise to the mirror
+ * `fifa96_camera_reflect` (`0x71908..0x71972`). The arm stores `vel_x`/`vel_z`
+ * and recomputes `speed` on its flag-0 tail, or fires the `0x71C94` event
+ * (`fifa96_camera_event_set` + the tracked/dir arm + the `0x7026C` zone
+ * refresh) with the `0x974DC` request recorded in `camera_arm_announce`; it
+ * never clears `goal_armed`/`goal_zone` (only the `0x700F4` zone refresh
+ * rewrites the zone). A mirror clears both flags and negates the velocity.
+ * The pan itself is the camera track (FU-71; the pan producer is leg L1/S4);
+ * the fixture seam is the camera velocity pair.
+ * Returns 1 when it armed, fired the arm, cleared, or mirrored, 0 for a no-op,
  * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_goal_arm(struct fifa96_match_run *mr);
 
