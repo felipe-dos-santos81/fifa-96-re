@@ -8957,3 +8957,110 @@ FU342-L6 — `0x36208`. FU342-L7 — the FU326-L4 `0x1104AB` init row. The
 `0x8D040[0x15] = 0x8D77B` walk arm stays the FU170-L2 residual; the act-9
 stage-1/2 gates stay FU170-L1 (the original FU-181 §7 item 5), not the
 phase-53 stage-0 scope. `make check` green (112/112).
+
+## Phase 54 — P1: the visible match (FU-343, 2026-11-05)
+
+P1 of the playable SDL wave (`docs/superpowers/specs/2026-11-05-fifa96-playable-sdl-design.md`,
+plan Task 1; recon `/tmp/opencode/play/A1-field-renderer.md`,
+`A2-formation-camera.md`, `A7-sprites.md`). Every new path is gated by
+`mr->live_start` (default 0), so the M1 `09b726b7…` and M2 v29 `7c3874f7…`
+goldens are byte-identical with **no re-pin**; census unchanged (**78/78**
+bodies, **58/80** natural, **64/80** install-live, **6** blocked, action
+**38/45**, phase **26/35**); `make check` green (112/112). **[M]** = measured
+first-hand this phase (Ghidra image reads, decoded retail containers, live
+frames); **[D]** = derived stand-in.
+
+**Live-start gate.** New `fifa96_match_run.live_start` + setter
+(`fifa96_match_run_set_live_start`). The windowed bridge sets it only when
+`eng->surface != NULL && !eng->cfg.headless`; headless runs, the M2 tape and
+every direct-begin fixture leave it 0. In `begin` the live path skips the
+`fifa96_match_run_period_setup(mr,1)` that arms act `0x0A` (its phase-`0x20`
+body installs action `0x24` on all 22 records, collapsing the kickoff
+placement to the `x = 0x7E0` line, A2 §1) and keeps the `352ko` kickoff
+placement commit. It then writes the live phase 2 (class-1 play), seeds one
+camera event (`fifa96_camera_event_set(…, 0x50, 0)` +
+`fifa96_camera_event_dir`) and binds `camera.tracked` to the controlled
+record: `entities.controlled` when the native `[0x157A83]` actor is live, else
+the FU-70 slot entity (the native actor cell is cleared by the act-9 reset;
+the slot is the human-controlled record). The seeded event is **[D]** — the
+native has no kickoff event (A2 §2); it is the stand-in for the unported FU-310
+camera place.
+
+**Camera follow + render eye.** In the frame body after the entity drain, a
+live run with no active native pan (`event_param == 0 && speed == 0`) sets the
+FU-71 focus triple to the ball (`pos_x = ball.x`, `pos_y = 0`,
+`pos_z = ball.z`) and keeps `tracked` on the controlled record. The render eye
+is separate: `fifa96_match_run_eye` returns
+`focus + (-1920,160,30)` for live (camera object 0 image `0x107508`;
+**[M]** `read_memory 0x107510` = `80 f8 ff ff a0 00 00 00 1e 00 00 00`; A1 §4,
+A2 §2) and the focus triple for non-live. The same eye feeds the sprite
+projection and the pitch (no split-brain). **[D]** the native rig smoothing and
+the live orientation director (`FUN_0004E834`, FU-157 R2-L1) are unported; the
+focus is the ball, not a smoothed native rig.
+
+**Live lens.** The fixed FU-88 projection has no FOV/zoom term (A1/A7), so the
+320-wide reciprocal lens crops most of the kickoff formation at the native
+near-goal standoff. The live path halves the **horizontal** focal dimension
+only (`lens_w = 320/2`, `lens_h = 240`) before building `recip_x`; the vertical
+lens and the native sprite scale are unchanged, so both teams stay readable
+across the width. **[D]** stand-in for the unported native lens director; the
+non-live projection keeps the pinned dimensions.
+
+**Pitch v1.** New `port/src/fifa96_engine/fifa96_pitch.c/.h`. Staging
+(`fifa96_match_run_stage_pitch`, called by the bridge only on the live path):
+`/ART/GAMEFLD1.PVI` → `FplainH.fsh`/`FplainV.fsh` (64x64 SHPI, 4096 B) and
+`/ART/GAMESTD1.PVI` → `STACcovr.fsh` (64x64 crowd frame), decoded through the
+engine asset table into an owned 3-tile arena; drawing is skipped when the
+stage fails. **Measured correction:** the retail field binding is GAMEFLD3
+(FU-2), but GAMEFLD3's entries are `FHstripH/V` + `3dwpts.dat` (A1 §1), not
+Fplain — the plain tile lives in GAMEFLD1. The stage tries GAMEFLD1 first and
+falls back to GAMEFLD3's FHstrip names. Draw order: sky rows (PALsys `0x3C`
+blue-grey), 56-row `STACcovr` crowd band (A1 §4 **[D]** approximation), the
+inverse-projected floor (one ray/pixel through the transpose of
+`fifa96_projection_matrix`, one divide per pixel, real 64x64 texels, H/V
+selected by the `FUN_0004C9D4` yaw ranges), then the procedural white markings
+(goal lines `x = ±0x7E0 = 2016`, touchlines `z = ±0xC1E = 3102`, halfway line,
+centre circle `r = 0x3C0`). Clipped to the render window/surface; drawn after
+`fifa96_surface_clear` and before the entity sort. The white marking index is
+the unused `0xFE` slot (no PLAYART frame uses > 229); no PALsys/PALteam entry is
+white.
+
+**Palette / kit.** The sprite body indices are magenta in the derived PALsys
+frame-2 base (A7 §4). **Measured:** PALsys **frame 0** carries the full match
+palette — grass indices 1..29 are green — while frame 2 is magenta at those
+indices; using PALteam frame 0 as the whole base turns the Fplain grass cyan
+(the A1 prototype palette re-run with PALteam: cyan/striped output). The live
+stage therefore builds the base from PALsys frame 0 (the derived stand-in for
+the native front-end base `0x14B200`, not statically derivable), applies the
+FU-98 kit remap and the frame-2 `[0xF0,+0x54)` / `[0x186,+0x4E)` appends, then
+overlays PALteam frame 0 over the sprite body bands 30..229 (the Fplain tile
+only uses 1..29, so the pitch stays green). Team 1's shirt/shorts bands move
+into the free 230..245 slots: `195..203 → 230..238`, `208..214 → 239..245`,
+with PALteam frame 2's colours (A7 §4); `remap_team[0]` is the identity,
+`remap_team[1]` is the band map. The sprite draw selects them only when
+`live_start`; the ball and every HUD/overlay pass keep the current `remap`, so
+the non-live tape is untouched. **[D]** the per-kit PALteam frame selection is
+still the A7 leg; the native translation pool (leg 11) remains unported.
+
+**Tests.** `test_engine_match_render` gains: the `live_start` default/setter and
+the eye offset (`focus + (-1920,160,30)`); an ISO-gated live begin + 1 frame
+probe pinning phase 2, no collapsed `x = 0x7E0` line, >10 distinct record
+positions, the tracked bind, the pitch's >30% non-background frame, the
+identity/team-1 remap bands and distinct shirt/shorts colours, and the white
+marking slot. Existing fixtures keep their `live_start = 0` path unchanged.
+
+**Legs (P1).** FU343-L1 the native floor caster `FUN_0005F684`
+(`0x5F684..0x5FEA9`) is not line-by-line ported (v1 is the inverse-projection
+stand-in). FU343-L2 exact world-units-per-texel (`FUN_0005F684`'s `>>12`
+stepping; v1 uses one unit per texel). FU343-L3 the `3dwpts.dat` stand-point
+projection / `FUN_000610C4` tiers and the `FUN_0005B448`/`0x62620/0x62588` band
+spans (v1 is a screen-space crowd band). FU343-L4 the field/stadium index
+producers (`[0x1492D0]/[0x1492D4]` have no absolute writer; the stage fixes
+GAMEFLD1/GAMEFLD3 + GAMESTD1). FU343-L5 the native camera rig smoothing / live
+orientation director (`FUN_0004E834`, FU-157 R2-L1). FU343-L6 the live lens
+(horizontal half-focal stand-in). FU343-L7 the exact native palette base
+(`0x14B200` is the front-end palette; PALsys frame 0 is the derived live base)
+and the per-kit PALteam frame selection. FU343-L8 the pre-match timeline
+(the native situation-0/act-0xA/phase-0x20 order is skipped on the live path;
+A2 §4 P6 / FU170-L10). The referee entity stays absent (A7 §2: no live pool
+slot/bank).

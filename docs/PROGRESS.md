@@ -3796,3 +3796,24 @@ close-out below).
   `port/spec/FU-342_act9_stage0_sinks.md`, FU-181/FU-170 Task-3 errata, and
   this register. The `0x8D040[0x15] = 0x8D77B` walk arm stays the FU170-L2
   residual; the act-9 stage-1/2 gates stay FU170-L1.
+
+- **phase-54 P1 visible match (FU-343, 2026-11-05).** The windowed game now
+  shows a real match: `live_start` (default 0, set only by the bridge when the
+  engine has a surface and is not headless) skips the native pre-match
+  situation-0/act-0xA collapse, keeps the `352ko` kickoff placement commit,
+  writes phase 2, seeds one derived camera event and tracks the controlled
+  record. The FU-71 focus follows the ball and the render uses the separate
+  camera-0 eye `focus + (-1920,160,30)` for pitch and sprites; a live-only
+  horizontal half-focal lens frames both teams. New `fifa96_pitch.c/.h` stages
+  `GAMEFLD1` `FplainH/V` (GAMEFLD3's FHstrip is the measured fallback) and
+  `GAMESTD1` `STACcovr` into an owned arena and draws sky/crowd band + the
+  inverse-projection floor + white markings. The live kit base is PALsys
+  frame 0 (frame 2 is magenta at the Fplain indices; a full PALteam base was
+  measured cyan), with PALteam frame 0 overlaid on the sprite bands and team
+  1's shirt/shorts redirected to the free 230..245 slots with frame 2's
+  colours. New ISO-gated render probes pin the formation, eye, pitch coverage
+  and kit split. M1 `09b726b7…` and M2 v29 `7c3874f7…` are byte-identical (no
+  re-pin); census unchanged; `make check` 112/112. Legs: native scanline
+  caster, exact texel scale, 3dwpts stand projection, field/stadium selection,
+  camera-rig smoothing/live director, live lens, native palette base and the
+  pre-match timeline.

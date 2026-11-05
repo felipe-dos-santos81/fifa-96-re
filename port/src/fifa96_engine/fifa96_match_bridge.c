@@ -20,7 +20,15 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
    * §1.1 menu-driven start-match path: FUN_00018014 enters the match setup
    * with selector 0 (`XOR EAX,EAX` at 0x180A8). */
   uint32_t selector = 0;
-  int rc = fifa96_match_run_begin(mr, eng, selector);
+  /* FU-343 (P1): only the windowed host opts into the live-start bootstrap
+   * (skip the native pre-match situation-0/act-0xA collapse, enter phase 2,
+   * seed the derived camera event/tracked, render the camera-0 eye and the
+   * pitch). Headless runs (the M1/M2 tapes and every direct-begin fixture)
+   * take the native begin order unchanged. */
+  const int live = eng->surface != NULL && !eng->cfg.headless;
+  int rc = fifa96_match_run_set_live_start(mr, live);
+  if (rc != 0) return rc;
+  rc = fifa96_match_run_begin(mr, eng, selector);
   if (rc != 0) return rc;
   eng->frontend.match_start = 0;   /* consumed: no instant re-entry */
   /* Stage the derived default pair so a live match renders (G1 Finding 2:
@@ -31,5 +39,8 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
    * observable only as render.enabled == 0. */
   (void)fifa96_match_run_stage(mr, eng->surface, FIFA96_MATCH_BRIDGE_PLAYER_BANK,
                                FIFA96_MATCH_BRIDGE_PITCH_BANK);
+  /* FU-343 (P1): the pitch/kit stage is live-only (it edits the kit palette and
+   * the per-team remap); a failure leaves the sprite-only render in place. */
+  if (live) (void)fifa96_match_run_stage_pitch(mr, eng);
   return 0;
 }

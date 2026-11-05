@@ -6,6 +6,7 @@
 #include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_engine/fifa96_match_phase_machine.h"
 #include "fifa96_engine/fifa96_match_act.h"
+#include "fifa96_engine/fifa96_pitch.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_loader/fifa96_action_handlers.h"
 #include "fifa96_loader/fifa96_camera.h"
@@ -373,6 +374,18 @@ struct fifa96_match_run_render {
   const uint8_t *sprite_data;               /* backing blob for frame parse */
   uint32_t sprite_data_len;
   uint8_t remap[256];                       /* indexed translation + 0xFF key */
+  /* FU-343 (P1): the per-team live kit translation. `remap_team[0]` is the
+   * identity (team 0 uses the staged PALteam band colours in place);
+   * `remap_team[1]` moves the shirt/shorts bands 195..203/208..214 into the
+   * free 230..245 slots, where the live stage writes PALteam frame 2's colours
+   * (A7 §4). Only the live_start sprite draw selects these; the non-live draw
+   * keeps `remap`, so M1/M2 stay byte-identical. `team_remap_ready` is set by
+   * fifa96_match_run_stage_pitch. */
+  uint8_t remap_team[2][256];
+  int team_remap_ready;
+  /* FU-343 (P1): the visible-match pitch (A1). Staged through the engine asset
+   * table by fifa96_match_run_stage_pitch and drawn only when live_start. */
+  struct fifa96_pitch pitch_art;
   /* OL-T11-6 (M2 playable-match Task 1): the derived native match palette in
    * the engine's 8-bit RGB form. Staged from the pitch container's PALsys.fsh
    * entry (frame 2 type-0x22 chunk, kit remap + appends, native `v << 2`);
@@ -1114,6 +1127,17 @@ struct fifa96_match_run {
    * (the coupled row-0x20 installer needs the unported actor-record producer;
    * FU205-L2). */
   uint8_t period_setup_live;
+  /* FU-343 (P1): the derived SDL-host immediate-kickoff mode. Default 0:
+   * every direct-begin fixture and the M2 tape keep the native begin order
+   * (period_setup(1) arms act 0x0A -> phase-0x20 installs code 0x24 and
+   * collapses the kickoff placement to the x=0x7E0 line, A2 §1). The windowed
+   * bridge sets it only when the engine has a surface and is not headless.
+   * When set, begin skips that period_setup, keeps the 352ko kickoff
+   * placement commit, writes the live phase 2, seeds one derived camera event
+   * and binds camera.tracked to the controlled record; the frame body then
+   * follows the ball with the focus triple and the render uses the separate
+   * camera-0 eye (focus + (-1920,160,30)) for pitch and sprites. */
+  uint8_t live_start;
   /* FU-197 §2/§5 (M2 phase-17 T2): the act-4 sit-2..4 formation-order arm's
    * state. `formation_order[side][i]` mirrors the desired line-up matrix
    * `0x14C360 + side*0x7B + i*4`; `formation_current[side][i]` mirrors the
@@ -1311,6 +1335,21 @@ int fifa96_match_run_set_input_options(
  * lifecycle's register failure. */
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
                            uint32_t selector);
+
+/* FU-343 (P1): set the derived live-start gate (default 0). The windowed
+ * bridge sets it before begin only when the engine has a surface and is not
+ * headless; direct begin callers and the M2 tape leave it 0. NULL is a no-op.
+ * Returns 0, -FIFA96_ERR_INVALID (NULL). */
+int fifa96_match_run_set_live_start(struct fifa96_match_run *mr, int on);
+
+/* FU-343 (P1): the render eye. Non-live returns the FU-71 focus triple
+ * (`render.camera.pos_*`, the pre-P1 behaviour). Live returns the native
+ * camera object 0 pose (image 0x107508, A1 §4/A2 §2):
+ *   eye = focus + (-1920, 160, 30)
+ * i.e. the focus triple is the ball-follow CAMERA and the rendered eye is a
+ * separate view object. The same eye feeds the pitch and the sprite pass, so a
+ * live frame stays internally consistent. NULL mr/out -> no write. */
+void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out);
 
 /* Write the FU-62 §4.6 period lengths the clock's period-end check reads
  * ([0x5881A] regular periods 0/1, [0x5881C] extra periods 2/3), in whole
@@ -2346,6 +2385,32 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
  * sprite banks in it). */
 int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surface *s,
                            const char *player_bank, const char *pitch_bank);
+
+/* FU-343 (P1): stage the derived visible-match pitch and live kit colours.
+ *
+ * Fields: /ART/GAMEFLD1.PVI -> `FplainH.fsh`/`FplainV.fsh` (64x64 tiles; the
+ * retail GAMEFLD3 carries FHstripH/V and is the fallback, A1 §1) and
+ * /ART/GAMESTD1.PVI -> `STACcovr.fsh` (a 64x64 crowd frame), both through the
+ * engine asset table into the render-owned fifa96_pitch arena (A1 §1/§3).
+ * Kits: /ART/GAMEART0.PVI `PALteam.fsh` frame 0 supplies the real colours for
+ * the sprite body bands (the derived PALsys frame-2 base leaves them magenta,
+ * A7 §4); frame 2 supplies the team-1 band colours. The live palette is built
+ * from PALsys frame 0 (the measured full match palette: the Fplain grass
+ * indices 1..29 are green there; frame 2 is magenta at those indices and a
+ * full PALteam base turns the pitch cyan), then gets the FU-98 kit remap and
+ * the frame-2 appends, the PALteam frame-0 overlay over the sprite bands and
+ * the team-1 band slots 230..245. `remap_team[0]` is the identity,
+ * `remap_team[1]` maps 195..203 -> 230..238 and 208..214 -> 239..245; the
+ * sprite draw uses them only when live_start. The pitch markings index 0xFE is
+ * forced to white.
+ *
+ * This is a soft stage: an absent/undecodable container leaves the previous
+ * pitch/kit state untouched and returns the negative fifa96_err_t. It does not
+ * touch the sprite arena, frames, banks, HUD or ball state. The bridge calls it
+ * only on the live path, so the M2 tape never reaches the palette/remap edits.
+ * Returns 0, -FIFA96_ERR_INVALID (NULL mr/eng), -FIFA96_ERR_STATE (run not live
+ * or no asset table), -FIFA96_ERR_NOT_FOUND or -FIFA96_ERR_UNSUPPORTED. */
+int fifa96_match_run_stage_pitch(struct fifa96_match_run *mr, struct fifa96_engine *eng);
 
 /* OL-T11-6 (M2 playable-match Task 1): the derived native match palette.
  *

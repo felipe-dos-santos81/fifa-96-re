@@ -437,6 +437,7 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_frontend_run.c
   src/fifa96_engine/fifa96_match_bridge.c
   src/fifa96_engine/fifa96_match_run.c
+  src/fifa96_engine/fifa96_pitch.c
   src/fifa96_engine/fifa96_match_handlers.c
   src/fifa96_engine/fifa96_match_entities.c
   src/fifa96_engine/fifa96_match_phase_machine.c

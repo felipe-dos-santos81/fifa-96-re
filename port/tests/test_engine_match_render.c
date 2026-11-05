@@ -39,6 +39,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "fifa96_engine/fifa96_engine.h"
@@ -1270,6 +1271,184 @@ static void test_engine_match_step_renders(void) {
 }
 
 /* ------------------------------------------------------------------------ *
+ * FU-343 (P1): the visible match — live_start gate, camera-0 eye, pitch,
+ * formation and the per-team kit remap.
+ *
+ * The ISO-gated cases use the retail containers the windowed bridge stages:
+ * /ART/PLAYART.PVI + /ART/GAMEART0.PVI for the sprites/palette, then
+ * /ART/GAMEFLD3.PVI + /ART/GAMESTD1.PVI through fifa96_match_run_stage_pitch.
+ * A direct begin with live_start = 1 is the headless equivalent of the
+ * windowed bridge's opt-in (the bridge gates it on a surface + !headless).
+ * ------------------------------------------------------------------------ */
+
+#define LIVE_ISO_PATH "data/game/FIFAPCCD96.iso"
+
+static int live_file_exists(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return 0;
+  fclose(f);
+  return 1;
+}
+
+struct live_fixture {
+  fifa96_platform *plat;
+  struct fifa96_engine *engine;
+  struct fifa96_match_run mr;
+  struct fifa96_surface *s;
+};
+
+/* The run must be begun at its final address (the engine keeps mr->engine and
+ * engine->match pointers), so the fixture owns the struct. */
+static void live_fixture_make(struct live_fixture *f) {
+  memset(f, 0, sizeof *f);
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.step_ns = 10000000ull;   /* one 100 Hz PIT tick per engine step */
+  f->plat = fifa96_platform_null_create(&pcfg);
+  assert(f->plat != NULL);
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = LIVE_ISO_PATH;
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  f->engine = fifa96_engine_create(&ecfg, f->plat);
+  assert(f->engine != NULL);
+  assert(fifa96_engine_boot(f->engine) == 0);
+  memset(&f->mr, 0, sizeof f->mr);
+  fifa96_match_run_init(&f->mr);
+  assert(fifa96_match_run_set_live_start(&f->mr, 1) == 0);
+  assert(f->mr.live_start == 1);
+  assert(fifa96_match_run_begin(&f->mr, f->engine, 0) == 0);
+  assert(f->mr.running == 1);
+  assert(f->mr.state.phase == 2);   /* the live open-play phase */
+  f->s = fifa96_surface_create(320, 240);
+  assert(f->s != NULL);
+  assert(fifa96_match_run_stage(&f->mr, f->s, "/ART/PLAYART.PVI",
+                                "/ART/GAMEART0.PVI") == 0);
+  assert(f->mr.render.enabled == 1);
+  assert(f->mr.render.palette_ready == 1);
+  assert(fifa96_match_run_stage_pitch(&f->mr, f->engine) == 0);
+}
+
+static void live_fixture_drop(struct live_fixture *f) {
+  assert(fifa96_match_run_end(&f->mr) == 0);
+  fifa96_match_run_init(&f->mr);
+  fifa96_engine_destroy(f->engine);
+  fifa96_platform_destroy(f->plat);
+  fifa96_surface_destroy(f->s);
+}
+
+static void test_live_start_gate_and_eye(void) {
+  struct fifa96_match_run mr;
+  memset(&mr, 0xAA, sizeof mr);
+  fifa96_match_run_init(&mr);
+  assert(mr.live_start == 0);
+  assert(fifa96_match_run_set_live_start(NULL, 1) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_set_live_start(&mr, 1) == 0 && mr.live_start == 1);
+  assert(fifa96_match_run_set_live_start(&mr, 0) == 0 && mr.live_start == 0);
+
+  assert(fifa96_camera_init(&mr.render.camera, 480, 0, -120) == FIFA96_OK);
+  fifa96_render_pos eye = {0, 0, 0};
+  fifa96_match_run_eye(&mr, &eye);
+  assert(eye.x == 480 && eye.y == 0 && eye.z == -120);   /* non-live: focus */
+
+  mr.live_start = 1;
+  fifa96_match_run_eye(&mr, &eye);
+  assert(eye.x == 480 - 1920 && eye.y == 160 && eye.z == -120 + 30);
+  /* The offset is the camera-0 object image (A1 §4/A2 §2). */
+  assert(mr.render.camera.pos_x - eye.x == 1920);
+  assert(eye.y - mr.render.camera.pos_y == 160);
+  assert(eye.z - mr.render.camera.pos_z == 30);
+  fifa96_match_run_eye(NULL, &eye);
+  fifa96_match_run_eye(&mr, NULL);
+}
+
+static void test_live_begin_formation_pitch_and_kit(void) {
+  struct live_fixture f;
+  live_fixture_make(&f);
+  struct fifa96_match_run_render *r = &f.mr.render;
+
+  assert(r->pitch_art.staged == 1);
+  assert(r->pitch_art.tile_h != NULL && r->pitch_art.tile_v != NULL);
+  assert(r->pitch_art.crowd != NULL);
+  assert(r->team_remap_ready == 1);
+
+  /* Camera bootstrap: one seeded event; the tracked bind is the controlled
+   * record (the native [0x157A83] actor is NONE right after the act-9 reset,
+   * so the FU-70 slot entity is the live controlled record). */
+  assert(r->camera.event_param != 0 || r->camera.timer_limit != 0);
+  assert(r->camera.tracked == f.mr.slot.entity ||
+         r->camera.tracked == f.mr.entities.controlled);
+
+  /* All 22 records kept the kickoff/formation placement: not the collapsed
+   * x = 0x7E0 line (the live path skipped period_setup's act-0x0A arm). */
+  int unique = 0;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      const struct fifa96_match_entity *e = &f.mr.entities.team[t].records[i];
+      assert(!(abs(e->pos_x - 0x7E0) <= 16 && abs(e->pos_z) <= 16));
+      int seen = 0;
+      for (uint32_t t2 = 0; t2 < FIFA96_MATCH_ENTITY_TEAMS && !seen; t2++)
+        for (uint32_t j = 0; j < FIFA96_MATCH_ENTITY_RECORDS && !seen; j++) {
+          if (t2 == t && j == i) continue;
+          const struct fifa96_match_entity *o = &f.mr.entities.team[t2].records[j];
+          if (o->pos_x == e->pos_x && o->pos_z == e->pos_z) seen = 1;
+        }
+      if (!seen) unique++;
+    }
+  }
+  assert(unique > 10);
+
+  /* One granted frame: still no collapse, the focus/eye pair stays coherent. */
+  assert(fifa96_engine_step(f.engine) == 0);
+  fifa96_render_pos eye;
+  fifa96_match_run_eye(&f.mr, &eye);
+  assert(eye.x == r->camera.pos_x - 1920);
+  assert(eye.y == r->camera.pos_y + 160);
+  assert(eye.z == r->camera.pos_z + 30);
+
+  /* The rendered live frame is mostly pitch (the floor plus the crowd band),
+   * not the cleared background. */
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  uint32_t non_background = 0;
+  const uint32_t total = (uint32_t)f.s->width * (uint32_t)f.s->height;
+  for (uint32_t i = 0; i < total; i++)
+    if (f.s->indexed[i] != r->background) non_background++;
+  assert(non_background > total * 30u / 100u);
+
+  /* Two teams' kit bands differ: the live stage overlays PALteam frame 0 over
+   * the sprite body bands (team 0) and writes frame 2's shirt/shorts bands
+   * into the free 230..245 slots (team 1, A7 §4). */
+  assert(r->remap_team[0][195] == 195 && r->remap_team[0][208] == 208);
+  assert(r->remap_team[1][195] == 230 && r->remap_team[1][203] == 238);
+  assert(r->remap_team[1][208] == 239 && r->remap_team[1][214] == 245);
+  int shorts_diff = 0, shirt_diff = 0;
+  for (int i = 0; i < 9; i++)
+    for (int c = 0; c < 3; c++)
+      shorts_diff += abs((int)r->palette[(230 + i) * 3 + c] -
+                         (int)r->palette[(195 + i) * 3 + c]);
+  for (int i = 0; i < 7; i++)
+    for (int c = 0; c < 3; c++)
+      shirt_diff += abs((int)r->palette[(239 + i) * 3 + c] -
+                        (int)r->palette[(208 + i) * 3 + c]);
+  assert(shorts_diff > 0 && shirt_diff > 0);
+  /* The kit bands are no longer the PALsys magenta (A7 §4). */
+  int kit_pixels = 0;
+  for (int i = 195; i <= 214; i++) {
+    if (!(r->palette[i * 3] == 0xE0 && r->palette[i * 3 + 1] == 0x44 &&
+          r->palette[i * 3 + 2] == 0xA0))
+      kit_pixels++;
+  }
+  assert(kit_pixels > 0);
+  /* The v1 marking slot is white. */
+  assert(r->palette[0xFE * 3] == 0xFF && r->palette[0xFE * 3 + 1] == 0xFF &&
+         r->palette[0xFE * 3 + 2] == 0xFF);
+
+  live_fixture_drop(&f);
+}
+
+/* ------------------------------------------------------------------------ *
  * OL-T11-7 (M2 full-gameplay P0.2): the match HUD (FU-148 §1/§6.1).
  *
  * First-hand native chain: FUN_000565BC's gates (period < 4 via FUN_0004B5F4,
@@ -1947,6 +2126,11 @@ int main(void) {
   test_overlay_gate_and_draw();
   test_ball_row_dormant();
   test_engine_match_step_renders();
+  test_live_start_gate_and_eye();
+  if (live_file_exists(LIVE_ISO_PATH))
+    test_live_begin_formation_pitch_and_kit();
+  else
+    puts("test_engine_match_render: no ISO, live pitch case skipped");
   puts("test_engine_match_render OK");
   return 0;
 }

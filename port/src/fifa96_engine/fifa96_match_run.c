@@ -1869,6 +1869,27 @@ static void match_run_entity_drain(struct fifa96_match_run *mr) {
   }
 }
 
+/* FU-343 (P1): the derived live camera follow. The native FU-71 event/pan
+ * producers are event-driven (the live path has no kickoff event; A2 §2), so
+ * the live windowed match uses the ball as the focus while no native pan event
+ * is active. `render.camera` stays the FU-71 focus triple; the rendered eye is
+ * the separate camera-0 rig (fifa96_match_run_eye). The `tracked` bind is kept
+ * on the controlled record (the native 0x1577CA writer is the camera event;
+ * the engine's row-04/ball-receive producers may rebind it later). Derived
+ * stand-in for the unported FU-310 camera place, not a native producer; the
+ * native rig smoothing and the live orientation director stay open legs. */
+static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
+  struct fifa96_camera *cam = &mr->render.camera;
+  if (cam->event_param != 0 || cam->speed != 0) return;   /* native pan active */
+  int32_t tracked = mr->entities.controlled;
+  if (tracked == FIFA96_MATCH_ENTITY_NONE) tracked = mr->slot.entity;
+  if (tracked != FIFA96_MATCH_ENTITY_NONE && cam->tracked != tracked)
+    (void)fifa96_camera_set_tracked(cam, tracked);
+  cam->pos_x = mr->entities.ball.x;
+  cam->pos_y = 0;
+  cam->pos_z = mr->entities.ball.z;
+}
+
 /* FU-85 §4/FUN_00036C70 (first-hand disassemble_function 0x36C70) stages the
  * 23 render slots per frame body: team 0 records 0..10 (base 0x1588A4) then
  * team 1 records 0..10 (0x1590D9), each from rec+0x59/5D/61 with hidden set by
@@ -2168,7 +2189,16 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->yaw = MATCH_RUN_VIEW_YAW;
   r->pitch = MATCH_RUN_VIEW_PITCH;
   r->view_ratio = MATCH_RUN_VIEW_RATIO;
+  r->pitch_art.sky_index = FIFA96_PITCH_SKY_INDEX;
+  r->pitch_art.line_index = FIFA96_PITCH_LINE_INDEX;
   for (int i = 0; i < 256; i++) r->remap[i] = (uint8_t)(i == 0 ? 0xFF : i);
+  /* FU-343 (P1): both per-team translations start as the identity; the live
+   * kit stage rewrites team 1's shirt/shorts bands into the 230..245 slots
+   * (A7 §4). The non-live draw never selects remap_team. */
+  for (int team = 0; team < 2; team++)
+    for (int i = 0; i < 256; i++)
+      r->remap_team[team][i] = (uint8_t)(i == 0 ? 0xFF : i);
+  r->team_remap_ready = 0;
   for (int i = 0; i < (int)FIFA96_MATCH_RUN_RENDER_SLOTS; i++) r->entities[i].anim_turn = 1;
 }
 
@@ -2302,6 +2332,9 @@ static void match_run_slot_bind(struct fifa96_match_run *mr) {
  * after init. A run whose render state was set without staging (owner NULL) is
  * left untouched. */
 static void match_run_release_stage(struct fifa96_match_run *mr) {
+  /* FU-343 (P1): the pitch arena is independent of stage_owner, so release it
+   * before the stage_owner early return. */
+  fifa96_pitch_release(&mr->render.pitch_art);
   if (!mr->stage_owner) return;
   free(mr->stage_owner);
   mr->stage_owner = NULL;
@@ -2505,6 +2538,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
    * matrices are a staged leg (FU201-L4: no match-begin engine consumer; the
    * arm's trigger is a runtime non-permutation, FU201-L1). */
   mr->period_setup_live = 0;
+  mr->live_start = 0;                  /* FU-343 P1: native begin order default */
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
   memset(mr->formation_current, 0, sizeof mr->formation_current);
@@ -2897,14 +2931,61 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
      * code-0x24 move. The retained frame-body `global_5882a` arm (`:3921`) is the
      * remaining derived stage-1 remainder — **leg FU203-L2** (idempotent with
      * the phase-0x17 stage-1 arm; no double-run). */
-    if (mr->period_setup_live) (void)fifa96_match_run_period_setup(mr, 1);
+    if (!mr->live_start && mr->period_setup_live)
+      (void)fifa96_match_run_period_setup(mr, 1);
     mr->state.phase = phase_before;
     mr->state.prev_phase = prev_before;
     mr->phase_machine.state = pm_state_before;
     mr->phase_machine.phase = pm_phase_before;
   }
+  /* FU-343 (P1): the live-start bootstrap. The windowed bridge opted in (the
+   * M2 tape/direct begin never do): the begin kickoff placement above is the
+   * 352ko formation commit and must survive, so the native pre-match
+   * situation-0/act-0xA collapse is skipped above. Enter the live phase 2
+   * directly (FU-143's class-1 play phase), seed the one derived camera event
+   * (A2 §4 P4: native has no kickoff event; the FU-310 camera place is
+   * unported) and bind the tracked record to the controlled player. These are
+   * the engine's live stand-ins, not native producers. */
+  if (mr->live_start) {
+    (void)fifa96_match_run_write_phase(mr, 2u);
+    (void)fifa96_camera_event_set(&mr->render.camera, 0, 0, 0x50, 0);
+    (void)fifa96_camera_event_dir(&mr->render.camera, 0, 0, 0);
+    /* FU-343 (P1): bind the controlled record. The native [0x157A83] actor
+     * cell (entities.controlled) is cleared by the act-9 reset and only
+     * republished by the entity chain; the human-controlled record lives in
+     * the FU-70 slot (`slot.entity`). Prefer the native actor when live, else
+     * the slot bind. */
+    int32_t tracked = mr->entities.controlled;
+    if (tracked == FIFA96_MATCH_ENTITY_NONE) tracked = mr->slot.entity;
+    if (tracked != FIFA96_MATCH_ENTITY_NONE)
+      (void)fifa96_camera_set_tracked(&mr->render.camera, tracked);
+  }
   match_run_camera_trace_open(mr);   /* FU313 §4.1: immediately before return 0 */
   return 0;
+}
+
+int fifa96_match_run_set_live_start(struct fifa96_match_run *mr, int on) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->live_start = on ? 1u : 0u;
+  return 0;
+}
+
+void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out) {
+  if (!mr || !out) return;
+  if (mr->live_start) {
+    /* FU-343 P1 / A1 §4, A2 §2: the native renders from camera object 0
+     * (image 0x107508: +0x10 = -1920, +0x14 = 160, +0x18 = 30; first-hand
+     * `read_memory 0x107510` = 80 f8 ff ff a0 00 00 00 1e 00 00 00), while the
+     * FU-71 triple 0x15774C/50/54 is the follow/focus cell. The engine's
+     * focus is render.camera; the eye is the separate rig. */
+    out->x = mr->render.camera.pos_x - 1920;
+    out->y = mr->render.camera.pos_y + 160;
+    out->z = mr->render.camera.pos_z + 30;
+  } else {
+    out->x = mr->render.camera.pos_x;
+    out->y = mr->render.camera.pos_y;
+    out->z = mr->render.camera.pos_z;
+  }
 }
 
 int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_seconds,
@@ -4917,6 +4998,10 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
                                       mr);
     if (rc != FIFA96_OK) return rc;
     match_run_entity_drain(mr);
+    /* FU-343 (P1): the live focus follow, after the entity drain and before
+     * the referee/phase tail (the frame draws this camera). Non-live runs keep
+     * the event/pan-only camera (M2 byte-identical). */
+    if (mr->live_start) match_run_live_camera_follow(mr);
     /* FU-150 P2: the referee machine (the native phase-body/act invocation
      * runs inside the entity/phase chain) once per granted frame. Idle when no
      * machine is active, so a fresh run's tape is unchanged. */
@@ -5766,19 +5851,45 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   int32_t matrix[9];
   int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
   int32_t recip_y[FIFA96_PROJECTION_RECIP_COUNT];
+  /* FU-343 (P1): the live lens. The native camera-0 record's +0x4C ratio
+   * 0x1500 is the near-threshold field, not an entity FOV term (FU-88 §5), and
+   * the fixed 320-wide projection crops most of the kickoff formation at the
+   * native near-goal standoff. The live path halves the horizontal focal
+   * dimension only, so the camera frames both halves and both teams stay
+   * readable at the native sprite scale; the vertical lens is unchanged. The
+   * non-live projection keeps the pinned dimensions byte-identically. Derived
+   * stand-in for the unported native lens director (FU-157 R2-L1, leg). */
+  int32_t lens_w = s->width;
+  int32_t lens_h = s->height;
+  if (mr->live_start) {
+    lens_w = (s->width + 1) / 2;
+    if (lens_w < 1) lens_w = 1;
+  }
   fifa96_err_t err = fifa96_projection_matrix(r->yaw, r->pitch, matrix);
   if (err != FIFA96_OK) return (int)err;
-  err = fifa96_projection_reciprocal(s->width, recip_x);
+  err = fifa96_projection_reciprocal(lens_w, recip_x);
   if (err != FIFA96_OK) return (int)err;
-  err = fifa96_projection_reciprocal(s->height, recip_y);
+  err = fifa96_projection_reciprocal(lens_h, recip_y);
   if (err != FIFA96_OK) return (int)err;
 
   /* FU-85 §4 camera staging (FUN_00036C70's camera copy/bounds over the FU-71
-   * block). */
-  const fifa96_render_pos cam_src = { r->camera.pos_x, r->camera.pos_y, r->camera.pos_z };
+   * block). FU-343 (P1): the live path renders from the separate camera-0 rig
+   * (focus + (-1920,160,30), A1 §4/A2 §2); the non-live path keeps the FU-71
+   * focus triple unchanged (M1/M2). */
+  fifa96_render_pos cam_src;
+  fifa96_match_run_eye(mr, &cam_src);
   fifa96_render_pos cam;
   err = fifa96_render_camera_stage(&cam_src, &cam);
   if (err != FIFA96_OK) return (int)err;
+
+  /* FU-343 (P1): the visible-match pitch, after the background clear and
+   * before the entity sort so every sprite blits over the floor. Only the live
+   * path draws it; the pitch and sprite passes share `cam`. */
+  if (mr->live_start && r->pitch_art.staged) {
+    err = (fifa96_err_t)fifa96_pitch_draw(&r->pitch_art, s, &cam, r->yaw, matrix, &clip,
+                                          &center, lens_w, lens_h);
+    if (err != FIFA96_OK) return (int)err;
+  }
 
   /* FU-89 §6/FUN_000589E0: the near-depth threshold `[0x54350]` is
    * `max((0x14<<16)/(2*camera +0x4C ratio), 0x78)`, or the 0x78 fallback when
@@ -5919,7 +6030,15 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     int32_t scale = (int32_t)(((int64_t)(int32_t)size_base * 0x5D1) >> 16);
     int32_t x = (int32_t)((int64_t)slots[slot].clean.x >> 16);
     int32_t y = (int32_t)((int64_t)slots[slot].clean.y >> 16);
-    int rc = match_run_draw_sprite(s, &sprite, r->remap, x, y, scale, frame.mirrored, &clip);
+    /* FU-343 (P1): the live per-team kit translation (A7 §4). Only the 22
+     * player slots select it; the ball (slot 22) and every HUD/overlay pass
+     * keep the current `remap`. Non-live keeps `remap` for every slot. */
+    const uint8_t *sprite_remap = r->remap;
+    if (mr->live_start && r->team_remap_ready &&
+        slot < (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      sprite_remap = r->remap_team[slot / FIFA96_MATCH_ENTITY_RECORDS];
+    int rc = match_run_draw_sprite(s, &sprite, sprite_remap, x, y, scale, frame.mirrored,
+                                   &clip);
     if (rc != 0) return rc;
     /* FU-85 §2 second pass: composite animator classes resolve an overlay
      * frame (out2) and the original blits it with a second FUN_00057080 call
@@ -5931,7 +6050,8 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
       if (fifa96_sprite_frame_parse(&sprite_bank,
                                     (uint32_t)(frame.overlay - r->sprite_data),
                                     &overlay) == FIFA96_OK) {
-        rc = match_run_draw_sprite(s, &overlay, r->remap, x, y, scale, frame.mirrored, &clip);
+        rc = match_run_draw_sprite(s, &overlay, sprite_remap, x, y, scale, frame.mirrored,
+                                   &clip);
         if (rc != 0) return rc;
       }
     }
@@ -6593,6 +6713,172 @@ out_cache:
   free(arena);
   fifa96_cache_destroy(cache);
   return rc;
+}
+
+/* FU-343 (P1): the live kit palette/remap stage (A7 §4). PALteam.fsh frame 0
+ * is the real sprite-band palette (the PALsys frame-2 base leaves the body
+ * indices magenta); frame 2 is the second team's band palette. The live base
+ * is PALsys **frame 0** — the measured full match palette whose Fplain grass
+ * indices 1..29 are green (frame 2 is magenta there, and a full PALteam base
+ * turns the pitch cyan). The overlay therefore starts at 30 (the Fplain tile
+ * only uses 1..29) and covers the sprite body bands; team 1's shirt/shorts
+ * bands move to the free 230..245 slots. */
+#define MATCH_RUN_KIT_BANK "PALteam.fsh"
+#define MATCH_RUN_KIT_MAGENTA_R 4u
+#define MATCH_RUN_KIT_MAGENTA_G 63u
+#define MATCH_RUN_KIT_MAGENTA_B 56u
+
+static int match_run_palette_frame(const uint8_t *bank, size_t bank_len, uint32_t frame,
+                                   uint8_t rgb6[768]) {
+  fifa96_sprite_bank parsed;
+  fifa96_sprite_entry entry;
+  fifa96_sprite_chunk chunk;
+  const uint8_t *rgb = NULL;
+  uint16_t count = 0;
+  if (fifa96_sprite_bank_parse(bank, bank_len, &parsed) != FIFA96_OK) return 0;
+  if (fifa96_sprite_bank_entry(&parsed, frame, &entry) != FIFA96_OK) return 0;
+  if (fifa96_sprite_chunk_parse(&parsed, entry.offset, &chunk) != FIFA96_OK) return 0;
+  if (fifa96_sprite_chunk_palette(&chunk, &rgb, &count) != FIFA96_OK) return 0;
+  if (!rgb || count < MATCH_RUN_PALETTE_COUNT) return 0;
+  memcpy(rgb6, rgb, 768);
+  return 1;
+}
+
+static int match_run_stage_live_kit(struct fifa96_match_run *mr,
+                                    struct fifa96_engine *eng) {
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  uint8_t *container = NULL;
+  size_t container_len = 0;
+  uint8_t kit0[768];
+  uint8_t kit2[768];
+  uint8_t sys0[768];
+  uint8_t sys2[768];
+  int have_team = 0;
+  int have_sys = 0;
+  struct fifa96_match_run_render *r = &mr->render;
+  if (!r->palette_ready) return -FIFA96_ERR_STATE;
+  if (fifa96_asset_read(eng->assets, MATCH_RUN_FORMATION_BANK, &bytes, &len) !=
+      FIFA96_OK)
+    return -FIFA96_ERR_NOT_FOUND;
+  if (match_stage_container(bytes, len, &container, &container_len) != 0) {
+    fifa96_asset_free(bytes);
+    return -FIFA96_ERR_UNSUPPORTED;
+  }
+  struct fifa96_bigf_info info;
+  if (fifa96_bigf_parse(container, container_len, &info) != FIFA96_OK) {
+    free(container);
+    fifa96_asset_free(bytes);
+    return -FIFA96_ERR_UNSUPPORTED;
+  }
+  for (size_t i = 0; i < info.count && !(have_team && have_sys); i++) {
+    uint32_t off = 0;
+    uint32_t size = 0;
+    const char *name = NULL;
+    uint8_t *bank = NULL;
+    uint32_t bank_len = 0;
+    uint32_t bank_count = 0;
+    if (fifa96_bigf_record(&info, i, &off, &size, &name) != FIFA96_OK) continue;
+    if (!name) continue;
+    int is_team = !have_team && match_run_name_eq(name, MATCH_RUN_KIT_BANK);
+    int is_sys = !have_sys && match_run_name_eq(name, MATCH_RUN_PALETTE_BANK);
+    if (!is_team && !is_sys) continue;
+    int got = match_stage_entry(container + off, size, container_len - off, &bank,
+                                &bank_len, &bank_count);
+    if (got != 1) continue;
+    if (is_team) {
+      if (match_run_palette_frame(bank, bank_len, 0u, kit0) &&
+          match_run_palette_frame(bank, bank_len, 2u, kit2))
+        have_team = 1;
+    } else {
+      if (match_run_palette_frame(bank, bank_len, 0u, sys0) &&
+          match_run_palette_frame(bank, bank_len, 2u, sys2))
+        have_sys = 1;
+    }
+    free(bank);
+  }
+  free(container);
+  fifa96_asset_free(bytes);
+  if (!have_sys) return -FIFA96_ERR_UNSUPPORTED;
+
+  /* The live base is PALsys frame 0 (the full match palette: the Fplain grass
+   * indices 1..29 are green there). The derived non-live default uses the
+   * frame-2 chunk itself (OL-T11-6 leg), which is magenta at those indices —
+   * measured by rendering P1's first live frame pink. The native base is the
+   * previously installed front-end palette (0x14B200, not statically
+   * derivable); frame 0 is the derived live stand-in. The frame-2 appends and
+   * the FU-98 kit remap follow the native order. */
+  uint8_t pal6[768];
+  memcpy(pal6, sys0, sizeof pal6);
+  (void)fifa96_sprite_palette_kit_remap(pal6, MATCH_RUN_PALETTE_COUNT);
+  memcpy(pal6 + MATCH_RUN_PALETTE_APPEND_A_OFF,
+         sys2 + MATCH_RUN_PALETTE_APPEND_A_OFF, MATCH_RUN_PALETTE_APPEND_A_LEN);
+  memcpy(pal6 + MATCH_RUN_PALETTE_APPEND_B_OFF,
+         sys2 + MATCH_RUN_PALETTE_APPEND_B_OFF, MATCH_RUN_PALETTE_APPEND_B_LEN);
+  for (int i = 0; i < 256; i++) {
+    r->palette[i * 3] = (uint8_t)(pal6[i * 3] << 2);
+    r->palette[i * 3 + 1] = (uint8_t)(pal6[i * 3 + 1] << 2);
+    r->palette[i * 3 + 2] = (uint8_t)(pal6[i * 3 + 2] << 2);
+  }
+  if (!have_team) return -FIFA96_ERR_UNSUPPORTED;
+
+  /* Team 0: keep the identity translation and overlay the real sprite-band
+   * colours over the PALsys base (skip the Fplain tile indices 1..29). */
+  for (int i = 0; i < 256; i++) {
+    r->remap_team[0][i] = (uint8_t)(i == 0 ? 0xFF : i);
+    r->remap_team[1][i] = (uint8_t)(i == 0 ? 0xFF : i);
+  }
+  for (int i = 30; i <= 229; i++) {
+    if (kit0[i * 3] == MATCH_RUN_KIT_MAGENTA_R &&
+        kit0[i * 3 + 1] == MATCH_RUN_KIT_MAGENTA_G &&
+        kit0[i * 3 + 2] == MATCH_RUN_KIT_MAGENTA_B)
+      continue;
+    r->palette[i * 3] = (uint8_t)(kit0[i * 3] << 2);
+    r->palette[i * 3 + 1] = (uint8_t)(kit0[i * 3 + 1] << 2);
+    r->palette[i * 3 + 2] = (uint8_t)(kit0[i * 3 + 2] << 2);
+  }
+  /* Team 1: shirt 208..214 -> 239..245, shorts 195..203 -> 230..238 (A7 §4);
+   * the translation redirects those bands, the palette slots take frame 2. */
+  for (int i = 195; i <= 203; i++) {
+    int dst = 230 + (i - 195);
+    r->remap_team[1][i] = (uint8_t)dst;
+    r->palette[dst * 3] = (uint8_t)(kit2[i * 3] << 2);
+    r->palette[dst * 3 + 1] = (uint8_t)(kit2[i * 3 + 1] << 2);
+    r->palette[dst * 3 + 2] = (uint8_t)(kit2[i * 3 + 2] << 2);
+  }
+  for (int i = 208; i <= 214; i++) {
+    int dst = 239 + (i - 208);
+    r->remap_team[1][i] = (uint8_t)dst;
+    r->palette[dst * 3] = (uint8_t)(kit2[i * 3] << 2);
+    r->palette[dst * 3 + 1] = (uint8_t)(kit2[i * 3 + 1] << 2);
+    r->palette[dst * 3 + 2] = (uint8_t)(kit2[i * 3 + 2] << 2);
+  }
+  /* The v1 marking index: no PALsys/PALteam entry is white, so dedicate the
+   * unused 0xFE slot (no PLAYART frame uses > 229, A7 §4). */
+  r->palette[FIFA96_PITCH_LINE_INDEX * 3] = 0xFF;
+  r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] = 0xFF;
+  r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 2] = 0xFF;
+  r->team_remap_ready = 1;
+  return 0;
+}
+
+int fifa96_match_run_stage_pitch(struct fifa96_match_run *mr, struct fifa96_engine *eng) {
+  int rc;
+  if (!mr || !eng) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  if (!eng->assets) return -FIFA96_ERR_STATE;
+  /* A1 §1: the field index table is [1]fplain [3]fhstrip. GAMEFLD3 is the
+   * retail session's field (FU-2) but is the *striped* FHstrip container; the
+   * plain FplainH/V tile the P1 brief names lives in GAMEFLD1. Try the plain
+   * field first and fall back to the retail FHstrip field, so either binding
+   * renders. */
+  rc = fifa96_pitch_stage(&mr->render.pitch_art, eng, "/ART/GAMEFLD1.PVI",
+                          "/ART/GAMESTD1.PVI");
+  if (rc != 0)
+    rc = fifa96_pitch_stage(&mr->render.pitch_art, eng, "/ART/GAMEFLD3.PVI",
+                            "/ART/GAMESTD1.PVI");
+  if (rc != 0) return rc;
+  return match_run_stage_live_kit(mr, eng);
 }
 
 /* FU-150 P2 — fouls / referee / offside: the engine seam over the
