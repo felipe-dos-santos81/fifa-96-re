@@ -3941,6 +3941,11 @@ static void run_scenario(int with_iso, char *transcript, size_t cap, size_t *out
    * dispatches there. main() compares this value. */
   res->mask_final = e->match_run.dispatched_ok;
   fifa96_platform_null_stats(plat, out_stats);
+  /* P3: the headless tape must stay silent — match audio is gated on
+   * cfg.headless, so the null backend sees no audio_submit call at all and
+   * the deterministic present hash is the only accumulated stream. */
+  assert(out_stats->audio_frames == 0u);
+  assert(out_stats->audio_hash == 0u);
   *out_len = used;
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);

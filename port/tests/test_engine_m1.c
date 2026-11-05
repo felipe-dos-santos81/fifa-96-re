@@ -151,6 +151,10 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
   }
 
   fifa96_platform_null_stats(plat, out_stats);
+  /* P3: the headless tape must stay silent — match audio is gated on
+   * cfg.headless, so the null backend sees no audio_submit call at all. */
+  assert(out_stats->audio_frames == 0u);
+  assert(out_stats->audio_hash == 0u);
   *out_len = used;
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);

@@ -5,6 +5,7 @@
 #include "fifa96_engine/fifa96_engine.h"
 #include "fifa96_engine/fifa96_frontend_run.h"
 #include "fifa96_engine/fifa96_intro.h"
+#include "fifa96_engine/fifa96_match_audio.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_surface.h"
 
@@ -30,6 +31,7 @@ struct fifa96_engine {
   struct fifa96_frontend_run frontend;
   struct fifa96_match_run match_run; /* engine-owned run the bridge begins */
   struct fifa96_match_run *match; /* active match driver, NULL when none */
+  struct fifa96_match_audio audio; /* P3 match audio (crowd + whistle) */
   enum fifa96_engine_mode mode;
   struct fifa96_engine_clock clock;
   uint64_t last_ns;      /* now_ns() at the previous step; 0 before the first */
