@@ -10458,9 +10458,20 @@ static void test_row1b_pan_feeds_row1a_and_screen(void) {
   assert(mr.match1b_pan_z == -8);           /* -(0x20 >> 2) */
   assert(mr.render.camera.vel_x != 0 || mr.render.camera.vel_z != 0);
 
-  /* The goal-screen selection reads the post-pan C2 (word 0x1577C2). */
-  mr.running = 1;
-  assert(fifa96_match_run_screen_install(&mr, 0, 0, 0) == 0);
+  /* The goal-screen selection reads the post-pan C2 (word 0x1577C2). The
+   * leg-0 SETUP0 queues situation 0xC, which invokes the act-9 stage 0;
+   * phase-53 T1's live camera reset (`0x88FA0`/`0x700F4`) zeroes the row-1B
+   * pan pair there, so re-stage the pair the selection is meant to consume
+   * (native `0x9497D` reads the current word after the install). */
+  {
+    int32_t pan_x = mr.render.camera.vel_x;
+    int32_t pan_z = mr.render.camera.vel_z;
+    mr.running = 1;
+    assert(fifa96_match_run_screen_install(&mr, 0, 0, 0) == 0);
+    assert(mr.render.camera.vel_x == 0 && mr.render.camera.vel_z == 0);
+    mr.render.camera.vel_x = pan_x;
+    mr.render.camera.vel_z = pan_z;
+  }
   mr.situation_id = 0;
   mr.situation_pending = 0;
   mr.render.camera.pos_z = -1;

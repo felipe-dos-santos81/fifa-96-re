@@ -8818,3 +8818,42 @@ direct-arm consumer (it runs after `fifa96_outfield_input_row` computes
 `out.forced`/`out.chase`/`out.no_edge`; native runs the switch before the
 `0x7CC82` tail). The stale §11 "chase arm's `[rec+0x20] == 0` gate keeps
 it unreachable" sentence is quoted as superseded in FU-75 §13.
+
+## Phase 53 — the act-9 stage-0 sinks (FU181-L5, FU-342, 2026-11-05)
+
+The act-9 stage-0 body `0x88F81..0x88FE7` runs its presentation/placement
+sinks after the `0x88F9A` gate clear: the camera reset `0x88FA0`
+(`0x700F4(0,0,0)`), the match/camera state reset `0x88FA5` (`0x73E28`), the
+phase-0x15 write `0x88FB8` (`0x740A0`, landed phase 41), the placement commit
+`0x88FBD` (`0x73E08`) and the presentation bind `0x88FD1` (`0x4C324`). This
+phase lands them in two measured re-pins. R7 is the fresh read
+(`/tmp/opencode/recon51/R7.md`); the FU-181 phase-53 erratum quotes the
+corrected stage-0 order and the two `0x700F4` omissions.
+
+**T1 — camera reset + present bind (v28, this task).** `fifa96_camera_init`
+now stages the native pan constants `pan_decay = 10`, `pan_rate_hi = 16`,
+`pan_rate_lo = 24` (`0x7011C/0x7013D/0x70146`, the image-default `0x1104AB`
+row) instead of zeros; stage 0 calls it after the gate clear and before the
+phase write (`0x88FA0`). New `mr->present_side` (native dword `[0x1074A4]`)
+and `fifa96_match_run_present_bind` port `0x4C324`: mode `[0x157AC2] >= 4`
+with a live `[0x1587D4]` record -> the record team's `+0x826` side through
+`fifa96_action_duel_bind` + `FUN_00036200(0)`; else `[0x1587E3]>>24`
+sign-extended; called last in stage 0. The bind cell has no engine reader. The
+`0x700F4` sound (`0x92820(0,0x24)`), the `0x70074`/`0x6D870` place recompute
+and the `0x4C324` `FUN_00053DC4` recorder latch stay named legs (no fake
+producer). Fixtures: the stage-0 order in
+`test_engine_match_act::test_act9_stage0_camera_and_present_bind` (gate clear
+-> camera zero + tracked NONE + pan constants -> phase 0x15 -> present bind),
+the `fifa96_camera_init` pan/tracked cells in `test_camera`, and both
+present-side arms (mode+pointer vs the sign-extended fallback, plus the
+mode<4 and no-pointer fallbacks). M2 re-pins **v28**:
+`bd6ac7a796b9020ef9196495e66c2e77947413b4467a5fb6d2d62e4231702995`
+(295087 bytes, 6522 lines; first differing line 422 = `frame=422`,
+`state=21/1-0`; 6101 lines differ, all hash-only; state set/counts unchanged).
+M1 `09b726b7…` exact. Census unchanged: **78/78 bodies, 58/80 natural,
+64/80 install-live, 6 blocked, action 38/45, phase 26/35**; `make check`
+112/112.
+
+**T2 — `0x73E28` + non-seeding `0x73E08` (v29).** Pending in this phase
+(reset cells, the non-seeding placement entry, the act-tick ordering leg, and
+the measured re-pin); the register is extended when it lands.

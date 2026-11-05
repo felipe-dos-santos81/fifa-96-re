@@ -31,6 +31,10 @@ static void test_init_fields(void) {
   assert(cam.anchor_time == 0 && cam.anchor2_time == 0);
   assert(cam.rate_x == 0 && cam.rate_z == 0);
   assert(cam.paused == 0);
+  /* FUN_000700F4 0x7011C/0x7013D/0x70146 (the 0x1104AB image-default row):
+   * decay 10, hi 16, lo = 16 + (0x20 - 16)/2 = 24; 0x70258 clears tracked. */
+  assert(cam.pan_decay == 10 && cam.pan_rate_hi == 16 && cam.pan_rate_lo == 24);
+  assert(cam.tracked == FIFA96_CAMERA_TRACKED_NONE);
 }
 
 static void test_init_invalid(void) {
@@ -280,7 +284,11 @@ static void test_update_event_interpolates_negative_remaining(void) {
    * (0x737da) and re-arms the event, so the negative-remaining interpolation
    * only remains reachable on the pan re-arm's own F6 value. Here the pan
    * resets the timer and zeroes the velocity (the raw fixture has no rate
-   * bytes staged). */
+   * bytes staged). The phase-53 T1 camera init now stages the native pan
+   * constants (decay 10), so the re-arm height is 0x20 * 10 / 0x20 = 0xA
+   * (not the old zero-pan idle arm): F2 = ramp(0xA) = 13, timer_limit =
+   * 2 * 13 = 26, F6 = 0 and the 16-scaled slow path keeps the zero
+   * velocity. */
   fifa96_camera cam = fresh_camera();
   fifa96_camera_init(&cam, 0, 0, 0);
   cam.target_x = 100;
@@ -296,9 +304,9 @@ static void test_update_event_interpolates_negative_remaining(void) {
   cam.event_param = 0x20;
   cam.event_cursor = 0x70;
   assert(fifa96_camera_update(&cam, 0, 0, 0) == FIFA96_OK);
-  assert(cam.timer == 0 && cam.timer_limit == 0xC);   /* the idle re-arm */
+  assert(cam.timer == 0 && cam.timer_limit == 26);    /* the height re-arm */
   assert(cam.vel_x == 0 && cam.vel_z == 0);
-  assert(cam.event_param == 0);                       /* 0x20 * 0 / 0x20 */
+  assert(cam.event_param == 0x0A);                    /* 0x20 * 10 / 0x20 */
   assert(cam.pan_counter == 1);
   assert(cam.target_x == 0 && cam.anchor_x == 0);     /* origin := pos */
 }

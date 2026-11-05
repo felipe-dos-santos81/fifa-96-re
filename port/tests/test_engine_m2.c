@@ -30,6 +30,20 @@
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m2 > port/tests/golden/engine/m2-frames.txt
  *
+ * v28 re-pin (2026-11-05, phase-53 T1/FU-181 L5 + FU-342): the act-9 stage-0
+ * camera reset (`0x88FA0 CALL 0x700F4`, `fifa96_camera_init` with the
+ * constant-zero `[0x10F328/2C/30]` triple) and the presentation bind
+ * (`0x88FD1 CALL 0x4C324`, the `[0x1074A4]` cell) are now live, and
+ * `fifa96_camera_init` stages the native pan constants 10/16/24 instead of
+ * zeros. The presented frame diverges at line 422 (frame 422,
+ * `state=21/1-0`); 6101 of 6522 lines differ, all hash-only, and the
+ * state-tag set/counts are unchanged (0×304, 1×953, 2×2193, 4×303, 12×4,
+ * 19×2640, 20×20, 21×100). Length stays 295087 bytes. New sha
+ * `bd6ac7a796b9020ef9196495e66c2e77947413b4467a5fb6d2d62e4231702995`
+ * (old `54f44987…`). The camera reset is the only transcript mover; the pan
+ * constants are masked on this tape (A3 == A2 in R7) and the bind cell has no
+ * engine reader. M1 `09b726b7…` stays exact.
+ *
  * v27 re-pin (2026-11-04, phase-51 T1/FU-340): the phase-`0x13` row is now
  * WIRED (slot `fifa96_match_phase_13`), and the `FUN_0008D098` case-`0x13/0x14`
  * scatter (`0x8D693..0x8D722`) runs at the native once-per-write cadence in

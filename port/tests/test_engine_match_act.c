@@ -131,6 +131,65 @@ static void test_sit0c_install_invokes_stage0(void) {
   assert(mr.global_5882a == 1u);        /* no body ran */
 }
 
+/* Phase-53 T1 (FU-181 L5 / FU-342): the act-9 stage-0 sinks in one invoke, in
+ * the native order 0x88F9A gate clear -> 0x88FA0 camera reset (`0x700F4`,
+ * `[0x10F328/2C/30]` = the constant zero) -> 0x88FB8 phase-0x15 write ->
+ * 0x88FD1 presentation bind (`0x4C324`, all args unused). A dirty camera proves
+ * the reset; `present_side` proves the bind's first arm. Mutation-RED: dropping
+ * the camera call leaves the dirty triple/tracked/pan cells; dropping the bind
+ * leaves `present_side` staged. */
+static void test_act9_stage0_camera_and_present_bind(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.global_5882a = 1u;
+  mr.state.frame_delta = 2;
+  mr.render.camera.pos_x = 0x1234;
+  mr.render.camera.pos_y = 0x2345;
+  mr.render.camera.pos_z = 0x3456;
+  mr.render.camera.target_x = 0x4567;
+  mr.render.camera.anchor_z = 0x5678;
+  mr.render.camera.tracked = 5;
+  mr.render.camera.pan_counter = 7;
+  mr.render.camera.pan_decay = 0;
+  mr.render.camera.pan_rate_hi = 0;
+  mr.render.camera.pan_rate_lo = 0;
+  /* First bind arm: `[0x157AC2] >= 4` with a live `[0x1587D4]` record (team 1
+   * -> the pool team's `+0x826` side = 1). */
+  mr.global_157ac2 = 4u;
+  mr.actor_1587d4 = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 1;
+  mr.render.sub.current_side = 0u;
+  assert(fifa96_match_act_dispatch(&mr, 9, 0, 1) == FIFA96_OK);
+  assert(mr.global_5882a == 0u);                    /* 0x88F9A */
+  assert(mr.render.camera.pos_x == 0 && mr.render.camera.pos_y == 0 &&
+         mr.render.camera.pos_z == 0);              /* 0x88FA0 */
+  assert(mr.render.camera.target_x == 0 && mr.render.camera.target_y == 0 &&
+         mr.render.camera.target_z == 0);
+  assert(mr.render.camera.anchor_x == 0 && mr.render.camera.anchor_y == 0 &&
+         mr.render.camera.anchor_z == 0);
+  assert(mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);
+  assert(mr.render.camera.pan_counter == 0);
+  assert(mr.render.camera.pan_decay == 10 &&
+         mr.render.camera.pan_rate_hi == 16 &&
+         mr.render.camera.pan_rate_lo == 24);
+  assert(mr.state.phase == 0x15u);                  /* 0x88FB8 */
+  assert(mr.present_side == 1);                     /* 0x88FD1 */
+  assert(mr.act.stage == 3u && mr.act.timer == 0);
+  /* Fallback arm: mode < 4 keeps the record pointer live but takes
+   * `[0x1587E3]>>24`, sign-extended (`0x4C363..0x4C36B`). */
+  mr.global_157ac2 = 3u;
+  mr.render.sub.current_side = 0xFEu;
+  assert(fifa96_match_run_present_bind(&mr) == FIFA96_OK);
+  assert(mr.present_side == (int32_t)(int8_t)0xFEu);
+  /* Mode >= 4 with no live pointer also takes the fallback. */
+  mr.global_157ac2 = 4u;
+  mr.actor_1587d4 = FIFA96_MATCH_ENTITY_NONE;
+  mr.render.sub.current_side = 1u;
+  assert(fifa96_match_run_present_bind(&mr) == FIFA96_OK);
+  assert(mr.present_side == 1);
+  assert(fifa96_match_run_present_bind(NULL) == -FIFA96_ERR_INVALID);
+}
+
 /* tick is a no-op while no act is installed or the installed act's phase row is
  * unported; act 9 accumulates `frame_delta` and at >= 0x3C sets the gate and
  * clears the slot (0x890B1..0x890DE). */
@@ -1488,6 +1547,7 @@ int main(void) {
   test_dispatch_installs_and_latches();
   test_dispatch_invoke_runs_handler();
   test_sit0c_install_invokes_stage0();
+  test_act9_stage0_camera_and_present_bind();
   test_tick_timer_and_completion();
   test_phase_18_registered();
   test_phase_18_act_owns_handoff();

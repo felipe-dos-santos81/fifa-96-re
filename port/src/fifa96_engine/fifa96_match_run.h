@@ -659,6 +659,14 @@ struct fifa96_match_run {
   int32_t global_10f364;
   int32_t global_10f368;
   uint8_t global_157ac2;
+  /* FU-181 L5 / FU-342 (phase-53 T1): the native dword `[0x1074A4]` — the
+   * shared display/camera-object side cell `FUN_0004C324` writes. The bind is
+   * `fifa96_match_run_present_bind` (mode `[0x157AC2] >= 4` and a live
+   * `[0x1587D4]` record -> the record team's `+0x826` side zero-extended,
+   * else `[0x1587E3]>>24` sign-extended). The cell has no engine reader (the
+   * native readers are the unported front-end camera/pose block, OL-68);
+   * init/begin/teardown stage 0. */
+  int32_t present_side;
   /* FU-188 §4 / FU-202 (row-0x24 stage 1): the native `word[0x15B37A]` ball
    * gate latch. `FUN_0008EEC0` (`0x8EEC0..0x8EEC6`) returns the word;
    * `FUN_0008EEB4` (`0x8EEB4..0x8EEBD`) stores 1. Row 0x24 stage 1
@@ -1637,6 +1645,18 @@ int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
  * phase-0x15 write natively instead of the sit-0xC install arm. Returns 0 or
  * the setter error; NULL -> -FIFA96_ERR_INVALID. */
 int fifa96_match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase);
+
+/* FU-181 L5 / FU-342 (phase-53 T1): the native `FUN_0004C324`
+ * (`0x4C324..0x4C372`, `RET 8`; every register and stack argument unused).
+ * Runs `FUN_00053DC4`'s recorder-arm latch (unmodelled, leg), then writes
+ * `[0x1074A4]`: when `byte[0x157AC2] >= 4` and the `[0x1587D4]` record pointer
+ * is live, `zero_extend(byte[[[0x1587D4]]+0x826])` (the record team's side)
+ * plus `FUN_00036200(0)`; else `sign_extend(dword[0x1587E3]>>24)` =
+ * `byte[0x1587E6]`. The engine passes the inputs through the shared
+ * `fifa96_action_duel_bind` and stores `out.bound` in `mr->present_side`; the
+ * `0x36200` stub runs only on the first arm. Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID (NULL). */
+int fifa96_match_run_present_bind(struct fifa96_match_run *mr);
 
 /* FU-191 §2/§9 (M2 phase-17 T1): the native per-record phase walk
  * `FUN_0008D098`'s loop (`0x8D0F2..0x8D166`) — the second caller of the phase

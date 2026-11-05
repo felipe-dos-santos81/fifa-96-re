@@ -392,3 +392,66 @@ tape has free records and no `0x70` press, so wiring these arms would stall
 the restart; stages 1/2 remain compressed. Stage 3's gate is
 `word[0x158818]` (the act timer), not `word[0x15881A]`; the engine already
 uses the timer and the stale comments were corrected.
+
+## Phase-53 erratum — act-9 stage-0 camera and present bind (2026-11-05)
+
+Task 1 of the phase-53 act-9 sink slice (FU-342; R7 fresh read
+`/tmp/opencode/recon51/R7.md`). Two corrections and the landed sinks:
+
+**Erratum 1 — the stage-0 order.** §4 said "Stage 0 `0x88F81`: camera reset
+(`PUSH 0, [0x10F330], [0x10F32C], [0x10F328]`), `[0x15882A]=0` (clear the
+gate), `CALL 0x73E28` …". The fresh `0x88F81..0x88FE7` listing shows the
+pushes (`0x88F81..0x88F99`) and the gate clear `0x88F9A` **precede**
+`CALL 0x700F4` at `0x88FA0`. The corrected order is: gate clear `0x88F9A` →
+camera reset `0x88FA0` (`0x700F4`) → `0x73E28` `0x88FA5` → phase write
+`0x88FB8` (`0x740A0`, landed phase 41) → `0x73E08` `0x88FBD` → presentation
+bind `0x88FD1` (`0x4C324`) → timer 0 / stage++. The `0x10F328/2C/30` triple is
+a constant zero (fresh `read_memory`, 24 B all `00`; 20 xrefs, no writer).
+
+**Erratum 2 — the `0x700F4` pan constants.** The engine's
+`fifa96_camera_init` (the `0x700F4` port) zeroed `pan_decay`/`pan_rate_hi`/
+`pan_rate_lo`. The native stores them from the `0x1104AB` table at
+`[0x14C2FE]*8 + [0x14C2FA]*2` (image defaults 0/0) as `0x157819 = 10`
+(`0x7011C`), `0x15781A = 16` (`0x7013D`) and `0x15781B = hi + (0x20 - hi)/2 =
+24` (`0x70137 SUB`, `0x7013b SAR 1`, `0x70142 ADD`, `0x70146`). The init now
+stages 10/16/24; the camera unit fixture that relied on the zero decay was
+re-derived (`test_update_event_interpolates_negative_remaining`: the first pan
+step decays `0x20 → 0xA`, so the re-arm is the height arm `F2 = 13`,
+`timer_limit = 26`).
+
+**Landed — `0x88FA0`.** `fifa96_match_action_phase_1F` stage 0 now calls
+`fifa96_camera_init(&mr->render.camera, 0, 0, 0)` after
+`mr->global_5882a = 0` and before the phase write, in the corrected native
+order. The camera triples/prev/target/anchor cells, the pan counter and
+`tracked = FIFA96_CAMERA_TRACKED_NONE` (`0x1577CA`, `0x70258`) are observable
+in the new `test_act9_stage0_camera_and_present_bind` fixture.
+
+**Landed — `0x88FD1`/`0x4C324`.** New `int32_t mr->present_side` (the native
+dword `[0x1074A4]`) and `fifa96_match_run_present_bind`, which reuses
+`fifa96_action_duel_bind`: when `byte[0x157AC2] >= 4` and the `[0x1587D4]`
+record pointer is live, the cell receives the record team's `+0x826` side
+(zero-extended) and `FUN_00036200(0)` runs; otherwise it receives
+`dword[0x1587E3]>>24` = `byte[0x1587E6]` (sign-extended). The engine's
+`[0x1587D4]` home is `mr->actor_1587d4` (pool id or NONE) and the side is the
+pool team block's `side` (`byte[team+0x826]`). The bind runs last in stage 0.
+The cell has no engine reader (the native readers are in the unported
+front-end camera/pose block).
+
+**Numbered legs (no fake producer).** (a) The `0x700F4` sound
+`0x92820(0,0x24)` and the `0x70074`+`0x6D870` place recompute
+(`0x1577D6/DA`, `0x15781E/20/22`, the event triple `0x1577DE/E2/E6/EA`, the
+dir byte `0x157815`) stay unmodelled; the camera-reset variant measured
+tape-neutral in R7 and the null backend has no sound consumer, while the
+planned-place pair feeds the unported ring-place path. (b) `0x4C324`'s
+`FUN_00053DC4`
+recorder-arm latch (`0x14E574`) is unmodelled in the engine bind. (c) The
+`0x36200` consumer `0x36208` is unported (the stub stays a no-op). (d)
+`0x73E28` (match/camera state reset) and `0x73E08` (placement commit) remain
+FU181-L5, Task 2 of this slice.
+
+M2 re-pin v28 (measured in-tree): first differing line 422
+(`frame=422`, `state=21/1-0`), 6101 of 6522 lines differ, all hash-only, the
+state-tag set/counts unchanged, 295087 bytes; sha
+`bd6ac7a796b9020ef9196495e66c2e77947413b4467a5fb6d2d62e4231702995` (old
+`54f44987…`). M1 `09b726b7…` exact; census unchanged (78/78, 58/80, 64/80,
+6 blocked, action 38/45, phase 26/35).

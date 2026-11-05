@@ -8,6 +8,7 @@
 #include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_loader/fifa96_action_handlers.h"
 #include "fifa96_loader/fifa96_animation.h"
+#include "fifa96_loader/fifa96_arm_bodies.h"
 #include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_bigf.h"
 #include "fifa96_loader/fifa96_entity_update.h"
@@ -2092,6 +2093,7 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->score_sound_midi = 0;
   mr->score_display_event = 0;
   mr->global_5882a = 0;                /* drop the kickoff gate with the match */
+  mr->present_side = 0;                /* FU-181 L5: drop the [0x1074A4] bind */
   /* FU-145 S2: the restart-body clear (`0x84F90`) drops the goal-arm state
    * with the match; the session gate returns to 0 with the session. */
   mr->goal_armed = 0;
@@ -2367,6 +2369,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->present_side = 0;                /* FU-181 L5: fresh [0x1074A4] */
   mr->ball_gate_15b37a = 0;            /* FU-188: fresh [0x15B37A] BSS word */
   memset(mr->row17_stash_1587fc, 0, sizeof mr->row17_stash_1587fc); /* FU-181 */
   mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
@@ -2554,6 +2557,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->present_side = 0;                /* FU-181 L5: fresh [0x1074A4] */
   mr->ball_gate_15b37a = 0;            /* FU-188: fresh [0x15B37A] word */
   memset(mr->row17_stash_1587fc, 0, sizeof mr->row17_stash_1587fc); /* FU-181 */
   mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
@@ -3002,6 +3006,41 @@ int fifa96_match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
       (void)fifa96_match_phase_machine_scatter(mr, 1u);
   }
   return 0;
+}
+
+/* FU-181 L5 / FU-342 (phase-53 T1): the native FUN_0004C324 presentation bind
+ * (`0x4C324..0x4C372`, `RET 8`; every register and stack argument is unused).
+ * It runs the `FUN_00053DC4` recorder-arm latch (unmodelled leg) and then
+ * writes the dword `[0x1074A4]`: when `byte[0x157AC2] >= 4` and the
+ * `[0x1587D4]` record pointer is live, `zero_extend(byte[[[0x1587D4]]+0x826])`
+ * plus `0x36200(0)`; else `sign_extend(byte[0x1587E6])`
+ * (`dword[0x1587E3]>>24`). The arithmetic is the shared duel bind
+ * (`fifa96_action_duel_bind`); the engine's `[0x1587D4]` home is
+ * `mr->actor_1587d4` (pool id or NONE) and the record team's side is the pool
+ * block's `byte[team+0x826]`. */
+int fifa96_match_run_present_bind(struct fifa96_match_run *mr) {
+  fifa96_action_duel_bind_in in;
+  fifa96_action_duel_bind_out out;
+  uint8_t side_826 = 0;
+  uint8_t team_present = 0;
+  int rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (mr->actor_1587d4 >= 0 &&
+      mr->actor_1587d4 <
+          (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    uint32_t team = (uint32_t)mr->actor_1587d4 / FIFA96_MATCH_ENTITY_RECORDS;
+    team_present = 1;
+    side_826 = mr->entities.team[team].side;   /* [*[0x1587D4] + 0x826] */
+  }
+  in.mode_157ac2 = mr->global_157ac2;
+  in.team_present = team_present;
+  in.side_826 = side_826;
+  in.fallback_e6 = mr->render.sub.current_side;  /* [0x1587E3] >> 24 */
+  rc = fifa96_action_duel_bind(&in, &out);
+  if (rc != FIFA96_OK) return rc;
+  mr->present_side = out.bound;                  /* 0x4C33E / 0x4C36B */
+  if (out.stub_36200 != 0) (void)fifa96_arm_stub_36200();  /* 0x4C359 */
+  return FIFA96_OK;
 }
 
 /* FU-184 §5/§7 T2-2 (phase-16 T2): the shared kickoff phase entry, factored

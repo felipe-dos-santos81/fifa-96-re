@@ -46,9 +46,13 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->event_suspended = 0;
   cam->ramp_divisor = 0;
   cam->pan_counter = 0;
-  cam->pan_decay = 0;
-  cam->pan_rate_hi = 0;
-  cam->pan_rate_lo = 0;
+  /* FUN_000700F4 0x7011C/0x7013D/0x70146: the 0x1104AB table row selected by
+   * `[0x14C2FE]*8 + [0x14C2FA]*2` (the image defaults are both zero) stores
+   * pan_decay = 10, pan_rate_hi = 16 and pan_rate_lo = hi + (0x20 - hi)/2 = 24
+   * (0x70137 SUB, 0x7013b SAR 1, 0x70142 ADD, 0x70146 store). */
+  cam->pan_decay = 10;
+  cam->pan_rate_hi = 16;
+  cam->pan_rate_lo = (uint8_t)(cam->pan_rate_hi + (0x20 - cam->pan_rate_hi) / 2);
   cam->event_step_x = 0;
   cam->event_step_z = 0;
   cam->tracked = FIFA96_CAMERA_TRACKED_NONE;   /* 0x700F4 0x70258 */
