@@ -3674,3 +3674,12 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   twin. The live long-ball window moves from 52 to 51 because the landing arm
   fires one frame before the timer gate. M1/M2 stay byte-identical; census
   unchanged (`78/78`, `57/80`, `63/80`, `6` blocked); `make check` 112/112.
+
+- **phase-48 row-04 sound-arm side fallback (FU171-L2, 2026-11-04).** The
+  row-04 `ball_track_side` now uses the tracked record's side, or a
+  non-matching `0xFF` sentinel when `[0x1577CA] == NONE`; the controlled-actor
+  fallback is removed. The native `0x7EE83` arm skips before the side compare.
+  A unit pins the TRACKED_NONE no-draw case; the live long-ball RNG pump moves
+  4 -> 5 because the removed draw shifts the deterministic stream. M1/M2 stay
+  byte-identical; census unchanged (`78/78`, `57/80`, `63/80`, `6` blocked);
+  `make check` 112/112.

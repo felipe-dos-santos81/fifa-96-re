@@ -680,3 +680,12 @@ also FU316-L3) was removed; the native `0x7EDA0` gate treats NONE as "not
 tracked" for every record. A unit pins the `0x7EDBD` receiver timer with
 `tracked = NONE, lane >= 0x40` and its tracked twin. M1/M2 are byte-identical;
 the emitted tracked-cell behavior is unchanged on the tape.
+
+## Phase-48 erratum — the side fallback is gone too (2026-11-04)
+
+`ball_track_side` now uses the tracked record's side, or a non-matching `0xFF`
+sentinel when `[0x1577CA] == NONE`. The native `0x7EE83` sound arm skips before
+the side compare, so the old controlled-actor fallback could draw on the
+record's own side. A unit pins the TRACKED_NONE no-draw case; the live
+long-ball chain's deterministic RNG pump moves 4 -> 5 because the removed
+draw shifts the stream. M1/M2 stay byte-identical; census unchanged.

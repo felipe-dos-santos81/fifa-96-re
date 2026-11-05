@@ -752,3 +752,12 @@ admits the pan step on the native landing arm
 still below the limit: `pan_counter == 1`) and the no-landing twin. The live
 long-ball window moves 52 -> 51 because the landing arm fires one frame before
 the timer gate. M1/M2 stay byte-identical; census unchanged.
+
+## Phase-48 erratum — FU171-L2 side fallback closed (2026-11-04)
+
+The row-04 `ball_track_side` now uses the tracked record's side or a
+non-matching `0xFF` sentinel when `[0x1577CA] == NONE`; the controlled-actor
+fallback is gone. The native `0x7EE83` arm skips before its side compare, so
+the old fallback could draw on the controlled record's own side. A unit pins
+the no-draw TRACKED_NONE case and the live long-ball RNG pump moves 4 -> 5
+(the removed draw). M1/M2 stay byte-identical; census unchanged.

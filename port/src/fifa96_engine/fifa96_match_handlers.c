@@ -2730,18 +2730,19 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.predictor_x = mr->render.camera.pos_x;  /* 0x71B9C(4) stand-in (OL-74) */
   s.predictor_y = mr->render.camera.pos_y;
   s.predictor_z = mr->render.camera.pos_z;
-  /* FU-171 §7 rec 2 (T2): the sound arm's `[tracked_owner+0x826]` compare
-   * (0x7EE95/0x7EE9D) is the tracked record's team side; TRACKED_NONE keeps
-   * the controlled stand-in. */
+  /* FU-171 §7 rec 2 / FU171-L2: the sound arm's `[tracked_owner+0x826]`
+   * compare (0x7EE95/0x7EE9D) is the tracked record's team side. When the
+   * native `[0x1577CA]` is NONE the arm is skipped, so 0xFF is the
+   * non-matching sentinel (sides are 0/1); the controlled actor is not a
+   * fallback. */
   {
     int32_t tracked_id = mr->render.camera.tracked;
-    int32_t side_id = tracked_id != FIFA96_CAMERA_TRACKED_NONE ? tracked_id
-                                                               : controlled;
-    s.ball_track_side = side_id >= 0
-                            ? mr->entities
-                                  .team[(uint32_t)side_id / FIFA96_MATCH_ENTITY_RECORDS]
-                                  .side
-                            : 0;
+    s.ball_track_side =
+        tracked_id != FIFA96_CAMERA_TRACKED_NONE
+            ? mr->entities
+                  .team[(uint32_t)tracked_id / FIFA96_MATCH_ENTITY_RECORDS]
+                  .side
+            : 0xFFu;
   }
   s.type_off_x = match_kick_dir_x;
   s.type_off_z = match_kick_dir_z;

@@ -1869,9 +1869,9 @@ static void test_action_04_stages_lane_fields(void) {
  * observable is its `fifa96_rng_step` draw (its 0x974F0/0x651F0 sinks have no
  * consumer), so this test counts RNG movement across one row-04 dispatch:
  * with the tracked record on the OTHER team from the row record there is no
- * draw; tracked on the record's own team (and the TRACKED_NONE controlled
- * fallback) witness that the arm can still fire. Pre-re-stage the
- * `id == controlled` side stand-in drew in the other-team case (the RED). */
+ * draw; tracked on the record's own team witnesses that the arm can fire.
+ * TRACKED_NONE skips the native arm entirely (no controlled fallback); the
+ * pre-fix `id == controlled` side stand-in could draw. */
 static void test_action_04_ball_track_side_from_tracked(void) {
   struct fixture f;
   struct fifa96_rng before;
@@ -1912,11 +1912,20 @@ static void test_action_04_ball_track_side_from_tracked(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
   assert(memcmp(&before, &f.mr.rng, sizeof before) != 0);
 
-  /* TRACKED_NONE: the native cell comparison is false for every record, so
-   * the controlled actor is not a fallback. The `0x7EDA0` early return is
-   * the discriminator: with the old controlled fallback this dispatch would
-   * stop before the `0x7EDBD` receiver timer. */
+  /* TRACKED_NONE: the native `0x7EE83` sound arm skips before the side
+   * compare; the controlled actor's side is not a fallback. The old staging
+   * could match the record's own side and draw. */
   f.mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].records[0].lane_x = 0x20;
+  f.mr.entities.controlled = 2;
+  f.mr.record.timer81 = 0;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  before = f.mr.rng;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(memcmp(&before, &f.mr.rng, sizeof before) == 0);
+
+  /* The same TRACKED_NONE state at lane >= 0x40 reaches the `0x7EDBD`
+   * receiver timer: the old `is_ball_track` fallback stopped at 0x7EDA0. */
   f.mr.entities.team[0].records[0].lane_x = 0x48;
   f.mr.entities.team[0].records[0].timer93 = 0;
   f.mr.record.timer81 = 0;                   /* reach 0x7ED9B, lane >= 0x40 */

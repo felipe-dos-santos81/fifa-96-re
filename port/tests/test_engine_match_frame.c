@@ -2582,13 +2582,13 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   begin_isolated(&mr, f.engine);
   /* Phase-35 P1: the produced movement consumes extra RNG draws before the
    * kick (the row-04 chase/tackle arms), shifting the code-4 arm's
-   * `r & 7` traj draw to 0xB0 (r & 7 == 2). The chain is pumped four RNG
-   * steps at its head (measured: pump 4 lands r & 7 == 7, traj 0x100, the
+   * `r & 7` traj draw to 0xB0 (r & 7 == 2). The chain is pumped five RNG
+   * steps at its head (measured: pump 5 lands r & 7 == 7, traj 0x100, the
    * > 0xF0 height the follow event arm needs; deterministic on the null
    * tape). */
   {
     uint16_t dump;
-    for (int i = 0; i < 4; i++) assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
+    for (int i = 0; i < 5; i++) assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
   }
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {

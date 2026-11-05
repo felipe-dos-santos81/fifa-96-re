@@ -8519,3 +8519,16 @@ one frame before the timer gate; the fixture is updated with that measured
 value. M1/M2 stay byte-identical; census unchanged: **78/78 bodies, 57/80
 natural, 63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make
 check` **112/112**.
+
+## Phase 48 — row-04 sound-arm side fallback drops the controlled actor (FU171-L2, 2026-11-04)
+
+`fifa96_match_action_04` now stages `ball_track_side` from the tracked record,
+or a non-matching `0xFF` sentinel when `[0x1577CA] == NONE`. The native
+`0x7EE83` arm skips before its side compare; the old controlled-actor fallback
+could draw on the record's own side. A unit pins the TRACKED_NONE no-draw case,
+and the live long-ball chain's deterministic RNG pump moves 4 -> 5 because the
+removed draw shifts the stream.
+
+M1/M2 stay byte-identical; census unchanged: **78/78 bodies, 57/80 natural,
+63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make check`
+**112/112**.
