@@ -143,7 +143,7 @@ without a competition-setup producer the rows remain producer-blocked. The
 prior attribution to an "unmodelled `0x8BCCF` variable writer" is corrected:
 `0x8BCCF` is the phase-`0x13` writer only.
 
-## 7. Erratum (2026-11-04, phase-51 T4) — the phase-6 latch and the blocked reason
+## 7. Erratum (2026-11-04, phase-51 T5) — the phase-6 latch and the blocked reason
 
 **Supersedes the §4 table rows for phase `0x06` / actions `0x13` and `0x1F`,
 and the §6 phase-`0x06` paragraph.** The row *set* is unchanged: the three
@@ -195,7 +195,7 @@ The census does not move: `78/78` bodies, `58/80` natural, `64/80`
 install-live, `6` blocked, action `38/45`, phase `26/35`. The M2 transcript
 stays byte-identical (`54f44987…`) and M1 `09b726b7…` exact.
 
-## 8. Erratum (2026-11-04, phase-51 T5) — the same-frame install clause
+## 8. Erratum (2026-11-04, phase-51 T6) — the same-frame install clause
 
 **Supersedes item 4 of §7 only.** Quoted:
 

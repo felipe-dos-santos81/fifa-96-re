@@ -8206,6 +8206,11 @@ free-record bind) and `0x4BDF8`/`0x4BD38` (the `0x1587D4` strip readers);
 > phase `0x1F` -> 57/80). Current is **57/80 natural, 62/80 install-live,
 > five blocked** (final wave section below).
 
+> **Erratum pointer (phase-51 T6).** The `57/80 / 62/80 / five blocked` count
+> in the paragraph above is historical; the current census is **58/80 natural,
+> 64/80 install-live, six blocked** — see the phase-51 close-out register at
+> the tail.
+
 ## M2 phase-`0x1F` one-shot producer (2026-11-04) — natural wired `56/80 → 57/80`
 
 The native sit-0xC install is invoke-now: `0x8AF0E MOV EBX,1` /
@@ -8589,7 +8594,7 @@ Census: **78/78 bodies, 58/80 natural, 64/80 install-live, 6 blocked, action
 (32 body draws, 40 with the producers), `test_phase_13_write_seam` and the
 census pins.
 
-## Phase 52 — far-wall damp/event arm (FU-71 leg 9.6, 2026-11-04)
+## Phase 51 T4 — far-wall damp/event arm (FU-71 leg 9.6, 2026-11-04)
 
 FU-71 leg 9.6 is landed: `fifa96_camera_wall_arm` (loader camera) ports the
 native `0x719A0..0x71B98` non-mirror branch of `FUN_0007131C` (fresh
@@ -8638,7 +8643,7 @@ camera word cannot pass the length gate. Census unchanged:
 **78/78 bodies, 58/80 natural, 64/80 install-live, 6 blocked, action 38/45,
 phase 26/35**; `make check` **112/112**.
 
-## Phase 51 T4 — phase-6 stage-3 latch + blocked reasons (FU-166 / FU-338, 2026-11-04)
+## Phase 51 T5 — phase-6 stage-3 latch + blocked reasons (FU-166 / FU-338, 2026-11-04)
 
 The act-2 stage-3 gate now models the native ball-row latch. `[0x158882]` is
 the ball block's (`0x1587EC`) `+0x96` byte = `row_flags & 1`, written by
@@ -8677,7 +8682,7 @@ Census unchanged: **78/78 bodies, 58/80 natural, 64/80 install-live, 6
 blocked, action 38/45, phase 26/35**; `make check` **112/112**. Golden: M1
 `09b726b7…` exact, M2 v27 `54f44987…` byte-identical (`cmp`); no re-pin.
 
-## Phase 51 close-out register (T1–T5, 2026-11-04)
+## Phase 51 close-out register (T6; T1–T5 outcomes, 2026-11-04)
 
 Final register for the natural-reach + fidelity wave. The per-task sections
 above stand; this is the consolidated outcome, the measured re-pin, the
@@ -8711,7 +8716,7 @@ with the native `0x7E27C JMP 0x7E3A6` tail. **The row-`0x03` slot stays
 (R51-T2b-defer), so wiring is the carried **FU177-L1** leg. M1/M2
 byte-identical; census unchanged. Tests: the dx/guard/counter/branch-B/
 opponent-selector fixtures (the phase-2 SET/NONE twin and the phase-1 floor
-discriminator are the T5 precision additions), plus the entity writer/reset/
+discriminator are the T6 precision additions), plus the entity writer/reset/
 reader units.
 
 **T3 — wire row `0x03` — deferred.** R11 §1.6: the role-band line
@@ -8738,7 +8743,7 @@ legs.
 `(contact_kind == 3)` for both sessions, and the stage-3 gate is
 `flag || kind == 3 || session != 0`. The RED-first test
 (`test_engine_referee_restart_stage3_latch`) proves the kind-3-at-stage-2 ->
-kind-1-at-stage-3 decision, and the T5 term-2 case pins kind 1 latched 0 ->
+kind-1-at-stage-3 decision, and the T6 term-2 case pins kind 1 latched 0 ->
 kind 3 at the decision (phase 7). **The three rows stay blocked; blocked stays
 6.** The same-frame ball-install clause is ruled out statically (one-frame gap,
 ball-row timers `>= 0x40`, spec §2.4); the reason now names only the kind-3 ->
@@ -8751,9 +8756,11 @@ README status `58/80 (64/80 install-live)`; `make check` **112/112**. M1
 exact; M2 v27 `54f44987…` byte-identical (`cmp`).
 
 **Carried legs.** Phase `0x14` producer and its slot wire (the seam is gated
-on `fn != NULL`); the phase-`0x13` `0x651F0(0xD)` sink; row `0x03` wiring
-FU177-L1 (PCCD.PDB clamp bounds), the counter one-pass lead **FU341-L1**, the
-`reset_lane` begin seed **FU341-L3**, and the branch-B `timer79` stand-in;
+on `fn != NULL`); the phase-`0x13` `0x651F0(0xD)` sink; the native side-first
+walk order **FU340-L2** (owner `fifa96_match_run_write_phase`); row `0x03`
+wiring FU177-L1 (PCCD.PDB clamp bounds), the counter one-pass lead
+**FU341-L1**, the `reset_lane` begin seed **FU341-L3**, and the branch-B
+`timer79` stand-in;
 FU-71 announce table / `0x71C94` tracked tails / **FU303-L12** no-slot
 `fifa96_camera_event_dir`; phase-6 release writers (R51-L1/L2) and the
 `0x8948D` stale-local read (the remaining FU166-L6 residuals, not L6 as a

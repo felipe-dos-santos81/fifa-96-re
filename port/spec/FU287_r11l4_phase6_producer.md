@@ -78,7 +78,7 @@ Fresh `get_xrefs_to 0x157C5C` = **6**: `0x7802D` WRITE + `0x780D7` WRITE (`FUN_0
 * **T287-L3 — `FUN_00076130` semantics (the shared keeper aim/steer).** It installs `0x19`/`0x1B`/`0x1C` from the `0x15774C` triple and `[EBP+0x63]>>0x10`, gated on phase 1/2 and the actor/side skip, and clears `[0x157C5C]`; called from both `FUN_000782D0` (table) and row `0x1F`. The exact install arm ordering is **unported**. Owner: FU180-L3 / FU186 (keeper cluster).
 * **T287-L4 — the `[0x157C5C]` latch ordering (ladder ↔ row `0x1F` ↔ row `0x1B`).** Six fresh refs; the set/clear/read ordering that couples the ladder (`FUN_00077EAC`), the row-`0x1F` body, and row `0x1B` is **not pinned** (the ladder's `[0x157C5D]` gate vs `[0x157C5C]` latch is a distinct pair; FU273 §1.3). Owner: `FUN_00077EAC` + `FUN_00076130` + row `0x1B` (`0x76D28`).
 
-## Erratum (2026-11-04, phase-51 T4/T5) — T287-L2's ball-row clause
+## Erratum (2026-11-04, phase-51 T5/T6) — T287-L2's ball-row clause
 
 **Supersedes the `[0x158882]` sentence of T287-L2 only.** Quoted:
 
@@ -87,7 +87,7 @@ Fresh `get_xrefs_to 0x157C5C` = **6**: `0x7802D` WRITE + `0x780D7` WRITE (`FUN_0
 >   the stage-3 gate can pass early.
 
 **Corrected.** The term is modelled as the act-2 stage-2 latch
-(`mr->ball_row_flag_158882`, phase-51 T4): the engine writes
+(`mr->ball_row_flag_158882`, phase-51 T5): the engine writes
 `ball_row_flag_158882 = (contact_kind == 3)` at its stage-1 (native stage-2)
 body for both sessions and gates on `flag || kind == 3 || session != 0`. The
 stage-3 gate no longer passes early through an assumed-zero ball-row term.

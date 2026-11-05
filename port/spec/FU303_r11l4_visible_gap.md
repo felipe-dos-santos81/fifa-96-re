@@ -401,7 +401,7 @@ Wave review verdict: OK — `0x157824` is 2 WRITEs in `FUN_000703E8` (fresh-veri
 
 **Verdict:** GO — `0x157824` = 2 WRITEs in `FUN_000703E8` fresh-verified; the per-cell verdicts are coherent.
 
-## Phase-51 T5 appended leg
+## Phase-51 T6 appended leg
 
 * **FU303-L12 — the `fifa96_camera_event_dir` no-slot branch
   (`0x71D70..0x71DBA`).** The native record-pointer/slot pair at `0x71D70`/

@@ -136,6 +136,15 @@ would force a second re-pin.
 ## 6. Residual legs
 
 - **`0x651F0(0xD)` sink** (`0x8D693/0x8D698`): still unported (R1a-L3).
+- **FU340-L2 — the native side-first walk order** (owner
+  `fifa96_match_run_write_phase`). Fresh `0x740A0..0x740E0` bytes:
+  `0x740B1 MOVSX EAX,DX` takes the caller's side, `0x740BA` stores it to
+  `[0x157AAF]`, `0x740C0` builds `0x1588A4 + side*0x835`, `0x740C5 XOR DL,0x1`,
+  then `0x740C8 CALL 0x8D098` walks team[side] and `0x740DB CALL 0x8D098`
+  walks team[side^1]. The port's `write_phase` has no side argument and walks
+  team 0 then team 1. M2's three writes carry `side_controlled = 0`, so the
+  tape order coincides; a side-1 `write_phase(0x13)` swaps the cell/install
+  order — a real off-tape divergence, no M2 impact.
 - **Phase `0x14` writer**: no live engine producer. The ET chooser
   `FUN_0008B9CC` → `0x8BAC1` is fed by the probe cells `0x142FE0`/`0x142FE8`,
   which the engine models as `mr->probe_a/probe_b`; `fifa96_match_run_set_probe`
@@ -148,7 +157,7 @@ would force a second re-pin.
   can dispatch the phase-`0x13` body inside a dwell. It does not on M2; a future
   `0x13` dwell with a dispatched row 03/15 adds four draws per record.
 
-## Errata (phase-51 T5, 2026-11-04)
+## Errata (phase-51 T6, 2026-11-04)
 
 Append-only corrections from the Task 2/5 review round; no prior section is
 rewritten.
@@ -180,7 +189,7 @@ rewritten.
    argument and walks team 0 then team 1. M2's three `write_phase(0x13)`
    calls carry `side_controlled = 0`, so the tape order coincides and the
    golden is unaffected; a future side-1 write would swap the cell/install
-   order. **Carried leg** (off-tape, no M2 impact).
+   order. **Carried leg FU340-L2** (off-tape, no M2 impact).
 
 3. **The riders pin 40 per write; 120 is the three-write total.** Quoted from
    §3/§5:

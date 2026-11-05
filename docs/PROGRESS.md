@@ -3718,8 +3718,8 @@ close-out below).
   `09b726b7…` exact; `make check` 112/112. Residual legs: the `0x651F0(0xD)`
   sink and the phase-`0x14` probe producer.
 
-- **phase-51 close-out (T2–T5, 2026-11-04).** The phase-51 wave lands its
-  remaining four slices. **T2 (FU-341):** the row-`0x03` special arm now reads
+- **phase-51 close-out (T6; T2–T5 outcomes, 2026-11-04).** The phase-51 wave
+  lands its remaining four slices. **T2 (FU-341):** the row-`0x03` special arm now reads
   the real `0x7E201` dx gate (`FUN_0008DCD4` `out[1]`, not the 2-D metric),
   applies the `FUN_00079B58` `+0x99` guard at both inlined sites, passes the
   mover-shaped counter `move_attr` (`distance << 16`), fills the clamp's
@@ -3736,7 +3736,7 @@ close-out below).
   (`ball_row_flag_158882 = kind==3 at stage 2`) and the blocked reasons now
   name only the kind-3 -> kind-≠3 transition and the mode-4 Practise term —
   the same-frame install clause is ruled out statically; the three rows stay
-  blocked (6). The T5 test sweep adds the phase-2 opponent-selector SET/NONE
+  blocked (6). The T6 test sweep adds the phase-2 opponent-selector SET/NONE
   twin, the phase-1 floor discriminator, and the latch-0 + kind-3-at-decision
   term-2 case. Census unchanged at the final phase-51 numbers: **78/78 bodies,
   58/80 natural, 64/80 install-live, 6 blocked, action 38/45, phase 26/35**;

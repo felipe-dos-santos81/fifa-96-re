@@ -203,7 +203,7 @@ int fifa96_camera_out_of_bounds(int32_t x, int32_t z) {
   return (camera_abs(x) > 0x6C0) || (camera_abs(z) > 0xAB0);
 }
 
-/* FU-71 leg 9.6 (phase-52 T4): the sign-extended low word of a 32-bit
+/* FU-71 leg 9.6 (phase-51 (FU-71)): the sign-extended low word of a 32-bit
  * magnitude — the native `MOV word[ESP+..], AX` / `MOVSX` pair at
  * `0x7136C`/`0x71383` re-read as words (`dword[ESP+0xE] >> 16`). A magnitude
  * whose low word sign-extends negative (`>= 0x8000`) therefore fails the
@@ -977,7 +977,7 @@ int fifa96_camera_event_dir(fifa96_camera *cam, int has_slot, int32_t dir_x,
   if (!cam) return -FIFA96_ERR_INVALID;
   /* 0x71d70/0x71d7d: a NULL slot (`[rec+0x20] == 0`) falls through the native
    * 0x71DBA bearing oct; the port's early return keeps the 0x71d6a default 0
-   * (the divergence is the carried FU303-family leg FU303-L12, phase-51 T5;
+   * (the divergence is the carried FU303-family leg FU303-L12, phase-51 T6;
    * the natural M2 tape never reaches the wall arm). */
   if (!has_slot) return FIFA96_OK;
   /* 0x71d89/0x71d93: a non-zero dir pair takes the 0x10E169 compass row. */

@@ -667,7 +667,7 @@ the rewording). The conclusion stands — only the quote form is marked here.
 
 ---
 
-## Phase-51 T4 erratum (2026-11-04) — the `[0x158882]` kind proxy is closed
+## Phase-51 T5 erratum (2026-11-04) — the `[0x158882]` kind proxy is closed
 
 **Supersedes, for the stage-3 gate only, the "kind proxy" item of the
 "FU166-L6 residuals folded" list and the extension paragraph's "The engine
@@ -715,11 +715,11 @@ ordinary-play reach is the **R51-L2** runtime leg. Because that release is
 unproven, phase `0x06` and actions `0x13`/`0x1F` stay in
 `fifa96_match_port_blocked` with the corrected reason.
 
-## Phase-51 T5 erratum (2026-11-04) — the kind-proxy item, not all of FU166-L6
+## Phase-51 T6 erratum (2026-11-04) — the kind-proxy item, not all of FU166-L6
 
-**Scope correction.** The phase-51 T4 erratum above is titled:
+**Scope correction.** The phase-51 T5 erratum above is titled:
 
-> ## Phase-51 T4 erratum (2026-11-04) — the `[0x158882]` kind proxy is closed
+> ## Phase-51 T5 erratum (2026-11-04) — the `[0x158882]` kind proxy is closed
 
 Only the **kind-proxy item** is closed. FU166-L6 as a whole is **not** closed:
 the `0x8948D` decision-word check (a read-before-write callee-local, R3 §4),

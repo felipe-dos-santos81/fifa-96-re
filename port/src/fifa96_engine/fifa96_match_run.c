@@ -3347,7 +3347,7 @@ int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z) {
   return bits == 0;                        /* 0x700E8..0x700EB TEST/SETZ */
 }
 
-/* FU-71 leg 9.6 (phase-52 T4): the native `0x718A9` boundary body. The
+/* FU-71 leg 9.6 (phase-51 (FU-71)): the native `0x718A9` boundary body. The
  * `0x718EF`/`0x718FF` dispatch selects the far-wall damp/event arm
  * (`0x719A0..0x71B98`) when `[0x15781E] != 0` (the engine `goal_zone`) or the
  * dispatch input bit 0 is clear — the front-end INVISIBLE WALLS option row 2

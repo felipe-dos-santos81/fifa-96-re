@@ -34,7 +34,7 @@
  * identity, whistle/sound mapping, referee-object identity, team-count
  * predicate, downed-vs-sent-off, [0x15888E] lifecycle, kind-3 geometry
  * inputs, 0x14C360/0x157BD2 severity tables). The act-2 `[0x158882]` latch is
- * modelled (phase-51 T4, `ball_row_flag_158882`); the remaining ball-row
+ * modelled (phase-51 T5, `ball_row_flag_158882`); the remaining ball-row
  * release writers and the `0x8948D` stale-local read stay legs. */
 #pragma once
 #include <stdint.h>

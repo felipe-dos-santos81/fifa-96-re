@@ -948,7 +948,7 @@ static void test_update_walk_landing_pan(void) {
   assert(b.pan_counter == 0);       /* no landing edge */
 }
 
-/* FU-71 leg 9.6 (phase-52 T4): `fifa96_camera_wall_arm` — the native
+/* FU-71 leg 9.6 (phase-51 (FU-71)): `fifa96_camera_wall_arm` — the native
  * `0x718A9..0x71B98` far-wall damp/event arm (first-hand
  * `disassemble_bytes 0x719A0`, 148 instructions, plus the shared 0x71972 tail).
  * Every fixture below pins an exact native branch edge; the expected velocity

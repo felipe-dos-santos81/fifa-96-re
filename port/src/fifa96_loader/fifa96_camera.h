@@ -11,7 +11,7 @@ typedef struct fifa96_camera {
    * (`0x73756`). `0x737C8..0x737DA` admits the pan step when
    * `prev_y > 0 && pos_y <= 0` even if the timer has not passed its limit. */
   int32_t prev_y;
-  /* FU-71 leg 9.6 (phase-52 T4): the native `[0x157758]`/`[0x157760]` cells —
+  /* FU-71 leg 9.6 (phase-51 (FU-71)): the native `[0x157758]`/`[0x157760]` cells —
    * the previous frame's camera X/Z. `0x73756` calls `FUN_00072AC4` and the
    * three `MOVSD` at `0x7375b..0x7375d` copy the whole live triple
    * `0x15774C/50/54` to `0x157758/5C/60`, so `prev_x`/`prev_z` are captured
@@ -120,7 +120,7 @@ int fifa96_camera_target(const fifa96_camera *cam, int16_t *x, int16_t *z);
 int fifa96_camera_reflect(fifa96_camera *cam, int input_bit0, int transition_active);
 int fifa96_camera_out_of_bounds(int32_t x, int32_t z);
 
-/* FU-71 leg 9.6 (phase-52 T4): the far-wall damp/event arm, the native
+/* FU-71 leg 9.6 (phase-51 (FU-71)): the far-wall damp/event arm, the native
  * `0x718A9..0x71B98` non-mirror branch of `FUN_0007131C`. Reached from the
  * `0x718A9` gate (`(int16)|camZ|_w > 0xB10 || (int16)|camX|_w > 0x720`) when
  * `[0x15781E] != 0` (`0x718EF`) or `((word[0x14C1D4]|word[0x14C1D6]) & 1) ==

@@ -620,7 +620,7 @@ armed at stage 3. The engine models the split (`ref_restart_stage = 2`) and
 The full re-entry catalogue is FU166-L6 (FU-166 status append).
 
 
-## Erratum (2026-11-04, phase-51 T4/T5) — the `[0x158882]` latch
+## Erratum (2026-11-04, phase-51 T5/T6) — the `[0x158882]` latch
 
 **Supersedes erratum 7's "carried 0" reading and the legs-table row
 "new `[0x158882]` producer | new — carried 0 (erratum 7)".** Quoted from
@@ -637,7 +637,7 @@ erratum 7:
 the match reset (`0x73D3A`). The act-2 stage-2 body installs the row from the
 contact kind before the byte-0 split, so at `0x894A2` the cell is
 `(contact_kind == 3)` **as of the stage-2 body**. The engine models that latch
-(`mr->ball_row_flag_158882`, phase-51 T4) and gates on all three terms
+(`mr->ball_row_flag_158882`, phase-51 T5) and gates on all three terms
 (`flag || kind == 3 || session != 0`). The remaining native release writers
 (`0x887D5` reset row 3, `0x8C2CE` kickoff row 0, `0x6FF37`/`0x6FF85`
 appearance pair) and the `0x8948D` stale-local decision-word read stay legs

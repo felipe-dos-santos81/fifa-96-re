@@ -5720,7 +5720,7 @@ static void test_goal_arm_reflect_clear(void) {
   assert(mr.goal_armed == 0 && mr.render.camera.pos_z == 0x1300);
 }
 
-/* FU-71 leg 9.6 (phase-52 T4): the far-wall damp/event arm through the public
+/* FU-71 leg 9.6 (phase-51 (FU-71)): the far-wall damp/event arm through the public
  * `fifa96_match_goal_arm` boundary gate. The native `0x718EF`/`0x718FF`
  * dispatch selects `0x719A0..0x71B98` when `goal_zone != 0` or input bit 0 is
  * clear (the INVISIBLE WALLS option, default Disabled); the mirror stays the
@@ -6672,7 +6672,7 @@ static void test_taker_armed_referee_rows_resolve(void) {
  *    therefore **passes under a byte-0 session on the re-entry** — the native
  *    net is a two-call decision — while a non-3 kind still aborts. The flag is
  *    the stage-2 latch (`= (kind == 3)` at the split), modelled since
- *    phase-51 T4 (`test_engine_referee_restart_stage3_latch`).
+ *    phase-51 T5 (`test_engine_referee_restart_stage3_latch`).
  * Treating `contact_kind == 3 || session != 0` as one flat gate is wrong in
  * both directions: before the stage-1 split it would let kind 3 pass on the
  * stage-2 call, and as a blanket byte-0 hold it would drop the native stage-3
@@ -6803,7 +6803,7 @@ static void test_engine_referee_restart_default_gate_split(void) {
   assert(mr.entities.team[1].records[1].code != 0x12u);
 }
 
-/* Phase-51 T4 (R1 §2.4 + R3 §2, FU166-L6 kind-proxy item closed): the
+/* Phase-51 T5 (R1 §2.4 + R3 §2, FU166-L6 kind-proxy item closed): the
  * stage-3 latch.
  *
  * The native stage-2 body (0x893E2..0x89487) installs the ball anim row from
@@ -6880,7 +6880,7 @@ static void test_engine_referee_restart_stage3_latch(void) {
   assert(mr.entities.team[1].records[1].code != 0x13u);
   assert(mr.entities.team[0].records[0].code != 0x1Fu);
 
-  /* term-2 isolation (phase-51 T5): kind 1 at the stage-2 body latches 0, then
+  /* term-2 isolation (phase-51 T6): kind 1 at the stage-2 body latches 0, then
    * kind 3 at the stage-3 decision. The gate passes on `contact_kind == 3`
    * alone (`0x894B2/0x894B5`), so the phase-7 write proves the second OR term
    * is live; a latch-only gate would hold at stage 2. */
@@ -7109,7 +7109,7 @@ static void test_contact_gate_reachable_via_pad_duel(void) {
  * contact **entry** reachable. But the act-2 terminal
  * (`match_run_ref_step_restart` stage 2 = the native stage-3 body) decides only
  * on the stage-3 terms: the stage-2 ball-row latch `[0x158882]` (=
- * `(contact_kind == 3)` at the split; phase-51 T4 models it — before that the
+ * `(contact_kind == 3)` at the split; phase-51 T5 models it — before that the
  * flag was assumed 0), `kind == 3` (`0x894AD..0x894B5`), or a non-zero session
  * (`0x894B7/0x894BE`). The live path emits a **non-3 contact kind (1 ≠ 3)**
  * (the row-0x0C literal `0x81EB4 MOV EAX,1` -> the `0x8A43C` registrar, the

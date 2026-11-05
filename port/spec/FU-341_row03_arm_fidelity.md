@@ -2,7 +2,7 @@
 
 **Scope/provenance.** Phase-51 Task 2
 (`docs/superpowers/plans/2026-11-04-fifa96-m2-phase51-producers.md`), spec
-§2.2/§7. The implementation landed in `66fe985`; the phase-51 T5 close-out
+§2.2/§7. The implementation landed in `66fe985`; the phase-51 T6 close-out
 re-read the key ranges with the Ghidra MCP on **`/FIFA96.EXE`** this session
 (`disassemble_bytes 0x7E1CE`, `0x7E25F`, `0x7E2D3`, `0x7E3A6`, `0x7E3D5`,
 `0x7C730`, `0x8C38D`, `0x79B58`, `0x79C20`, `0x740A0`, `0x8DCD4`). The T2
@@ -180,10 +180,15 @@ bytes clamp x to `±0x720` (`0x7D3E8..0x7D400`) and z to `±0xB10`
 
 The `0x7E27C` jump skips the idle hold/idle core and the phase-2 clamp and
 runs the shared tail: `0x7E3A6 CALL 0x79F3C` (camera place), then
-`0x7E3AD..0x7E3B8` (`[0x157A4C]>>24 == 1` -> `word[rec+0x7B] = 1`, return) and
-`0x7E3CA..0x7E417` (phase 1 only: side 0 floors target_z at `-0x20`
-(`0x7E3E2`/`0x7E3EC`), side 1 floors at `+0x20` (`0x7E3FD`/`0x7E407`)). The
-engine models this as `tail_only = 1`.
+`0x7E3AD..0x7E3B8` (fresh bytes `a1 49 7a 15 00` / `c1 f8 18` =
+`[0x157A49]>>24`, the byte `0x157A4C`, `== 1` -> `word[rec+0x7B] = 1`,
+return) and `0x7E3CA..0x7E417` (phase 1 only: side 0 floors target_z at
+`-0x20` (`0x7E3E2`/`0x7E3EC`), side 1 floors at `+0x20`
+(`0x7E3FD`/`0x7E407`)). The engine models this as `tail_only = 1`. The
+`0x7E3AD` block itself is **not modelled** in `fifa96_match_action_03`; it is
+provably inert on the branch-B path because branch A returns first when
+`[0x157A4C] == 1` (`0x7E230..0x7E23C`), so branch B is entered only with the
+byte != 1.
 
 **Limit-word stand-in.** The native copies `word[rec+0x79]`; the engine's
 staging record has no `+0x79` cell, so `timer7b` takes the pool entity's
@@ -206,9 +211,9 @@ staging record has no `+0x79` cell, so `timer7b` takes the pool entity's
   `dir (1,-1)` -> `(0x720, 0, -0xB10)`, `timer7b = timer79 = 0x12` (not the
   idle counter); phase 1: the branch-B move target `-0xB10` is raised to
   `+0x20` by the side-1 floor, so a `return` after `timer7b` leaves `-0xB10`
-  and fails (T5 precision).
+  and fails (T6 precision).
 - `test_action_03_phase2_opponent_clip` — sibling `+0x7C3 = record 3` with
-  `pos_z = 0` clips `0x200` to `-0x60`; the `NONE` twin leaves `0x200` (T5
+  `pos_z = 0` clips `0x200` to `-0x60`; the `NONE` twin leaves `0x200` (T6
   precision; term isolation).
 - `test_last_defender7c3_dispatch_site` — one granted live frame moves the
   team-0 cell off `NONE` and it names an active record.

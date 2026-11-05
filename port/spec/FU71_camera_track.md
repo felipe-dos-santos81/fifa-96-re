@@ -569,7 +569,7 @@ phase/armer-gate fail paths. `match_run_goal_mirror` runs the ported
 the native `0x718EF`/`0x718FF` gates; the `0x720..0x730` gap mirrors without
 arming. The angle arm `0x719A0..0x71B98` (FU-71 leg 9.6) remains unported.
 
-## Phase-52 note — leg 9.6 landed: the far-wall damp/event arm (2026-11-04)
+## Phase-51 note — leg 9.6 landed: the far-wall damp/event arm (2026-11-04)
 
 Leg 9.6 is closed. `fifa96_camera_wall_arm` (loader camera) ports the whole
 non-mirror branch `0x719A0..0x71B98` of `FUN_0007131C`, reached from the

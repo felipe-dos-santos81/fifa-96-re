@@ -315,7 +315,7 @@ struct fifa96_match_run_render {
   int input_bit2;
   /* FU-145 S2 (0x718FF): the boundary reflect arm's input bit 0 — the native
    * tests `(word[0x14C1D4] | word[0x14C1D6]) & 1` (the per-side range words
-   * FU-139 reads; image-zero). Fresh (FU-71 leg 9.6, phase-52 T4): the bit is
+   * FU-139 reads; image-zero). Fresh (FU-71 leg 9.6, phase-51 (FU-71)): the bit is
    * the front-end option **row 2 = INVISIBLE WALLS** (`Disabled` = 0,
    * `Enabled` = 1: `FUN_0001C9BC` sets the range word bit from the value cell
    * `[0x10527C]`, the editor row `0x10513C` -> `0x10069C`). Clear takes the
@@ -977,7 +977,7 @@ struct fifa96_match_run {
   int32_t goal_snap_x;
   int32_t goal_snap_y;
   int32_t goal_snap_z;
-  /* FU-71 leg 9.6 (phase-52 T4): the far-wall arm's `0x974DC` announce
+  /* FU-71 leg 9.6 (phase-51 (FU-71)): the far-wall arm's `0x974DC` announce
    * request (`0x71B5B`). 0 = no call (no event, or the entry `speed <= 5`
    * skip), 1 = entry speed 6..8, 2 = 9..0xA, 3 = > 0xA. The audio sink itself
    * is unported (OL-27 family); the request is recorded, never faked (the
@@ -998,7 +998,7 @@ struct fifa96_match_run {
   uint8_t situation_id;
   uint8_t situation_pending;
   uint8_t session_gate_14c32a;
-  /* FU166-L6 kind-proxy item closed (phase-51 T4; R1 §2.4 + R3 §2; the other
+  /* FU166-L6 kind-proxy item closed (phase-51 T5; R1 §2.4 + R3 §2; the other
    * L6 residuals stay legs): `[0x158882]` is the ball
    * block's (base `0x1587EC`) `+0x96` byte = `row_flags & 1`, written by
    * `FUN_0006E724` (`0x6E7E7 MOV [ESI+0x96],AL`, `AL = row[2] & 1`) at every

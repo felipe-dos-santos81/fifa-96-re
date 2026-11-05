@@ -7867,7 +7867,7 @@ const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_RO
     {0x13, fifa96_match_phase_13,
      "FU-335 (phase-36) + FU-340 (phase-51 T1): phase 13 = the native 0x6E244..0x6E32A camera-scatter body (side gate, inactive cell copy with the ac2<4/side-0 z negation, active FOUR 0x92AC8 draws; writes only +0x4D/+0x55), WIRED to the live walk. The FUN_0008D098 case-0x13/0x14 producer 0x8D693..0x8D722 runs at the native once-per-write cadence in fifa96_match_run_write_phase (walk team 0 -> scatter team 0 -> walk team 1 -> scatter team 1; the producer has exactly two xrefs, 0x740C8/0x740DB), not per frame. M2 carries three live writes (steps 2502/3402/4302): 20 body dispatches and 32 body draws each (96/run), plus the producer's 4 draws per team (8/write, 120 shared draws/run at ac2<4). Re-pin v27: first differing line 3185, 3338/6522 lines hash-only, state tags/counts unchanged, 295087 bytes. Residual legs: the 0x651F0(0xD) sink and phase 0x14 (no live writer). OL-13"},
     {0x14, NULL,
-     "FU-335 (phase-36) + FU-340 (phase-51 T1): phase 14 = the native 0x6E244 (same body as row 13, shared fifa96_match_phase_13). The scatter producer runs at the write seam for 0x13/0x14 (FU-340), but phase 0x14 has no live writer (the phase_drive probe words are {0,0,0,0}), so the slot stays NULL/ported-but-dormant. OL-13"},
+     "FU-335 (phase-36) + FU-340 (phase-51 T1): phase 14 = the native 0x6E244 (same body as row 13, shared fifa96_match_phase_13). The call site is gated with the walk (the seam sits inside fifa96_match_phase_table[phase].fn != NULL; FU-340 §6), so 0x14 stays dormant until its slot is wired; phase 0x14 has no live writer (the phase_drive probe words are {0,0,0,0}), so the slot stays NULL/ported-but-dormant. OL-13"},
     {0x15, fifa96_match_phase_02,
      "FU-192 §2.11/R1 (phase-17 T3): phase 15 shares the T1 body 0x6DCC8 (0x110794[0x15] = 0x6DCC8). Wired by T3 after the writer-path cmp pin (T1 deliberately deferred it, ENGINE.md phase-17 T1): ON-TAPE (100 frames); the [rec+0xC] gate is opened by the match-begin OL-13 bind (FU-199 §7.2, phase-18 T1), and the M2 re-run is byte-identical (T1 cmp pin)"},
     {FIFA96_MATCH_PHASE_INT3_SLOT, NULL,
@@ -8046,7 +8046,7 @@ unsigned fifa96_match_port_install_live(void) {
   return n;
 }
 
-/* FU-338 §4; the reason strings are corrected by phase-51 T4 (R1 §2.4 + R3
+/* FU-338 §4; the reason strings are corrected by phase-51 T5 (R1 §2.4 + R3
  * §2/§4) — the old "phase 6 blocked / writer-less `[0x158882]`" text is
  * retired. Install-live rows whose natural producer is structurally unproven:
  *  - actions `0x13`/`0x1F`: their only installer is the phase-6 arm

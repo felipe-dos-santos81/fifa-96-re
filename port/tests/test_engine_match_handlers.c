@@ -1402,7 +1402,7 @@ static void test_action_03_slot_branch_b(void) {
    * camera + phase-1 clamp tail (`0x7E3A6` -> `0x7E3CA`) runs. The branch-B
    * move target is -0xB10 (`-0xB00 - 0x80` clamped); side 1 then floors
    * target_z at +0x20 (`0x7E3FD..0x7E407`). A `return` after `timer7b`
-   * would leave -0xB10, so the floor is the discriminator (T5 precision). */
+   * would leave -0xB10, so the floor is the discriminator (T6 precision). */
   f.mr.state.phase = 1u;
   f.mr.entities.team[0].side = 1;
   f.mr.record.pos_x = 0;
@@ -1418,7 +1418,7 @@ static void test_action_03_slot_branch_b(void) {
   drop_fixture(&f);
 }
 
-/* FU-341 (phase-51 T5): the phase-2 clamp's opponent selector — the sibling
+/* FU-341 (phase-51 T6): the phase-2 clamp's opponent selector — the sibling
  * team's `+0x7C3` record's `[rec+0x61]` (`0x15989C`/`0x159067`, fresh bytes
  * `0x7E360`/`0x7E383`). With the cell set, the side-0 clamp clips target_z to
  * `opponent_z - 0x60` (`0x7E36B..0x7E373`); with NONE the declared default
