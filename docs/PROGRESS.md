@@ -3888,3 +3888,13 @@ close-out below).
   `p4-second-match.png`. Legs: P4-L1 native pause menu, P4-L2 POST timer/
   period-overlay armer, P4-L3 shade-table derivation, P4-L4 text ramp,
   P4-L5 STACcovr's source-art crowd separation, P4-L6 full-time period label.
+
+- **P5 play-test polish (playable SDL, 2026-11-05).** The merged P1–P4 build
+  plays end to end: Game Select -> Friendly -> two-team select -> a visible
+  pitch with both teams, HUD names/score/clock, crowd and whistle, pause,
+  full time and the return to Game Select (a second match starts). The first
+  play-through found the FULL TIME panel printing `PERIOD 3` (the post
+  sentinel behind `state.period + 1`); the live POST screen now suppresses
+  the HUD and the panel shows `FULL TIME / score / ENTER: MENU` instead. M1
+  and M2 v29 remain byte-identical; README now documents the menu and match
+  controls.

@@ -5499,6 +5499,14 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
   if (!match_run_hud_ready(r)) return;
   if (r->display.suspend) return;                 /* [0x14E688] */
   if (mr->state.period >= 4) return;              /* FUN_0004B5F4() < 4 */
+  /* FU-343 P5: the live POST/OVER screen replaces the HUD with the result
+   * panel. The native POST screen is a separate screen install (A5 §1); the
+   * port's HUD period cell is `period+1`, which would read 3 on the post
+   * sentinel. Non-live runs keep the historical HUD path (M2 v29). */
+  if (mr->live_start &&
+      (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
+       mr->lc.screen == FIFA96_MATCH_SCREEN_POST))
+    return;
 
   const int zoomed = r->window_zoomed;
   const struct fifa96_font *font = match_run_hud_font(r);
@@ -5614,20 +5622,17 @@ static void match_run_draw_result(const struct fifa96_match_run *mr,
   const int x = (s->width - MATCH_RUN_RESULT_PANEL_W) / 2;
   const int y = (s->height - MATCH_RUN_RESULT_PANEL_H) / 2;
   char score[64];
-  char period[24];
   if (r->hud_name[0][0] && r->hud_name[1][0])
     (void)snprintf(score, sizeof score, "%s %u - %u %s", r->hud_name[0],
                    (unsigned)mr->score[0], (unsigned)mr->score[1], r->hud_name[1]);
   else
     (void)snprintf(score, sizeof score, "%u - %u", (unsigned)mr->score[0],
                    (unsigned)mr->score[1]);
-  (void)snprintf(period, sizeof period, "PERIOD %u", (unsigned)mr->state.period + 1u);
   match_run_panel_fill(s, x, y, MATCH_RUN_RESULT_PANEL_W, MATCH_RUN_RESULT_PANEL_H, ink);
-  match_run_panel_text(s, font, "FULL TIME", x, MATCH_RUN_RESULT_PANEL_W, y + 7, ink,
+  match_run_panel_text(s, font, "FULL TIME", x, MATCH_RUN_RESULT_PANEL_W, y + 8, ink,
                        0x00);
-  match_run_panel_text(s, font, score, x, MATCH_RUN_RESULT_PANEL_W, y + 22, ink, 0x00);
-  match_run_panel_text(s, font, period, x, MATCH_RUN_RESULT_PANEL_W, y + 37, ink, 0x00);
-  match_run_panel_text(s, font, "ENTER: MENU", x, MATCH_RUN_RESULT_PANEL_W, y + 52,
+  match_run_panel_text(s, font, score, x, MATCH_RUN_RESULT_PANEL_W, y + 24, ink, 0x00);
+  match_run_panel_text(s, font, "ENTER: MENU", x, MATCH_RUN_RESULT_PANEL_W, y + 42,
                        ink, 0x00);
 }
 

@@ -87,6 +87,27 @@ make trace TRACE=data/captures/session-*/trace.bin   # parse a capture
 ./tools/run-fifa96.sh                # the original game under DOSBox-X (needs data/game/FIFAPCCD96.iso)
 ```
 
+## Play
+
+The windowed SDL3 build is the playable game:
+
+```bash
+make game                     # or: make run
+```
+
+It boots the intro (any key skips it) into the native **Game Select** screen.
+Move with the arrows and press **Enter** to choose. **Friendly** opens the
+two-team selector: the arrows change the highlighted Home/Visitor entry,
+**Enter** starts the match, **X**/Backspace backs out. The other six native
+Game Select entries are shown dimmed (not ported yet).
+
+Match controls: **arrows** move the controlled player, **Z** kicks,
+**C** passes, **V** plays a long ball; **Esc** pauses (**Enter** resumes,
+**X** quits to the menu). Halves are 120 seconds (about four minutes a match).
+The HUD shows the team codes, score, period and clock; at full time the
+result panel holds for five seconds, then returns to Game Select. Crowd
+ambience and the whistle play through SDL3 audio when the ISO is mounted.
+
 ## Conventions
 
 * Address renders: the loader map quotes `11bd:`-segment addresses; gap rows

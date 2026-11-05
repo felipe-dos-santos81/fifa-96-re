@@ -9274,3 +9274,17 @@ source rows linearly; removing it would need an art/venue change, so it is
 recorded rather than patched. **P4-L6** the full-time period label mirrors the
 HUD cell (`state.period+1`, i.e. 3 after two regulation halves); a
 "completed halves" reading would be a separate display decision.
+
+## Phase 56 — P5: play-test polish (FU-343, 2026-11-05)
+
+The first full play-through of the merged P1–P4 build exposed one live-only
+display defect: the FULL TIME panel mirrored the HUD's `state.period + 1`
+cell, so the post sentinel rendered `PERIOD 3` at the end of a two-half match,
+and the HUD behind the panel repeated the same `3`. Fix (live-gated, M1
+`09b726b7…` / M2 v29 `7c3874f7…` untouched): `match_run_draw_hud` returns
+early on the live OVER/POST screens (the native POST is a separate screen
+install, A5 §1), and the result panel no longer prints a period line — it
+shows `FULL TIME`, the staged `HOME score - score AWAY`, and
+`ENTER: MENU`. This closes P4-L6 as a display fix; the native screen-3
+timer/armer remains P4-L2. README gains a **Play** section with the exact
+menu and match controls (arrows, Z/C/V, Esc pause, the 120-second halves).
