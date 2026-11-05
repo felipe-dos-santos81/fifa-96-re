@@ -1197,6 +1197,249 @@ static void test_action_03_direct_leg_body(void) {
   drop_fixture(&f);
 }
 
+/* FU-341 (phase-51 T2): the row-03 phase-0x13/0x14 special arm
+ * (`0x7E1CE..0x7E223`). The `< 0x30` gate at `0x7E201/0x7E204` is
+ * `FUN_0008DCD4`'s `out[1]` = dx = `(int16)(0x780 - pos_x)` read through the
+ * `dword[ESP] >> 16` alias (fresh bytes, R6 §1.1) — a 1-D pos_x test; pos_z
+ * does not participate. The pre-FU-341 metric form fails the first case: the
+ * 2-D octagon from (0x751, ·, 0x4000) to (0x780, 0, 0) is ~0x4000, never
+ * `< 0x30`. Mutation-RED: restoring the metric compare flips that assert. */
+static void test_action_03_arm_dx_gate(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  f.mr.entities.team[0].side = 0;
+  f.mr.entities.team[0].intercept = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.record.entity_id = 0;
+  f.mr.record.has_slot = 0;
+  f.mr.record.pos_y = 0;
+  e = &f.mr.entities.team[0].records[0];
+  e->team = 0;
+  e->skip_99 = 0;
+  e->timer93 = 0;
+
+  /* pos_x = 0x751 -> dx = 0x2F < 0x30; pos_z far away -> still 0xAE0. */
+  f.mr.state.phase = 0x13u;
+  f.mr.record.pos_x = 0x751;
+  f.mr.record.pos_z = 0x4000;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.ran == 1u);                     /* 0x7E1AF */
+  assert(f.mr.record.target_x == 0xAE0);             /* 0x7E20C */
+  assert(f.mr.record.target_y == 0);                 /* 0x7E1EF */
+  assert(f.mr.record.target_z == 0);                 /* 0x7E1E0 */
+  assert(e->timer93 == 0x10u);                       /* FUN_00079B58 */
+
+  /* the 0x780 twin: dx = 0 is inside the window regardless of z. */
+  f.mr.record.pos_x = 0x780;
+  f.mr.record.pos_z = -0x3000;
+  f.mr.record.target_x = 0;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0xAE0);
+  assert(f.mr.record.target_z == 0);
+
+  /* the boundary twin: pos_x = 0x750 -> dx = 0x30 is NOT < 0x30 -> 0x780. */
+  f.mr.record.pos_x = 0x750;
+  f.mr.record.pos_z = 0;
+  f.mr.record.target_x = 0;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x780);
+
+  /* well outside the window -> 0x780. */
+  f.mr.record.pos_x = 0x600;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x780);
+
+  /* the signed-16 window: 0x7000 -> dx = 0x9780 = -0x6880 < 0x30. */
+  f.mr.record.pos_x = 0x7000;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0xAE0);
+
+  /* phase 0x14 takes the same arm. */
+  f.mr.state.phase = 0x14u;
+  f.mr.record.pos_x = 0x760;
+  f.mr.record.target_x = 0;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0xAE0);
+  drop_fixture(&f);
+}
+
+/* FU-341 (phase-51 T2): the `FUN_00079B58` `+0x99` guard at BOTH inlined
+ * sites — guard A (`0x7E1C4 CALL`) and the special arm (`0x7E215 CALL`) write
+ * `+0x93 = 0x10` only when `byte[rec+0x99] == 0` (fresh `0x79B58` bytes
+ * `80b89900000000 / 7507`). Mutation-RED: dropping the guard flips the two
+ * `timer93 == 0x55` asserts. */
+static void test_action_03_skip_99_guard(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  f.mr.entities.team[0].side = 0;
+  f.mr.record.entity_id = 0;
+  f.mr.record.has_slot = 0;
+  f.mr.record.pos_y = 0;
+  f.mr.record.pos_x = 0x780;
+  f.mr.record.pos_z = 0;
+  e = &f.mr.entities.team[0].records[0];
+  e->team = 0;
+
+  /* the arm twin: skip_99 == 1 -> the +0x93 write is skipped, the arm's
+   * target writes still run. */
+  f.mr.entities.team[0].intercept = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.state.phase = 0x13u;
+  e->skip_99 = 1;
+  e->timer93 = 0x55;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(e->timer93 == 0x55);
+  assert(f.mr.record.target_x == 0xAE0);
+  /* and with skip_99 == 0 it writes. */
+  e->skip_99 = 0;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(e->timer93 == 0x10);
+
+  /* guard A twin: `rec == [team+0x7BA]` -> FUN_00079B58(rec); exit. */
+  e->timer93 = 0x22;
+  e->skip_99 = 1;
+  f.mr.entities.team[0].intercept = 0;               /* entity id of record 0 */
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(e->timer93 == 0x22);
+  e->skip_99 = 0;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(e->timer93 == 0x10);
+  drop_fixture(&f);
+}
+
+/* FU-341 (phase-51 T2): the idle-core placement counter's mover-shaped
+ * `move_attr` (native `0x7E2E0 MOV EAX,[ESI+0x63]; SAR EAX,0x16; INC`). The
+ * native `+0x63` high word is the mover block-A distance (`0x8E273/0x8E278`
+ * = `0x8DC68` over the low-word target-minus-pos), so the attr is
+ * `distance << 16` and the counter is `min((d >> 6) + 1, word[rec+0x79])`.
+ * The pre-FU-341 literal 0 gave `min(1, timer79)`; a positive d makes the two
+ * forms differ (mutation-RED). */
+static void test_action_03_counter_move_attr(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  f.mr.entities.team[0].side = 0;
+  f.mr.entities.team[0].intercept = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.session_gate_14c32a = 0;
+  f.mr.state.phase = 2u;
+  f.mr.record.entity_id = 0;
+  f.mr.record.has_slot = 0;                          /* the idle core */
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.pos_y = 0;
+  e = &f.mr.entities.team[0].records[0];
+  e->team = 0;
+  e->phase_meta = NULL;                              /* 0x6DCC8 gated: target stays */
+  e->timer79 = 0x20;
+
+  /* d = 0x180 -> (0x180 >> 6) + 1 = 7. */
+  f.mr.record.target_x = 0x180;
+  f.mr.record.target_z = 0;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.timer7b == 7u);
+
+  /* d = 0x100 -> 5 (the `+1` and the `>>6` both visible). */
+  f.mr.record.target_x = 0x100;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.timer7b == 5u);
+
+  /* the limit wins: d = 0x1000 -> 0x41 > timer79 = 0x10. */
+  e->timer79 = 0x10;
+  f.mr.record.target_x = 0x1000;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.timer7b == 0x10u);
+
+  /* a negative z displacement uses the signed low-word delta (the octagon's
+   * |dz|): d = 0x100 + 0 = 0x100 for target_z = -0x100 -> 5 again. */
+  e->timer79 = 0x20;
+  f.mr.record.target_x = 0;
+  f.mr.record.target_z = -0x100;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.timer7b == 5u);
+  drop_fixture(&f);
+}
+
+/* FU-341 (phase-51 T2): the row-03 slot branch B (`0x7E25F..0x7E27C`) —
+ * `FUN_00079C20(rec, [slot+0x1D]>>24, [slot+0x1E]>>24)` writes
+ * `target = pos + dir*0x80` (y = 0, x/z clamped to ±0x720/±0xB10), then
+ * `word[rec+0x7B] = word[rec+0x79]`, then the native `JMP 0x7E3A6` runs the
+ * camera/phase-1/tail path (the idle core and the phase-2 clamp are skipped).
+ * Mutation-RED: the pre-FU-341 stub left the target untouched and made
+ * `timer7b` the idle-core counter. */
+static void test_action_03_slot_branch_b(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  f.mr.global_157a4c = 0;                            /* not slot branch A */
+  f.mr.entities.team[0].side = 0;
+  f.mr.entities.team[0].intercept = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.session_gate_14c32a = 0;
+  f.mr.state.phase = 2u;
+  f.mr.record.entity_id = 0;
+  f.mr.record.has_slot = 1;
+  f.mr.record.pos_x = 0x700;
+  f.mr.record.pos_z = -0xB00;                        /* both edges */
+  f.mr.record.pos_y = 0;
+  f.mr.record.dir_x = 1;
+  f.mr.record.dir_z = -1;
+  e = &f.mr.entities.team[0].records[0];
+  e->team = 0;
+  e->phase_meta = NULL;
+  e->timer79 = 0x12;
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x720);             /* 0x700+0x80 clamped */
+  assert(f.mr.record.target_y == 0);
+  assert(f.mr.record.target_z == -0xB10);            /* -0xB00-0x80 clamped */
+  /* the native copy is `word[+0x7B] := word[+0x79]`, not the counter:
+   * the idle core would have produced 3 for this displacement. */
+  assert(f.mr.record.timer7b == 0x12u);
+
+  /* the fall-through: phase 1 skips branch A, writes the dir target, then the
+   * camera + phase-1 clamp tail (`0x7E3A6` -> `0x7E3CA`) runs. Side 1 floors
+   * target_z at +0x20, so a `0x180` dir target survives while the stale
+   * `target_z = 0` of the old stub would have become 0x20. */
+  f.mr.state.phase = 1u;
+  f.mr.entities.team[0].side = 1;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0x100;
+  f.mr.record.dir_x = 0;
+  f.mr.record.dir_z = 1;
+  f.mr.record.target_x = 0x111;                      /* stale */
+  f.mr.record.target_z = 0;                          /* stale */
+  assert(fifa96_match_action_03(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0);
+  assert(f.mr.record.target_z == 0x180);             /* survived the floor */
+  drop_fixture(&f);
+}
+
+/* FU-341 (phase-51 T2): the dispatch-site wiring of the `+0x7C3` producer —
+ * the native `0x7C741` gate (`byte[rec+0x8D] != 0`) + the `0x7C74A..0x7C770`
+ * step after the mover's z integration, in `match_run_dispatch_entity`. The
+ * live fixture's begun match grants a frame body; with the call removed the
+ * cell never leaves the init NONE (mutation-RED). The update rule itself is
+ * pinned in `test_engine_match_entities.c::test_last_defender7c3`. */
+static void test_last_defender7c3_dispatch_site(void) {
+  struct fixture f;
+  uint32_t frame;
+  make_fixture(&f);
+  assert(f.mr.entities.team[0].last_defender7c3 == FIFA96_MATCH_ENTITY_NONE);
+  for (frame = 0;
+       frame < 20u &&
+       f.mr.entities.team[0].last_defender7c3 == FIFA96_MATCH_ENTITY_NONE;
+       frame++)
+    assert(fifa96_match_run_frame(&f.mr) >= 0);
+  assert(f.mr.entities.team[0].last_defender7c3 != FIFA96_MATCH_ENTITY_NONE);
+  assert(f.mr.entities.team[0].last_defender7c3 >= 0 &&
+         f.mr.entities.team[0].last_defender7c3 <
+             (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+  assert(f.mr.entities.team[0]
+             .records[f.mr.entities.team[0].last_defender7c3]
+             .active != 0u);                    /* the 0x7C741 active gate */
+  drop_fixture(&f);
+}
+
 /* FU-191 §6 / FU-198 §5.1 (phase-17 T1): the ported native `0x6DCC8` (phase row
  * 0x02). `target_x = (int16)(int8)meta[idx*2] * 0x26`, `target_y = 0`,
  * `target_z = (int16)(int8)meta[idx*2+1] * 0x21`, sign-flipped when
@@ -5980,6 +6223,11 @@ int main(void) {
   test_action_20_body_arms();
   test_action_25_counted_refutation();
   test_action_03_direct_leg_body();
+  test_action_03_arm_dx_gate();
+  test_action_03_skip_99_guard();
+  test_action_03_counter_move_attr();
+  test_action_03_slot_branch_b();
+  test_last_defender7c3_dispatch_site();
   test_phase_02_source_pair_scales();
   test_record_phase_walk_scans_and_skips();
   test_phase_00_reset_copies_position();

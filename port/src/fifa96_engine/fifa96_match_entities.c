@@ -79,6 +79,7 @@ int fifa96_match_entities_init(struct fifa96_match_entities *pool) {
     team->intercept = FIFA96_MATCH_ENTITY_NONE;
     team->chosen831 = FIFA96_MATCH_ENTITY_NONE;
     team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
+    team->last_defender7c3 = FIFA96_MATCH_ENTITY_NONE;   /* native +0x7C3 NULL */
     for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
       struct fifa96_match_entity *e = &team->records[i];
       e->team = (uint8_t)t;
@@ -292,11 +293,75 @@ int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_
   t->second = FIFA96_MATCH_ENTITY_NONE;                         /* 0x8C371 (+0x7B6=0) */
   t->target = pick < 0 ? FIFA96_MATCH_ENTITY_NONE : ENTITY_ID(pool, team, (uint32_t)pick);
   t->tracker7c7 = t->target;                                    /* 0x8C37B/0x8C387 */
+  /* FU-341 (phase-51 T2): the native `0x8C38D..0x8C399` `+0x7C3 := +0x7B2`
+   * (the same pick), modelled as the team-relative index. */
+  (void)fifa96_match_entities_last_defender_reset(pool, team);
   /* FU295 §2.2/§2.3 (phase-27 T6): the FUN_0008C33C tail lift (0x8C3BE) — the
    * freshly-picked target is lifted into `[0x157A83]` for the controlled team
-   * (the native `0x8C38D..0x8C3BE`). The sibling tail writes (`+0x7C3`,
-   * `+0x7BF = 0`, the `+0x82x`/`+0x7E7` clears, `FUN_0008C418`) stay unported. */
+   * (the native `0x8C38D..0x8C3BE`). The sibling tail writes (`+0x7BF = 0`,
+   * the `+0x82x`/`+0x7E7` clears, `FUN_0008C418`) stay unported. */
   return fifa96_match_entities_actor_lift(pool, team, controlled_side);
+}
+
+/* FU-341 (phase-51 T2): the `FUN_0007BF20` tail `0x7C741..0x7C770` — the
+ * team's extreme-z "last defender" tracker. Fresh bytes and the full
+ * comparison are in the header contract; the caller applies the native
+ * `byte[rec+0x8D] != 0` gate and passes the record's live `pos_z` after the
+ * position integration. `team->side` is `byte[team+0x826]` (0/1). */
+int fifa96_match_entities_last_defender_step(struct fifa96_match_team *team,
+                                             int32_t index, int32_t pos_z) {
+  int32_t incumbent;
+  if (!team) return -FIFA96_ERR_INVALID;
+  if (index < 0 || index >= (int32_t)FIFA96_MATCH_ENTITY_RECORDS)
+    return -FIFA96_ERR_INVALID;
+  incumbent = team->last_defender7c3;
+  if (incumbent != FIFA96_MATCH_ENTITY_NONE) {
+    int less;
+    if (incumbent < 0 || incumbent >= (int32_t)FIFA96_MATCH_ENTITY_RECORDS)
+      return -FIFA96_ERR_INVALID;
+    less = pos_z < team->records[incumbent].pos_z ? 1 : 0;   /* 0x7C75A/0x7C75D */
+    /* 0x7C760..0x7C76E: XOR the side byte with SETL and skip on equality —
+     * side 0 stores only a strictly smaller z, side 1 only an equal-or-larger
+     * one (the native tie asymmetry). */
+    if ((int32_t)team->side == less) return FIFA96_OK;
+  }
+  team->last_defender7c3 = index;                            /* 0x7C770 */
+  return FIFA96_OK;
+}
+
+/* FU-341 (phase-51 T2): the `FUN_0008C33C` reset write `0x8C399`
+ * (`+0x7C3 := +0x7B2`). `team->target` is the engine's encoded id form of the
+ * native record pointer; decode it to the team-relative index here. */
+int fifa96_match_entities_last_defender_reset(struct fifa96_match_entities *pool,
+                                              uint32_t team) {
+  int32_t base;
+  int32_t target;
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  base = (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS);
+  target = pool->team[team].target;
+  pool->team[team].last_defender7c3 =
+      (target >= base && target < base + (int32_t)FIFA96_MATCH_ENTITY_RECORDS)
+          ? target - base
+          : FIFA96_MATCH_ENTITY_NONE;
+  return FIFA96_OK;
+}
+
+/* FU-341 (phase-51 T2): the row-03 clamp's opponent selector
+ * (`0x15989C`/`0x159067`, the opponent team's `+0x7C3`) read as `[rec+0x61]`.
+ * An unset cell is the declared engine default (the native pointer is
+ * guaranteed): return 0 with `*z` untouched, and the caller leaves the side
+ * clamp unable to clip. */
+int fifa96_match_entities_opponent_defender_z(const struct fifa96_match_entities *pool,
+                                              uint32_t team, int32_t *z) {
+  const struct fifa96_match_team *opp;
+  int32_t ld;
+  if (!pool || !z || team >= FIFA96_MATCH_ENTITY_TEAMS)
+    return -FIFA96_ERR_INVALID;
+  opp = &pool->team[1u - team];              /* the fixed sibling team block */
+  ld = opp->last_defender7c3;
+  if (ld < 0 || ld >= (int32_t)FIFA96_MATCH_ENTITY_RECORDS) return 0;
+  *z = opp->records[ld].pos_z;               /* dword [rec+0x61] */
+  return 1;
 }
 
 /* M2 interactive Task 1 / FU-70 §1.3: the derived `FUN_0008DB6C` free-record

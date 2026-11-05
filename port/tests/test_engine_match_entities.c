@@ -309,6 +309,7 @@ static void test_reset_lane_pass(void) {
   assert(pool.team[TEAM0].second == NONE);
   assert(pool.team[TEAM0].target == 5);
   assert(pool.team[TEAM0].tracker7c7 == 5);
+  assert(pool.team[TEAM0].last_defender7c3 == 5);   /* FU-341: 0x8C399 */
   /* FU295 §2.2 (phase-27 T6): the controlled-side actor lift (0x8C3BE) — with
    * controlled_side == team 0's side the fresh pick is lifted into the actor
    * cell (pool.controlled). */
@@ -331,9 +332,98 @@ static void test_reset_lane_pass(void) {
   assert(pool.team[TEAM0].records[6].cam_dz6f == 0x468); /* cam.z - pos.z */
   assert(pool.team[TEAM0].target == 6);
   assert(pool.team[TEAM0].tracker7c7 == 6);
+  assert(pool.team[TEAM0].last_defender7c3 == 6);   /* FU-341: 0x8C399 */
   assert(pool.controlled == 6);   /* FU295: the lift re-tracks the fresh pick */
   assert(fifa96_match_entities_reset_lane(NULL, TEAM0, 0, 0, 0) == -FIFA96_ERR_INVALID);
   assert(fifa96_match_entities_reset_lane(&pool, 2, 0, 0, 0) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-341 (phase-51 T2): the native team field `+0x7C3` — the "last defender"
+ * extreme-z tracker. Fresh bytes:
+ *   - writer `0x7C741..0x7C770` (the FUN_0007BF20 tail, active records only):
+ *     store iff `side != (self_z < incumbent_z)` — side 0 keeps the MIN z and
+ *     the incumbent on an equal z, side 1 keeps the MAX z and replaces on an
+ *     equal z (the native SETL/XOR asymmetry);
+ *   - reset `0x8C399` (`FUN_0008C33C`): `+0x7C3 := +0x7B2` (the pick);
+ *   - read `0x15989C`/`0x159067` (the row-03 clamp opponent selector): the
+ *     sibling team block's record `[rec+0x61]` dword.
+ * Mutation-RED: flipping the side compare, the tie rule, or the id->index
+ * decode flips one of the asserts. */
+static void test_last_defender7c3(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_team *t0;
+  int32_t z;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  t0 = &pool.team[TEAM0];
+  assert(t0->last_defender7c3 == NONE);         /* the native BSS NULL */
+  assert(pool.team[TEAM1].last_defender7c3 == NONE);
+  /* an unset sibling cell -> 0, `*z` untouched (the declared default) */
+  z = 0x1234;
+  assert(fifa96_match_entities_opponent_defender_z(&pool, TEAM0, &z) == 0);
+  assert(z == 0x1234);
+
+  /* side 0 keeps the MIN z; the NULL cell stores unconditionally. */
+  t0->side = 0;
+  t0->records[3].pos_z = 0x100;
+  assert(fifa96_match_entities_last_defender_step(t0, 3, 0x100) == FIFA96_OK);
+  assert(t0->last_defender7c3 == 3);
+  /* an equal z keeps the incumbent (side 0's SETL is false). */
+  t0->records[4].pos_z = 0x100;
+  assert(fifa96_match_entities_last_defender_step(t0, 4, 0x100) == FIFA96_OK);
+  assert(t0->last_defender7c3 == 3);
+  /* a strictly smaller z replaces it. */
+  t0->records[5].pos_z = 0x80;
+  assert(fifa96_match_entities_last_defender_step(t0, 5, 0x80) == FIFA96_OK);
+  assert(t0->last_defender7c3 == 5);
+  /* a larger z is kept out. */
+  t0->records[6].pos_z = 0x200;
+  assert(fifa96_match_entities_last_defender_step(t0, 6, 0x200) == FIFA96_OK);
+  assert(t0->last_defender7c3 == 5);
+
+  /* side 1 keeps the MAX z and REPLACES on an equal z (XOR asymmetry). */
+  t0->side = 1;
+  t0->records[7].pos_z = 0x200;
+  assert(fifa96_match_entities_last_defender_step(t0, 7, 0x200) == FIFA96_OK);
+  assert(t0->last_defender7c3 == 7);
+  t0->records[8].pos_z = 0x200;
+  assert(fifa96_match_entities_last_defender_step(t0, 8, 0x200) == FIFA96_OK);
+  assert(t0->last_defender7c3 == 8);
+  t0->records[9].pos_z = 0x100;
+  assert(fifa96_match_entities_last_defender_step(t0, 9, 0x100) == FIFA96_OK);
+  assert(t0->last_defender7c3 == 8);
+  /* argument guards */
+  assert(fifa96_match_entities_last_defender_step(NULL, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_last_defender_step(t0, -1, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_last_defender_step(t0, 11, 0) == -FIFA96_ERR_INVALID);
+
+  /* the opponent selector reads the SIBLING team block's +0x7C3 record. */
+  pool.team[TEAM1].records[2].pos_z = -0x9A;
+  pool.team[TEAM1].last_defender7c3 = 2;
+  z = 0;
+  assert(fifa96_match_entities_opponent_defender_z(&pool, TEAM0, &z) == 1);
+  assert(z == -0x9A);
+  z = 0;
+  assert(fifa96_match_entities_opponent_defender_z(&pool, TEAM1, &z) == 1);
+  assert(z == 0x200);                           /* team 0's cell = record 8 */
+  assert(fifa96_match_entities_opponent_defender_z(NULL, TEAM0, &z) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_opponent_defender_z(&pool, TEAM0, NULL) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_opponent_defender_z(&pool, 2, &z) ==
+         -FIFA96_ERR_INVALID);
+
+  /* reset `0x8C399`: `+0x7C3 := +0x7B2`, decoded from the encoded id. */
+  t0->target = 3;                               /* team 0, record 3 */
+  assert(fifa96_match_entities_last_defender_reset(&pool, TEAM0) == FIFA96_OK);
+  assert(t0->last_defender7c3 == 3);
+  t0->target = NONE;
+  assert(fifa96_match_entities_last_defender_reset(&pool, TEAM0) == FIFA96_OK);
+  assert(t0->last_defender7c3 == NONE);
+  t0->target = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;   /* the sibling team */
+  assert(fifa96_match_entities_last_defender_reset(&pool, TEAM0) == FIFA96_OK);
+  assert(t0->last_defender7c3 == NONE);
+  assert(fifa96_match_entities_last_defender_reset(NULL, TEAM0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_last_defender_reset(&pool, 2) == -FIFA96_ERR_INVALID);
 }
 
 /* The update chain order, observed by a counter callback: team 0 records
@@ -1279,6 +1369,7 @@ int main(void) {
   test_team_select_none();
   test_team_pick_ranked_lane();
   test_reset_lane_pass();
+  test_last_defender7c3();
   test_update_chain_order();
   test_update_selection_buckets();
   test_update_intercept_select();

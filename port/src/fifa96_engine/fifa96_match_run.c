@@ -1555,6 +1555,14 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   /* FU-153 / T1: the BF20 jump arc runs after the mover blocks and before the
    * 0x7C776 lane block (`0x7C057..0x7C113`). */
   match_run_record_jump_step(r);
+  /* FU-341 (phase-51 T2): the BF20 tail's last-defender tracker
+   * (`0x7C741..0x7C770`, between the `0x7C73E` z integration and the
+   * `0x7C776` lane block): active records only (`byte[rec+0x8D] != 0`), then
+   * the extreme-z store toward the team's own goal. The jump arc does not
+   * touch z, so `r->pos_z` is the native `[rec+0x61]` the block reads. */
+  if (r->active != 0)
+    (void)fifa96_match_entities_last_defender_step(&mr->entities.team[e->team],
+                                                   (int32_t)e->index, r->pos_z);
   {
     int16_t lane = 0;
     int16_t cam_dx = 0;

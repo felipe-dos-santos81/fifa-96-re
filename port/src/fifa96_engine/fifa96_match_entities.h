@@ -258,6 +258,20 @@ struct fifa96_match_team {
                              * the fresh lane is strictly smaller, and the
                              * FU-151 reset pass `FUN_0008C33C` copies the
                              * `FUN_0008DDE0` pick into it) */
+  int32_t last_defender7c3; /* +0x7C3 last-defender tracker: the team-relative
+                             * record index of the extreme-z record toward the
+                             * team's own goal (native record pointer; NONE =
+                             * the native NULL). Writer: the `FUN_0007BF20`
+                             * tail `0x7C74A..0x7C770` (per active dispatched
+                             * record, `fifa96_match_entities_last_defender_step`
+                             * from `match_run_dispatch_entity` after the z
+                             * integration); reset: `FUN_0008C33C` `0x8C399`
+                             * (`+0x7C3 := +0x7B2`,
+                             * `fifa96_match_entities_reset_lane`). Read by the
+                             * row-03 phase-2 clamp's opponent selector
+                             * (`0x15989C`/`0x159067` -> `[rec+0x61]`,
+                             * `fifa96_match_entities_opponent_defender_z`).
+                             * FU-341 (phase-51 T2). */
   int32_t target;           /* +0x7B2 encoded entity id or NONE */
   int32_t second;           /* +0x7B6 encoded entity id or NONE */
   int32_t chosen;           /* +0x7BF encoded entity id or NONE */
@@ -462,8 +476,9 @@ int fifa96_match_entities_team_pick(struct fifa96_match_entities *pool, uint32_t
  * derived installer (the native's virtual `[rec+0x1C]` target restore and the
  * 0x79B6C commit are unported; the derived subset keeps the live position,
  * FU-151 §3.4 leg). Then the team tail: `+0x7CB = 0`, the `FUN_0008DDE0`
- * pick with skip -1, `+0x7B6 = 0` (NONE), `+0x7B2 = pick`, `+0x7C7 = pick`
- * (`target`/`tracker7c7`), and the FU295 §2.2 controlled-side actor lift
+ * pick with skip -1, `+0x7B6 = 0` (NONE), `+0x7B2 = pick`, `+0x7C7 = pick`,
+ * `+0x7C3 = pick` (`target`/`tracker7c7`/`last_defender7c3`; FU-341 lands the
+ * `0x8C399` write), and the FU295 §2.2 controlled-side actor lift
  * (`0x8C3BE`, `fifa96_match_entities_actor_lift`). Returns FIFA96_OK or
  * -FIFA96_ERR_INVALID.
  *
@@ -474,13 +489,63 @@ int fifa96_match_entities_team_pick(struct fifa96_match_entities *pool, uint32_t
 int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_t team,
                                      int32_t cam_x, int32_t cam_z, uint8_t controlled_side);
 
+/* FU-341 (phase-51 T2): the native team field `+0x7C3` — the "last defender",
+ * i.e. the record with the extreme z toward the team's own goal (side 0 keeps
+ * the minimum z, side 1 the maximum). Fresh `disassemble_bytes 0x7C730` (this
+ * session) confirms the `FUN_0007BF20` tail:
+ *
+ *   0x7C741 CMP byte[rec+0x8D],0 / JZ skip   ; active records only
+ *   0x7C74A MOV EAX,[rec]                    ; team block
+ *   0x7C74D MOV EDX,[EAX+0x7C3] / TEST/JZ store
+ *   0x7C757 MOV EBX,[rec+0x61]               ; self pos_z
+ *   0x7C75A CMP EBX,[EDX+0x61]               ; vs the incumbent's pos_z
+ *   0x7C75D SETL DL / MOVZX EBX,DL
+ *   0x7C766 MOVZX EDX,byte[team+0x826]       ; side
+ *   0x7C76C XOR EDX,EBX / JZ skip
+ *   0x7C770 MOV [EAX+0x7C3],EBP              ; store the record pointer
+ *
+ * So the store fires when `side != (self_z < incumbent_z)`: side 0 keeps the
+ * MIN z and keeps the incumbent on an equal z; side 1 keeps the MAX z and
+ * replaces on an equal z (the native asymmetry). The engine stores the
+ * team-relative index (`index`) and uses `FIFA96_MATCH_ENTITY_NONE` for the
+ * native NULL. `team->records[index].pos_z` is the comparison value; an
+ * unset/NULL cell stores unconditionally. Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for a NULL team / out-of-range index. */
+int fifa96_match_entities_last_defender_step(struct fifa96_match_team *team,
+                                             int32_t index, int32_t pos_z);
+
+/* FU-341 (phase-51 T2): the `FUN_0008C33C` reset write `0x8C399` (fresh
+ * `disassemble_bytes 0x8C370`: `MOV EAX,[ESI+0x7B2]` at 0x8C38D then
+ * `MOV [ESI+0x7C3],EAX` at 0x8C399) — `+0x7C3 := +0x7B2` (the `FUN_0008DDE0`
+ * pick the same pass just stored). The engine's `team->target` is an encoded
+ * entity id while `+0x7C3` stores a team-relative index, so the id is decoded
+ * to its own-team index (an out-of-team id -> NONE). Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_last_defender_reset(struct fifa96_match_entities *pool,
+                                              uint32_t team);
+
+/* FU-341 (phase-51 T2): the row-03 phase-2 clamp's opponent selector
+ * (`0x15989C` / `0x159067` = the opponent team block's `+0x7C3`) read back as
+ * the `[rec+0x61]` dword: `*z = pool->team[1-team].records[ld].pos_z`.
+ * Fresh `disassemble_bytes` of the clamp (`0x7E360`/`0x7E383`) reads
+ * `MOV EAX,[0x15989C]; MOV EBP,[EAX+0x61]` (side-0 records read the side-1
+ * team's cell) and the mirror `MOV EAX,[0x159067]; MOV EDI,[EAX+0x61]`.
+ * Returns 1 and stores `*z` when the opponent cell is set, 0 (leaving `*z`
+ * untouched) when it is NONE — the native guarantees a pointer, so this is a
+ * declared engine default (an unset anchor skips the side clamp). NULL pool /
+ * `z` / team >= 2 -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_opponent_defender_z(const struct fifa96_match_entities *pool,
+                                              uint32_t team, int32_t *z);
+
 /* FU295 §2.2/§2.3 (phase-27 T6): the `FUN_0008C33C` controlled-side actor lift
  * (`0x8C3BE`, fresh `decompile_function 0x8C33C`): `if (([0x157AAC]>>0x18) ==
  * byte[team+0x826]) [0x157A83] = [team+0x7B2];` — the team's picked target
  * (`team->target`) is lifted into the actor cell (`pool->controlled`) only when
  * `team->side == controlled_side`. The remaining `FUN_0008C33C` tail writes
- * (`+0x7C3 = target`, `+0x7BF = 0`, the `+0x82x`/`+0x7E7` clears,
- * `FUN_0008C418`) stay unported legs. The native callers (the `0x741C4` driver
+ * (`+0x7BF = 0`, the `+0x82x`/`+0x7E7` clears,
+ * `FUN_0008C418`) stay unported legs; the `+0x7C3 = target` write is now the
+ * FU-341 `last_defender7c3` cell in `fifa96_match_entities_reset_lane`.
+ * The native callers (the `0x741C4` driver
  * and `FUN_0007417C`) are unported (FU295-L1), so this is not wired live.
  * NULL pool / team >= 2 -> -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_actor_lift(struct fifa96_match_entities *pool, uint32_t team,
