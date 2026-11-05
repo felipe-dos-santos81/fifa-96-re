@@ -208,3 +208,11 @@ This phase lands comments/spec only: no engine behavior, no dispatch table, no
 census. The intended gate is M1 `09b726b7…` and M2 v25 `ea18ee1d…` exact and
 `make check` 112/112. The row-05 experiment and the act-9 timer/camera
 experiments were reverted before the gate.
+
+## Phase-44 erratum — FU316-L9 landed (2026-11-04)
+
+The unarmed `0x7131C` mirror described in §4 is now wired:
+`fifa96_match_goal_arm` reaches `match_run_goal_mirror` on the disarmed phase
+and armer-gate fail paths, and the `0x720..0x730` gap mirrors without arming.
+The angle arm remains FU-71 leg 9.6. The row-05 claim tail is still deferred
+for the probe re-characterization described in §2.1.

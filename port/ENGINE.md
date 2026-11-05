@@ -8451,3 +8451,20 @@ No engine behavior, dispatch table, census, or golden changed. M1
 `09b726b7…` / M2 v25 `ea18ee1d…` stay exact; `make check` **112/112**.
 Census unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live, 6
 blocked, action 38/45, phase 25/35**.
+
+## Phase 44 — unarmed camera mirror (FU316-L9, 2026-11-04)
+
+`fifa96_match_goal_arm` now runs the native `0x718A9` mirror gate on the
+disarmed fail paths as well as the armed path. The phase check at `0x713A0`
+and the armer bound at `0x713C0` both jump to the mirror, whose tighter
+`|z| > 0xB10` / `|x| > 0x720` gate can fire in the `0x720..0x730` gap without
+setting `goal_armed`. `match_run_goal_mirror` passes
+`transition_active = goal_zone != 0`, so a set zone or clear input bit still
+takes the unported angle arm (`0x719A0..0x71B98`, FU-71 leg 9.6); a mirror
+clears `goal_armed`/`goal_zone` and negates the mirrored velocity.
+
+Tests pin the disarmed z mirror, the `0x720..0x730` x mirror, the velocity
+negation and the zone-set no-op. The M2 tape keeps `input_bit0 == 0`, so the
+golden is byte-identical; the live frame suite passes. Census unchanged:
+**78/78 bodies, 57/80 natural, 63/80 install-live, 6 blocked, action 38/45,
+phase 25/35**.

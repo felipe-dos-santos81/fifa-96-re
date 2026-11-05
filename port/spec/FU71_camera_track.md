@@ -560,3 +560,11 @@ change. Port write set: `port/src/fifa96_loader/fifa96_camera.h`,
 (one library/test block). `make test`: 59/59 before, **60/60 after**;
 ASan+UBSan `test_camera` clean. `data/game/FIFAPCCD96.iso` untouched;
 `data/fifa96.rep/**` churn not staged.
+
+## Phase-44 note — the unarmed mirror is now wired (2026-11-04)
+
+`fifa96_match_goal_arm` no longer returns before `0x718A9` on the disarmed
+phase/armer-gate fail paths. `match_run_goal_mirror` runs the ported
+`fifa96_camera_reflect` with `transition_active = goal_zone != 0`, matching
+the native `0x718EF`/`0x718FF` gates; the `0x720..0x730` gap mirrors without
+arming. The angle arm `0x719A0..0x71B98` (FU-71 leg 9.6) remains unported.

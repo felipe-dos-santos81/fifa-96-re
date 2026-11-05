@@ -1999,10 +1999,13 @@ int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z);
  * `render.input_bit0` set it calls `fifa96_camera_reflect` and clears
  * `goal_armed`/`goal_zone` when the mirror fires (the native clears before
  * the mirror; zone != 0 or a clear input takes the unported angle arm, FU-71
- * leg 9.6, with no clear). The pan itself is the camera track (FU-71; the
- * pan producer is leg L1/S4); the fixture seam is the camera velocity pair.
- * Returns 1 when it armed or cleared, 0 for a no-op, -FIFA96_ERR_INVALID
- * (NULL). */
+ * leg 9.6, with no clear). The same `0x718A9` mirror gate is reached on both
+ * disarmed fail paths (`0x713A0` phase fail, `0x713C0` armer-gate fail,
+ * FU316-L9): the `0x720`/`0xB10` gate can mirror in the `0x720..0x730` gap
+ * without arming. The pan itself is the camera track (FU-71; the pan producer
+ * is leg L1/S4); the fixture seam is the camera velocity pair.
+ * Returns 1 when it armed, cleared, or mirrored, 0 for a no-op,
+ * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_goal_arm(struct fifa96_match_run *mr);
 
 /* FU-146 §7 item 1, landed here because FU-145's scanner calls it: the

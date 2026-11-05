@@ -5682,6 +5682,40 @@ static void test_goal_arm_reflect_clear(void) {
   mr.render.input_bit0 = 0;
   assert(fifa96_match_goal_arm(&mr) == 0);
   assert(mr.goal_armed == 1 && mr.render.camera.pos_z == 0x1300);
+
+  /* FU316-L9: the disarmed phase-fail path still reaches 0x718A9. Phase 1,
+   * zone 0, bit 0 set: the mirror fires without arming. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 1;
+  mr.render.input_bit0 = 1;
+  fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  mr.render.camera.vel_z = 0x40;
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.goal_armed == 0 && mr.goal_zone == 0);
+  assert(mr.render.camera.pos_z == 0x1620 - 0x1300);
+  assert(mr.render.camera.vel_z == (int16_t)(uint16_t)(0u - 0x40u));
+
+  /* The 0x720..0x730 gap: phase 2 fails the 0x730 armer gate but passes the
+   * 0x720 mirror gate, so the disarmed call mirrors instead of arming. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.render.input_bit0 = 1;
+  fifa96_camera_init(&mr.render.camera, 0x730, 0, 0);
+  mr.render.camera.vel_x = 0x20;
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.goal_armed == 0 && mr.goal_zone == 0);
+  assert(mr.render.camera.pos_x == 0xE40 - 0x730);
+  assert(mr.render.camera.vel_x == (int16_t)(uint16_t)(0u - 0x20u));
+
+  /* A set zone takes the unported angle arm, not the mirror, on the disarmed
+   * path too. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 1;
+  mr.goal_zone = 1;
+  mr.render.input_bit0 = 1;
+  fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.goal_armed == 0 && mr.render.camera.pos_z == 0x1300);
 }
 
 /* FU-145 S2: the clock-tail gate and scanner (`FUN_0008AF38 0x8B623..0x8B643`

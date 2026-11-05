@@ -3637,3 +3637,12 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   act-9 timer/camera order were measured and reverted. The stale stage-3
   `word[0x15881A]` comments are corrected to the act timer
   `word[0x158818]`. No census or golden change; `make check` 112/112.
+
+- **phase-44 unarmed camera mirror (2026-11-04).** Closed the FU316-L9 mirror
+  path: `fifa96_match_goal_arm` now reaches the native `0x718A9` gate on the
+  disarmed phase and armer-bound fail paths, so the `0x720..0x730` gap can
+  mirror without arming. A set zone or clear input bit still takes the
+  unported angle arm (FU-71 leg 9.6). Tests pin the disarmed z mirror, the gap
+  x mirror, velocity negation and the zone-set no-op. M1/M2 stay exact (the
+  tape has `input_bit0 == 0`); census unchanged (`78/78`, `57/80`, `63/80`,
+  `6` blocked); `make check` 112/112.

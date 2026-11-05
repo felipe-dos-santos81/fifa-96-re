@@ -3323,30 +3323,34 @@ int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z) {
   return bits == 0;                        /* 0x700E8..0x700EB TEST/SETZ */
 }
 
+/* FU316-L9: the native `0x718A9..0x71972` mirror is reached on the armed
+ * path and on both disarmed fail paths (`0x713A0` phase fail, `0x713C0`
+ * armer-gate fail). It mirrors only when `[0x5781E] == 0` (the engine
+ * `goal_zone`) and input bit 0 is set; otherwise the unported angle arm
+ * (FU-71 leg 9.6) runs and this helper is a no-op. */
+static int match_run_goal_mirror(struct fifa96_match_run *mr) {
+  if (fifa96_camera_reflect(&mr->render.camera, mr->render.input_bit0,
+                            mr->goal_zone != 0 ? 1 : 0) != 0) {
+    mr->goal_armed = 0;
+    mr->goal_zone = 0;
+    return 1;
+  }
+  return 0;
+}
+
 int fifa96_match_goal_arm(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
-  if (mr->goal_armed) {
-    /* The already-armed reflect arm `0x718A9..0x7190E`: zone != 0 takes the
-     * unported angle arm (FU-71 leg 9.6) with no clear; zone == 0 and the
-     * reflect input bit set mirror the camera and clear both arm flags. The
-     * native clear happens before the mirror body; the ported
-     * fifa96_camera_reflect carries the same `0xB10`/`0x720` gate. */
-    if (mr->goal_zone == 0) {
-      if (fifa96_camera_reflect(&mr->render.camera, mr->render.input_bit0, 0) != 0) {
-        mr->goal_armed = 0;
-        mr->goal_zone = 0;
-        return 1;
-      }
-    }
-    return 0;
-  }
-  /* 0x71390..0x713A0: phase 2/0x10 only. */
-  if (mr->state.phase != 2u && mr->state.phase != 0x10u) return 0;
+  if (mr->goal_armed) return match_run_goal_mirror(mr);
+  /* 0x71390..0x713A0: phase 2/0x10; any other phase still reaches the
+   * 0x718A9 mirror gate (the native `JNZ 0x718A9`). */
+  if (mr->state.phase != 2u && mr->state.phase != 0x10u)
+    return match_run_goal_mirror(mr);
   /* 0x713A6..0x713C0: |camZ|_w > 0xB20 || |camX|_w > 0x730 (the word
-   * truncation trap is reproduced by match_run_goal_abs_word). */
+   * truncation trap is reproduced by match_run_goal_abs_word). A failed gate
+   * also reaches 0x718A9, where the tighter 0xB10/0x720 mirror can fire. */
   if (!(match_run_goal_abs_word(mr->render.camera.pos_z) > (int16_t)0xB20 ||
         match_run_goal_abs_word(mr->render.camera.pos_x) > (int16_t)0x730))
-    return 0;
+    return match_run_goal_mirror(mr);
   /* 0x713DB..0x713EC: arm, freeze the snapshot triple (y forced 0), then
    * 0x713F2 the goal-mouth classifier over the live camera triple. The
    * native also latches [0x157ACB] at 0x713E6 (leg L7: dropped, its only

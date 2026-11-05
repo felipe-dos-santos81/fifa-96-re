@@ -719,3 +719,14 @@ natural-claim probe (stop 702→850, 27→175 frames, x `-0x90`→`-0x736`) and
 breaks the long-ball `cross_ok` probe, so it needs a dedicated
 re-characterization rather than a fixture edit. FU316-L9 (the unarmed
 `0x7131C` mirror) is untouched.
+
+## Phase-44 erratum — FU316-L9 mirror path closed (2026-11-04)
+
+`fifa96_match_goal_arm` now reaches the `0x718A9` mirror gate on both disarmed
+fail paths too: the phase `0x713A0 JNZ` and the armer-gate `0x713C0 JLE`.
+`match_run_goal_mirror` calls `fifa96_camera_reflect` with
+`transition_active = goal_zone != 0`, so the `0x720`/`0xB10` mirror can fire
+without arming (the `0x720..0x730` gap) and the zone-set/clear-bit cases still
+fall to the unported angle arm. Tests pin the disarmed z mirror, the
+`0x720..0x730` x mirror, the velocity negation and the zone-set no-op. The
+angle arm `0x719A0..0x71B98` remains FU-71 leg 9.6.
