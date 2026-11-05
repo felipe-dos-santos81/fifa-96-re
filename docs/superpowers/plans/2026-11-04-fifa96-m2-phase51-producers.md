@@ -11,7 +11,7 @@ for the row-03 clamp inputs.
 
 ---
 
-## T1 — phase `0x13` slot + write-seam scatter (golden v27)
+## Task 1 — phase `0x13` slot + write-seam scatter (T1, golden v27)
 
 **Requirements (R5):** wire the ported `fifa96_match_phase_13` into the phase
 dispatch table and call `fifa96_match_phase_machine_scatter` at the native
@@ -66,7 +66,7 @@ scratch prediction is the control.
 
 ---
 
-## T2 — action row `0x03`: the arm fidelity fixes
+## Task 2 — action row `0x03` arm fidelity fixes (T2)
 
 **Requirements (R6):** fix the three defects in the already-ported
 `0x7E1CE..0x7E223` arm, then decide the slot per the clamp-input verdict.
@@ -94,7 +94,7 @@ is not dispatched).
 
 ---
 
-## T2b — wire row `0x03` (conditional on R11: clamp inputs portable)
+## Task 3 — wire row `0x03` (T2b; conditional on R11: clamp inputs portable)
 
 If R11 shows `FUN_0008C418` + the opponent selector are portable in one small
 task: port them, fill the clamp inputs in `fifa96_match_action_03`, wire
@@ -108,7 +108,7 @@ carried leg; record that ruling.
 
 ---
 
-## T3 — FU-71 leg 9.6: the far-wall damp/event arm
+## Task 4 — FU-71 leg 9.6 far-wall damp/event arm (T3)
 
 **Requirements (R8):** port `0x719A0..0x71B98` as `fifa96_camera_wall_arm`
 (or the owning camera module), reached from `fifa96_match_goal_arm` when
@@ -125,7 +125,7 @@ the outer gate).
 
 ---
 
-## T4 — phase-6 stage-3 latch + blocked reasons
+## Task 5 — phase-6 stage-3 latch + blocked reasons (T4)
 
 **Requirements (R1/R3):** add `ball_row_flag_158882` to the run struct and
 the native latch write at the stage-1→2 transition
@@ -151,7 +151,7 @@ byte-identical; measure.
 
 ---
 
-## T5 — close-out
+## Task 6 — close-out (T5)
 
 - ENGINE phase-51 register: T1/T2/T2b/T3/T4 outcomes, the re-pin ledger,
   the new headline, the legs closed/carried.
