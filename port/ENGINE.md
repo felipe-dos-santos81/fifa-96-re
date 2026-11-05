@@ -8957,3 +8957,54 @@ FU342-L6 — `0x36208`. FU342-L7 — the FU326-L4 `0x1104AB` init row. The
 `0x8D040[0x15] = 0x8D77B` walk arm stays the FU170-L2 residual; the act-9
 stage-1/2 gates stay FU170-L1 (the original FU-181 §7 item 5), not the
 phase-53 stage-0 scope. `make check` green (112/112).
+
+## P3 match audio register (2026-11-05)
+
+The match is audible through the ported DSP stack for the first time. The
+chain is `mr->ref_whistle` (staged by the eight `0x974DC(0x1E)` sinks) ->
+`fifa96_match_audio_step` cue edge -> `fifa96_sfx_play_id` ->
+`fifa96_mixer_render` -> `plat->audio_submit` -> `SDL_PutAudioStreamData`.
+The crowd bed is armed directly, without the native ambience state machine:
+`/SOUND/CHN_GEN1.BNK` id **55** (`CHN_GEN1`) through
+`fifa96_sfx_arm_alloc` at caller volume **0x60**, master 0x7F (mixer gain 0x60;
+the 16 kHz `DELTA_MONO` EACS loop 10753 + 97673 = 6.1 s loops indefinitely).
+The whistle is `/SOUND/SFX_GAME.BNK` id **0x1E = 30** at caller volume 0x7F on
+a rising/any-change edge of `ref_whistle`; the slot is cleared by
+`fifa96_match_run_referee_step` (`fifa96_match_run.c:7663`) before the frame
+writers, so a held slot does not repeat. A score increase fires the labelled
+goal stand-in id **15** (the longest crowd-like `SFX_GAME` clip, 6.78 s). The
+module renders `22050 * ticks / 100` frames per engine step (220/221 at 10 ms)
+in 512-frame chunks.
+
+Wiring: `fifa96_match_audio_start` runs on the first MATCH step after the
+bridge begins the run; banks are read through `fifa96_cache_get` (the cache is
+created on demand when boot had no intro), and a missing ISO/bank is a soft
+failure (silent, playable). The step runs after `fifa96_match_run_step`, and
+`fifa96_match_audio_stop` runs when `e->match` clears, on QUIT, and in
+`fifa96_engine_destroy`. **Headless (`cfg.headless`) never starts or steps the
+module**, so the null tapes submit no PCM: `test_engine_m1` and
+`test_engine_m2` now assert `audio_frames == 0` and `audio_hash == 0` for the
+full tapes, and M1 `09b726b7…` / M2 v29 `7c3874f7…` are byte-identical.
+`test_engine_audio` covers the no-bank silent contract, the retail crowd arm
+(loop, gain 0x60), 1 s of non-silent stereo PCM at exactly 22050 frames, the
+whistle edge (one cue per change, none while held, nonzero gain), and the goal
+edge. Windowed verification (2026-11-05, `DISPLAY=:1`, ISO mounted): the SDL3
+device opened at 22050 Hz S16 stereo (`SDL_OpenAudioDevice` dev 25) and bound;
+the real game submitted 248 PCM chunks / 377,496 bytes / 94,374 frames
+(≈4.3 s) over a live match, with 188,688 nonzero samples (peak 24576) and
+exit rc 0 (instrumented with a verification-only `LD_PRELOAD` shim around
+`SDL_OpenAudioDevice`/`SDL_BindAudioStream`/`SDL_PutAudioStreamData`; no test
+or game code change).
+
+Open legs: **A6-L1** the match effect id map `{1,2,4,8,0xB,0xC,0xE}` and the
+kick cue (no port producer stages one; FU-113 §7 leg 1); **A6-L2** the native
+goal audio is the `FUN_00066724` commentary chain (OL-89) — id 15 is a
+stand-in; **A6-L3** team/event CHN selection (`FUN_000652f0`), the 20..59 s
+`FUN_00091F60`/`FUN_000920C0` ambience machine and the `0x37` volume ramp;
+**A6-L4** CRD music (raw 8-bit mono tracks, no `fifa96_eacs` format);
+**A6-L5** commentary (`PHR_*` phrase banks, `ref_speech` has no consumer);
+**A6-L6** the channel/master volume model `[0x55D00..]`/`[0x15FD6]` and
+settings sliders 0x11/0x12/0x13 (v1 fixed gains); **A6-L9** the unported
+`0x974DC(0x1E)` sinks (row-01/0x10/0x11/0x12/0x13 and the scanner) do not
+move `ref_whistle`. The SDL3 queue still has no backpressure and a failed
+device open remains silent (`platform_sdl3.c`, A6-L7; not changed here).

@@ -73,6 +73,23 @@ static int engine_key_mapped(int32_t raw_code) {
   }
 }
 
+/* P3: start match audio on the first MATCH step with a live run. The banks are
+ * borrowed from the cache (created here when boot had no intro asset), and a
+ * missing ISO/bank is a soft failure: the match stays silent and playable.
+ * Headless runs never reach this helper (the engine step gates them out), so
+ * the null tapes keep submitting no PCM. */
+static int engine_match_audio_begin(struct fifa96_engine *e) {
+  if (!e || !e->match || e->audio.active) return 0;
+  if (!e->assets) return -1;
+  if (!e->cache) e->cache = fifa96_cache_create(e->assets);
+  if (!e->cache) return -1;
+  size_t sfx_len = 0, crowd_len = 0;
+  const uint8_t *sfx = fifa96_cache_get(e->cache, "/SOUND/SFX_GAME.BNK", &sfx_len);
+  const uint8_t *crowd = fifa96_cache_get(e->cache, "/SOUND/CHN_GEN1.BNK", &crowd_len);
+  return fifa96_match_audio_start(&e->audio, e->match, sfx, sfx_len,
+                                  crowd, crowd_len);
+}
+
 struct fifa96_engine *fifa96_engine_create(const struct fifa96_engine_config *cfg,
                                            fifa96_platform *plat) {
   if (!cfg || !plat) return NULL;
@@ -229,7 +246,15 @@ int fifa96_engine_step(struct fifa96_engine *e) {
       if (!e->match) {
         e->mode = FIFA96_ENGINE_MODE_FRONTEND;
       } else {
+        if (!e->cfg.headless && !e->audio.active)
+          (void)engine_match_audio_begin(e);
         if (fifa96_match_run_step(e->match) < 0) return -1;
+        /* P3: the run step above has applied this frame's whistle writer, so
+         * the audio cue edge is sampled after it (the clock already advanced
+         * the 100 Hz pump before this dispatch). */
+        if (!e->cfg.headless && e->audio.active && e->match)
+          (void)fifa96_match_audio_step(&e->audio, e->match, e->plat,
+                                        e->step_ticks);
         /* One presentation pass per presented frame: recompose the indexed
          * match canvas before the surface->planes conversion below. The run
          * no-ops while rendering is disabled (the Task 12-14 fixtures). */
@@ -239,6 +264,11 @@ int fifa96_engine_step(struct fifa96_engine *e) {
       }
     }
   }
+  /* P3: stop on match end (fifa96_match_run_end clears e->match) or a QUIT
+   * transition. The bank bytes stay in the cache until engine destroy. */
+  if (e->audio.active &&
+      (e->mode != FIFA96_ENGINE_MODE_MATCH || !e->match))
+    fifa96_match_audio_stop(&e->audio);
   fifa96_platform_frame f;
   fifa96_surface_plane(e->surface, &f);
   if (e->plat->present(e->plat->self, &f) != 0) return -1;
@@ -271,7 +301,9 @@ int fifa96_engine_should_quit(const struct fifa96_engine *e) {
 void fifa96_engine_destroy(struct fifa96_engine *e) {
   if (!e) return;
   /* Ownership contract in fifa96_match_run.h: a run alive at destroy must
-   * outlive this call; end it before the engine state is freed. */
+   * outlive this call; end it before the engine state is freed. Stop the
+   * audio first: its bank descriptors borrow the cache bytes. */
+  fifa96_match_audio_stop(&e->audio);
   if (e->match) fifa96_match_run_end(e->match);
   if (e->booted) e->plat->shutdown(e->plat->self);
   fifa96_surface_destroy(e->surface);

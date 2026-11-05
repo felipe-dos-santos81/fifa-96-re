@@ -3796,3 +3796,21 @@ close-out below).
   `port/spec/FU-342_act9_stage0_sinks.md`, FU-181/FU-170 Task-3 errata, and
   this register. The `0x8D040[0x15] = 0x8D77B` walk arm stays the FU170-L2
   residual; the act-9 stage-1/2 gates stay FU170-L1.
+
+- **P3 match audio (playable SDL, 2026-11-05).** New
+  `fifa96_match_audio.{c,h}` makes the match audible: the `CHN_GEN1` id 55
+  crowd loop armed at gain 0x60 through `fifa96_sfx_arm_alloc`, the
+  `SFX_GAME` id 0x1E whistle on a `ref_whistle` change, and a labelled id 15
+  goal stand-in on a score increase, all rendered by `fifa96_mixer_render`
+  into `plat->audio_submit` at 220/221 frames per 10 ms tick (22050 Hz stereo).
+  Banks load through the engine asset cache; missing ISO/banks stay silent.
+  The module is disabled under `cfg.headless`, so `test_engine_m1` and
+  `test_engine_m2` assert zero audio frames/hash and both goldens stay exact.
+  `test_engine_audio` covers the no-bank contract and the retail banks
+  (loop armed at gain 0x60, 22050 non-silent frames per second, whistle edge
+  and gain, goal edge). Windowed run (`DISPLAY=:1`, ISO): SDL opened 22050 Hz
+  S16 stereo and the real game submitted 94,374 non-silent frames (≈4.3 s,
+  peak 24576) over a live match; see `port/ENGINE.md` P3 register. Legs:
+  A6-L1 kick/effect id map, A6-L2 commentary-driven goal audio, A6-L3 crowd
+  event/team machine, A6-L4 CRD music, A6-L5 commentary, A6-L6 channel
+  volumes, A6-L9 unported whistle sinks.
