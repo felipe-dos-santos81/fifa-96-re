@@ -9154,13 +9154,19 @@ The crowd bed is armed directly, without the native ambience state machine:
 `/SOUND/CHN_GEN1.BNK` id **55** (`CHN_GEN1`) through
 `fifa96_sfx_arm_alloc` at caller volume **0x60**, master 0x7F (mixer gain 0x60;
 the 16 kHz `DELTA_MONO` EACS loop 10753 + 97673 = 6.1 s loops indefinitely).
-The whistle is `/SOUND/SFX_GAME.BNK` id **0x1E = 30** at caller volume 0x7F on
-a rising/any-change edge of `ref_whistle`; the slot is cleared by
-`fifa96_match_run_referee_step` (`fifa96_match_run.c:7663`) before the frame
-writers, so a held slot does not repeat. A score increase fires the labelled
-goal stand-in id **15** (the longest crowd-like `SFX_GAME` clip, 6.78 s). The
-module renders `22050 * ticks / 100` frames per engine step (220/221 at 10 ms)
-in 512-frame chunks.
+The whistle is `/SOUND/SFX_GAME.BNK` id **0x1E = 30** at caller volume 0x7F.
+The cue edge is `mr->whistle_seq`, the monotone count the run increments at
+every staged `0x974DC(0x1E)` write (the eight sites: `match_run_ref_apply`,
+`match_run_ref_step_restart`, the act-0x1D wait arm and
+`fifa96_match_action_phase_21/22`), so a clear + re-set inside one frame body
+is audible; one cue is played per pending write (two writes in one step fire
+two cues). `mr->ref_whistle` is the staged level, cleared by
+`fifa96_match_run_referee_step` before the frame writers, and remains the
+compatibility fallback edge for fixtures that stage the byte directly (a held
+slot does not repeat). A score increase fires the labelled goal stand-in id
+**15** (the longest crowd-like `SFX_GAME` clip, 6.78 s). The module renders
+`22050 * ticks / 100` frames per engine step (220/221 at 10 ms) in 512-frame
+chunks.
 
 Wiring: `fifa96_match_audio_start` runs on the first MATCH step after the
 bridge begins the run; banks are read through `fifa96_cache_get` (the cache is
@@ -9173,8 +9179,10 @@ module**, so the null tapes submit no PCM: `test_engine_m1` and
 full tapes, and M1 `09b726b7…` / M2 v29 `7c3874f7…` are byte-identical.
 `test_engine_audio` covers the no-bank silent contract, the retail crowd arm
 (loop, gain 0x60), 1 s of non-silent stereo PCM at exactly 22050 frames, the
-whistle edge (one cue per change, none while held, nonzero gain), and the goal
-edge. Windowed verification (2026-11-05, `DISPLAY=:1`, ISO mounted): the SDL3
+whistle level edge (one cue per change, none while held, nonzero gain), the
+durable `whistle_seq` edge (a clear+re-set inside one step cues; two pending
+writes cue twice; the referee clear does not increment), and the goal edge.
+Windowed verification (2026-11-05, `DISPLAY=:1`, ISO mounted): the SDL3
 device opened at 22050 Hz S16 stereo (`SDL_OpenAudioDevice` dev 25) and bound;
 the real game submitted 248 PCM chunks / 377,496 bytes / 94,374 frames
 (≈4.3 s) over a live match, with 188,688 nonzero samples (peak 24576) and
@@ -9190,10 +9198,13 @@ stand-in; **A6-L3** team/event CHN selection (`FUN_000652f0`), the 20..59 s
 **A6-L4** CRD music (raw 8-bit mono tracks, no `fifa96_eacs` format);
 **A6-L5** commentary (`PHR_*` phrase banks, `ref_speech` has no consumer);
 **A6-L6** the channel/master volume model `[0x55D00..]`/`[0x15FD6]` and
-settings sliders 0x11/0x12/0x13 (v1 fixed gains); **A6-L9** the unported
+settings sliders 0x11/0x12/0x13 (v1 fixed gains); **A6-L8** the intro video
+companion audio (`fifa96_intro.c` discards the `1SNh`/`1SNd` chunks, FU-35 §1)
+is out of this slice; **A6-L9** the unported
 `0x974DC(0x1E)` sinks (row-01/0x10/0x11/0x12/0x13 and the scanner) do not
-move `ref_whistle`. The SDL3 queue still has no backpressure and a failed
-device open remains silent (`platform_sdl3.c`, A6-L7; not changed here).
+move `ref_whistle`/`whistle_seq`. The SDL3 queue still has no backpressure and
+a failed device open remains silent (`platform_sdl3.c`, A6-L7; not changed
+here).
 
 ## Phase 55 — P4: HUD, pause and full-time result (FU-343, 2026-11-05)
 
@@ -9209,11 +9220,14 @@ cells (A4 §3). The live draw now applies the native bar pixel rule
 `0x00..0xFD` opaque, `0xFE` = shade the **destination**, `0xFF` transparent
 (`FUN_000D11CB` 0xD12DB.. / `FUN_000CEB9A` 0xCEBBC..), and the native two-pass
 text pair outline `0x00` / body = `hud_ink`. `hud_ink` is the palette index
-maximising `min(r,g,b)` (the A4 near-white scan; 30 = (236,232,236) on the
-measured staging palette); `hud_shade[256]` is the nearest palette entry to
-half the destination RGB (`shade[0] = 0`), the documented stand-in for the
-unported palette-pool table `[0x14BF2C]`/`0x114274`. Both are rebuilt from the
-final live palette by `fifa96_match_run_stage`/`_stage_pitch`.
+maximising `min(r,g,b)` (the A4 near-white scan). On the final live palette
+the kit stage forces the pitch-marking slot `0xFE` to pure white, so the scan
+selects **`0xFE`** and the live HUD text is that white; 30 = (236,232,236) is
+only the pre-stage/fallback value on the measured staging palette.
+`hud_shade[256]` is the nearest palette entry to half the destination RGB
+(`shade[0] = 0`), the documented stand-in for the unported palette-pool table
+`[0x14BF2C]`/`0x114274`. Both are rebuilt from the final live palette by
+`fifa96_match_run_stage`/`_stage_pitch`.
 `fifa96_match_run_hud_colors_from_palette` is unit-pinned. The entire change is
 gated on `mr->live_start` (default 0 for the M2 tape and every direct-begin
 fixture); non-live frames keep the legacy FU-148 operands and 0-transparent

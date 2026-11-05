@@ -3851,27 +3851,31 @@ close-out below).
 - **P3 match audio (playable SDL, 2026-11-05).** New
   `fifa96_match_audio.{c,h}` makes the match audible: the `CHN_GEN1` id 55
   crowd loop armed at gain 0x60 through `fifa96_sfx_arm_alloc`, the
-  `SFX_GAME` id 0x1E whistle on a `ref_whistle` change, and a labelled id 15
+  `SFX_GAME` id 0x1E whistle on a `whistle_seq` change (the eight native
+  `0x974DC(0x1E)` writes increment the counter; one cue per pending write,
+  `ref_whistle` kept as the compatibility level edge), and a labelled id 15
   goal stand-in on a score increase, all rendered by `fifa96_mixer_render`
   into `plat->audio_submit` at 220/221 frames per 10 ms tick (22050 Hz stereo).
   Banks load through the engine asset cache; missing ISO/banks stay silent.
   The module is disabled under `cfg.headless`, so `test_engine_m1` and
   `test_engine_m2` assert zero audio frames/hash and both goldens stay exact.
   `test_engine_audio` covers the no-bank contract and the retail banks
-  (loop armed at gain 0x60, 22050 non-silent frames per second, whistle edge
-  and gain, goal edge). Windowed run (`DISPLAY=:1`, ISO): SDL opened 22050 Hz
-  S16 stereo and the real game submitted 94,374 non-silent frames (≈4.3 s,
-  peak 24576) over a live match; see `port/ENGINE.md` P3 register. Legs:
-  A6-L1 kick/effect id map, A6-L2 commentary-driven goal audio, A6-L3 crowd
-  event/team machine, A6-L4 CRD music, A6-L5 commentary, A6-L6 channel
-  volumes, A6-L9 unported whistle sinks.
+  (loop armed at gain 0x60, 22050 non-silent frames per second, whistle level
+  and sequence edges, goal edge). Windowed run (`DISPLAY=:1`, ISO): SDL opened
+  22050 Hz S16 stereo and the real game submitted 94,374 non-silent frames
+  (≈4.3 s, peak 24576) over a live match; see `port/ENGINE.md` P3 register.
+  Legs: A6-L1 kick/effect id map, A6-L2 commentary-driven goal audio, A6-L3
+  crowd event/team machine, A6-L4 CRD music, A6-L5 commentary, A6-L6 channel
+  volumes, A6-L8 intro video companion audio (out of this slice), A6-L9
+  unported whistle sinks.
 
 - **P4 HUD, pause and full-time result (playable SDL, 2026-11-05).** The live
   HUD now uses the native colour rule from A4: bar source `0x00..0xFD` opaque,
   `0xFE` shades the destination (nearest-half-luma palette table), `0xFF`
   transparent; text outline 0 and body `render.hud_ink` (palette max-min
-  near-white, 30 on the staging palette). Geometry, names, score/period/clock
-  cells are unchanged. The whole HUD change is gated on `mr->live_start`
+  near-white; the final live palette picks `0xFE`, the pure-white pitch-marking
+  slot, with 30 only the pre-stage fallback). Geometry, names, score/period/
+  clock cells are unchanged. The whole HUD change is gated on `mr->live_start`
   (default 0 for the M2 tape), so M1 `09b726b7…` and M2 v29 `7c3874f7…` stay
   byte-identical and no re-pin was taken. ESC in a live match now pauses via
   the native pace hold and draws a PAUSED plate (RETURN resume, X/Backspace

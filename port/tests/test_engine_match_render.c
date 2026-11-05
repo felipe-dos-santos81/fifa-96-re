@@ -1450,6 +1450,11 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   /* The v1 marking slot is white. */
   assert(r->palette[0xFE * 3] == 0xFF && r->palette[0xFE * 3 + 1] == 0xFF &&
          r->palette[0xFE * 3 + 2] == 0xFF);
+  /* FU-343 P4/P3 fix: the HUD colours are rebuilt from that final palette, so
+   * the near-white scan selects the pure-white 0xFE marking slot (the live
+   * text is white); 30 is only the pre-stage fallback. */
+  assert(r->hud_colors_ready == 1);
+  assert(r->hud_ink == FIFA96_PITCH_LINE_INDEX);
 
   live_fixture_drop(&f);
 }
@@ -1786,6 +1791,8 @@ static void test_live_pause_and_result_panels(void) {
   assert(f.s->indexed[94 * 320 + 86] == 30);   /* top border row */
   assert(f.s->indexed[95 * 320 + 86] == 0);    /* dark fill */
   assert(f.s->indexed[100 * 320 + 100] == 0);
+  /* The HUD still draws under the pause plate (it is outside the panel). */
+  assert(f.s->indexed[197 * 320 + 2] == 0x11);
 
   /* FULL TIME panel: 200x68 at ((320-200)/2, (240-68)/2) = (60,86). The
    * result draw is keyed on the lifecycle screen, not the phase. */
@@ -1796,6 +1803,15 @@ static void test_live_pause_and_result_panels(void) {
   assert(f.s->indexed[86 * 320 + 61] == 30);
   assert(f.s->indexed[87 * 320 + 61] == 0);
   assert(f.s->indexed[100 * 320 + 100] == 0);
+  /* FU-343 P5: POST/OVER suppress the HUD entirely (the result panel is the
+   * only live presentation there); the bar/period pixels stay background. */
+  assert(f.s->indexed[197 * 320 + 2] == 0x7F);
+  assert(f.s->indexed[224 * 320 + 4] == 0x7F);
+  f.mr.lc.screen = FIFA96_MATCH_SCREEN_OVER;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[86 * 320 + 60] == 30);   /* panel still drawn */
+  assert(f.s->indexed[197 * 320 + 2] == 0x7F);
+  assert(f.s->indexed[224 * 320 + 4] == 0x7F);
 
   /* Non-live: neither panel may draw (the M2 tape gate). */
   f.mr.live_start = 0;

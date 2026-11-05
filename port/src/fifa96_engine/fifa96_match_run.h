@@ -426,8 +426,12 @@ struct fifa96_match_run_render {
    * 0xFF green, so `hud_ink` is the palette index closest to near-white (the
    * max-min scan, A4 §4.1) and `hud_shade[256]` is the derived nearest-entry
    * halving stand-in for the unported shade table (A4 §4.2). Both are staged
-   * from the final palette by fifa96_match_run_stage/_stage_pitch. Non-live
-   * draws keep the legacy FU-148 operands, so M1/M2 stay byte-identical. */
+   * from the final palette by fifa96_match_run_stage/_stage_pitch; on the live
+   * palette the kit stage forces index 0xFE (the pitch-marking slot) to pure
+   * white, so the scan selects `0xFE` for the live HUD text. The 30 default is
+   * the pre-stage/fallback value (the measured staging palette's near-white).
+   * Non-live draws keep the legacy FU-148 operands, so M1/M2 stay
+   * byte-identical. */
   uint8_t hud_ink;
   uint8_t hud_shade[256];
   uint8_t hud_colors_ready;
@@ -1214,6 +1218,15 @@ struct fifa96_match_run {
   uint8_t ref_restart_stage;
   uint8_t ref_whistle;
   uint8_t ref_speech;
+  /* FU-343 (P3 fix): monotone count of the native `0x974DC(0x1E)` whistle
+   * assertions. `ref_whistle` is a level (the referee step clears it at the
+   * head of every granted frame), so a clear + re-set inside one frame body
+   * leaves the byte reading the same at the audio step; this counter makes
+   * every staged write observable. Init/begin zero it; only
+   * `match_run_whistle_event` increments it. The audio step consumes the
+   * delta (one cue per write), and `ref_whistle` remains the compatibility
+   * level edge for fixtures that stage the byte directly. */
+  uint32_t whistle_seq;
   /* FU-148 §3 (S4): the per-side formation id ([0x14C1E4]/[0x14C1E5]). The
    * native image default is 0 (BSS) and the match-init producer FUN_00011620
    * copies the team record +0x12 byte; the engine has no team record (leg), so
@@ -2461,12 +2474,16 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
  * sprite draw uses them only when live_start. The pitch markings index 0xFE is
  * forced to white.
  *
- * This is a soft stage: an absent/undecodable container leaves the previous
- * pitch/kit state untouched and returns the negative fifa96_err_t. It does not
- * touch the sprite arena, frames, banks, HUD or ball state. The bridge calls it
- * only on the live path, so the M2 tape never reaches the palette/remap edits.
- * Returns 0, -FIFA96_ERR_INVALID (NULL mr/eng), -FIFA96_ERR_STATE (run not live
- * or no asset table), -FIFA96_ERR_NOT_FOUND or -FIFA96_ERR_UNSUPPORTED. */
+ * This is a soft stage: an absent/undecodable pitch container leaves the
+ * previous pitch/kit state untouched. If the pitch succeeds but the kit stage
+ * fails, the new pitch is kept while the palette/remap commit is skipped (the
+ * kit is built into locals and copied only after the full success path, so a
+ * partial stage never rewrites the live palette or the HUD colours). It does
+ * not touch the sprite arena, frames, banks, HUD or ball state. The bridge
+ * calls it only on the live path, so the M2 tape never reaches the
+ * palette/remap edits. Returns 0, -FIFA96_ERR_INVALID (NULL mr/eng),
+ * -FIFA96_ERR_STATE (run not live or no asset table), -FIFA96_ERR_NOT_FOUND or
+ * -FIFA96_ERR_UNSUPPORTED. */
 int fifa96_match_run_stage_pitch(struct fifa96_match_run *mr, struct fifa96_engine *eng);
 
 /* OL-T11-6 (M2 playable-match Task 1): the derived native match palette.
@@ -2575,5 +2592,9 @@ int fifa96_match_run_resolve(struct fifa96_match_run *mr);
 int fifa96_match_run_step(struct fifa96_match_run *mr);
 
 /* Tear the match down through the lifecycle and clear the engine linkage.
+ * FU-343 fix: also clears the live-start gate, the live-only one-shot stage
+ * flags (`team_remap_ready`, `hud_colors_ready`) and the camera tracked bind,
+ * so a reused struct cannot inherit live mode after an end without the
+ * bridge's fresh opt-in (begin also rebuilds them via reset_render).
  * 0 = plain teardown, 1 = post-exit ran, or a -fifa96_err_t. */
 int fifa96_match_run_end(struct fifa96_match_run *mr);

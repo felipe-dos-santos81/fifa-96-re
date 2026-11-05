@@ -2573,6 +2573,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->ref_restart_stage = 0;
   mr->ref_whistle = 0;
   mr->ref_speech = 0;
+  mr->whistle_seq = 0;                 /* FU-343 P3 fix: no staged whistle */
   match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
@@ -2778,6 +2779,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->ref_restart_stage = 0;
   mr->ref_whistle = 0;
   mr->ref_speech = 0;
+  mr->whistle_seq = 0;                 /* FU-343 P3 fix: no staged whistle */
   {
     struct fifa96_settings settings;
     fifa96_settings_defaults(&settings);
@@ -5273,6 +5275,14 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   mr->paused = 0;               /* FU-343 P4: fresh pause/POST state on reuse */
   mr->post_timer = 0;
   mr->post_skip = 0;
+  /* FU-343 P3 fix: clear the live-only mode and its one-shot stage flags so a
+   * reused struct cannot inherit live mode. begin/reset_render rebuilds the
+   * render state anyway; this keeps the post-end state honest (and the
+   * live_start render gates closed) between end and the next begin. */
+  mr->live_start = 0;
+  mr->render.team_remap_ready = 0;
+  mr->render.hud_colors_ready = 0;
+  mr->render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
   if (eng) {
     if (eng->match == mr) eng->match = NULL;
     if (eng->mode == FIFA96_ENGINE_MODE_MATCH) eng->mode = FIFA96_ENGINE_MODE_FRONTEND;
@@ -5387,6 +5397,10 @@ void fifa96_match_run_hud_colors_from_palette(const uint8_t palette[768],
 
 static void match_run_hud_colors_refresh(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r = &mr->render;
+  /* FU-343 P4 note: on the final live palette the kit stage forces the pitch
+   * marking slot 0xFE to (255,255,255), so the max-min scan below selects
+   * 0xFE as the live text body. The compiled fallback 30 is only the pre-stage
+   * value (the measured staging palette's near-white). */
   if (r->palette_ready) {
     fifa96_match_run_hud_colors_from_palette(r->palette, &r->hud_ink, r->hud_shade);
     r->hud_colors_ready = 1;
@@ -7011,6 +7025,12 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
   uint8_t kit2[768];
   uint8_t sys0[768];
   uint8_t sys2[768];
+  /* FU-343 P3 fix: build the live palette and per-team remap into locals and
+   * commit them only after the full success path. A pitch stage that succeeds
+   * while the kit stage fails (missing PALteam or a bad frame) must not leave a
+   * half-installed live palette behind. */
+  uint8_t palette[768];
+  uint8_t remap_team[2][256];
   int have_team = 0;
   int have_sys = 0;
   struct fifa96_match_run_render *r = &mr->render;
@@ -7056,7 +7076,7 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
   }
   free(container);
   fifa96_asset_free(bytes);
-  if (!have_sys) return -FIFA96_ERR_UNSUPPORTED;
+  if (!have_sys || !have_team) return -FIFA96_ERR_UNSUPPORTED;
 
   /* The live base is PALsys frame 0 (the full match palette: the Fplain grass
    * indices 1..29 are green there). The derived non-live default uses the
@@ -7073,48 +7093,50 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
   memcpy(pal6 + MATCH_RUN_PALETTE_APPEND_B_OFF,
          sys2 + MATCH_RUN_PALETTE_APPEND_B_OFF, MATCH_RUN_PALETTE_APPEND_B_LEN);
   for (int i = 0; i < 256; i++) {
-    r->palette[i * 3] = (uint8_t)(pal6[i * 3] << 2);
-    r->palette[i * 3 + 1] = (uint8_t)(pal6[i * 3 + 1] << 2);
-    r->palette[i * 3 + 2] = (uint8_t)(pal6[i * 3 + 2] << 2);
+    palette[i * 3] = (uint8_t)(pal6[i * 3] << 2);
+    palette[i * 3 + 1] = (uint8_t)(pal6[i * 3 + 1] << 2);
+    palette[i * 3 + 2] = (uint8_t)(pal6[i * 3 + 2] << 2);
   }
-  if (!have_team) return -FIFA96_ERR_UNSUPPORTED;
 
   /* Team 0: keep the identity translation and overlay the real sprite-band
    * colours over the PALsys base (skip the Fplain tile indices 1..29). */
   for (int i = 0; i < 256; i++) {
-    r->remap_team[0][i] = (uint8_t)(i == 0 ? 0xFF : i);
-    r->remap_team[1][i] = (uint8_t)(i == 0 ? 0xFF : i);
+    remap_team[0][i] = (uint8_t)(i == 0 ? 0xFF : i);
+    remap_team[1][i] = (uint8_t)(i == 0 ? 0xFF : i);
   }
   for (int i = 30; i <= 229; i++) {
     if (kit0[i * 3] == MATCH_RUN_KIT_MAGENTA_R &&
         kit0[i * 3 + 1] == MATCH_RUN_KIT_MAGENTA_G &&
         kit0[i * 3 + 2] == MATCH_RUN_KIT_MAGENTA_B)
       continue;
-    r->palette[i * 3] = (uint8_t)(kit0[i * 3] << 2);
-    r->palette[i * 3 + 1] = (uint8_t)(kit0[i * 3 + 1] << 2);
-    r->palette[i * 3 + 2] = (uint8_t)(kit0[i * 3 + 2] << 2);
+    palette[i * 3] = (uint8_t)(kit0[i * 3] << 2);
+    palette[i * 3 + 1] = (uint8_t)(kit0[i * 3 + 1] << 2);
+    palette[i * 3 + 2] = (uint8_t)(kit0[i * 3 + 2] << 2);
   }
   /* Team 1: shirt 208..214 -> 239..245, shorts 195..203 -> 230..238 (A7 §4);
    * the translation redirects those bands, the palette slots take frame 2. */
   for (int i = 195; i <= 203; i++) {
     int dst = 230 + (i - 195);
-    r->remap_team[1][i] = (uint8_t)dst;
-    r->palette[dst * 3] = (uint8_t)(kit2[i * 3] << 2);
-    r->palette[dst * 3 + 1] = (uint8_t)(kit2[i * 3 + 1] << 2);
-    r->palette[dst * 3 + 2] = (uint8_t)(kit2[i * 3 + 2] << 2);
+    remap_team[1][i] = (uint8_t)dst;
+    palette[dst * 3] = (uint8_t)(kit2[i * 3] << 2);
+    palette[dst * 3 + 1] = (uint8_t)(kit2[i * 3 + 1] << 2);
+    palette[dst * 3 + 2] = (uint8_t)(kit2[i * 3 + 2] << 2);
   }
   for (int i = 208; i <= 214; i++) {
     int dst = 239 + (i - 208);
-    r->remap_team[1][i] = (uint8_t)dst;
-    r->palette[dst * 3] = (uint8_t)(kit2[i * 3] << 2);
-    r->palette[dst * 3 + 1] = (uint8_t)(kit2[i * 3 + 1] << 2);
-    r->palette[dst * 3 + 2] = (uint8_t)(kit2[i * 3 + 2] << 2);
+    remap_team[1][i] = (uint8_t)dst;
+    palette[dst * 3] = (uint8_t)(kit2[i * 3] << 2);
+    palette[dst * 3 + 1] = (uint8_t)(kit2[i * 3 + 1] << 2);
+    palette[dst * 3 + 2] = (uint8_t)(kit2[i * 3 + 2] << 2);
   }
   /* The v1 marking index: no PALsys/PALteam entry is white, so dedicate the
    * unused 0xFE slot (no PLAYART frame uses > 229, A7 §4). */
-  r->palette[FIFA96_PITCH_LINE_INDEX * 3] = 0xFF;
-  r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] = 0xFF;
-  r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 2] = 0xFF;
+  palette[FIFA96_PITCH_LINE_INDEX * 3] = 0xFF;
+  palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] = 0xFF;
+  palette[FIFA96_PITCH_LINE_INDEX * 3 + 2] = 0xFF;
+  /* Full success: commit the palette + remap atomically. */
+  memcpy(r->palette, palette, sizeof r->palette);
+  memcpy(r->remap_team, remap_team, sizeof r->remap_team);
   r->team_remap_ready = 1;
   /* FU-343 (P4): the final live palette is now installed; derive the HUD body
    * and 0xFE shade from it (the stage-time PALsys frame-2 values are stale). */
@@ -7168,6 +7190,16 @@ static int match_run_ref_view(const struct fifa96_match_run *mr, int32_t id,
   return 1;
 }
 
+/* FU-343 P3 fix: record one native `0x974DC(0x1E)` whistle assertion. The
+ * staged slot `ref_whistle` is a level cleared by the referee step at the head
+ * of each granted frame, so a clear + re-set inside one frame body would leave
+ * the same byte at the audio observation. `whistle_seq` is the monotone write
+ * count the audio module consumes; every writer of 0x1E must go through here. */
+static void match_run_whistle_event(struct fifa96_match_run *mr) {
+  mr->ref_whistle = 0x1Eu;
+  mr->whistle_seq++;
+}
+
 /* Apply one sequence step's requests: the whistle/speech observation slots,
  * the phase write with its FU-149 arm (the native FUN_000740A0 runs the
  * per-team FUN_0008D098 immediately), the record install on rec_first and the
@@ -7178,7 +7210,7 @@ static int match_run_ref_view(const struct fifa96_match_run *mr, int32_t id,
 static int match_run_ref_apply(struct fifa96_match_run *mr,
                                const struct fifa96_ref_sequence_out *out) {
   int rc;
-  if (out->whistle != 0u) mr->ref_whistle = 0x1Eu;
+  if (out->whistle != 0u) match_run_whistle_event(mr);
   if (out->speech_code != 0u) mr->ref_speech = out->speech_code;
   /* The native stage-0 order: the phase write runs before the record install
    * (0x8A091 vs 0x8A0A0), and the installer's +0x98 clear reads the new phase
@@ -7261,7 +7293,7 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
 static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
   int rc;
   if (mr->ref_restart_stage == 0u) {
-    if (mr->referee.foul_kind == 0u) mr->ref_whistle = 0x1Eu;
+    if (mr->referee.foul_kind == 0u) match_run_whistle_event(mr);
     /* 0x8935A: FUN_000740A0(0xA, fouled side) — the side lands in [0x157AAF]
      * before the arm. */
     mr->phase_machine.side_controlled = (uint8_t)((mr->referee.rec_first_side ^ 1u) & 1u);
@@ -7699,7 +7731,7 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
         /* The native gates read word[rec+0x65] (unported record cells, FU194-L7)
          * and the shared timeline word[0x15881A] (derived state.tick_total). */
         if ((int32_t)mr->state.tick_total < 0x78) return FIFA96_OK;
-        mr->ref_whistle = 0x1Eu;                     /* 0x974DC(0x1E) */
+        match_run_whistle_event(mr);                 /* 0x974DC(0x1E) */
         mr->global_5882a = 1u;                       /* [0x15882A]=1 */
         mr->act.timer = 0;
         mr->act.stage = 2u;
@@ -7980,14 +8012,14 @@ int fifa96_match_action_phase_21(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta); /* 0x8B884 */
   if (mr->act.stage == 0u) {                       /* 0x8B89E */
-    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    match_run_whistle_event(mr);                   /* 0x974DC(0x1E) */
     mr->act.timer = 0;                             /* 0x8B8B2 */
     mr->act.stage = 1u;                            /* 0x8B8B9 */
     return FIFA96_OK;
   }
   if (mr->act.stage == 1u) {                       /* 0x8B8C3 */
     if (mr->act.timer < 0x3C) return FIFA96_OK;    /* the word[0x15881A] gate (FU195-L4) */
-    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    match_run_whistle_event(mr);                   /* 0x974DC(0x1E) */
     mr->act.id = 0;                                /* 0x8B8ED [0x158808]/[0x158828] */
     mr->act.stage = 0;                             /* 0x8B8F3 */
     mr->act.timer = 0;                             /* 0x8B8DE */
@@ -8013,21 +8045,21 @@ int fifa96_match_action_phase_22(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta); /* 0x8B911 */
   if (mr->act.stage == 0u) {                       /* 0x8B92E */
-    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    match_run_whistle_event(mr);                   /* 0x974DC(0x1E) */
     mr->act.timer = 0;                             /* 0x8B951 */
     mr->act.stage = 1u;
     return FIFA96_OK;
   }
   if (mr->act.stage == 1u) {                       /* 0x8B95C */
     if (mr->act.timer < 0x3C) return FIFA96_OK;    /* the word[0x15881A] gate (FU195-L4) */
-    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    match_run_whistle_event(mr);                   /* 0x974DC(0x1E) */
     mr->act.timer = 0;                             /* 0x8B98E */
     mr->act.stage = 2u;
     return FIFA96_OK;
   }
   if (mr->act.stage == 2u) {                       /* 0x8B98F */
     if (mr->act.timer < 0x3C) return FIFA96_OK;    /* the word[0x15881A] gate (FU195-L4) */
-    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    match_run_whistle_event(mr);                   /* 0x974DC(0x1E) */
     mr->act.timer = 0;                             /* 0x8B9AA */
     mr->act.id = 0;                                /* 0x8B9B3 */
     mr->act.stage = 0;                             /* 0x8B9BF */
