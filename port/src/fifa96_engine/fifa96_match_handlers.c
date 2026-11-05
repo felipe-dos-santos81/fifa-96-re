@@ -2675,18 +2675,12 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.opp_target_index = match_row04_index(opp, mr->entities.team[opp].target);
   s.opp_7c7_index = FIFA96_OUTFIELD_ROW04_NONE;   /* [opp+0x7C7] unported (OL-72) */
   s.is_carrier = id == mr->entities.ball.carrier ? 1u : 0u;   /* [0x158777] stand-in */
-  /* FU-171 §7 rec 2 (T2/FU171-L2): the native half-line gates 0x7EDA0/0x7EE83/
-   * 0x7EFEE all read `[0x1577CA]` — the camera-tracked record — not the
-   * controlled actor. Live now that `fifa96_camera_set_tracked` maintains the
-   * cell (0x71D27); the controlled comparison stays only as the TRACKED_NONE
-   * fallback. */
-  {
-    int32_t tracked_id = mr->render.camera.tracked;
-    if (tracked_id != FIFA96_CAMERA_TRACKED_NONE)
-      s.is_ball_track = tracked_id == id ? 1u : 0u;
-    else
-      s.is_ball_track = id == controlled ? 1u : 0u;
-  }
+  /* FU316-L3: the native half-line gates 0x7EDA0/0x7EFEE read `[0x1577CA]`
+   * only. Live `fifa96_camera_set_tracked` maintains the cell (0x71D27);
+   * when it is NONE the comparison is false for every record — the controlled
+   * actor is not a fallback (the old stand-in blocked its first pan). The
+   * separate 0x7EE83 sound-arm side fallback stays FU171-L2. */
+  s.is_ball_track = (mr->render.camera.tracked == id) ? 1u : 0u;
   /* FU-147 S1: the BF20 lane block maintains `[team+0x7C7]`; the pool stores
    * it as the team-relative index. */
   s.is_team_7c7 = (mr->entities.team[team].tracker7c7 >= 0 &&

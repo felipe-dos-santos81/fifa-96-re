@@ -8489,3 +8489,18 @@ frames. M1 `09b726b7…` stays exact.
 
 Census unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live, 6
 blocked, action 38/45, phase 25/35**; `make check` **112/112**.
+
+## Phase 46 — row-04 tracked gate drops the controlled fallback (FU316-L3, 2026-11-04)
+
+`fifa96_match_action_04` now stages `is_ball_track` as
+`mr->render.camera.tracked == id` only. The old `TRACKED_NONE -> id ==
+controlled` fallback blocked the controlled record at the native `0x7EDA0`
+early return; with the fallback gone, a record with `tracked == NONE` and
+`lane >= 0x40` reaches the `0x7EDBD` receiver timer (`e->timer93 = 0x10`).
+The unit pins both the NONE and tracked cases, so removing the fallback is
+mutation-RED.
+
+M1/M2 are byte-identical: the tape's gate frames already carry a live tracked
+cell, and the row-04 caller path is unchanged. Census unchanged: **78/78
+bodies, 57/80 natural, 63/80 install-live, 6 blocked, action 38/45, phase
+25/35**; `make check` **112/112**.

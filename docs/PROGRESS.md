@@ -3658,3 +3658,11 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   more. M1 `09b726b7…` exact; census unchanged (`78/78`, `57/80`, `63/80`,
   `6` blocked); `make check` 112/112. The camera/`0x73E28`/`0x4C324` stage-0
   sinks remain FU181-L5 legs.
+
+- **phase-46 row-04 tracked gate (FU316-L3, 2026-11-04).** Removed the
+  `TRACKED_NONE -> id == controlled` fallback from the row-04 `is_ball_track`
+  staging. The native `0x7EDA0` gate now sees only the tracked cell, so a
+  record with `tracked == NONE` and `lane >= 0x40` reaches the `0x7EDBD`
+  receiver timer (`e->timer93 = 0x10`); the old fallback returned early. A
+  unit pins the NONE and tracked cases. M1/M2 are byte-identical; census
+  unchanged (`78/78`, `57/80`, `63/80`, `6` blocked); `make check` 112/112.

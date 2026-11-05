@@ -730,3 +730,14 @@ without arming (the `0x720..0x730` gap) and the zone-set/clear-bit cases still
 fall to the unported angle arm. Tests pin the disarmed z mirror, the
 `0x720..0x730` x mirror, the velocity negation and the zone-set no-op. The
 angle arm `0x719A0..0x71B98` remains FU-71 leg 9.6.
+
+## Phase-46 erratum — FU316-L3 closed (2026-11-04)
+
+`fifa96_match_action_04` now stages `is_ball_track` as
+`mr->render.camera.tracked == id` only; the `TRACKED_NONE -> id == controlled`
+fallback is removed. The native `0x7EDA0` early return is the discriminator:
+with `tracked == NONE` and `lane >= 0x40`, the record now reaches the
+`0x7EDBD` receiver timer (`e->timer93 = 0x10`), while the old fallback
+returned early. A unit pins both the NONE and tracked cases. M1/M2 are
+byte-identical (the tape's gate frames already carry a live tracked cell);
+census unchanged.

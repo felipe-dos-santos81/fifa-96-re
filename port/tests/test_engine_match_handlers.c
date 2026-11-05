@@ -1912,12 +1912,24 @@ static void test_action_04_ball_track_side_from_tracked(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
   assert(memcmp(&before, &f.mr.rng, sizeof before) != 0);
 
-  /* TRACKED_NONE: the controlled stand-in keeps the witness firing. */
+  /* TRACKED_NONE: the native cell comparison is false for every record, so
+   * the controlled actor is not a fallback. The `0x7EDA0` early return is
+   * the discriminator: with the old controlled fallback this dispatch would
+   * stop before the `0x7EDBD` receiver timer. */
   f.mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].records[0].lane_x = 0x48;
+  f.mr.entities.team[0].records[0].timer93 = 0;
+  f.mr.record.timer81 = 0;                   /* reach 0x7ED9B, lane >= 0x40 */
+  f.mr.entities.controlled = 0;               /* the old fallback's trigger */
   f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
-  before = f.mr.rng;
   assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
-  assert(memcmp(&before, &f.mr.rng, sizeof before) != 0);
+  assert(f.mr.entities.team[0].records[0].timer93 == 0x10); /* 0x7EDBD */
+
+  /* The tracked twin: is_ball_track == 1 takes the same 0x7EDA0 return. */
+  f.mr.entities.team[0].records[0].timer93 = 0;
+  f.mr.render.camera.tracked = 0;             /* the record's own id */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(f.mr.entities.team[0].records[0].timer93 == 0);
   drop_fixture(&f);
 }
 

@@ -671,3 +671,12 @@ Two review minors folded this round; fresh Ghidra reads (program
    camera Y producer gap the phase-14 T3 status in ENGINE.md records; the
    FU-170 restart wire now supplies the goal path, the open-play Y producer
    stays open).
+
+## Phase-46 erratum — the FU171-L2 controlled fallback is gone (2026-11-04)
+
+The row-04 `is_ball_track` staging now compares `mr->render.camera.tracked`
+only. The old `TRACKED_NONE -> id == controlled` fallback (FU171-L2's stand-in,
+also FU316-L3) was removed; the native `0x7EDA0` gate treats NONE as "not
+tracked" for every record. A unit pins the `0x7EDBD` receiver timer with
+`tracked = NONE, lane >= 0x40` and its tracked twin. M1/M2 are byte-identical;
+the emitted tracked-cell behavior is unchanged on the tape.
