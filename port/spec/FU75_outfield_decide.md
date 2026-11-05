@@ -832,6 +832,36 @@ M1 `09b726b7…` and M2 v27 `54f44987…` stay byte-identical (`cmp`); the
 census is untouched (`78/78`, `58/80`, `64/80`, 6 blocked, action `38/45`,
 phase `26/35`); `make check` 112/112.
 
+**FU75-L4.5a — the tail-ordering seam (fix round 1, 2026-11-05).** The
+engine snapshots `s.chase.unbound = (e->has_slot == 0)` in the outfield
+seam (`fifa96_match_run.c`, `match_run_outfield_input`) **before** the
+released-row scan, so `fifa96_outfield_chase_action` reads the pre-switch
+`[rec+0x20]`. Native `0x7D1D4` runs inside the same record machine
+**before** the `0x7CC82` tail, and the chase gate's fresh
+`0x7CD03 CMP dword ptr [EBP+0x20],0` therefore reads the **post-switch**
+cell: a record that gives up the slot on the switch frame can install
+code 8 in that same frame natively, while the port defers the install by
+one frame (the next frame's snapshot sees `has_slot == 0`). The leg is
+named **FU75-L4.5a**; its owner is the `fifa96_match_run` outfield seam.
+The same ordering statement covers the latent `0x7CB03` direct-arm
+consumer: it calls the binder after `fifa96_outfield_input_row` has
+already computed `out.forced` / `out.chase` / `out.no_edge` from the
+pre-switch record, while native calls `0x7D1D4` from the pre-gate and only
+then enters the `0x7CC82` tail. The chase `[rec+0x20]` term is the only
+tail reader of the switched cell; the forced/no-edge terms read other
+cells, so the one-frame chase deferral is the observable difference. It is
+latent on M2 (the switch row is never reached: no PASS edge, and
+`[0x157AB0]` is staged 0 for the direct arm).
+
+**Superseded sentence (quoted, §11 / L4.1).** "this seam keeps the
+slot-record scope, so the chase arm's `[rec+0x20] == 0` gate keeps it
+unreachable on the live path — the unbound-record walk remains the
+**L4.1 residual**." Superseded on two counts: §12 landed the
+unbound-record walk (`match_run_outfield_input` runs for every outfield
+record), and under FU75-L4.5a the gate is reachable for a just-switched
+record (the cell reads 0 after the switch). The L4.1 scope statement
+stands only for the pre-§12 landing.
+
 ## Provenance
 
 Ghidra MCP on `/fifa96_le.bin`: `get_current_program_info`;

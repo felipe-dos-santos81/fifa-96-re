@@ -752,12 +752,12 @@ fifa96_err_t fifa96_outfield_select_step(const fifa96_outfield_select_state *sta
    * fallback adds `sext16(word) << 4` to X/Z (Y is copied but never read). */
   triple_x = state->anchor_x;
   triple_z = state->anchor_z;
-  if (state->slot_anim_b != 0 || state->slot_anim_c != 0) {   /* 0x7D254 JZ */
+  if (state->slot_anim_b != 0 || state->slot_anim_c != 0) {   /* 0x7D258 JZ */
     triple_x += (int32_t)state->slot_anim_b * 0x80;           /* 0x7D266 SHL 7 */
     triple_z += (int32_t)state->slot_anim_c * 0x80;           /* 0x7D27B SHL 7 */
   } else {                                                    /* 0x7D286 */
-    triple_x += (int32_t)state->lead_x * 0x10;                /* 0x7D28C SHL 4 */
-    triple_z += (int32_t)state->lead_z * 0x10;                /* 0x7D29C SHL 4 */
+    triple_x += (int32_t)state->lead_x * 0x10;                /* 0x7D291 SHL 4 */
+    triple_z += (int32_t)state->lead_z * 0x10;                /* 0x7D2A2 SHL 4 */
   }
   out->triple_x = triple_x;
   out->triple_z = triple_z;

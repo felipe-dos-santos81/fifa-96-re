@@ -350,7 +350,8 @@ fifa96_err_t fifa96_outfield_row04_step(const fifa96_outfield_row04_state *state
  * the "select the nearest player" switch (also the direct-arm target of the
  * `0x7CB03` pre-gate). The body in native order (byte/word widths as read):
  *   - `0x7D1DF` `rec == [0x157A83]` -> return 0 (no self reselection; the
- *     `XOR EAX,EDX` zeroes the return and skips the `0x7D355 MOV EAX,1`);
+ *     `XOR EAX,EDX` zeroes the return and jumps past the `0x7D350 MOV EAX,1`
+ *     to the `0x7D355` epilogue (`ADD ESP,0xC`; RET at `0x7D35E`));
  *   - `0x7D1F0` the camera-height-keyed lane gate: `dword[0x157750] < 0x50`
  *     selects threshold `0xC0`, else `0x120`; reject (return 0) only when
  *     `word[rec+0x6B]` (`lane_x`, signed) is below the threshold AND

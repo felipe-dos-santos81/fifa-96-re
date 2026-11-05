@@ -588,10 +588,13 @@ static void test_control_switch_self_returns_zero(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *owner;
   stage_select_common(&mr);
+  /* A different team target keeps the lane gate from explaining the return 0
+   * (`0x7D1F0` needs `rec == [team+0x7B2]`); only the self gate can. */
+  mr.entities.team[0].target = 2;
   mr.entities.team[0].records[3].has_slot = 0;
   owner = &mr.entities.team[0].records[1];
   owner->has_slot = 1;
-  mr.slot.entity = 1;              /* controlled == target == slot record */
+  mr.slot.entity = 1;              /* controlled == slot record (target is 2) */
   mr.slot.reserved_08[0] = 0x11;
   mr.slot.byte24 = 0x77;
 

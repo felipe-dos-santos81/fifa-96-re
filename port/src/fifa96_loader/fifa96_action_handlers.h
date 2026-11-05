@@ -494,8 +494,10 @@ fifa96_err_t fifa96_action_duel_search(fifa96_action_duel_search_in const *in,
  * slot and `to` does not, the slot pointer moves (`to[+0x20] =
  * from[+0x20]`, `[[from+0x20]] = to`, `from[+0x20] = 0`) and the new slot's
  * words +4/+6/+8/+0xA/+0xC/+0x14/+0x16 are zeroed. The derived surface moves
- * the record-visible `has_slot` flag only; the slot block's field clears are
- * the numbered leg OL-68 (the derived engine does not model the slot block). */
+ * the record-visible `has_slot` flag only; the slot block's field clears stay
+ * the numbered leg OL-68 at the other call sites. The `0x7D1D4` binder
+ * (`fifa96_match_run_select_step`) applies the `0x786A0` tail for this
+ * handler. */
 typedef struct fifa96_action_duel_slot {
   uint8_t has_slot;   /* native record +0x20 != 0 */
 } fifa96_action_duel_slot;

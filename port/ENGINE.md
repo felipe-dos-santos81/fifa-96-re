@@ -8807,3 +8807,14 @@ M1 `09b726b7…` and M2 v27 `54f44987…` byte-identical (`cmp`); census
 unchanged: **78/78** bodies, **58/80 natural**, **64/80 install-live**,
 **6 blocked**, action **38/45**, phase **26/35**; `make check`
 **112/112**.
+
+Residual (fix round 1): **FU75-L4.5a — the tail-ordering seam.** The
+outfield seam snapshots `s.chase.unbound` from `e->has_slot` before the
+released-row scan, while native `0x7CD03` reads `[rec+0x20]` after
+`0x7D1D4`, so a switch frame can defer the code-8 chase install by one
+frame for the record that gave up the slot. Owner: the `fifa96_match_run`
+outfield seam. The same ordering applies to the latent `0x7CB03`
+direct-arm consumer (it runs after `fifa96_outfield_input_row` computes
+`out.forced`/`out.chase`/`out.no_edge`; native runs the switch before the
+`0x7CC82` tail). The stale §11 "chase arm's `[rec+0x20] == 0` gate keeps
+it unreachable" sentence is quoted as superseded in FU-75 §13.

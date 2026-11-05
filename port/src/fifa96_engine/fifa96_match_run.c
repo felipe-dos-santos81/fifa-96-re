@@ -725,8 +725,9 @@ _Static_assert(FIFA96_OUTFIELD_SELECT_RECORDS == FIFA96_MATCH_ENTITY_RECORDS,
  * `team+0x826` = `team->side`; `[0x157750]` dword = `camera.pos_y`;
  * `0x157788/8C/90` = `camera.anchor_x/y/z`; `word[0x1577C0]`/`word[0x1577C2]`
  * = the signed `camera.vel_x`/`vel_z` leads; the slot `+0x20`/`+0x21` bytes =
- * `slot.anim_b`/`anim_c` (the same source as the frame staging at
- * `fifa96_match_run.c:1458`). `[0x1587A8]`/`[0x1587AC]` have no engine cell
+ * `slot.anim_b`/`anim_c` (the same source as the `match_run_dispatch_entity`
+ * frame-staging block's `r->dir_x = mr->slot.anim_b; r->dir_z =
+ * mr->slot.anim_c`). `[0x1587A8]`/`[0x1587AC]` have no engine cell
  * (their native writers `FUN_000832A8`/the set-piece tails are unported), so
  * both stage `NONE` — the named OL-72/OL-68 residual; the derived `NONE/NONE`
  * comparison reproduces the native unstaged-pointer reject edge (Task 1).
@@ -739,7 +740,14 @@ _Static_assert(FIFA96_OUTFIELD_SELECT_RECORDS == FIFA96_MATCH_ENTITY_RECORDS,
  *     tail via `fifa96_control_slot_merge_reset` (words +4/+6/+8/+A/+C/+14/+16)
  *     plus the `0x78B00` `+0x24` byte. If the record held no slot the native
  *     swap is a no-op and `0x78B00([result+0x20])` reads NULL;
- *   - `[team+0x7CB] = 0` (`0x7D33B`) unconditionally on a switch result.
+ *   - `[team+0x7CB] = 0` (`0x7D33B`) unconditionally on a switch result; the
+ *     helper co-sets `clear_team_7cb`/`slot_clear` with `switched`, and the
+ *     binder consumes both flags instead of the `switched` shortcut.
+ * FU75-L4.5a (tail ordering): the frame seam snapshots `chase.unbound` from
+ * `e->has_slot` before the scan, while the native `0x7CD03` reads `[rec+0x20]`
+ * after this call; a switch frame can defer the code-8 chase install one
+ * frame (owner: the `fifa96_match_run` outfield seam). The same ordering
+ * applies to the latent `0x7CB03` direct-arm consumer.
  * Returns the native handler return 0/1 (1 stops the row scan). */
 int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id) {
   struct fifa96_match_team *team;
@@ -817,12 +825,16 @@ int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id) {
       to->has_slot = to_slot.has_slot;
     }
   }
-  if (slot_owned != 0) {
+  /* 0x7D33B: the team `+0x7CB` clear runs before the 0x7D348 slot clear (the
+   * two cells are disjoint). The helper co-sets `clear_team_7cb` with
+   * `switched`, so consuming the flag is behavior-identical and keeps the
+   * advisory field honest. */
+  if (out.clear_team_7cb != 0) team->timer7cb = 0;        /* 0x7D33B */
+  if (slot_owned != 0 && out.slot_clear != 0) {
     mr->slot.entity = out.new_controlled;                 /* 0x786A0 [[slot]] */
     (void)fifa96_control_slot_merge_reset(&mr->slot);     /* 0x786A0 tail */
     mr->slot.byte24 = 0;                                  /* 0x78B00 +0x24 */
   }
-  team->timer7cb = 0;                                     /* 0x7D33B */
   return out.ret;
 }
 
@@ -1065,6 +1077,10 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
   s.chase.user_present = s.user_present;
   s.chase.sides_differ =
       (s.user_present != 0u && s.side != s.user_side) ? 1u : 0u;
+  /* FU75-L4.5a (phase-52 fix round 1): this snapshot is taken before the
+   * released-row scan, while native `0x7CD03` reads `[rec+0x20]` after the
+   * `0x7D1D4` call, so a switch frame defers the code-8 chase install by one
+   * frame for the record that gave up the slot. Owner: this outfield seam. */
   s.chase.unbound = e->has_slot == 0 ? 1u : 0u;
   s.chase.timer = e->timer81;
   s.chase.third_zero = ((uint32_t)e->pos_y == 0u) ? 1u : 0u;  /* +0x5D */
