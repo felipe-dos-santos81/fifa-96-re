@@ -640,6 +640,55 @@ static void test_phase_scatter_producer(void) {
   assert(fifa96_match_phase_machine_scatter(&mr, 2) == -FIFA96_ERR_INVALID);
 }
 
+/* Phase 0x13 write seam (phase-51 T1/FU-340): `fifa96_match_run_write_phase`
+ * runs the native `FUN_0008D098` order — walk team 0, scatter team 0, walk
+ * team 1, scatter team 1 — so (a) the body reads the cells left by the
+ * previous write, and (b) the team-1 scatter overwrites the team-0 pair before
+ * the next body run. `ac2 = 4` keeps the producer draw-free so the cell deltas
+ * are exact. Mutation-RED: moving the scatter to `machine_step` (per frame) or
+ * dropping either team call changes the cells/targets below. */
+static void test_phase_13_write_seam(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  struct fifa96_rng rng_mid;
+  int32_t t2_x, t2_z, w_x, w_z;
+  fifa96_match_run_init(&mr);
+  mr.phase_machine.side_controlled = 0;
+  mr.global_157ac2 = 4;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    mr.entities.team[t].side = (uint8_t)t;
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      mr.entities.team[t].records[i].team = (uint8_t)t;
+      mr.entities.team[t].records[i].active = 0;
+      mr.entities.team[t].records[i].skip_9a = 0;
+    }
+  }
+  e = &mr.entities.team[0].records[0];
+  e->active = 1;
+  fifa96_rng_seed(&mr.rng, 0);
+  assert(fifa96_match_run_write_phase(&mr, 0x13u) == FIFA96_OK);
+  /* the team-1 fixed scatter is the last write of the seam */
+  assert(mr.global_10f364 == 0x2D0 && mr.global_10f368 == 0x5A0);
+
+  /* the second write reads exactly that pair: replaying the same stream with
+   * the cells zeroed moves the body's targets by the cell values. */
+  rng_mid = mr.rng;
+  assert(fifa96_match_run_write_phase(&mr, 0x13u) == FIFA96_OK);
+  t2_x = e->target_x;
+  t2_z = e->target_z;
+  assert(mr.global_10f364 == 0x2D0 && mr.global_10f368 == 0x5A0);
+  mr.rng = rng_mid;
+  mr.global_10f364 = 0;
+  mr.global_10f368 = 0;
+  e->target_x = 0;
+  e->target_z = 0;
+  assert(fifa96_match_run_record_phase_walk(&mr, 0x13u, 0u) == FIFA96_OK);
+  w_x = e->target_x;
+  w_z = e->target_z;
+  assert((int16_t)(t2_x - w_x) == 0x2D0);
+  assert((int16_t)(t2_z - w_z) == 0x5A0);
+}
+
 /* Phase 0x1C / act 6 (FU-193 §4 + phase-36 R9): the pre-restart timeline is
  * WIRED. The offside machine is the act-6 producer; the body wraps the
  * already-ported `fifa96_ref_offside_sequence_step` (native 0x89110).
@@ -1456,6 +1505,7 @@ int main(void) {
   test_phase_13_inactive();
   test_phase_13_active();
   test_phase_scatter_producer();
+  test_phase_13_write_seam();
   test_phase_1C_counted();
   test_phase_1C_stage0();
   test_phase_1C_terminal();

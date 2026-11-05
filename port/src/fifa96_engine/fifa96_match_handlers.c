@@ -6612,9 +6612,10 @@ static int32_t match_scatter_draw(struct fifa96_match_run *mr, uint32_t mod) {
  * (magnitude, sign) and writes `target_z = +/-((int16)0x10F368 +/- d1%0x90)`
  * then `target_x = (int16)(0x10F364 +/- d3%0x90)`. The z sign is the
  * `ac2 < 4 && side == 0` negation; x is never negated. Only `+0x4D` and
- * `+0x55` are written (`+0x51` untouched). The row is ported but its table
- * slot stays NULL: phase `0x13` is live and the body would consume the shared
- * RNG stream, so wiring needs the M2 re-pin (phase-36 R1a). */
+ * `+0x55` are written (`+0x51` untouched). The row is WIRED (phase-51 T1,
+ * FU-340): the producer runs at the write seam, so each live `write_phase`
+ * walks both teams and re-seeds the cells before the next body run; the M2
+ * re-pin v27 is measured (first differing line 3185, hash-only). */
 int fifa96_match_phase_13(struct fifa96_match_run *mr) {
   struct fifa96_match_entity *rec;
   int32_t side;
@@ -6657,8 +6658,9 @@ int fifa96_match_phase_13(struct fifa96_match_run *mr) {
  * tail). `ac2 >= 4` writes the fixed side-signed `+/-0x2D0` / `0x5A0`; below 4
  * it draws `d1%0x1E0` for x and `d3%0x1E0` for z, each signed by the next
  * draw's bit 0, with `z += 0x5A0`. The `0x651F0(0xD)` sink is unported (leg).
- * Not called from the live walk yet: the producer injects draws into the shared
- * stream, so the live wiring is the phase-36 re-pin leg. */
+ * Called from `fifa96_match_run_write_phase` once per team per phase write for
+ * phases `0x13`/`0x14` (the native `0x740C8`/`0x740DB` cadence), so the cells
+ * are re-seeded between the two team walks and before the next body run. */
 int fifa96_match_phase_machine_scatter(struct fifa96_match_run *mr,
                                        uint32_t team_index) {
   struct fifa96_match_team *team;
@@ -7831,10 +7833,10 @@ const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_RO
      "FU-192 §2.8/L6 (phase-17 T3) + phase-36 R6: phase 11 = the native 0x6E1C8 (8-byte shim: EBX=-1, EDX=&rec+0x4D, falls into 0x6E1D0); under the walk ABI it is identical to rows 01/12 and uses the same ported per-record body fifa96_match_phase_01. The slot stays NULL (the R10 'do not double-wire'; FU192-L6/L7); OL-13"},
     {0x12, NULL,
      "FU-192 §2.9 (phase-17 T3) + phase-36 R6: phase 12 = the native 0x6E1D0 (formation placement; see row 01), ported per record as fifa96_match_phase_01. Phase 0x12 is never written by an engine source (FU-191 §10), so the slot stays NULL; not wired (FU192-L6/L7); OL-13"},
-    {0x13, NULL,
-     "FU-335 (phase-36) + FU-192 §2.10/L2: phase 13 = the native 0x6E244..0x6E32A camera-scatter body, PORTED as fifa96_match_phase_13 (side gate, inactive cell copy with the ac2<4/side-0 z negation, active FOUR 0x92AC8 draws; writes only +0x4D/+0x55). The FUN_0008D098 case-0x13/0x14 producer 0x8D693..0x8D722 is ported as fifa96_match_phase_machine_scatter. The slot stays NULL: phase 0x13 is live on the M2 tape and the body consumes the shared RNG stream, so wiring needs the measured re-pin (R1a-L2); the native 'twice' in the old text is corrected to four draws. OL-13"},
+    {0x13, fifa96_match_phase_13,
+     "FU-335 (phase-36) + FU-340 (phase-51 T1): phase 13 = the native 0x6E244..0x6E32A camera-scatter body (side gate, inactive cell copy with the ac2<4/side-0 z negation, active FOUR 0x92AC8 draws; writes only +0x4D/+0x55), WIRED to the live walk. The FUN_0008D098 case-0x13/0x14 producer 0x8D693..0x8D722 runs at the native once-per-write cadence in fifa96_match_run_write_phase (walk team 0 -> scatter team 0 -> walk team 1 -> scatter team 1; the producer has exactly two xrefs, 0x740C8/0x740DB), not per frame. M2 carries three live writes (steps 2502/3402/4302): 20 body dispatches and 32 body draws each (96/run), plus the producer's 4 draws per team (8/write, 120 shared draws/run at ac2<4). Re-pin v27: first differing line 3185, 3338/6522 lines hash-only, state tags/counts unchanged, 295087 bytes. Residual legs: the 0x651F0(0xD) sink and phase 0x14 (no live writer). OL-13"},
     {0x14, NULL,
-     "FU-335 (phase-36) + FU-192 §2.10/L2: phase 14 = the native 0x6E244 (same body as row 13, shared fifa96_match_phase_13). The scatter producer is ported; phase 0x14 has no live writer (the phase_drive probe words are {0,0,0,0}), so the slot stays NULL/ported-but-dormant. OL-13"},
+     "FU-335 (phase-36) + FU-340 (phase-51 T1): phase 14 = the native 0x6E244 (same body as row 13, shared fifa96_match_phase_13). The scatter producer runs at the write seam for 0x13/0x14 (FU-340), but phase 0x14 has no live writer (the phase_drive probe words are {0,0,0,0}), so the slot stays NULL/ported-but-dormant. OL-13"},
     {0x15, fifa96_match_phase_02,
      "FU-192 §2.11/R1 (phase-17 T3): phase 15 shares the T1 body 0x6DCC8 (0x110794[0x15] = 0x6DCC8). Wired by T3 after the writer-path cmp pin (T1 deliberately deferred it, ENGINE.md phase-17 T1): ON-TAPE (100 frames); the [rec+0xC] gate is opened by the match-begin OL-13 bind (FU-199 §7.2, phase-18 T1), and the M2 re-run is byte-identical (T1 cmp pin)"},
     {FIFA96_MATCH_PHASE_INT3_SLOT, NULL,

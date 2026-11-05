@@ -3700,3 +3700,19 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   unported `FUN_00083428` throw machine. A unit pins the producer and the gate;
   M1/M2 stay byte-identical; census unchanged (`78/78`, `57/80`, `63/80`, `6`
   blocked); `make check` 112/112.
+
+- **phase-51 T1 phase-`0x13` wiring (FU-335 / FU-340, 2026-11-04).** The
+  ported camera-scatter body is now the live phase-table row
+  `{0x13, fifa96_match_phase_13, …}`, and the `FUN_0008D098` case-`0x13/0x14`
+  producer (`0x8D693..0x8D722`) runs in `fifa96_match_run_write_phase` after
+  each team's walk (walk team 0 → scatter team 0 → walk team 1 → scatter team
+  1) — the native `0x740C8`/`0x740DB` once-per-write cadence, not the
+  per-frame machine. Phase `0x14` stays `NULL` (no live writer). M2 re-pins
+  **v27** `54f4498755a74f0945266c66c59164a239ebf1f5fd60d0f78e416fe5316d44fd`
+  (295087 bytes, 6522 lines; first differing line 3185, 3338 lines differ,
+  all hash-only, state set/counts unchanged). The three live writes (steps
+  2502/3402/4302) carry 32 body draws each (96/run) plus 8 producer draws
+  (120 shared draws/run). Census moves to **78/78 bodies, 58/80 natural,
+  64/80 install-live, 6 blocked, action 38/45, phase 26/35**; M1
+  `09b726b7…` exact; `make check` 112/112. Residual legs: the `0x651F0(0xD)`
+  sink and the phase-`0x14` probe producer.

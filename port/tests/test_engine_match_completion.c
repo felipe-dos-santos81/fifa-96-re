@@ -642,34 +642,39 @@ static void test_et_over_terminal_reached(void) {
   assert(mr.end_word_158822 == 0u);
 }
 
-/* FU-240 §2/§4 (M2 phase-23 T6, FU240-L2): the `0x13`/`0x14` RNG-gate probe —
- * a CHARACTERIZATION only, no wire. The FU-239 extra-time chooser reaches
- * `match_run_write_phase(mr, 0x13/0x14)` on the live golden tail (the route
- * `test_loopbacked_tiebreak_completion` exercises), and that shared write gates
- * the per-record `FUN_0008D098` walk on `fifa96_match_phase_table[phase].fn !=
- * NULL` (`fifa96_match_run.c:2528`). It answers the plan's question — does
- * driving the ET chooser through the phase-`0x13`/`0x14` scatter consume the
- * shared `0x92AC8` RNG stream (`mr.rng`) on the frames the golden reaches? —
- * in three parts:
- *   (a) the live chooser write reaches phase `0x13` (the frames the golden
- *       reaches are RNG-live: the ET tail's per-frame render path also reads
- *       `mr.rng` — the camera walk `fifa96_match_run.c:4148`, FU-240 §5.2);
- *   (b) the two slots are NULL, so the walk is a structural no-op TODAY and the
- *       chooser round still draws no shared RNG (dispatch returns UNSUPPORTED
- *       before any body runs);
- *   (c) the injection precondition holds: the pool seeds `active = index`
- *       (`fifa96_match_entities_init`, FU-147 S1), so records 1..10 are ACTIVE
- *       on that frame; the native `0x6E244` body takes its RNG branch for every
- *       active record (four draws: two magnitudes + two signs, FU-240 §2). So
- *       the moment the slot is registered the ET-entry write injects draws
- *       ahead of the tail frames that also read the shared stream.
- * Ruling: the rows stay GATED (owner FU240-L2). Mutation-RED: registering
- * `fifa96_match_phase_table[0x13]` (fn != NULL) un-gates the walk and trips the
- * NULL-slot asserts; dropping the active-record seeding trips (c). */
+/* FU-240 §2/§4 (M2 phase-23 T6, FU240-L2; WIRED phase-51 T1/FU-340): the
+ * phase-`0x13` positive — the row 0x13 slot is live and the shared write runs
+ * the per-record `fifa96_match_phase_13` body for both teams. The ET chooser
+ * (`test_loopbacked_tiebreak_completion`'s route) reaches
+ * `match_run_write_phase(0x13)` on the golden tail, so the wire injects the
+ * native 4-draws-per-active-record consumption ahead of the tail frames that
+ * also read the shared stream. The assertions:
+ *   (a) the live chooser write still lands phase `0x13` (act 0xC);
+ *   (b) `fifa96_match_phase_table[0x13].fn == fifa96_match_phase_13`, and a
+ *       forced `write_phase(0x13)` advances `mr.rng` by exactly `4 × active`
+ *       with the producer's draw-free `ac2 >= 4` branch;
+ *   (c) the tape-shaped `ac2 < 4` write adds the producer's own four draws per
+ *       team (`0x8D693..0x8D722`, `write_phase` walk -> scatter per team);
+ *   (d) phase `0x14` stays NULL — no live writer — and dispatches UNSUPPORTED.
+ * Mutation-RED: NULLing the slot un-gates the walk and the (b)/(c) draw counts
+ * drop to zero (the `write_phase` walk is gated on `fn != NULL`). */
+static uint32_t rng_draws_between(struct fifa96_rng from, struct fifa96_rng to) {
+  struct fifa96_rng probe = from;
+  uint16_t value = 0;
+  uint32_t n = 0;
+  while (memcmp(&probe, &to, sizeof probe) != 0) {
+    assert(n < 4096u);                   /* the generator's period is far larger */
+    assert(fifa96_rng_step(&probe, &value) == FIFA96_OK);
+    n++;
+  }
+  return n;
+}
+
 static void test_phase_13_14_rng_gate(void) {
   struct fifa96_match_run mr;
   struct fifa96_rng before;
   uint32_t active = 0;
+  uint32_t draws;
 
   /* (a) The live ET chooser write (the same route the golden tail reaches):
    * the loopbacked preamble mirrors test_loopbacked_tiebreak_completion — a 1 s
@@ -691,28 +696,43 @@ static void test_phase_13_14_rng_gate(void) {
     assert(mr.state.phase == 0x13u);                   /* the chooser's phase-0x13 write */
     assert(mr.act.id == 0x0Cu);                        /* the ET-set act */
 
-    /* (b) The gate: both slots NULL => the walk is a structural no-op today. */
-    assert(fifa96_match_phase_table[0x13].fn == NULL);
+    /* (b) The positive: row 0x13 is wired to the ported body; row 0x14 stays
+     * NULL (no live writer) and dispatches UNSUPPORTED. */
+    assert(fifa96_match_phase_table[0x13].fn == fifa96_match_phase_13);
     assert(fifa96_match_phase_table[0x14].fn == NULL);
-    assert(fifa96_match_dispatch_phase(&mr, 0x13u) == -FIFA96_ERR_UNSUPPORTED);
     assert(fifa96_match_dispatch_phase(&mr, 0x14u) == -FIFA96_ERR_UNSUPPORTED);
 
-    /* The per-record walk consumes NO shared RNG while the row is unwired. */
-    before = mr.rng;
-    assert(fifa96_match_run_record_phase_walk(&mr, 0x13u, 0u) == FIFA96_OK);
-    assert(fifa96_match_run_record_phase_walk(&mr, 0x13u, 1u) == FIFA96_OK);
-    assert(memcmp(&mr.rng, &before, sizeof before) == 0);
+    /* Count the records the body will draw for: side-matched, active and not
+     * `[rec+0x9A]`-skipped (the walk's exclusion). */
+    mr.phase_machine.side_controlled = 0;
+    for (uint32_t team = 0; team < FIFA96_MATCH_ENTITY_TEAMS; team++) {
+      for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+        const struct fifa96_match_entity *e = &mr.entities.team[team].records[i];
+        if (e->skip_9a != 0 || e->active == 0u) continue;
+        if (e->team >= FIFA96_MATCH_ENTITY_TEAMS) continue;
+        if (mr.entities.team[e->team].side !=
+            mr.phase_machine.side_controlled)
+          continue;
+        active++;
+      }
+    }
+    assert(active > 0u);   /* records 1..10 active on the ET frame (FU-147 S1) */
 
-    /* (c) The injection precondition: active records exist on this frame, so a
-     * WIRED body would take its RNG branch; the dispatch is gated (UNSUPPORTED)
-     * only because the slot is NULL — the slot is the sole barrier between the
-     * frozen tape and the native 4-draws-per-active-record consumption. */
-    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
-      if (mr.entities.team[0].records[i].active != 0) active++;
-    assert(active > 0u);   /* records 1..10 active (FU-147 S1) */
-    assert(fifa96_match_dispatch_phase_record(
-               &mr, 0x13u, &mr.entities.team[0].records[1], -1) ==
-           -FIFA96_ERR_UNSUPPORTED);   /* gated: no body, no draw */
+    /* (b) The producer's `ac2 >= 4` arm draws nothing, so one forced write is
+     * exactly the body's four draws per served record. */
+    mr.global_157ac2 = 4u;
+    before = mr.rng;
+    assert(fifa96_match_run_write_phase(&mr, 0x13u) == FIFA96_OK);
+    draws = rng_draws_between(before, mr.rng);
+    assert(draws == 4u * active);
+
+    /* (c) The tape-shaped `ac2 < 4` write adds the producer's magnitude/sign
+     * pairs: four draws for each of the two per-team scatter calls. */
+    mr.global_157ac2 = 1u;
+    before = mr.rng;
+    assert(fifa96_match_run_write_phase(&mr, 0x13u) == FIFA96_OK);
+    draws = rng_draws_between(before, mr.rng);
+    assert(draws == 4u * active + 8u);
 
     drop_fixture(f);
   }

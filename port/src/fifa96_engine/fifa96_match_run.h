@@ -1593,9 +1593,11 @@ int fifa96_match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase);
  * `0x8D110 CALL dword[ECX+0x1C]` invokes it with the EAX=rec/EDX=&rec[0x4D]/
  * EBX=-1 ABI). `fifa96_match_run_write_phase` calls it for both teams after every phase
  * write (the native `FUN_000740A0` `0x740C8`/`0x740DB`), **gated on
- * `fifa96_match_phase_table[phase].fn != NULL`** so it is a structural no-op
- * until a per-record body lands (FU-191 §10; the gap vs the native
- * unconditional `FUN_0008DCD4` distance write is FU191-L2). `phase` out of the
+ * `fifa96_match_phase_table[phase].fn != NULL`** so an unwired row stays a
+ * structural no-op (FU-191 §10; the gap vs the native
+ * unconditional `FUN_0008DCD4` distance write is FU191-L2). For phases
+ * `0x13`/`0x14` the write seam also runs `fifa96_match_phase_machine_scatter`
+ * after each team's walk (the native `0x8D693` arm, FU-340). `phase` out of the
  * table, or `team >= 2`, -> -FIFA96_ERR_INVALID; otherwise FIFA96_OK (per-record
  * handler errors are absorbed: the native walk ignores the handler return). */
 int fifa96_match_run_record_phase_walk(struct fifa96_match_run *mr, uint8_t phase,

@@ -5,9 +5,9 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-78/78 native dispatch bodies ported (100%) — 57/80 dispatch slots wired
-(63/80 install-live)
-(38 action + the wired phase rows 0x02, 0x0D, 0x10, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
+78/78 native dispatch bodies ported (100%) — 58/80 dispatch slots wired
+(64/80 install-live)
+(38 action + the wired phase rows 0x02, 0x0D, 0x10, 0x13, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -8560,3 +8560,31 @@ the gate; the old zero-staged input fails both.
 M1/M2 stay byte-identical; census unchanged: **78/78 bodies, 57/80 natural,
 63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make check`
 **112/112**.
+
+## Phase 51 — phase-`0x13` wiring + once-per-write scatter (FU-335 / FU-340, 2026-11-04)
+
+The ported phase-`0x13` body is now live: `fifa96_match_phase_table[0x13]` is
+`{0x13, fifa96_match_phase_13, …}`, and `fifa96_match_run_write_phase` calls
+the `FUN_0008D098` case-`0x13/0x14` scatter (`fifa96_match_phase_machine_scatter`,
+native `0x8D693..0x8D722`) after each team's walk — walk team 0 → scatter team
+0 → walk team 1 → scatter team 1 — for phases `0x13`/`0x14` only. The cadence
+is native: `get_xrefs_to 0x8D098` returns exactly the two `FUN_000740A0` calls
+`0x740C8`/`0x740DB`, never a per-frame call. Phase `0x14` stays `NULL`
+(no live writer; the probe cells `0x142FE0`/`0x142FE8` remain unfed), and the
+`0x651F0(0xD)` sink is the open leg.
+
+M2 carries three live `write_phase(0x13)` calls (steps 2502/3402/4302): 20
+body dispatches and 32 body draws each (96/run), plus the producer's four
+draws per team (8/write; 120 shared draws/run at `ac2 < 4`). The v27 re-pin is
+first differing line **3185**, **3338/6522** lines, all hash-only, state tags
+and counts unchanged, 295087 bytes, sha
+`54f4498755a74f0945266c66c59164a239ebf1f5fd60d0f78e416fe5316d44fd` (old
+`6f402095…`); M1 `09b726b7…` stays exact. The per-frame `machine_step`
+placement is rejected by measurement (first diff 852, 5671 lines, sha
+`09642d40…`) and by the two-xref cadence.
+
+Census: **78/78 bodies, 58/80 natural, 64/80 install-live, 6 blocked, action
+38/45, phase 26/35**; `make check` **112/112**. Evidence: FU-340; tests
+`test_phase_13_14_rng_gate` (4 × active; +8 for the producer), the m2 rider
+(32 body draws, 40 with the producers), `test_phase_13_write_seam` and the
+census pins.

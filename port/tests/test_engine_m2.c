@@ -30,6 +30,19 @@
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m2 > port/tests/golden/engine/m2-frames.txt
  *
+ * v27 re-pin (2026-11-04, phase-51 T1/FU-340): the phase-`0x13` row is now
+ * WIRED (slot `fifa96_match_phase_13`), and the `FUN_0008D098` case-`0x13/0x14`
+ * scatter (`0x8D693..0x8D722`) runs at the native once-per-write cadence in
+ * `fifa96_match_run_write_phase` (walk team 0 -> scatter team 0 -> walk team 1
+ * -> scatter team 1). The M2 tape carries three live writes (steps 2502/3402/
+ * 4302): 20 body dispatches and 32 body draws each (96/run), plus the
+ * producer's four draws per team (8/write, 120 shared draws/run at `ac2 < 4`).
+ * The first differing line is 3185; 3338 of 6522 lines differ, all hash-only,
+ * and the state-tag set/counts are unchanged (0×304, 1×953, 2×2193, 4×303,
+ * 12×4, 19×2640, 20×20, 21×100). Length stays 295087 bytes. New sha
+ * `54f4498755a74f0945266c66c59164a239ebf1f5fd60d0f78e416fe5316d44fd`
+ * (old `6f402095…`). M1 `09b726b7…` stays exact.
+ *
  * v26 re-pin (2026-11-04): the act-9 stage-0 timer zero (`0x88FE0`) is now
  * live. The phase-0x15 window keeps its hashes through frame 541; the state
  * tag `21/1-0` extends from frame 466 through 469 (the old `4/1-0` entry is
@@ -5798,7 +5811,7 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 38u && phase_wired == 25u);  /* 63/80 install-live, 57/80 natural (phase-38: +action 0x0D) */
+    assert(action_wired == 38u && phase_wired == 26u);  /* 64/80 install-live, 58/80 natural (phase-51: +phase 0x13) */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -5826,8 +5839,8 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10);  /* T2: write live via row 0x1D arm 0 (FU-222) */
     assert(fifa96_match_phase_table[0x11].fn == NULL);  /* 0x6E1D0 shim (L6) */
     assert(fifa96_match_phase_table[0x12].fn == NULL);  /* formation + never written */
-    assert(fifa96_match_phase_table[0x13].fn == NULL);  /* 0x6E244 RNG (L2) */
-    assert(fifa96_match_phase_table[0x14].fn == NULL);  /* 0x6E244 RNG (L2) */
+    assert(fifa96_match_phase_table[0x13].fn == fifa96_match_phase_13);  /* phase-51 T1: the RNG row is wired (FU-340) */
+    assert(fifa96_match_phase_table[0x14].fn == NULL);  /* 0x6E244 sibling: no live writer (FU-340) */
     assert(fifa96_match_phase_table[0x20].fn != NULL);  /* T3: situation-0 producer live (FU202) */
     assert(fifa96_match_phase_table[0x17].fn != NULL);  /* T4: the native act-1 route is live (the phase-0x20 terminal -> sit 1 -> act 1; FU-203) */
     assert(fifa96_match_phase_table[0x1A].fn == NULL);  /* T4: ported, no act-4 producer (FU193-L3) */
@@ -6089,17 +6102,60 @@ static void run_phase17_t3_riders(void) {
     assert(fifa96_match_dispatch_phase_record(&mr, 0x15u, e, -1) == FIFA96_OK);
     assert(e->target_x == 7 && e->target_y == 8 && e->target_z == 9);
   }
-  /* 3. The RNG/formation rows stay NULL: the walk dispatches nothing. (T2:
-   *    phase 0x10 is no longer in this set — its live row-0x1D arm-0 writer is
-   *    now registered.) */
+  /* 3. The RNG/formation rows: phase 0x13 is now WIRED (phase-51 T1/FU-340);
+   *    phase 0x14 stays NULL (no live writer). The forced write runs both
+   *    walks and the two once-per-write scatters. With the tape's 8 active
+   *    team-0 records the body alone is exactly 32 draws; the `ac2 >= 4`
+   *    producer branch is draw-free, so the write is 32 — the tape-shaped
+   *    `ac2 < 4` write adds the producer's four draws per team. */
   {
+    static const uint8_t tape_active[8] = { 1, 2, 3, 4, 5, 7, 8, 10 };
     struct fifa96_match_run mr;
+    struct fifa96_rng before;
+    uint16_t value = 0;
+    uint32_t draws;
     fifa96_match_run_init(&mr);
-    assert(fifa96_match_phase_table[0x13].fn == NULL);
+    assert(fifa96_match_phase_table[0x13].fn == fifa96_match_phase_13);
     assert(fifa96_match_phase_table[0x14].fn == NULL);
     assert(fifa96_match_phase_table[0x01].fn == NULL);
     assert(fifa96_match_phase_table[0x11].fn == NULL);
     assert(fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10);  /* T2: registered */
+    /* the M2 write state: the controlled side 0, team 0 side 0 (team 1 is
+     * side-gated), eight active records. */
+    mr.phase_machine.side_controlled = 0;
+    mr.entities.team[0].side = 0;
+    mr.entities.team[1].side = 1;
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      mr.entities.team[0].records[i].team = 0;
+      mr.entities.team[0].records[i].active = 0;
+      mr.entities.team[1].records[i].team = 1;
+      mr.entities.team[1].records[i].active = 0;
+    }
+    for (size_t i = 0; i < sizeof tape_active; i++)
+      mr.entities.team[0].records[tape_active[i]].active = 1;
+    /* the producer's fixed branch draws nothing: exactly the body's 4 × 8 */
+    mr.global_157ac2 = 4u;
+    before = mr.rng;
+    assert(fifa96_match_run_write_phase(&mr, 0x13u) == FIFA96_OK);
+    draws = 0;
+    while (memcmp(&before, &mr.rng, sizeof before) != 0) {
+      assert(draws < 4096u);
+      assert(fifa96_rng_step(&before, &value) == FIFA96_OK);
+      draws++;
+    }
+    assert(draws == 32u);
+    assert(mr.global_10f364 == 0x2D0 && mr.global_10f368 == 0x5A0);  /* the team-1 scatter ran last */
+    /* the M2 tape's ac2 < 4: the same write adds 4 producer draws per team */
+    mr.global_157ac2 = 1u;
+    before = mr.rng;
+    assert(fifa96_match_run_write_phase(&mr, 0x13u) == FIFA96_OK);
+    draws = 0;
+    while (memcmp(&before, &mr.rng, sizeof before) != 0) {
+      assert(draws < 4096u);
+      assert(fifa96_rng_step(&before, &value) == FIFA96_OK);
+      draws++;
+    }
+    assert(draws == 40u);   /* 32 body + 8 producer (4 per team) */
   }
 }
 
@@ -6182,7 +6238,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 38u && phase_wired == 25u);    /* 63/80 install-live, 57/80 natural (phase-38: +action 0x0D) */
+    assert(action_wired == 38u && phase_wired == 26u);    /* 64/80 install-live, 58/80 natural (phase-51: +phase 0x13) */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);
@@ -6212,8 +6268,9 @@ static void run_phase17_riders(void) {
   }
   /* 5. The leg pins (T1/T6): action row 0x03 NULL (owner FU177-L1, its
    *    evidence carries the 0x6DCC8/FU177-L1 markers; dispatch UNSUPPORTED),
-   *    phase 0x1B NULL (FU195-L1) and the 0x13/0x14 RNG rows NULL (FU192-L2).
-   *    The T4 phase-0x22 row is now wired (see `run_census_riders`). */
+   *    phase 0x1B NULL (FU195-L1) and phase 0x14 NULL (no live writer; the
+   *    phase-0x13 row is wired by phase-51 T1/FU-340). The T4 phase-0x22 row
+   *    is now wired (see `run_census_riders`). */
   {
     struct fifa96_match_run mr;
     const struct fifa96_match_handler *row03 = &fifa96_match_action_table[0x03];
@@ -6223,7 +6280,7 @@ static void run_phase17_riders(void) {
     assert(strstr(row03->evidence, "FU177-L1") != NULL);
     assert(fifa96_match_dispatch_action(&mr, 0x03u) == -FIFA96_ERR_UNSUPPORTED);
     assert(fifa96_match_phase_table[0x1B].fn == NULL);
-    assert(fifa96_match_phase_table[0x13].fn == NULL);
+    assert(fifa96_match_phase_table[0x13].fn == fifa96_match_phase_13);
     assert(fifa96_match_phase_table[0x14].fn == NULL);
   }
 }

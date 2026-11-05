@@ -195,17 +195,16 @@ int fifa96_match_phase_01(struct fifa96_match_run *mr);
  * (FU-83 §3.1 / FU-192 §2.10; fresh phase-36 disassembly): the side gate, the
  * inactive cell copy with the `ac2 < 4 && side == 0` z negation, and the
  * active four-draw scatter (`d % 0x90` magnitude/sign pairs; z negated by the
- * same gate, x never). The body is ported but the phase-table slots stay NULL:
- * phase `0x13` is live and the body consumes the shared RNG stream, so wiring
- * needs the measured M2 re-pin. */
+ * same gate, x never). The row is WIRED via the phase-table slot (phase-51
+ * T1, FU-340); the live re-pin v27 is measured. */
 int fifa96_match_phase_13(struct fifa96_match_run *mr);
 
 /* The `FUN_0008D098` case-`0x13/0x14` scatter producer `0x8D693..0x8D722`
  * (phase-36): `ac2 >= 4` writes the fixed side-signed `+/-0x2D0` / `0x5A0`;
  * below 4 it draws `d % 0x1E0` magnitude/sign pairs into `[0x10F364]` /
- * `[0x10F368]` with `z += 0x5A0`. The `0x651F0(0xD)` sink is a leg. Not called
- * from the live walk (the draws would move the tape); the producer is exported
- * for direct unit testing and the live re-pin slice. */
+ * `[0x10F368]` with `z += 0x5A0`. The `0x651F0(0xD)` sink is a leg. Called
+ * from `fifa96_match_run_write_phase` after each team's walk for phases
+ * `0x13`/`0x14` (the native `0x740C8`/`0x740DB` once-per-write cadence). */
 int fifa96_match_phase_machine_scatter(struct fifa96_match_run *mr,
                                        uint32_t team_index);
 

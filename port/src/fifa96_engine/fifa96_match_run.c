@@ -2831,11 +2831,19 @@ int fifa96_match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
    * (0x740C8 team[side], 0x740DB team[side^1]) immediately after the [0x157A4D]
    * phase write. Gated on a ported phase row (fn != NULL) so it is a structural
    * no-op until a per-record body lands (FU-191 §10; the divergence from the
-   * native unconditional FUN_0008DCD4 distance write is FU191-L2). */
+   * native unconditional FUN_0008DCD4 distance write is FU191-L2). For phases
+   * 0x13/0x14 the same FUN_0008D098 call runs its 0x8D693..0x8D722 scatter arm
+   * after each team's walk (the native walk -> scatter -> installs order), so
+   * the cells 0x10F364/0x10F368 are re-seeded once per write, never per frame
+   * (FU-340). */
   if (phase < FIFA96_MATCH_PHASE_ROWS &&
       fifa96_match_phase_table[phase].fn != NULL) {
     (void)fifa96_match_run_record_phase_walk(mr, phase, 0u);
+    if (phase == 0x13u || phase == 0x14u)
+      (void)fifa96_match_phase_machine_scatter(mr, 0u);
     (void)fifa96_match_run_record_phase_walk(mr, phase, 1u);
+    if (phase == 0x13u || phase == 0x14u)
+      (void)fifa96_match_phase_machine_scatter(mr, 1u);
   }
   return 0;
 }
