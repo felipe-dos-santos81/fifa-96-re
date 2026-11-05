@@ -8637,3 +8637,42 @@ every branch and the engine wiring either fail these tests or, in one case
 camera word cannot pass the length gate. Census unchanged:
 **78/78 bodies, 58/80 natural, 64/80 install-live, 6 blocked, action 38/45,
 phase 26/35**; `make check` **112/112**.
+
+## Phase 51 T4 — phase-6 stage-3 latch + blocked reasons (FU-166 / FU-338, 2026-11-04)
+
+The act-2 stage-3 gate now models the native ball-row latch. `[0x158882]` is
+the ball block's (`0x1587EC`) `+0x96` byte = `row_flags & 1`, written by
+`FUN_0006E724` (`0x6E7E7 MOV [ESI+0x96],AL`) at every ball anim-row install
+and cleared by the match reset (`0x73D3A`). The stage-2 body
+(`0x893E2..0x89487`) installs the ball row from the contact kind — the
+keep/reroll `0x89401/0x8941D` rows 0/0x62..0x65 (flags 0x07 -> 1) or the
+non-3 `0x8944F/0x89464` row 0x49 (flags 0x00 -> 0) — before the stage
+increment and the byte-0 split, so the gate at `0x894A2` reads **"kind was 3
+at stage 2"**, not "kind is 3 now". The engine stores that net effect in the
+new `mr->ball_row_flag_158882`, written at its stage-1 (native stage-2) body
+for both sessions before the session-0 split, and the gate is now
+`flag || contact_kind == 3 || session != 0`.
+
+Behaviour pinned by `test_engine_referee_restart_stage3_latch` (RED first,
+assertion `state.phase == 6` failed before the change): a byte-0 session with
+kind 3 at the split and kind 1 at the decision decides phase 6 and installs
+`0x13` on the controlled taker (team 1 record 1, target 12) plus `0x1F` on
+the other team's record 0; the negative twin (kind 1 on both frames) latches
+0 and the stage-3 gate holds armed with no phase write. The four existing
+`test_engine_referee_restart_default_gate_split` cases stay green, including
+the byte-1 (Practise) stall-through path.
+
+The three rows stay blocked with corrected reasons: actions `0x13`/`0x1F`
+("reachable only via the stage-3 latch, the mode-4 Practise term, or a
+same-frame ball-row install; no ordinary-play witness") and phase `0x06`
+(the same latch; `[0x158882]` has a writer; the `0x8948D` stale-local read is
+the leg). The stale "writer-less `[0x158882]`" and "`[0x14C32A]` is the only
+blocker" text is retired by append-only errata in FU-338 §7 and FU-166's
+phase-51 erratum. Residual legs: the mode-4 Practise term `[0x14C32A]`, the
+`0x8948D` read-before-write local, and the other ball-row writers
+(`0x887D5`/`0x8C2CE`/`0x6FF37`/`0x6FF85`; R51-L1 release catalogue, R51-L2
+runtime).
+
+Census unchanged: **78/78 bodies, 58/80 natural, 64/80 install-live, 6
+blocked, action 38/45, phase 26/35**; `make check` **112/112**. Golden: M1
+`09b726b7…` exact, M2 v27 `54f44987…` byte-identical (`cmp`); no re-pin.

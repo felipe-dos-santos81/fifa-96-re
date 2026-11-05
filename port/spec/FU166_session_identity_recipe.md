@@ -664,3 +664,53 @@ always holds once `0x8947A` passes, so the effective native condition is
 abort for all kinds"; the quoted "the engine now aborts iff the gate is 0" is
 a rewording of those two (the blockquote's ellipsis marks the omission, not
 the rewording). The conclusion stands — only the quote form is marked here.
+
+---
+
+## Phase-51 T4 erratum (2026-11-04) — the `[0x158882]` kind proxy is closed
+
+**Supersedes, for the stage-3 gate only, the "kind proxy" item of the
+"FU166-L6 residuals folded" list and the extension paragraph's "The engine
+does not model the byte" sentence.** Quoted from the list:
+
+> the **kind proxy** — the engine's stage-3 gate passes kind 3 via
+> `foul_kind == 3` where the native passes via the ball-row flag
+> `[0x158882] = 1` ... the future port tracks the ball row-terminal flag (the
+> writer catalogue above);
+
+and from the extension paragraph:
+
+> The engine does not model the byte; a future port should track the ball
+> row-terminal flag to reproduce the stage-3 gate without the kind proxy.
+
+Fresh bytes (R1 §2.3/§2.4 + R3 §2): `[0x158882]` **has writers** — it is the
+ball block's (base `0x1587EC`) `+0x96` byte, written by `FUN_0006E724`
+(`0x6E7E7 MOV [ESI+0x96],AL`, `AL = row[2] & 1`) at every ball anim-row
+install and cleared by the match reset (`0x73D3A REP STOSB`). The act-2
+stage-2 body installs the row from the contact kind — `0x89401/0x8941D`
+keep/reroll rows 0/0x62..0x65 (flags 0x07 -> 1); the non-3
+`0x8944F/0x89464` row 0x49 (flags 0x00, `0x10F193` -> 0) — **before** the
+stage increment (`0x8947F`) and the byte-0 split (`0x89487`). Net: the cell
+is `(contact_kind == 3)` at the end of the stage-2 body, for both sessions.
+
+The engine now models that latch: `mr->ball_row_flag_158882` is written at
+the stage-1 (native stage-2) body as `(contact_kind == 3)` for both sessions,
+and the stage-3 gate is `flag || kind == 3 || session != 0`
+(`match_run_ref_step_restart`). On the byte-0 re-entry the gate therefore
+reads **"kind was 3 at stage 2"**, not "kind is now 3": a kind-3 contact
+whose `[0x15888C]` is overwritten by a later collision before the next
+driver call still decides (`test_engine_referee_restart_stage3_latch`, whose
+negative twin pins kind 1 on both frames -> no phase write, stage stays).
+
+The two residuals stay numbered legs: the **mode-4 Practise term**
+`[0x14C32A]` (three writers; only `FUN_00032DE0`/hub case 8 passes mode 4,
+so ordinary Friendly/League/Tournament/Playoff matches stay 0 and the engine
+seed is the native value) and the **`0x8948D` decision-word read** (R3 §4
+proves it is a read-before-write callee-local word, so the older "the
+caller's decision word" phrasing is an over-claim; reproducing it needs the
+act-step stack depth, not state). The other native ball-row writers
+(`0x887D5` reset row 3, `0x8C2CE` kickoff row 0, `0x6FF37`/`0x6FF85`
+appearance pair) remain unmodelled: the **R51-L1** release catalogue, whose
+ordinary-play reach is the **R51-L2** runtime leg. Because that release is
+unproven, phase `0x06` and actions `0x13`/`0x1F` stay in
+`fifa96_match_port_blocked` with the corrected reason.

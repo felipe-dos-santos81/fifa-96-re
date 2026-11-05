@@ -6671,7 +6671,8 @@ static void test_taker_armed_referee_rows_resolve(void) {
  *    decision at `0x894C4`), then the session (`0x894B7/0x894BE`). `kind == 3`
  *    therefore **passes under a byte-0 session on the re-entry** — the native
  *    net is a two-call decision — while a non-3 kind still aborts. The flag is
- *    the unmodelled term (assumed 0, FU166-L6).
+ *    the stage-2 latch (`= (kind == 3)` at the split), modelled since
+ *    phase-51 T4 (`test_engine_referee_restart_stage3_latch`).
  * Treating `contact_kind == 3 || session != 0` as one flat gate is wrong in
  * both directions: before the stage-1 split it would let kind 3 pass on the
  * stage-2 call, and as a blanket byte-0 hold it would drop the native stage-3
@@ -6800,6 +6801,83 @@ static void test_engine_referee_restart_default_gate_split(void) {
   assert(mr.state.phase == 0x0Au);
   assert(mr.ref_speech == 0u);
   assert(mr.entities.team[1].records[1].code != 0x12u);
+}
+
+/* Phase-51 T4 (R1 §2.4 + R3 §2, FU-166 L6 closed): the stage-3 latch.
+ *
+ * The native stage-2 body (0x893E2..0x89487) installs the ball anim row from
+ * the contact kind — the keep/reroll arm `0x89401/0x8941D` (rows 0/0x62..0x65,
+ * flags 0x07 -> `[0x158882] = 1`) or the `0x8944F/0x89464` row-0x49 install
+ * (flags 0x00 -> 0) — and only then tests the session byte
+ * (`0x8947A..0x89487`). The cell is the ball block's `+0x96` byte
+ * (`FUN_0006E724` `0x6E7E7 MOV [ESI+0x96],AL`, `AL = row[2] & 1`), not a
+ * second contact kind (R3 §2). So after the byte-0 one-call split the stage-3
+ * gate at `0x894A2` reads **"kind was 3 at stage 2"**, not "kind is 3 now": a
+ * kind-3 contact that is overwritten by a later (kind 1) collision before the
+ * next driver call still passes the first OR term. The engine models the
+ * latch (`mr->ball_row_flag_158882`) and the gate
+ * `flag || kind == 3 || session != 0`.
+ *
+ * Positive: byte 0, kind 3 at the stage-1 -> 2 split, kind 1 at the stage-3
+ * decision, incident in the penalty band -> phase 6 + the `0x8D4A2` arm
+ * (`0x13` on the controlled taker, `0x1F` on the other team's record 0).
+ * Negative twin: kind 1 on both frames -> the latch is 0 and the gate holds
+ * (no phase write, the machine stays armed at stage 2). */
+static void test_engine_referee_restart_stage3_latch(void) {
+  struct fifa96_match_run mr;
+  const int32_t spot[3] = {0x100, 0, -0x800};   /* |x| < 0x420, side-0 band */
+
+  /* positive: kind 3 at the stage-2 body, kind 1 when stage 3 decides */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;             /* soft: the row-0x0C kind stays 1 */
+  mr.session_gate_14c32a = 0;            /* the settled ordinary-match default */
+  mr.situation_pending = 1;              /* force the direct act-2 arm */
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
+  assert(mr.referee.contact_kind == 1u);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);   /* FU-241: deferred */
+  match_frame_act8_sweep(&mr);
+  assert(mr.act.id == 2u && mr.ref_restart_stage == 1u);
+  assert(mr.state.phase == 0x0Au);
+  mr.referee.contact_kind = 3u;          /* the FU-289 cell at the stage-2 body */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* latch write + the split */
+  assert(mr.act.id == 2u);
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);       /* no decision on the split call */
+  mr.referee.contact_kind = 1u;          /* rewritten before the stage-3 call */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* the gate reads the latch */
+  assert(mr.state.phase == 6u);          /* the native two-call decision */
+  assert(mr.act.id == 0u);               /* the terminal cleared the act slot */
+  assert(mr.ref_speech == 0x23u);
+  assert(mr.entities.team[1].records[1].code == 0x13u);  /* the penalty taker */
+  assert(mr.entities.team[1].target == 12);
+  assert(mr.entities.team[0].records[0].code == 0x1Fu);  /* the other keeper */
+
+  /* negative twin: kind 1 at the split latches 0 -> the stage-3 gate holds */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;
+  mr.session_gate_14c32a = 0;
+  mr.situation_pending = 1;
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
+  assert(mr.referee.contact_kind == 1u);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);
+  match_frame_act8_sweep(&mr);
+  assert(mr.act.id == 2u && mr.ref_restart_stage == 1u);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* latch 0 + the split */
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* the gate holds */
+  assert(mr.act.id == 2u);               /* still armed at the stage-3 body */
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);       /* no decision phase write */
+  assert(mr.ref_speech == 0u);
+  assert(mr.entities.team[1].records[1].code != 0x13u);
+  assert(mr.entities.team[0].records[0].code != 0x1Fu);
 }
 
 /* The settings-0 gate and the 1-in-8 skip: no decision, no machine, no phase. */
@@ -7000,8 +7078,9 @@ static void test_contact_gate_reachable_via_pad_duel(void) {
  * phase 0x19 -> sit 0xA -> act 2) is live and faithful, and Task 4 proved the
  * contact **entry** reachable. But the act-2 terminal
  * (`match_run_ref_step_restart` stage 2 = the native stage-3 body) decides only
- * on the stage-3 terms: the unmodelled ball-row flag `[0x158882]` (assumed 0,
- * FU166-L6), `kind == 3` (`0x894AD..0x894B5`), or a non-zero session
+ * on the stage-3 terms: the stage-2 ball-row latch `[0x158882]` (=
+ * `(contact_kind == 3)` at the split; phase-51 T4 models it — before that the
+ * flag was assumed 0), `kind == 3` (`0x894AD..0x894B5`), or a non-zero session
  * (`0x894B7/0x894BE`). The live path emits a **non-3 contact kind (1 ≠ 3)**
  * (the row-0x0C literal `0x81EB4 MOV EAX,1` -> the `0x8A43C` registrar, the
  * engine `fifa96_match_run_contact`) and the settled ordinary-match session is
@@ -10837,6 +10916,7 @@ int main(void) {
   test_corner_counter_side_swap();
   test_engine_referee_contact_fk();
   test_engine_referee_restart_default_gate_split();
+  test_engine_referee_restart_stage3_latch();
   test_taker_armed_referee_rows_resolve();
   test_engine_referee_contact_gates();
   test_engine_referee_foul_sequence();

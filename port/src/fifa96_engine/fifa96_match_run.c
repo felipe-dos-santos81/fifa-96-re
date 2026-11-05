@@ -1961,6 +1961,7 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
+  mr->ball_row_flag_158882 = 0;        /* the native reset clear 0x73D3A */
   match_run_reset_screen_state(mr);    /* FU-146 S3: no installed handler */
   (void)fifa96_match_entities_release(&mr->entities);
   return 0;
@@ -2325,6 +2326,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
+  mr->ball_row_flag_158882 = 0;        /* the native reset clear 0x73D3A */
   /* FU-149 P1: fresh set-piece dispatcher state (the match-reset seeds:
    * FUN_00073EE0 zeroes 0x157AD4/0x157AD6 and the act-8 replay bytes). */
   mr->sit_side_pending = 0;
@@ -2516,6 +2518,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
+  mr->ball_row_flag_158882 = 0;        /* the native reset clear 0x73D3A */
   /* FU-149 P1: a fresh match drops the set-piece dispatcher state (the native
    * match reset FUN_00073EE0 zeroes the corner counters 0x157AD4/0x157AD6;
    * the [0x157ABE] swap and the incident triple carry their unported-producer
@@ -6421,9 +6424,10 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
  *  - stage 0 (0x89318/0x8935A): the soft-foul whistle then phase 0xA on the
  *    fouled side (the native then cascades through the stage 1/2 camera-lead
  *    gates; the port derives one stage per granted frame, FU-150 erratum);
- *  - stage 1 (0x893E2..0x89487 = native stage 2): the ball-row keep/reroll
- *    then the **session gate**;
- *  - stage 2 (0x894A2..0x895AC = native stage 3): the flag/kind/session gate
+ *  - stage 1 (0x893E2..0x89487 = native stage 2): the ball-row install and
+ *    its `[0x158882]` latch (`= (contact_kind == 3)`) then the **session
+ *    gate**;
+ *  - stage 2 (0x894A2..0x895AC = native stage 3): the latch/kind/session gate
  *    then the decision.
  *
  * **The two gates are ordered differently and must not be flattened** (FU-310
@@ -6438,15 +6442,22 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
  *    `a2 94 08 00`), i.e. the engine's stage 2. The engine models the abort as
  *    the stage 1 -> 2 split hold. (A non-zero session then runs the
  *    `0x8948D..0x8949C` decision-word check; that cell stays the FU166-L6
- *    leg.)
- *  - native stage 3 tests the ball-row flag (`0x894A2/0x894A9`), then
+ *    leg — R3 §4 proves the read is of a stale callee-local word, not a
+ *    caller parameter.)
+ *  - native stage 2 also installs the ball anim row from the contact kind
+ *    (`0x89401/0x8941D` keep/reroll rows 0/0x62..0x65, flags 0x07; the
+ *    non-3 `0x8944F/0x89464` row 0x49, flags 0x00), and `FUN_0006E724`
+ *    writes `row_flags & 1` to `[0x158882]` at `0x6E7E7`. The engine latches
+ *    the net effect at its stage-1 body: `ball_row_flag_158882 =
+ *    (contact_kind == 3)`, before the byte-0 split and for both sessions.
+ *  - native stage 3 tests the ball-row latch (`0x894A2/0x894A9`), then
  *    `kind == 3` (`0x894AD/0x894B2/0x894B5` -> the decision at `0x894C4`),
- *    then the session (`0x894B7/0x894BE`). `[0x158882]` — the ball block's
- *    `+0x96` byte (base `0x1587EC`), written by FUN_0006E724 as `row_flags &
- *    1` — is the only unmodelled term (assumed 0, FU166-L6). The engine's
- *    stage 2 therefore passes on `kind == 3 || session != 0`, independent of
- *    how the stage was reached: a byte-0 + kind-3 contact is the native
- *    **two-call decision** (split on one call, decide on the next).
+ *    then the session (`0x894B7/0x894BE`). Because the latch is read first,
+ *    a contact that was kind 3 when the stage-2 body ran still decides after
+ *    a later collision rewrites `[0x15888C]` — the engine's stage 2 passes on
+ *    `flag || kind == 3 || session != 0`, independent of how the stage was
+ *    reached. A byte-0 + kind-3 contact is the native **two-call decision**
+ *    (split on one call, decide on the next).
  *  - A non-zero session reaches the same stage-3 gate directly from stage 1
  *    (the native stage-2 body falls through); the session term then passes
  *    every kind, subject only to the unmodelled decision-word check above.
@@ -6467,19 +6478,28 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     mr->ref_restart_stage = 1u;
     return 1;
   }
-  /* Native stage 2 (0x893E2..0x89487): the stage byte is incremented first
-   * (0x8947F), then the session-0 abort (0x89487). The engine's stage 1 is
-   * that body, so a byte-0 frame performs the split and does not decide. */
-  if (mr->ref_restart_stage == 1u && mr->session_gate_14c32a == 0u) {
-    mr->ref_restart_stage = 2u;
-    return 1;
+  /* Native stage 2 (0x893E2..0x89487): the ball-row install latches
+   * `[0x158882] = (contact_kind == 3)` (see `ball_row_flag_158882` in the
+   * header: the keep/reroll rows 0/0x62..0x65 have flags 0x07, the non-3
+   * row-0x49 install at 0x8944F/0x89464 has 0x00), for both sessions,
+   * before the stage byte is incremented (`0x8947F`) and the session-0
+   * abort (`0x89487`). The engine's stage 1 is that body, so a byte-0 frame
+   * performs the split and does not decide. */
+  if (mr->ref_restart_stage == 1u) {
+    mr->ball_row_flag_158882 = mr->referee.contact_kind == 3u ? 1u : 0u;
+    if (mr->session_gate_14c32a == 0u) {
+      mr->ref_restart_stage = 2u;
+      return 1;
+    }
   }
   /* Native stage 3 (0x894A2..0x894BE; also reached from stage 1 with a
-   * non-zero session): the unmodelled `[0x158882]` flag (assumed 0) ->
-   * kind == 3 -> session. `kind == 3` passes at 0x894B2/0x894B5 before the
-   * 0x894B7 session test, so it decides under a byte-0 session on this
-   * re-entry; otherwise only a non-zero session passes. */
-  if (!(mr->referee.contact_kind == 3u || mr->session_gate_14c32a != 0u)) {
+   * non-zero session): the stage-2 latch -> kind == 3 -> session. The latch
+   * is read first (0x894A2/0x894A9), so a byte-0 contact that was kind 3 when
+   * the stage-2 body ran still decides after a later collision rewrites
+   * `[0x15888C]`; `kind == 3` passes at 0x894B2/0x894B5 before the 0x894B7
+   * session test. */
+  if (!(mr->ball_row_flag_158882 != 0u || mr->referee.contact_kind == 3u ||
+        mr->session_gate_14c32a != 0u)) {
     return 1;
   }
   {

@@ -996,6 +996,20 @@ struct fifa96_match_run {
   uint8_t situation_id;
   uint8_t situation_pending;
   uint8_t session_gate_14c32a;
+  /* FU166-L6 closed (phase-51 T4; R1 §2.4 + R3 §2): `[0x158882]` is the ball
+   * block's (base `0x1587EC`) `+0x96` byte = `row_flags & 1`, written by
+   * `FUN_0006E724` (`0x6E7E7 MOV [ESI+0x96],AL`, `AL = row[2] & 1`) at every
+   * ball anim-row install. The act-2 stage-2 body installs the row from
+   * `contact_kind` — keep/reroll rows 0/0x62..0x65 (flags 0x07) -> 1, the
+   * row-0x49 install (flags 0x00) -> 0 — and only then tests the session
+   * (`0x8947A`). The engine latches the net effect at its stage-1 -> 2 body
+   * (`ball_row_flag_158882 = (contact_kind == 3)`), so the stage-3 gate
+   * (`0x894A2`) reads "kind was 3 at stage 2", not "kind is 3 now" on the
+   * byte-0 re-entry. The other native ball-row writers (`0x887D5` reset row 3,
+   * `0x8C2CE` kickoff row 0, `0x6FF37`/`0x6FF85` appearance pair) are the
+   * R51-L1 residue: they are not modelled and the cell is cleared by
+   * init/begin/teardown (the native match-reset clear `0x73D3A`). */
+  uint8_t ball_row_flag_158882;
   /* FU-149 P1 (set pieces & restarts) dispatcher state, native cells:
    *  - `sit_side_pending` = [0x15B6B8]: the queue head latches `(side == 0)`
    *    of the queued situation (0x8A977/0x8A982) before the table-1 id write;

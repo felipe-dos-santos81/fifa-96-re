@@ -142,3 +142,55 @@ The engine's `probe[4]` literal is now a real seam (`mr->probe_a/probe_b`);
 without a competition-setup producer the rows remain producer-blocked. The
 prior attribution to an "unmodelled `0x8BCCF` variable writer" is corrected:
 `0x8BCCF` is the phase-`0x13` writer only.
+
+## 7. Erratum (2026-11-04, phase-51 T4) — the phase-6 latch and the blocked reason
+
+**Supersedes the §4 table rows for phase `0x06` / actions `0x13` and `0x1F`,
+and the §6 phase-`0x06` paragraph.** The row *set* is unchanged: the three
+rows stay in `fifa96_match_port_blocked` (`FIFA96_MATCH_PORT_BLOCKED_ROWS 6`).
+Quoted from §4:
+
+> | phase `0x06` | `match_run_ref_step_restart` `phase = 6` | the arm needs
+> `contact_kind != 3`, but the enclosing gate admits only `kind == 3` when
+> `session_gate_14c32a == 0`, and that cell has no writer. The unmodelled
+> `[0x158882]` ball-row flag (FU166-L6) is the blocker. |
+> | action `0x13` | `phase_arm(6)` `match_run.c` | its only installer is the
+> dead phase 6. |
+> | action `0x1F` | `phase_arm(6)` | same as `0x13`. |
+
+and from §6:
+
+> The real blocker is `[0x14C32A]`, the mode-4 Practise session byte set by
+> the front-end `FUN_0001B7B8` path; the engine seeds it 0 with no writer.
+> Phase `0x06` therefore stays a front-end-scoped leg, not a missing
+> ball-row model.
+
+**Corrections (fresh R1 §2 + R3 §2/§4, reconciled by the phase-51 spec §2.4).**
+
+1. **`[0x158882]` has a writer and is not the blocker.** It is the ball
+   block's `+0x96` byte = `row_flags & 1` (`FUN_0006E724` `0x6E7E7`;
+   reset clear `0x73D3A`). The act-2 stage-2 body installs the ball row from
+   `contact_kind` — keep/reroll rows 0/0x62..0x65 (flags 0x07) -> 1, the
+   non-3 row 0x49 (flags 0x00) -> 0 — before the `0x89487` byte-0 split, so
+   at `0x894A2` the cell is `(contact_kind == 3)` **as of the stage-2 body**,
+   a *latched* value, not a same-frame proxy.
+2. **The blocker is not one cell.** The gate is a three-term OR
+   (`[0x158882] != 0 || [0x15888C] == 3 || [0x14C32A] != 0`). The engine now
+   models the latch (`mr->ball_row_flag_158882`) and gates on all three terms.
+   `[0x14C32A]` is the **mode-4 Practise** term (three writers; only
+   `FUN_00032DE0`/hub case 8 passes mode 4), not "the only blocker".
+3. **The remaining `0x8948D` check is a stale local, not a caller parameter.**
+   `word[ESP]` is the act-2 body's own 4-byte callee local (`0x89232 SUB
+   ESP,4`), first written only at `0x894E7`/`0x894F2`/`0x89550`, i.e. *after*
+   the `0x8948D` read. Reproducing it needs the act-step stack depth, not
+   game state; it stays an open leg.
+4. **Why the rows stay blocked.** The phase-6 arm (`0x8D4A2`) is reachable
+   only via the stage-3 latch (kind 3 at stage 2, non-3 at stage 3), the
+   mode-4 Practise term, or a same-frame ball-row install during the armed
+   hold; there is **no ordinary-play witness**. The latch-release catalogue
+   is R51-L1 and its runtime confirmation is R51-L2 (the engine-side twin is
+   FU287 T287-L2).
+
+The census does not move: `78/78` bodies, `58/80` natural, `64/80`
+install-live, `6` blocked, action `38/45`, phase `26/35`. The M2 transcript
+stays byte-identical (`54f44987…`) and M1 `09b726b7…` exact.

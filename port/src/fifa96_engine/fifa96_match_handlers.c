@@ -8046,17 +8046,32 @@ unsigned fifa96_match_port_install_live(void) {
   return n;
 }
 
-/* FU-338 §4: install-live rows whose natural producer is structurally blocked.
- * They stay in `fifa96_match_port_install_live` and are subtracted from
- * `fifa96_match_port_wired` (the natural-reach count). */
+/* FU-338 §4; the reason strings are corrected by phase-51 T4 (R1 §2.4 + R3
+ * §2/§4) — the old "phase 6 blocked / writer-less `[0x158882]`" text is
+ * retired. Install-live rows whose natural producer is structurally unproven:
+ *  - actions `0x13`/`0x1F`: their only installer is the phase-6 arm
+ *    (`0x8D4A2` -> `0x8D532`/`0x8D569`). The arm is reachable only via the
+ *    stage-3 latch (kind 3 at stage 2, non-3 at stage 3), the mode-4 Practise
+ *    term (`[0x14C32A]`; only `FUN_00032DE0`/hub case 8 passes mode 4) or a
+ *    same-frame ball-row install during the armed hold; no ordinary-play
+ *    witness (the latch-release catalogue is R51-L1, runtime R51-L2).
+ *  - phase `0x06`: the same latch reason. `[0x158882]` is the ball block's
+ *    `+0x96` = `row_flags & 1` with a real writer (`FUN_0006E724` `0x6E7E7`;
+ *    reset clear `0x73D3A`), latched by the act-2 stage-2 body as "kind was
+ *    3", and the engine models it (`mr->ball_row_flag_158882`); `[0x14C32A]`
+ *    is the second term, not the only blocker. The `0x8948D` decision-word
+ *    read stays a leg (R3 §4: a read-before-write callee-local, not a caller
+ *    parameter). */
 const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS] = {
   {FIFA96_MATCH_PORT_ACTION, 0x0D},  /* phase-38: installer gate unproduced */
-  {FIFA96_MATCH_PORT_ACTION, 0x13},  /* phase_arm(6) only; phase 6 blocked */
+  {FIFA96_MATCH_PORT_ACTION, 0x13},  /* phase_arm(6) only; stage-3 latch, no
+                                      * ordinary-play witness */
   {FIFA96_MATCH_PORT_ACTION, 0x1F},  /* same */
   {FIFA96_MATCH_PORT_ACTION, 0x28},  /* phase-0x14 chooser arm unfed */
   {FIFA96_MATCH_PORT_ACTION, 0x2A},  /* same */
-  {FIFA96_MATCH_PORT_PHASE, 0x06},   /* contact_kind != 3 arm unreachable */
+  {FIFA96_MATCH_PORT_PHASE, 0x06},   /* the same stage-3 latch; the 0x8948D
+                                      * stale-local read stays a leg */
   /* Phase 0x1F is closed: the sit-0xC install invokes act 9 now (0x8AF0E
    * EBX=1 / 0x88937 CALL [0x158808]); the native one-shot stage-0 run is
    * observable before the match-init act-0xA supersession. */
