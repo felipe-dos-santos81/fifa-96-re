@@ -40,13 +40,18 @@ struct fifa96_frontend_run {
   char     team_name[2][FIFA96_FRONTEND_TEAM_NAME_MAX];  /* full selected name */
   char     team_code[2][4];         /* derived 3-letter HUD code (P2-L4) */
   uint8_t  formation[2];            /* native [0x14C1E4]/[0x14C1E5] ids */
-  int      team_selected;           /* bridge stages teams/formation */
+  int      team_selected;           /* 1 = the native menu supplies the current
+                                     * team payload (the bridge stages it) */
   uint8_t  key_down[16];            /* F1: raw engine key codes currently held
                                      * (native edge latch; 1..10 in use) */
   int      input_armed;             /* F1: 0 = drop held input until a neutral
                                      * poll; 1 = edge-latch fresh presses */
 };
 
+/* Initialise a fresh (zeroed or uninitialised) front-end run. This clears the
+ * struct, so it must not be called a second time on a live run: that would
+ * drop the decoded LANG/font copies without freeing them. Use
+ * fifa96_frontend_run_reset to re-enter Game Select after a match. */
 int fifa96_frontend_run_init(struct fifa96_frontend_run *fr, struct fifa96_surface *s);
 int fifa96_frontend_run_input(struct fifa96_frontend_run *fr, const fifa96_platform_key *keys,
                               size_t count);

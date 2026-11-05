@@ -1,11 +1,15 @@
 /* fifa96_pitch.h — P1 (FU-343): the visible-match pitch renderer.
  *
  * Derived v1 of the native field/stadium pass (recon A1):
- *  - the field container /ART/GAMEFLD3.PVI carries `FplainH.fsh`/`FplainV.fsh`
- *    (64x64, SHPI, 4096-byte tiles, A1 §1/§2). The native floor is the
- *    per-scanline Mode-X caster FUN_0005F684 (`0x5F684..0x5FEA9`, A1 §2); this
- *    module instead inverse-projects one ray per pixel through the transpose
- *    of fifa96_projection_matrix and samples the real 64x64 tile. The native
+ *  - the plain field container /ART/GAMEFLD1.PVI carries
+ *    `FplainH.fsh`/`FplainV.fsh` (64x64, SHPI, 4096-byte tiles, A1 §1/§2).
+ *    The retail field binding is GAMEFLD3 (FU-2), but its entries are the
+ *    stripped `FHstripH/V` names + `3dwpts.dat` (A1 §1, measured); the
+ *    windowed bridge therefore tries GAMEFLD1 first and falls back to the
+ *    GAMEFLD3 FHstrip pair. The native floor is the per-scanline Mode-X
+ *    caster FUN_0005F684 (`0x5F684..0x5FEA9`, A1 §2); this module instead
+ *    inverse-projects one ray per pixel through the transpose of
+ *    fifa96_projection_matrix and samples the real 64x64 tile. The native
  *    world-units-per-texel scale (`>>12`, A1 leg 4) is a numbered open leg;
  *    v1 uses one world unit per texel.
  *  - the stadium container /ART/GAMESTD1.PVI carries `STACcovr.fsh` (9 crowd
@@ -35,9 +39,11 @@ struct fifa96_surface;
 #define FIFA96_PITCH_TILE_BYTES (FIFA96_PITCH_TILE_W * FIFA96_PITCH_TILE_H)
 #define FIFA96_PITCH_CROWD_BAND_ROWS 56
 
-/* PALsys-index choices for the v1 band/markings (the match palette staged by
- * fifa96_match_run_stage is the PALsys frame-2 chunk; index 0x3C is the
- * blue-grey sky entry and 0xFE is set to white by the live kit stage). */
+/* PALsys-index choices for the v1 band/markings. The live match palette is
+ * the PALsys frame 0 base with the PALteam band overlay (the P1 measured
+ * correction; the non-live PALsys frame-2 chunk never reaches the pitch
+ * path); index 0x3C is the blue-grey sky entry and 0xFE is set to white by
+ * the live kit stage. */
 #define FIFA96_PITCH_SKY_INDEX 0x3Cu
 #define FIFA96_PITCH_LINE_INDEX 0xFEu
 
@@ -52,10 +58,11 @@ struct fifa96_pitch {
 };
 
 /* Stage the two derived match-art containers through the engine asset table:
- * `field_path` (default /ART/GAMEFLD3.PVI) and `stadium_path` (default
- * /ART/GAMESTD1.PVI). The new tiles are committed only when all three are
- * decoded; on failure the previous staging is left untouched and a negative
- * fifa96_err_t is returned. NULL arguments -> -FIFA96_ERR_INVALID. */
+ * `field_path` (the bridge supplies /ART/GAMEFLD1.PVI and a GAMEFLD3
+ * FHstrip fallback) and `stadium_path` (/ART/GAMESTD1.PVI). The new tiles are
+ * committed only when all three are decoded; on failure the previous staging
+ * is left untouched and a negative fifa96_err_t is returned. NULL arguments
+ * -> -FIFA96_ERR_INVALID. */
 int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *eng,
                        const char *field_path, const char *stadium_path);
 

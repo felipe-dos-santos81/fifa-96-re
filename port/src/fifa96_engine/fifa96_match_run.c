@@ -5636,17 +5636,25 @@ static void match_run_draw_result(const struct fifa96_match_run *mr,
   const int x = (s->width - MATCH_RUN_RESULT_PANEL_W) / 2;
   const int y = (s->height - MATCH_RUN_RESULT_PANEL_H) / 2;
   char score[64];
+  char period[24];
   if (r->hud_name[0][0] && r->hud_name[1][0])
     (void)snprintf(score, sizeof score, "%s %u - %u %s", r->hud_name[0],
                    (unsigned)mr->score[0], (unsigned)mr->score[1], r->hud_name[1]);
   else
     (void)snprintf(score, sizeof score, "%u - %u", (unsigned)mr->score[0],
                    (unsigned)mr->score[1]);
+  /* The plan asks for the period on the FULL TIME panel. Use the post index
+   * itself (2 after regulation), not the HUD's `period + 1` cell, which read
+   * 3 on the post sentinel (the P5 fix removed the wrong line; this restores
+   * the correct one). */
+  (void)snprintf(period, sizeof period, "PERIOD %u",
+                 (unsigned)(mr->state.period < 1u ? 1u : mr->state.period));
   match_run_panel_fill(s, x, y, MATCH_RUN_RESULT_PANEL_W, MATCH_RUN_RESULT_PANEL_H, ink);
-  match_run_panel_text(s, font, "FULL TIME", x, MATCH_RUN_RESULT_PANEL_W, y + 8, ink,
+  match_run_panel_text(s, font, "FULL TIME", x, MATCH_RUN_RESULT_PANEL_W, y + 6, ink,
                        0x00);
-  match_run_panel_text(s, font, score, x, MATCH_RUN_RESULT_PANEL_W, y + 24, ink, 0x00);
-  match_run_panel_text(s, font, "ENTER: MENU", x, MATCH_RUN_RESULT_PANEL_W, y + 42,
+  match_run_panel_text(s, font, score, x, MATCH_RUN_RESULT_PANEL_W, y + 21, ink, 0x00);
+  match_run_panel_text(s, font, period, x, MATCH_RUN_RESULT_PANEL_W, y + 36, ink, 0x00);
+  match_run_panel_text(s, font, "ENTER: MENU", x, MATCH_RUN_RESULT_PANEL_W, y + 51,
                        ink, 0x00);
 }
 

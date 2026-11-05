@@ -9348,7 +9348,7 @@ This closes the "front-end held-key repeat cadence" leg under the hold policy
 for the native interactive menu; the legacy FU-135 panel path keeps the
 original every-state-1 consumption by design (headless/M1-pinned).
 
-## Phase 57 — P5 follow-up: bounded host catch-up (FU-343, 2026-11-05)
+## Phase 58 — P5 follow-up: bounded host catch-up (FU-343, 2026-11-05)
 
 The live play-test (80 scripted kicks with the right direction held) exposed
 the A6-L7 catch-up spiral: `fifa96_engine_step` fed the whole
@@ -9364,3 +9364,38 @@ byte-identical (M1 `09b726b7…`, M2 v29 `7c3874f7…` verified by `cmp`).
 Regression `test_engine_platform` drives a virtual 1 s step and asserts the
 clamp fires exactly 10 ticks. Re-running the same 80-kick live sequence
 leaves the window responsive and the match clock advancing (00:23).
+
+## Phase 59 — code-review fixes (FU-343, 2026-11-05)
+
+Two-axis review (`0ee103d..a5a63f2`): the Spec axis found two implementation
+defects and the Standards axis found two hard documentation breaches plus
+judgement smells. Fixed:
+
+- **Pitch H/V selector.** `FUN_0004C9D4` (A1 §2) returns 0 for yaw inside
+  `[0x2000,0x6000]` or `[0xA000,0xE000]` (selecting **V**) and 1 elsewhere
+  (**H**); the v1 condition had the two sets swapped. Fplain H/V pixels are
+  identical, so only the GAMEFLD3 `FHstrip` fallback showed the pattern
+  rotated 90°. `pitch_tile_pick` now selects V inside those bands and H
+  outside.
+- **FULL TIME period.** The plan asks for the period on the panel; P5 removed
+  the line because the HUD's `period + 1` cell read 3 on the post sentinel.
+  The panel now prints `PERIOD <state.period>` (2 after regulation, 3/4 in
+  extra time) and keeps the HUD suppressed on POST. This is the P5 note's
+  correction (append-only erratum; the P5 text above stands).
+- **Standards corrections.** `fifa96_pitch.h` and the render-test banner now
+  state GAMEFLD1-first / GAMEFLD3-FHstrip-fallback and no default field path;
+  the duplicate second `Phase 57` heading is renumbered **Phase 58**; the
+  `fifa96_frontend_run_init` single-init contract is documented (use reset to
+  reuse; a second init would drop the decoded LANG/font without freeing);
+  `frontend_native_commit_teams` is renamed `frontend_native_sync_teams` and
+  `team_selected` is documented as "the native menu supplies the current team
+  payload".
+- **Spec errata** §6 records the GAMEFLD1/PALteam-base/live-lens/P2-roster/
+  result-period/optional-goal corrections above.
+
+Deferred judgement smells (no change, recorded): the three local RefPack
+decode/name-finder copies are a module-leaf choice; the three key latches
+(front-end/menu, engine ESC, match pause) cover different key spaces; the menu
+model's native-code/fallback seam is test/evidence-bearing; the
+`engine_step`/`stage_live_kit` breadth is architectural and not worth a
+late-wave refactor. `make check` 115/115; M1/M2 exact.

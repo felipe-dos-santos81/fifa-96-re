@@ -124,3 +124,32 @@ Measured starting point (fresh, this session):
   projection — all named legs.
 - Online/modem, tournaments/leagues, and the other five native front-end
   screens.
+
+## 6. Errata — post-implementation review (2026-11-05)
+
+Append-only corrections from the two-axis review of `0ee103d..a5a63f2`; the
+sections above stand as written.
+
+1. **§3 P1 field container.** The spec names `/ART/GAMEFLD3.PVI` as carrying
+   `FplainH/V`. Measured (A1 §1): GAMEFLD3 carries the stripped `FHstripH/V`
+   pair + `3dwpts.dat`; the plain tiles live in `/ART/GAMEFLD1.PVI`. The
+   bridge tries GAMEFLD1 first and falls back to the GAMEFLD3 FHstrip set.
+2. **§3 P1 palette base.** The spec says `PALteam.fsh` frame 0 as the base.
+   Measured: a full PALteam base turns the Fplain grass cyan. The live base
+   is PALsys frame 0 plus the PALteam band overlay (P1 register); the player
+   colours are the intended result. The named base is superseded.
+3. **§3 P1 live lens.** The horizontal half-focal lens is not in this spec;
+   it is a derived live stand-in (FU343-L6) needed to frame both teams at the
+   native near-goal standoff. The native lens director remains a leg.
+4. **§3 P2 handoff.** The chosen full names are captured in
+   `frontend.team_name[2]`, but the native HUD uses the 3-letter code
+   (P2-L4; the PCCD roster mapping is explicitly out of scope). The
+   formation is the default 0 until a formation chooser lands (P2-L9); the
+   setter handoff is staged. The roster/formation mapping remains a leg.
+5. **§3 P4 result period.** The plan asks for the period on the FULL TIME
+   panel. P5 removed the line because the HUD's `period + 1` cell read 3 on
+   the post sentinel; the panel now shows the post index itself (2 after
+   regulation, 3/4 in extra time). The HUD remains suppressed on POST.
+6. **§3 P3 goal cue.** The plan's Task 3 explicitly permits an optional
+   short goal cue ("mark the id mapping as a leg"); the SFX id-15 cue is that
+   labelled stand-in (A6-L2), not scope creep.

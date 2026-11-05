@@ -1282,7 +1282,8 @@ static void test_engine_match_step_renders(void) {
  *
  * The ISO-gated cases use the retail containers the windowed bridge stages:
  * /ART/PLAYART.PVI + /ART/GAMEART0.PVI for the sprites/palette, then
- * /ART/GAMEFLD3.PVI + /ART/GAMESTD1.PVI through fifa96_match_run_stage_pitch.
+ * /ART/GAMEFLD1.PVI (GAMEFLD3 FHstrip fallback) + /ART/GAMESTD1.PVI through
+ * fifa96_match_run_stage_pitch.
  * A direct begin with live_start = 1 is the headless equivalent of the
  * windowed bridge's opt-in (the bridge gates it on a surface + !headless).
  * ------------------------------------------------------------------------ */

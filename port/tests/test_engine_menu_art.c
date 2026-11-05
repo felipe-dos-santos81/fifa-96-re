@@ -206,7 +206,8 @@ static void test_zero_length_options_inv(void) {
   fifa96_asset_unmount(t);
 }
 
-static void test_engine_boot_uses_asset_table(void) {  uint8_t shpi[64];
+static void test_engine_boot_uses_asset_table(void) {
+  uint8_t shpi[64];
   size_t shpi_len = mt_build_shpi(shpi, sizeof shpi);
   uint8_t image[MT_LEN];
   mt_build_iso(image, sizeof image, shpi, shpi_len);

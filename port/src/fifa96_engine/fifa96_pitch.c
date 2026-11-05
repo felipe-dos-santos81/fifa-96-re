@@ -233,12 +233,15 @@ void fifa96_pitch_release(struct fifa96_pitch *pitch) {
 
 static int32_t pitch_abs32(int32_t v) { return v < 0 ? -v : v; }
 
-/* The native H/V tile selector FUN_0004C9D4 (A1 §2): H for yaw in
- * (0x2000,0x6000) or (0xA000,0xE000), else V. */
+/* The native H/V tile selector FUN_0004C9D4 (A1 §2): V for yaw inside
+ * [0x2000,0x6000] or [0xA000,0xE000] (the native returns 0 there); H for the
+ * complement, including (0x6000,0xA000) and the two extremes. The earlier v1
+ * had the two sets swapped; Fplain H/V pixels are identical so only the
+ * FHstrip fallback showed the rotation. */
 static const uint8_t *pitch_tile_pick(const struct fifa96_pitch *pitch, int32_t yaw) {
   uint16_t a = (uint16_t)yaw;
-  int use_h = (a >= 0x2000u && a <= 0x6000u) || (a >= 0xA000u && a <= 0xE000u);
-  return use_h ? pitch->tile_h : pitch->tile_v;
+  int use_v = (a >= 0x2000u && a <= 0x6000u) || (a >= 0xA000u && a <= 0xE000u);
+  return use_v ? pitch->tile_v : pitch->tile_h;
 }
 
 /* v1 marking gate: a 2*FIFA96_PITCH_LINE_HALF-unit wide band around the

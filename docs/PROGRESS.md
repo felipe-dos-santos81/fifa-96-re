@@ -3928,3 +3928,12 @@ close-out below).
   drops the excess; the headless tapes stay byte-identical and
   `test_engine_platform` pins the clamp. The repeated live sequence stays
   responsive (match clock 00:23, no WM hang).
+
+- **Code-review fixes (playable SDL, 2026-11-05).** The two-axis review found
+  the pitch H/V selector inverted (V belongs inside `[0x2000,0x6000]` /
+  `[0xA000,0xE000]`; only the FHstrip fallback showed it) and the FULL TIME
+  panel missing the period (P5 had removed the wrong `+1` value). Both are
+  fixed; the panel now shows `PERIOD 2` after regulation. The pitch/test
+  header claims (GAMEFLD1 first, GAMEFLD3 FHstrip fallback), the duplicate
+  Phase-57 heading, the front-end init contract and the team-sync naming are
+  corrected; spec §6 records the errata. `make check` 115/115; M1/M2 exact.

@@ -36,7 +36,7 @@ static void frontend_copy_name(char dst[FIFA96_FRONTEND_TEAM_NAME_MAX], const ch
 
 /* Snapshot the model's current teams into the bridge payload. The full name is
  * kept for display; the HUD takes the derived 3-letter code (A3 §2.3/P2-L4). */
-static void frontend_native_commit_teams(struct fifa96_frontend_run *fr) {
+static void frontend_native_sync_teams(struct fifa96_frontend_run *fr) {
   for (int side = 0; side < 2; side++) {
     int index = fr->menu.team[side];
     fr->team_id[side] = fifa96_menu_team_id(index);
@@ -129,7 +129,7 @@ static int frontend_native_step(struct fifa96_frontend_run *fr, struct fifa96_su
       if (action == FIFA96_MENU_ACTION_QUIT) {
         fr->quit_requested = 1;
       } else if (action == FIFA96_MENU_ACTION_START_MATCH) {
-        frontend_native_commit_teams(fr);
+        frontend_native_sync_teams(fr);
         fr->match_start = 1;
       }
     } else if (code == 8) {
@@ -138,7 +138,7 @@ static int frontend_native_step(struct fifa96_frontend_run *fr, struct fifa96_su
   }
   fr->queue_len = 0;
 
-  frontend_native_commit_teams(fr);
+  frontend_native_sync_teams(fr);
   fr->phase = fr->frontend.phase;
   struct fifa96_menu_state menu = {0};
   frontend_native_menu_state(fr, &menu);
