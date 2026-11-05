@@ -72,11 +72,13 @@ int fifa96_match_act_installed(const struct fifa96_match_act *act);
  *  - head (`0x88F51`): `timer += frame_delta` (`word[0x158818] += [0x157A64]`);
  *  - stage 0 (`0x88F81`): clear the gate `[0x15882A] = 0`, reset the camera
  *    (`0x88FA0 CALL 0x700F4`, the constant-zero pushed `0x10F328/2C/30`
- *    triple), write phase 0x15, run the `0x4C324` presentation bind
- *    (`0x88FD1`, `fifa96_match_run_present_bind`) and advance to the stage-3
- *    wait (stages 1/2 `0x88FED`/`0x89064` compressed to pass, FU170-L1; the
- *    stage-0 `0x88FE0` timer clear is handler-owned; `0x73E28`/`0x73E08` stay
- *    FU181-L5, phase-53 Task 2);
+ *    triple), run the `0x73E28` match/camera reset
+ *    (`fifa96_match_run_act9_reset`, `0x88FA5`), write phase 0x15, run the
+ *    non-seeding `0x73E08` placement commit
+ *    (`fifa96_match_entities_restart_place`, `0x88FBD`), run the `0x4C324`
+ *    presentation bind (`0x88FD1`, `fifa96_match_run_present_bind`) and
+ *    advance to the stage-3 wait (stages 1/2 `0x88FED`/`0x89064` compressed
+ *    to pass, FU170-L1; the stage-0 `0x88FE0` timer clear is handler-owned);
  *  - stage >= 1: when `timer >= 0x3C` set `[0x15882A] = 1` (the derived
  *    `global_5882a` + `act9_gate` markers) and clear the act slot. The native
  *    stage-3 gate reads `word[0x158818]` (`0x890B1 MOV EAX,[0x158816] SAR

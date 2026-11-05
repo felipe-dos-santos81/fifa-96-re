@@ -73,17 +73,24 @@ int fifa96_match_action_phase_1F(struct fifa96_match_run *mr) {
   if (a->stage == 0u) {
     /* Stage 0 (0x88F81): clear the [0x15882A] gate (0x88F9A), reset the
      * camera (`0x88FA0 CALL 0x700F4` with the constant-zero triple
-     * [0x10F328/2C/30]), write phase 0x15 through the shared FUN_000740A0
-     * port (0x88FB8), run the presentation bind (`0x88FD1 CALL 0x4C324`),
-     * zero the timer (0x88FE0), then advance to the stage-3 wait. The native
-     * stage 0 also calls FUN_00073E28/FUN_00073E08 (the match/camera reset and
-     * the placement commit); those sinks stay FU181-L5 (Task 2). Stages 1/2
-     * (0x88FED/0x89064) are compressed to pass (FU170-L1). */
+     * [0x10F328/2C/30]), run the match/camera state reset (`0x88FA5 CALL
+     * 0x73E28`, `fifa96_match_run_act9_reset`), write phase 0x15 through the
+     * shared FUN_000740A0 port (0x88FB8), commit the non-seeding placement
+     * (`0x88FBD CALL 0x73E08`, `fifa96_match_entities_restart_place`), run the
+     * presentation bind (`0x88FD1 CALL 0x4C324`), zero the timer (0x88FE0),
+     * then advance to the stage-3 wait. Stages 1/2 (0x88FED/0x89064) are
+     * compressed to pass (FU170-L1). */
     mr->global_5882a = 0u;                           /* 0x88F9A */
     if (fifa96_camera_init(&mr->render.camera, 0, 0, 0) != FIFA96_OK)
       return -FIFA96_ERR_INVALID;                    /* 0x88FA0 CALL 0x700F4 */
+    if (fifa96_match_run_act9_reset(mr) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;                    /* 0x88FA5 CALL 0x73E28 */
     if (fifa96_match_run_write_phase(mr, 0x15u) != 0)
-      return -FIFA96_ERR_INVALID;
+      return -FIFA96_ERR_INVALID;                    /* 0x88FB8 CALL 0x740A0 */
+    if (fifa96_match_entities_restart_place(&mr->entities, mr->render.camera.pos_x,
+                                            mr->render.camera.pos_y,
+                                            mr->render.camera.pos_z) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;                    /* 0x88FBD CALL 0x73E08 */
     if (fifa96_match_run_present_bind(mr) != FIFA96_OK)
       return -FIFA96_ERR_INVALID;                    /* 0x88FD1 CALL 0x4C324 */
     a->timer = 0;                                    /* 0x88FE0 */

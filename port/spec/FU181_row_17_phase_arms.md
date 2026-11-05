@@ -461,3 +461,67 @@ state-tag set/counts unchanged, 295087 bytes; sha
 `bd6ac7a796b9020ef9196495e66c2e77947413b4467a5fb6d2d62e4231702995` (old
 `54f44987…`). M1 `09b726b7…` exact; census unchanged (78/78, 58/80, 64/80,
 6 blocked, action 38/45, phase 26/35).
+
+## Phase-53 T2 erratum — `0x73E28` and the non-seeding `0x73E08` (2026-11-05)
+
+Task 2 of the same slice closes the remaining FU181-L5 sinks. Fresh
+`disassemble_bytes 0x73E28` (`0x73E28..0x73EDC`) and `0x73E08`
+(`0x73E08..0x73E27`) this session; the reset's two sub-resets were re-read
+(`0x7F144` = `0x158724..0x15872C`; `0x7A028` = `0x158730..0x158746` with
+`0x158742 = 0x20`, `0x158743 = 2`).
+
+**Landed — `0x73E28`.** New `fifa96_match_run_act9_reset(mr)` runs between the
+camera reset and the phase write (`0x88FA5`). It stores, cell-for-cell:
+`[0x157AA7] = 0` (`deepest_keeper_157aa7`), `[0x157A4C] = 0`
+(`global_157a4c`), `[0x157A4E]`/`[0x157A4D] = 0` (`state.prev_phase`/`phase`
+plus the FU-142a mirror), `[0x157A60]`/`[0x157A5C] = 0`
+(`clock_saved_157a60`/`state.frame_acc`), `[0x157A73] = 0x15774C` (the focus
+pointer is the engine's live camera triple — comment, no duplicate cell),
+`[0x157A9F] = 0` (`goal_record` NONE), `[0x157A83] = 0`
+(`entities.controlled` NONE), `[0x157A6C] = 0`
+(`render.camera.event_suspended`), `[0x157A6A] = 0`
+(`referee.offside_suppress`), `[0x157A64] = 0` (`state.frame_delta`),
+`[0x157AAB] = 0xFF` (`flag_157aab`), `[0x157A6D] = 0x702F8(mode) + 0x70`
+(`camera_height_157a6d`: mode `[0x14C2F6] == 0 ? 0x40 : 0x30` -> 0xB0/0xA0),
+`[0x157AB0] = 0` (`flag_157ab0`), `[0x157A6F] = 0`
+(`camera_override_157a6f`), then the `0x7F144` possession/carrier clear and
+`0x7A028` via `fifa96_ball_pair_clear`. The `0x157A60` saved-copy cell has no
+engine save/restore caller; `0x702F8` itself is the camera-height mode selector
+and only its derived anchor value is stored.
+
+**Landed — non-seeding `0x73E08`.** New
+`fifa96_match_entities_restart_place(pool, cam_x, cam_y, cam_z)`:
+`0x8C24C` copies the staged `pool->ball.target_*` x/z into the ball position
+(not the `0x1E0/0` act-1 seed), forces `y = 0`, clears the
+velocity/heading/metric words and re-installs row 3; the shared `0x8CF60`
+loop body then commits each record (`pos := target`, camera face, `0x6E598`
+anim select, row-43 latch, frame 0). The `0x79F3C` ring place is not run:
+`byte[0x1106C3 + 0x15] == 0` (fresh table read) skips it at phase 0x15, the
+same gate `fifa96_match_entities_camera_place` applies. The `0x8C24C`
+`[0x14C32A] != 0` fixed `0x1C80/0x2C40` session arm is unported: this entry
+is the ordinary-match branch (**FU181-L5.b**).
+
+**Numbered leg — act-tick ordering.** Fresh `0x4B193 CALL 0x736AC`,
+`0x4B1A6 CALL 0x8AF38`, `0x4B2A9.. CALL 0x8D8EC`: the native runs the clock
+body (screen + act slot) **before** the entity chain. The engine's act tick
+sits after `fifa96_match_entities_update`; aligning it means moving the whole
+clock block before the entity chain and is not cheap/measured this slice. The
+native-faithful `0x73E28`/`0x73E08` bodies land at the engine's tick position,
+and the begin/held-key/M2 pins are re-derived from the measured transcript;
+the divergence is the numbered **FU342-L1** leg. The begin-order cause is the
+standing **FU170-L10** leg (the derived screen install runs after kickoff, so
+the act-9 placement commits the phase-0x15 targets at begin).
+
+**M2 re-pin v29 (measured in-tree).** First differing line 9
+(`frame=9`); 6514 of 6522 lines differ (6501 hash-only + 13 hash+state); the
+period-0 completion shifts engine step 845 -> 849 and the half-time markers
+m 841 -> 845 / m 845 -> 849, while the ET anchors stay 2502/3402/4302 and the
+terminal 6502/6503; state counts `1` 953 -> 950, `2` 2193 -> 2194, `12`
+4 -> 3, `21` 100 -> 103 (set unchanged); 295089 bytes; sha
+`7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f`. Restart
+pins: `gate-phase15` 96 -> 100, `phase4-phase15` 100 -> 103,
+`restart-phase4` 303; act timer 2 -> 0. The final dispatch mask loses row
+0x06 (wired, dormant under the v29 placement). The `0x700F4` sound/place
+recompute legs and the `0x4C324` recorder latch remain the legs above. M1
+`09b726b7…` exact; census unchanged (78/78, 58/80, 64/80, 6 blocked, action
+38/45, phase 26/35).

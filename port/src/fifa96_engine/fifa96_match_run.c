@@ -2094,6 +2094,12 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->score_display_event = 0;
   mr->global_5882a = 0;                /* drop the kickoff gate with the match */
   mr->present_side = 0;                /* FU-181 L5: drop the [0x1074A4] bind */
+  mr->clock_saved_157a60 = 0;          /* FU-181 L5: drop the saved Q8 cell */
+  mr->deepest_keeper_157aa7 = 0;
+  mr->flag_157aab = 0;
+  mr->camera_height_157a6d = 0;
+  mr->flag_157ab0 = 0;
+  mr->camera_override_157a6f = 0;
   /* FU-145 S2: the restart-body clear (`0x84F90`) drops the goal-arm state
    * with the match; the session gate returns to 0 with the session. */
   mr->goal_armed = 0;
@@ -2370,6 +2376,12 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->present_side = 0;                /* FU-181 L5: fresh [0x1074A4] */
+  mr->clock_saved_157a60 = 0;          /* FU-181 L5: fresh 0x157A60 saved Q8 */
+  mr->deepest_keeper_157aa7 = 0;       /* 0x157AA7: no deepest keeper (BSS) */
+  mr->flag_157aab = 0;                 /* 0x157AAB: fresh BSS byte */
+  mr->camera_height_157a6d = 0;        /* 0x157A6D: fresh BSS word */
+  mr->flag_157ab0 = 0;                 /* 0x157AB0: OL-72 default */
+  mr->camera_override_157a6f = 0;      /* 0x157A6F: no override pointer */
   mr->ball_gate_15b37a = 0;            /* FU-188: fresh [0x15B37A] BSS word */
   memset(mr->row17_stash_1587fc, 0, sizeof mr->row17_stash_1587fc); /* FU-181 */
   mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
@@ -2558,6 +2570,12 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->present_side = 0;                /* FU-181 L5: fresh [0x1074A4] */
+  mr->clock_saved_157a60 = 0;          /* FU-181 L5: fresh 0x157A60 saved Q8 */
+  mr->deepest_keeper_157aa7 = 0;       /* 0x157AA7: no deepest keeper (BSS) */
+  mr->flag_157aab = 0;                 /* 0x157AAB: fresh BSS byte */
+  mr->camera_height_157a6d = 0;        /* 0x157A6D: fresh BSS word */
+  mr->flag_157ab0 = 0;                 /* 0x157AB0: OL-72 default */
+  mr->camera_override_157a6f = 0;      /* 0x157A6F: no override pointer */
   mr->ball_gate_15b37a = 0;            /* FU-188: fresh [0x15B37A] word */
   memset(mr->row17_stash_1587fc, 0, sizeof mr->row17_stash_1587fc); /* FU-181 */
   mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
@@ -2966,6 +2984,51 @@ int fifa96_match_run_record_phase_walk(struct fifa96_match_run *mr, uint8_t phas
     (void)fifa96_match_dispatch_phase_record(mr, phase, e, -1);  /* 0x8D110 */
   }
   return FIFA96_OK;
+}
+
+/* FU-181 L5 / FU-342 (phase-53 T2): the native `FUN_00073E28`
+ * (`0x73E28..0x73EDC`, fresh `disassemble_bytes` this slice). One store group
+ * per native store; see the run.h contract for the cell map and the unmodelled
+ * consumers. The `0x157A73 = 0x15774C` focus-pointer store is represented by
+ * the engine's live camera triple (the same native cell), not duplicated. */
+int fifa96_match_run_act9_reset(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->deepest_keeper_157aa7 = 0;        /* 0x73E3C dword [0x157AA7] */
+  mr->global_157a4c = 0;                /* 0x73E42 byte [0x157A4C] */
+  mr->state.prev_phase = 0;             /* 0x73E48 byte [0x157A4E] */
+  mr->state.phase = 0;                  /* 0x73E4E byte [0x157A4D] */
+  mr->phase_machine.state = 0;          /* the FU-142a mirror of [0x157A4D] */
+  mr->phase_machine.phase = 0;
+  mr->clock_saved_157a60 = 0;           /* 0x73E54 dword [0x157A60] saved Q8 */
+  mr->state.frame_acc = 0;              /* 0x73E5A dword [0x157A5C] live Q8 */
+  /* 0x73E60 dword [0x157A73] = 0x15774C: the focus pointer is the camera
+   * triple; the engine's focus readers use `render.camera.pos_*` directly. */
+  mr->goal_record = FIFA96_MATCH_ENTITY_NONE;        /* 0x73E66 [0x157A9F] */
+  mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;/* 0x73E6C [0x157A83] */
+  mr->render.camera.event_suspended = 0;             /* 0x73E7B [0x157A6C] */
+  mr->referee.offside_suppress = 0;                  /* 0x73E85 word [0x157A6A] */
+  mr->state.frame_delta = 0;                         /* 0x73E8E word [0x157A64] */
+  mr->flag_157aab = 0xFFu;                           /* 0x73E95 byte [0x157AAB] */
+  /* 0x73E9B..0x73EB8: `0x702F8([0x14C2F6] == 0 ? 0x40 : 0x30)` then +0x70. The
+   * native `0x702F8` call itself is the camera height-mode selector; its
+   * derived stand-in is the `[0x14C2F6]` mode read (the return value is not
+   * modelled, only the anchor it feeds). */
+  mr->camera_height_157a6d = (int16_t)((mr->difficulty_14c2f6 == 0 ? 0x40 : 0x30) + 0x70);
+  mr->flag_157ab0 = 0;                  /* 0x73EC1 byte [0x157AB0] */
+  mr->camera_override_157a6f = 0;       /* 0x73EC7 dword [0x157A6F] */
+  /* 0x73ECD CALL 0x7F144: the possession/carrier block 0x158724..0x15872C. */
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;   /* 0x158724 pointer */
+  mr->entities.ball.pos_index = 0;      /* 0x158728 */
+  mr->entities.ball.pos_rotation = 0;   /* 0x158729 */
+  mr->entities.ball.pos_dir_x = 0;      /* 0x15872A */
+  mr->entities.ball.pos_dir_z = 0;      /* 0x15872B */
+  mr->entities.ball.pos_counter_c = 0;  /* 0x15872C */
+  mr->entities.ball.pos_release = 0;    /* 0x15872D */
+  mr->entities.ball.pos_counter_e = 0;  /* 0x15872E */
+  mr->entities.ball.pos_counter_f = 0;  /* 0x15872F */
+  /* 0x73ED2 CALL 0x7A028: the ball-pair block 0x158730..0x158746, flags 0x20,
+   * code 2 (the exact `FUN_0007A028` clear). */
+  return (int)fifa96_ball_pair_clear(&mr->entities.ball.pair);
 }
 
 /* FU-145 §3 item 3 / 0x740F6 (S2): the shared phase write. Every engine

@@ -8860,3 +8860,29 @@ M1 `09b726b7…` exact. Census unchanged: **78/78 bodies, 58/80 natural,
 **T2 — `0x73E28` + non-seeding `0x73E08` (v29).** Pending in this phase
 (reset cells, the non-seeding placement entry, the act-tick ordering leg, and
 the measured re-pin); the register is extended when it lands.
+
+**T2 landed — the match reset + non-seeding placement (v29, this task).** The
+pending note above is superseded. `fifa96_match_run_act9_reset` ports
+`FUN_00073E28` cell-for-cell (phase/prev/`global_157a4c`, the `0x157A60/5C`
+clock cells, the `0x157A73 = 0x15774C` focus comment, goal record, controlled
+actor, `frame_delta`, `0x157AAB = 0xFF`, the `0x157A6D` 0xB0/0xA0 height
+anchor, `0x157AB0`, `0x157A6F`, the `0x7F144` possession block and the
+`0x7A028` pair block with flags 0x20/code 2); new run cells
+`clock_saved_157a60`, `deepest_keeper_157aa7`, `flag_157aab`,
+`camera_height_157a6d`, `flag_157ab0`, `camera_override_157a6f` hold the
+otherwise-unconsumed cells. `fifa96_match_entities_restart_place` ports the
+non-seeding `FUN_00073E08` (ball := staged `pool->ball.target_*` x/z, y = 0,
+velocity/heading/metric cleared; the shared `0x8CF60` commit/face/anim/row43/
+frame-0 loop; no `0x79F3C` ring place at phase 0x15). Stage 0 now runs gate
+clear -> `0x700F4` -> `0x73E28` -> `0x740A0` -> `0x73E08` -> `0x4C324` ->
+timer 0. The act-tick ordering divergence stays a numbered leg (native
+`0x8AF38` before `0x8D8EC`; the engine tick is after the entity chain). M2
+re-pins **v29**: `7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f`
+(295089 bytes, 6522 lines; first differing line 9; 6514 lines differ — 6501
+hash-only + 13 hash+state; state set/counts 0x304, 1x950, 2x2194, 4x303,
+12x3, 19x2640, 20x20, 21x103; half markers m 845/849, ET anchors unchanged).
+Restart pins: `gate-phase15` 96 -> 100, `phase4-phase15` 100 -> 103,
+`restart-phase4` 303; act timer 2 -> 0. The final dispatch mask loses row
+0x06 (wired, dormant under the v29 placement). M1 `09b726b7…` exact. Census
+unchanged: **78/78 bodies, 58/80 natural, 64/80 install-live, 6 blocked,
+action 38/45, phase 26/35**; `make check` green.

@@ -731,6 +731,21 @@ int fifa96_match_entities_bind_record_meta(struct fifa96_match_entities *pool,
 int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int32_t cam_x,
                                         int32_t cam_y, int32_t cam_z);
 
+/* FU-181 L5 / FU-342 (phase-53 T2): the non-seeding act-9 placement commit
+ * `FUN_00073E08` (`0x73E08..0x73E27`: `FUN_0008C24C(&0x158830)` then
+ * `FUN_0008CF60` over `0x1588A4` and `0x1590D9`). Unlike the act-1 kickoff
+ * entry the ball position copies the staged `pool->ball.target_*` triple
+ * instead of the `0x1E0/0` spawn (`0x8C294..0x8C296`), forces y = 0
+ * (`0x8C299`), zeroes the speed/velocity words (`0x8C272/0x8C2A6/0x8C2AD/
+ * 0x8C2B4`) and clears the heading/metric state; the shared `FUN_0008CF60`
+ * loop then commits/faces/selects every record (row 43 latch + frame 0). The
+ * `0x79F3C` ring place is skipped by the native phase gate
+ * `byte[0x1106C3 + 0x15] == 0`, so this entry does not call it. NULL `pool` ->
+ * -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_restart_place(struct fifa96_match_entities *pool,
+                                        int32_t cam_x, int32_t cam_y,
+                                        int32_t cam_z);
+
 /* FU-96 leg 5 (M2 interactive T2): the per-record camera place
  * `FUN_00079F3C` (`0x79F3C..0x7A027`, 74 instructions; first-hand
  * `disassemble_function 0x79F3C` on `/FIFA96.EXE`). `FUN_0008CF60` calls it

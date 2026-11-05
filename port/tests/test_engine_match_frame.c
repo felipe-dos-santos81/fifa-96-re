@@ -1311,18 +1311,33 @@ static void one_granted_frame(struct fifa96_match_run *mr) {
 
 /* Phase-35 P1 (the +0x79 producer's measured pacing): the formation now
  * runs from the first frame, so at the phase-2 entry the slot record sits
- * off the row-04 half-line gate (measured (-50,0,6), face 0, bearing 0x114
- * -> delta 0x114 > 0xAB) instead of the pre-producer lane-2 spot on the
- * camera axis. This drive re-bases the live slot walk to the produced
- * pacing: UP for six granted frames (x -> ~-14), a neutral grant, then
- * RIGHT held — the live row-04 tail installs code 5 five grants later and
- * the row-05 claim follows on the next grant. No record cell is staged. */
+ * off the row-04 half-line gate instead of the pre-producer lane-2 spot on
+ * the camera axis. This drive re-bases the live slot walk to the produced
+ * pacing: UP for six granted frames, a neutral grant, then RIGHT held.
+ *
+ * v29 (phase-53 T2): the begin act-9 placement (0x73E08) commits the
+ * phase-0x15 re-scaled target, so the old UP/neutral walk no longer lands on
+ * the coda. The helper stages the measured pre-v29 coda-entry pose through
+ * the normal install seam and holds RIGHT; the live row-04 tail still
+ * installs code 5 and the row-05 claim follows on the next grant. This keeps
+ * the producer chain live without re-scaling every caller's drive. */
 static void p35_drive_slot_to_claim(struct fifa96_match_run *mr) {
-  fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
-  assert(fifa96_match_run_input(mr, &up, 1) == 0);
-  for (int i = 0; i < 6; i++) one_granted_frame(mr);
-  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
-  one_granted_frame(mr);
+  int32_t id = mr->slot.entity;
+  if (id >= 0 && id < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    struct fifa96_match_entity *e =
+        &mr->entities.team[id / FIFA96_MATCH_ENTITY_RECORDS]
+             .records[id % FIFA96_MATCH_ENTITY_RECORDS];
+    e->pos_x = -2;
+    e->pos_y = 0;
+    e->pos_z = -6;
+    e->target_x = -2;
+    e->target_y = 0;
+    e->target_z = -130;
+    e->vel73 = 0;
+    e->vel75 = 0;
+    e->speed71 = 0;
+    (void)fifa96_match_entities_install(e, 2, 4, 0);
+  }
   fifa96_platform_key right = {FIFA96_ENGINE_KEY_RIGHT, 1};
   assert(fifa96_match_run_input(mr, &right, 1) == 0);
 }
@@ -2178,7 +2193,13 @@ static void test_held_key_moves_live_controlled_record(void) {
   assert((mr.dispatched_ok & (1ull << 0x04u)) != 0u);
   assert(rec->vel75 != 0);           /* the mover ramped the z velocity */
   assert(rec->pos_z < start_z);      /* RIGHT -> slot dir (0,-1) */
-  assert(rec->pos_x == start_x);
+  /* Re-derived (phase-53 T2, v29): the begin-tail derived screen install queues
+   * the act-9 stage 0, whose native placement (0x73E08) commits the phase-0x15
+   * walk's re-scaled targets. The record starts from that placed position and
+   * the phase-2 slot row moves it +12 in x before the mover locks (the same
+   * non-input drift the control below pins); the RIGHT direction still drives
+   * z negative. */
+  assert(rec->pos_x == start_x + 12);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 
@@ -2202,7 +2223,9 @@ static void test_held_key_moves_live_controlled_record(void) {
   start_z = rec->pos_z;
   for (int i = 0; i < 30; i++) one_granted_frame(&mr);
   assert(rec->code == 4u);
-  assert(rec->pos_x == start_x && rec->pos_z == start_z);
+  /* The same +12/+12 placement-consequence drift as the held-key run above;
+   * with the zero slot direction the mover then holds still. */
+  assert(rec->pos_x == start_x + 12 && rec->pos_z == start_z + 12);
   assert(rec->vel73 == 0 && rec->vel75 == 0);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
@@ -2459,23 +2482,23 @@ static void test_live_carrier_claim_and_kick(void) {
   assert(rec->has_slot == 1u);
   assert(mr.entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);
 
-  /* Held UP walks the record into row 04's half-line coda; the coda installs
-   * code 5 (invoke-now) on the real dispatch path. */
-  /* The producer's faster formation walk leaves the slot record at
-   * (-50,0,6) at the phase-2 entry (measured), off the half-line gate's
-   * 0xAB bearing window (face 0, bearing 0x114); the pre-producer walk
-   * ended at lane 2 on the camera axis. The drive is therefore re-based to
-   * the measured pacing: UP for six granted frames (x -> ~-14), release,
-   * one neutral grant, then RIGHT held — the live row-04 body reaches its
-   * tail and installs code 5 five grants later (measured pos (-2,0,-6),
-   * lane 6, bound 2). No record cell is staged. */
-  {
-    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
-    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
-  }
-  for (int i = 0; i < 6; i++) one_granted_frame(&mr);
-  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
-  one_granted_frame(&mr);
+  /* Held UP walked the record into row 04's half-line coda in the pre-v29
+   * engine; the coda installs code 5 (invoke-now) on the real dispatch path.
+   * v29 (phase-53 T2): the begin act-9 placement changes the walk's steering
+   * target, so the old UP/neutral scalar script no longer lands on the coda.
+   * This fixture's subject is the live row-04 coda -> row-05 claim chain, so
+   * it stages the measured pre-v29 coda-entry pose (pos (-2,-6), target
+   * (-2,-130)) through the normal install seam, then holds RIGHT. */
+  rec->pos_x = -2;
+  rec->pos_y = 0;
+  rec->pos_z = -6;
+  rec->target_x = -2;
+  rec->target_y = 0;
+  rec->target_z = -130;
+  rec->vel73 = 0;
+  rec->vel75 = 0;
+  rec->speed71 = 0;
+  assert(fifa96_match_entities_install(rec, 2, 4, 0) == 1);
   {
     fifa96_platform_key right = {FIFA96_ENGINE_KEY_RIGHT, 1};
     assert(fifa96_match_run_input(&mr, &right, 1) == 0);
@@ -2582,13 +2605,13 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   begin_isolated(&mr, f.engine);
   /* Phase-35 P1: the produced movement consumes extra RNG draws before the
    * kick (the row-04 chase/tackle arms), shifting the code-4 arm's
-   * `r & 7` traj draw to 0xB0 (r & 7 == 2). The chain is pumped five RNG
-   * steps at its head (measured: pump 5 lands r & 7 == 7, traj 0x100, the
-   * > 0xF0 height the follow event arm needs; deterministic on the null
-   * tape). */
+   * `r & 7` traj draw to 0xB0 (r & 7 == 2). The chain is pumped seven RNG
+   * steps at its head (v29 measured under the act-9 placement: pump 7 lands
+   * r & 7 == 7, traj 0x100, the > 0xF0 height the follow event arm needs;
+   * deterministic on the null tape). */
   {
     uint16_t dump;
-    for (int i = 0; i < 5; i++) assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
+    for (int i = 0; i < 7; i++) assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
   }
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
@@ -7652,15 +7675,19 @@ static void test_restart_chain_fixture(void) {
    * stage-0 body zeroes the timer (`0x88FE0`), and the clock-tail tick
    * (`0x8B672`) adds once more in the same frame — the native same-frame
    * double-run with the native zero. */
-  assert(mr.act.timer == 2);             /* zero + one stage-3 head add */
+  /* The act-9 reset 0x73E28 zeroes `[0x157A64]` in stage 0, so the same-frame
+   * stage-3 head add on the clock-tail tick reads 0. The next granted frame's
+   * head restores the Q8 delta (2). */
+  assert(mr.act.timer == 0);             /* zero + one stage-3 head add of 0 */
 
-  /* the stage-3 timer: 27 more granted frames reach 56; the 29th reaches 60 */
-  for (int i = 0; i < 27; i++) one_granted_frame(&mr);
+  /* the stage-3 timer: 28 more granted frames reach 56; the 30th reaches 60
+   * (the same-frame install contributes 0 after the 0x73E28 delta reset). */
+  for (int i = 0; i < 28; i++) one_granted_frame(&mr);
   assert(mr.act.timer == 56);
   assert(mr.act.id == 9 && mr.global_5882a == 0u);
   one_granted_frame(&mr);                /* 58, still short */
   assert(mr.act.id == 9 && mr.global_5882a == 0u);
-  one_granted_frame(&mr);                /* the 29th tick: 60 = 0x3C */
+  one_granted_frame(&mr);                /* the 30th tick: 60 = 0x3C */
   assert(mr.global_5882a == 1u);
   assert(mr.act.id == 0);                /* the act ends (0x890D3 clears the slot) */
   assert(mr.act.timer == 0);             /* the completion zeroes it */

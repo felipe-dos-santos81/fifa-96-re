@@ -639,6 +639,42 @@ int fifa96_match_entities_camera_place(struct fifa96_match_entities *pool,
   return FIFA96_OK;
 }
 
+/* The shared `FUN_0008CF60` per-record body over both team blocks: the
+ * `FUN_00079B6C` commit (`fifa96_match_entities_place`), the
+ * `FUN_00079C50(camera - target)` face, the `0x6E598` anim select and the
+ * row-43 latch, then the selector's frame-0 request. The caller owns the ball
+ * commit and the `0x79F3C` ring-place decision (the native interleaves the
+ * ring place per record in the same loop; the engine's `camera_place` pass is
+ * the documented whole-pool equivalent, FU-96 leg 5). */
+static int match_place_records(struct fifa96_match_entities *pool, int32_t cam_x,
+                               int32_t cam_y, int32_t cam_z) {
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &pool->team[t].records[i];
+      uint8_t slot;
+      (void)fifa96_match_entities_place(e);
+      {
+        fifa96_arm_vec from = { e->target_x, e->target_y, e->target_z };
+        fifa96_arm_vec to = { cam_x, cam_y, cam_z };
+        uint8_t face = e->type;
+        if (fifa96_arm_face(&from, &to, &face) == FIFA96_OK) e->type = face;
+      }
+      if (fifa96_arm_anim_select(e->active != 0 ? 0u : 0x26u, e->anim_id, &slot) ==
+          FIFA96_OK) {
+        e->anim_id = slot;
+        /* FU319 §5 writer 3 (phase-33): the native `0x79C13` tail is a real
+         * row install — write the +0x43 latch from the selected row's flags
+         * (rows 0/0x26 carry flags 0x07, so the latch is 2 for every record
+         * after the placement). The narrow write: no anim_timer/aux_seen
+         * side effects here; +0x44 reproduces through the dispatch staging. */
+        fifa96_match_run_record_kickoff_row43(e, (int32_t)slot);
+      }
+      e->frame = 0;   /* FUN_0006E490 with BX = 0 (0x79C13 selector request) */
+    }
+  }
+  return FIFA96_OK;
+}
+
 /* The derived kickoff pass (see the header contract). The native tail of
  * `FUN_00079B6C` (`0x79BB5..0x79C13`) runs per record after the commit:
  *  - `FUN_00079C50(camera - target)` face (0x79BB5..0x79BCF): the ported
@@ -676,31 +712,49 @@ int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int3
   pool->ball.metric = 0;
   pool->ball.metric_dx = 0;
   pool->ball.metric_dz = 0;
-  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
-    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
-      struct fifa96_match_entity *e = &pool->team[t].records[i];
-      uint8_t slot;
-      (void)fifa96_match_entities_place(e);
-      {
-        fifa96_arm_vec from = { e->target_x, e->target_y, e->target_z };
-        fifa96_arm_vec to = { cam_x, cam_y, cam_z };
-        uint8_t face = e->type;
-        if (fifa96_arm_face(&from, &to, &face) == FIFA96_OK) e->type = face;
-      }
-      if (fifa96_arm_anim_select(e->active != 0 ? 0u : 0x26u, e->anim_id, &slot) ==
-          FIFA96_OK) {
-        e->anim_id = slot;
-        /* FU319 §5 writer 3 (phase-33): the native `0x79C13` tail is a real
-         * row install — write the +0x43 latch from the selected row's flags
-         * (rows 0/0x26 carry flags 0x07, so the latch is 2 for every record
-         * after the placement). The narrow write: no anim_timer/aux_seen
-         * side effects here; +0x44 reproduces through the dispatch staging. */
-        fifa96_match_run_record_kickoff_row43(e, (int32_t)slot);
-      }
-      e->frame = 0;   /* FUN_0006E490 with BX = 0 (0x79C13 selector request) */
-    }
-  }
-  return FIFA96_OK;
+  return match_place_records(pool, cam_x, cam_y, cam_z);
+}
+
+/* FU-181 L5 / FU-342 (phase-53 T2): the non-seeding `FUN_00073E08` placement
+ * commit (fresh `disassemble_bytes 0x73E08`: `MOV EAX,0x158830 ; CALL
+ * 0x8C24C`, then `0x8CF60(&0x1588A4)` and `0x8CF60(&0x1590D9)`). Unlike the
+ * act-1 kickoff body it has no `0x1E0/0` spawn seed: `FUN_0008C24C`'s
+ * `[0x14C32A] == 0` branch copies the staged target triple
+ * `0x158830/34/38` into the ball position (`0x8C294..0x8C296`), forces
+ * `[0x158810] = 0` (`0x8C299`), zeroes the speed/velocity words
+ * (`0x8C2A6/0x8C2AD/0x8C2B4`) and runs the heading/metric update
+ * (`0x8C068(0x32)`) plus the row install (`0x6E724(0x1587EC,0,[0x158852])`).
+ * The engine's `ball.target_*` cells are that staged triple; x/z are copied
+ * into `ball.x`/`ball.z` and the committed y is 0. The shared `0x8CF60` loop
+ * body then commits/faces/selects every record. The `0x79F3C` ring place is
+ * NOT run here: `byte[0x1106C3 + 0x15] == 0` (fresh table read) skips it at
+ * act 9, the same phase gate `fifa96_match_entities_camera_place` applies.
+ * `[0x14C32A] != 0` (the Practise session) takes the fixed `0x1C80/0x2C40`
+ * spawn instead; that branch is the unported session arm and this entry is the
+ * ordinary-match one (leg FU181-L5.b). NULL `pool` -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_restart_place(struct fifa96_match_entities *pool,
+                                        int32_t cam_x, int32_t cam_y,
+                                        int32_t cam_z) {
+  int32_t target_x;
+  int32_t target_z;
+  if (!pool) return -FIFA96_ERR_INVALID;
+  target_x = pool->ball.target_x;   /* 0x158830 staged x */
+  target_z = pool->ball.target_z;   /* 0x158838 staged z */
+  pool->ball.x = target_x;          /* 0x8C294 MOVSD x */
+  pool->ball.y = 0;                 /* 0x8C299 [0x158810] = 0 */
+  pool->ball.z = target_z;          /* 0x8C296 MOVSD z */
+  pool->ball.vel_x = 0;             /* 0x8C2A6 word [0x158848] */
+  pool->ball.vel_z = 0;             /* 0x8C2AD word [0x15884C] */
+  pool->ball.speed = 0;             /* 0x8C2B4 word [0x15884A] */
+  pool->ball.heading = 0;           /* the 0x8C068 metric/heading arm */
+  pool->ball.target_heading = 0;
+  pool->ball.visual_dir = 3;        /* the 0x6E724 row-3 install posture */
+  pool->ball.appear_row = 3;
+  pool->ball.ramp_timer = 0;
+  pool->ball.metric = 0;
+  pool->ball.metric_dx = 0;
+  pool->ball.metric_dz = 0;
+  return match_place_records(pool, cam_x, cam_y, cam_z);
 }
 
 static void entity_timer_decay(struct fifa96_match_entity *e, uint16_t delta) {

@@ -102,6 +102,90 @@ static void test_dispatch_invoke_runs_handler(void) {
   assert(mr.state.phase == 1u);              /* the kickoff phase-1 entry */
 }
 
+/* FU-181 L5 / FU-342 (phase-53 T2): the act-9 stage-0 match/camera reset
+ * (`0x88FA5 CALL 0x73E28`). Dirty every native cell group, then run the
+ * invoke-now path: the reset must clear the phase/clock/focus/goal/controlled
+ * cells, zero the frame delta (so the same-frame stage-3 head add reads 0),
+ * stage the camera height anchor from the `[0x14C2F6]` mode, zero the
+ * possession/carrier block and re-seat the ball-pair block to its native
+ * posture (flags 0x20, code 2). The phase write then sets phase 0x15 /
+ * prev 0. A second direct call with mode != 0 stages the 0xA0 anchor. */
+static void test_act9_stage0_resets_match_cells(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.global_157a4c = 1u;
+  mr.state.phase = 0x15u;
+  mr.state.prev_phase = 0x15u;
+  mr.phase_machine.state = 0x15u;
+  mr.phase_machine.phase = 0x15u;
+  mr.state.frame_acc = 0x56u;
+  mr.clock_saved_157a60 = 0x1234u;
+  mr.deepest_keeper_157aa7 = 5;
+  mr.goal_record = 7;
+  mr.entities.controlled = 3;
+  mr.render.camera.event_suspended = 1u;
+  mr.referee.offside_suppress = 0x12Cu;
+  mr.state.frame_delta = 2u;
+  mr.flag_157aab = 0u;
+  mr.camera_height_157a6d = 0;
+  mr.flag_157ab0 = 1u;
+  mr.camera_override_157a6f = 0x1234;
+  mr.difficulty_14c2f6 = 0;                 /* the image default -> 0xB0 */
+  mr.entities.ball.carrier = 4;
+  mr.entities.ball.pos_index = 1u;
+  mr.entities.ball.pos_rotation = 2u;
+  mr.entities.ball.pos_dir_x = 3;
+  mr.entities.ball.pos_dir_z = 4;
+  mr.entities.ball.pos_counter_c = 5u;
+  mr.entities.ball.pos_release = 6u;
+  mr.entities.ball.pos_counter_e = 7u;
+  mr.entities.ball.pos_counter_f = 8u;
+  memset(&mr.entities.ball.pair, 0xAA, sizeof mr.entities.ball.pair);
+  mr.entities.ball.target_x = 0x1E0;
+  mr.entities.ball.target_y = 0;
+  mr.entities.ball.target_z = 0;
+  assert(fifa96_match_act_dispatch(&mr, 9, 0, 1) == FIFA96_OK);
+  /* The reset stores (0x73E3C..0x73EC7). */
+  assert(mr.deepest_keeper_157aa7 == 0);
+  assert(mr.global_157a4c == 0u);
+  assert(mr.state.prev_phase == 0u);        /* the phase write: prev 0 */
+  assert(mr.state.phase == 0x15u);          /* the phase write: 0x15 */
+  assert(mr.phase_machine.phase == 0x15u);
+  assert(mr.state.frame_acc == 0u);         /* 0x157A5C live Q8 */
+  assert(mr.clock_saved_157a60 == 0u);      /* 0x157A60 saved Q8 */
+  assert(mr.goal_record == FIFA96_MATCH_ENTITY_NONE);   /* 0x157A9F */
+  assert(mr.entities.controlled == FIFA96_MATCH_ENTITY_NONE); /* 0x157A83 */
+  assert(mr.render.camera.event_suspended == 0u);       /* 0x157A6C */
+  assert(mr.referee.offside_suppress == 0u);            /* 0x157A6A */
+  assert(mr.state.frame_delta == 0u);                   /* 0x157A64 */
+  assert(mr.flag_157aab == 0xFFu);                      /* 0x157AAB */
+  assert(mr.camera_height_157a6d == 0xB0);              /* 0x157A6D */
+  assert(mr.flag_157ab0 == 0u);                         /* 0x157AB0 */
+  assert(mr.camera_override_157a6f == 0);               /* 0x157A6F */
+  /* 0x7F144: the possession/carrier block 0x158724..2C. */
+  assert(mr.entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr.entities.ball.pos_index == 0u && mr.entities.ball.pos_rotation == 0u &&
+         mr.entities.ball.pos_dir_x == 0 && mr.entities.ball.pos_dir_z == 0 &&
+         mr.entities.ball.pos_counter_c == 0u && mr.entities.ball.pos_release == 0u &&
+         mr.entities.ball.pos_counter_e == 0u && mr.entities.ball.pos_counter_f == 0u);
+  /* 0x7A028: the ball-pair block reset posture. */
+  assert(mr.entities.ball.pair.actor == 0 && mr.entities.ball.pair.receiver == 0);
+  assert(mr.entities.ball.pair.vector.x == 0 && mr.entities.ball.pair.vector.height == 0 &&
+         mr.entities.ball.pair.vector.z == 0);
+  assert(mr.entities.ball.pair.traj == 0 && mr.entities.ball.pair.angle == 0);
+  assert(mr.entities.ball.pair.flags == 0x20u && mr.entities.ball.pair.code == 2u);
+  assert(mr.entities.ball.pair.sub_code == 0u && mr.entities.ball.pair.reserved45 == 0u &&
+         mr.entities.ball.pair.ack == 0u);
+  /* The 0x73E08 placement commit copied the staged target into the ball. */
+  assert(mr.entities.ball.x == 0x1E0 && mr.entities.ball.y == 0 &&
+         mr.entities.ball.z == 0);
+  assert(mr.act.id == 9 && mr.act.stage == 3u && mr.act.timer == 0);
+  /* The other `[0x14C2F6]` arm: mode != 0 stages 0x30 + 0x70 = 0xA0. */
+  mr.difficulty_14c2f6 = 1;
+  assert(fifa96_match_run_act9_reset(&mr) == FIFA96_OK);
+  assert(mr.camera_height_157a6d == 0xA0);
+  assert(fifa96_match_run_act9_reset(NULL) == -FIFA96_ERR_INVALID);
+}
 /* The native sit-0xC arm is invoke-now (`0x8AF0E MOV EBX,1 / 0x8AF13 MOV EAX,9
  * / 0x8AF18 XOR EDX,EDX / 0x8AF1A CALL 0x888FC`; the seam's `0x88937 CALL
  * dword[0x158808]`), so the leg-0 screen install queues situation 0xC and runs
@@ -218,6 +302,11 @@ static void test_tick_timer_and_completion(void) {
   assert(fifa96_match_act_dispatch(&mr, 9, 0, 0) == FIFA96_OK);
   assert(mr.act.stage == 0u);
   for (int i = 0; i < 29; i++) {
+    /* Each tick models one granted frame: the frame head recomputes
+     * `[0x157A64]` from the Q8 accumulator before the act tick. The act-9
+     * stage-0 reset zeroes the delta in-frame (0x73E28), so the same-frame
+     * stage-3 head add reads 0; the next frame's head restores 2. */
+    mr.state.frame_delta = 2;
     assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
     assert(mr.act.id == 9);
   }
@@ -1553,6 +1642,7 @@ int main(void) {
   test_init_defaults();
   test_dispatch_installs_and_latches();
   test_dispatch_invoke_runs_handler();
+  test_act9_stage0_resets_match_cells();
   test_sit0c_install_invokes_stage0();
   test_act9_stage0_camera_and_present_bind();
   test_tick_timer_and_completion();

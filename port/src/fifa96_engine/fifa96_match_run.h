@@ -667,6 +667,30 @@ struct fifa96_match_run {
    * native readers are the unported front-end camera/pose block, OL-68);
    * init/begin/teardown stage 0. */
   int32_t present_side;
+  /* FU-181 L5 / FU-342 (phase-53 T2): the remaining `FUN_00073E28` native cells
+   * that have no live engine reader yet. Each is the reset's honest store (the
+   * producers/consumers that would make them live are the unported keeper/
+   * camera-override machinery; see the `fifa96_match_run_act9_reset` contract).
+   *  - `clock_saved_157a60` = dword `[0x157A60]`, the 0x73DF0/0x73DFC saved
+   *    copy of the live Q8 accumulator `[0x157A5C]` (`state.frame_acc`);
+   *  - `deepest_keeper_157aa7` = dword `[0x157AA7]`, the deepest-keeper record
+   *    pointer (its native writers are unported);
+   *  - `flag_157aab` = byte `[0x157AAB]` (the reset's 0xFF sentinel);
+   *  - `camera_height_157a6d` = word `[0x157A6D]`, the camera height anchor
+   *    (`0xB0`/`0xA0`; the height-branch consumer is OL-T11-79);
+   *  - `flag_157ab0` = byte `[0x157AB0]`, the outfield released-arm gate
+   *    (producer unported, OL-72);
+   *  - `camera_override_157a6f` = dword `[0x157A6F]`, the animation-camera
+   *    override triple pointer (native producers/consumers unported,
+   *    FU154/R2-L2).
+   * Init/begin stage the image defaults (0); act-9 stage 0 applies the
+   * `0x73E28` values. */
+  uint32_t clock_saved_157a60;
+  int32_t deepest_keeper_157aa7;
+  uint8_t flag_157aab;
+  int16_t camera_height_157a6d;
+  uint8_t flag_157ab0;
+  int32_t camera_override_157a6f;
   /* FU-188 §4 / FU-202 (row-0x24 stage 1): the native `word[0x15B37A]` ball
    * gate latch. `FUN_0008EEC0` (`0x8EEC0..0x8EEC6`) returns the word;
    * `FUN_0008EEB4` (`0x8EEB4..0x8EEBD`) stores 1. Row 0x24 stage 1
@@ -1657,6 +1681,39 @@ int fifa96_match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase);
  * `0x36200` stub runs only on the first arm. Returns FIFA96_OK or
  * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_present_bind(struct fifa96_match_run *mr);
+
+/* FU-181 L5 / FU-342 (phase-53 T2): the native `FUN_00073E28`
+ * (`0x73E28..0x73EDC`, fresh `disassemble_bytes` this slice), the act-9
+ * stage-0 match/camera state reset called between the `0x700F4` camera reset
+ * and the `0x740A0` phase write:
+ *  - `[0x157AA7]` dword = 0 (the unported deepest-keeper record pointer home
+ *    `keeper_deepest_157aa7`);
+ *  - bytes `[0x157A4C]`/`[0x157A4E]`/`[0x157A4D]` = 0 (`global_157a4c` and the
+ *    phase pair `state.prev_phase`/`state.phase`, plus their FU-142a mirror);
+ *  - dwords `[0x157A60]`/`[0x157A5C]` = 0 (the saved Q8 clock accumulator
+ *    `clock_saved_157a60` and the live `state.frame_acc`; the 0x73DF0/0x73DFC
+ *    save/restore callers are unported, so the saved cell is the reset's
+ *    honest store);
+ *  - `[0x157A73] = 0x15774C` focus pointer: the engine's camera-focus readers
+ *    already read the live `render.camera.pos_*` triple (the same cell), so
+ *    this is a comment, not a second store;
+ *  - dword `[0x157A9F]` = 0 (`goal_record` NONE) and dword `[0x157A83]` = 0
+ *    (`entities.controlled` NONE);
+ *  - byte `[0x157A6C]` = 0 (`render.camera.event_suspended`), word
+ *    `[0x157A6A]` = 0 (`referee.offside_suppress`), word `[0x157A64]` = 0
+ *    (`state.frame_delta`, the same-frame stage-head add cell);
+ *  - byte `[0x157AAB]` = 0xFF (`flag_157aab`);
+ *  - word `[0x157A6D] = 0x702F8([0x14C2F6] == 0 ? 0x40 : 0x30) + 0x70` =
+ *    0xB0/0xA0 (`camera_height_157a6d`; `[0x14C2F6]` is
+ *    `difficulty_14c2f6`, the image default 0);
+ *  - byte `[0x157AB0]` = 0 (`flag_157ab0`) and dword `[0x157A6F]` = 0
+ *    (`camera_override_157a6f`);
+ *  - `0x73ECD CALL 0x7F144`: the possession/carrier block
+ *    `0x158724..0x15872C` = `ball.carrier` NONE + the eight `pos_*` bytes 0;
+ *  - `0x73ED2 CALL 0x7A028`: the ball-pair block `0x158730..0x158746` via
+ *    `fifa96_ball_pair_clear` (flags 0x20, code 2, tails 0).
+ * Returns FIFA96_OK or -FIFA96_ERR_INVALID (NULL). */
+int fifa96_match_run_act9_reset(struct fifa96_match_run *mr);
 
 /* FU-191 §2/§9 (M2 phase-17 T1): the native per-record phase walk
  * `FUN_0008D098`'s loop (`0x8D0F2..0x8D166`) — the second caller of the phase

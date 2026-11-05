@@ -527,3 +527,37 @@ starts four frames later (first diff line 466, 5985 lines differ, state
 set/counts unchanged). The camera reset `0x700F4`, `0x73E28`, the `0x73E08`
 placement and `0x4C324` remain FU181-L5/FU170-L2 legs because adding them
 alone also moves the live/M2 baselines.
+
+## Phase-53 T2 erratum — `0x73E28` / `0x73E08` landed, ordering leg (2026-11-05)
+
+The Phase-43 deferred pieces now land. `fifa96_match_run_act9_reset` ports
+`0x73E28` cell-for-cell and `fifa96_match_entities_restart_place` ports the
+non-seeding `0x73E08` (the staged `pool->ball.target_*` copy instead of the
+act-1 `0x1E0` seed; the ring place stays skipped by
+`byte[0x1106C3 + 0x15] == 0`). The stage-0 order is now the full native
+`0x88F9A` gate clear -> `0x700F4` -> `0x73E28` -> `0x740A0` -> `0x73E08` ->
+`0x4C324` -> timer 0 / stage++.
+
+**The timing consequence.** The `0x73E28` frame-delta zero makes the
+same-frame stage-3 head add read 0, so the act timer starts at 0 (was 2).
+M2 v29 is re-pinned: first differing line 9; 6514 of 6522 lines differ
+(6501 hash-only + 13 hash+state); the state set is unchanged with `1`
+953 -> 950, `2` 2193 -> 2194, `12` 4 -> 3, `21` 100 -> 103; 295089 bytes;
+sha `7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f`. The
+period-0 completion shifts engine step 845 -> 849 and the half-time markers
+m 841 -> 845 / m 845 -> 849; the ET anchors and the terminal are unchanged.
+Restart pins: `gate-phase15` 96 -> 100, `phase4-phase15` 100 -> 103,
+`restart-phase4` 303; the restart fixture's install-frame timer is 0.
+`test_restart_chain_fixture` needs one more granted frame (30 instead of 29)
+to reach the gate.
+
+**The ordering leg (FU342-L1).** The native clock body `0x8AF38` runs before
+the entity chain `0x8D8EC` (`0x4B1A6` before `0x4B2A9..`). The engine's act
+tick is after `fifa96_match_entities_update`; aligning it requires moving the
+whole clock block and is not done here. The native-faithful placement is
+landed at the engine position, and the begin/held-key pins are re-derived from
+the measured transcript. The begin-order cause is the standing FU170-L10 leg:
+the derived screen install runs after kickoff, so the act-9 placement commits
+the phase-0x15 re-scaled targets at begin (the M2 begin pins move, and the
+live carrier fixture stages the measured pre-v29 coda pose to keep its
+row-04/05 chain live). M1 `09b726b7…` exact; census unchanged.

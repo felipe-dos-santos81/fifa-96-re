@@ -1007,6 +1007,72 @@ static void test_kickoff_place_commits_records_and_ball(void) {
   assert(fifa96_match_entities_kickoff_place(NULL, 0, 0, 0) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-181 L5 / FU-342 (phase-53 T2): the non-seeding `FUN_00073E08` placement
+ * commit. The ball copies the staged `pool->ball.target_*` x/z (NOT the
+ * `0x1E0` kickoff seed), forces y = 0, zeroes the velocity/heading/metric
+ * words and installs the row-3 appearance; the shared `0x8CF60` loop commits
+ * each record (position := target, camera face, anim select, row43, frame 0).
+ * The `0x79F3C` ring place is skipped at phase 0x15, so a near non-controlled
+ * target inside the 0x180 ring stays untouched. */
+static void test_restart_place_commits_target_and_skips_ring(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entity *e;
+  struct fifa96_match_entity *near;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  pool.ball.target_x = 0x780;
+  pool.ball.target_y = 7;
+  pool.ball.target_z = -0x21;
+  pool.ball.x = 0x1E0;      /* the kickoff seed must NOT survive */
+  pool.ball.y = 0x55;
+  pool.ball.z = 0x66;
+  pool.ball.vel_x = 9;
+  pool.ball.vel_z = -9;
+  pool.ball.speed = 7;
+  pool.ball.heading = 0x123;
+  pool.ball.target_heading = 0x456;
+  pool.ball.metric = 0x77;
+  pool.ball.metric_dx = 1;
+  pool.ball.metric_dz = 2;
+  pool.ball.ramp_timer = 3;
+  e = &pool.team[TEAM0].records[5];
+  e->target_x = -0x100;
+  e->target_z = 0;
+  e->pos_x = 0x7FFFFFFF;
+  e->active = 1;
+  e->anim_id = 0x62;   /* special: kept by the derived selector */
+  e->frame = 9;        /* reset by the selector's BX=0 frame request */
+  e->type = 7;
+  near = &pool.team[TEAM1].records[2];
+  near->target_x = 0;
+  near->target_z = 0x60;   /* inside the 0x180 ring */
+  near->pos_x = 0x7FFFFFFF;
+  near->active = 1;
+  near->anim_id = 0x28;
+  assert(fifa96_match_entities_restart_place(&pool, 0, 0, 0) == FIFA96_OK);
+  /* 0x8C24C: x/z from the staged target, y forced 0, velocity/heading/metric
+   * cleared, row 3 installed. The target cells are untouched. */
+  assert(pool.ball.x == 0x780 && pool.ball.y == 0 && pool.ball.z == -0x21);
+  assert(pool.ball.target_x == 0x780 && pool.ball.target_y == 7 &&
+         pool.ball.target_z == -0x21);
+  assert(pool.ball.vel_x == 0 && pool.ball.vel_z == 0 && pool.ball.speed == 0);
+  assert(pool.ball.heading == 0 && pool.ball.target_heading == 0);
+  assert(pool.ball.metric == 0 && pool.ball.metric_dx == 0 &&
+         pool.ball.metric_dz == 0);
+  assert(pool.ball.ramp_timer == 0 && pool.ball.visual_dir == 3 &&
+         pool.ball.appear_row == 3);
+  /* 0x8CF60: commit + face + selector + frame. */
+  assert(e->pos_x == -0x100 && e->pos_y == 0 && e->pos_z == 0);
+  assert(e->target_x == -0x100 && e->target_z == 0);
+  assert(e->type == 2);            /* camera - target = (+0x100, 0) */
+  assert(e->anim_id == 0x62 && e->frame == 0 && e->row43 == 2u);
+  /* The ring place is skipped: a near non-controlled target is committed
+   * as-is (the ring would have moved it to z = 0x180). */
+  assert(near->target_x == 0 && near->target_z == 0x60);
+  assert(near->pos_x == 0 && near->pos_y == 0 && near->pos_z == 0x60);
+  assert(near->frame == 0 && near->row43 == 2u);
+  assert(fifa96_match_entities_restart_place(NULL, 0, 0, 0) ==
+         -FIFA96_ERR_INVALID);
+}
 /* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): the formation seed. The
  * 44 bytes are the extracted `352ko.fmt` (GAMEART0.PVI BIGF entry 0, first
  * hand: `00 b4 00 b8 ...`); the phase cell `FUN_0006E1D0` maps record i's
@@ -1387,6 +1453,7 @@ int main(void) {
   test_formation_iso_fixture();
   test_kickoff_place_commits_records_and_ball();
   test_kickoff_place_face_and_selector();
+  test_restart_place_commits_target_and_skips_ring();
   test_camera_place_snaps_near_non_controlled_records();
   test_camera_place_phase_and_side_gates();
   test_update_tolerates_unsupported();
