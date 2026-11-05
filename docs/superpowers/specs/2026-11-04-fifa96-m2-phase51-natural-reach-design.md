@@ -154,3 +154,14 @@ the row-03 wiring is FU177-L1's carried leg.
 - Player-visible gaps (R10): pitch/stadium, camera follow, control switch,
   fouls/offside, set pieces, celebration/replay, ball height, animation,
   HUD identity, audio.
+
+## 7. Errata (measured during execution)
+
+- **§2.1 draw count.** The "96 draws per run" is the **body-only** count
+  (3 writes × 32 body draws). The producer adds 4 draws per team per write
+  (8/write), so a live write consumes **40** shared draws and the tape run
+  **120**. The re-pin sha was unaffected; the in-tree riders pin 32 (ac2>=4)
+  and 40 (ac2<4) per write, and FU-340 records body 96 + producer 24 = 120.
+- **§2.2 T2b.** R11 proves the phase-2 clamp bounds are `PCCD.PDB`-data-blocked;
+  the row-`0x03` slot stays `NULL`. The portable sub-inputs (opponent selector,
+  slot branch B) land in Task 2. Wiring is carried as FU177-L1.

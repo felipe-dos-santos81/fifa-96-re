@@ -82,6 +82,16 @@ scratch prediction is the control.
    `move_attr`: compute `d = fifa96_entity_distance((int16_t)(target_x - pos_x),
    (int16_t)(target_z - pos_z))` and pass `(int32_t)((uint32_t)d << 16)` to
    `fifa96_action_locomotion_placement_counter` (native `(d<<16)>>22 = d>>6`).
+4. **Opponent selector (R11 item 2).** Add `int32_t last_defender7c3` (the
+   native team field `+0x7C3`) to the match team, seed/update it in the
+   `jump_step`/reset path (native writer `0x7C770`, reset `0x8C399`), expose
+   the opponent-z read (`[rec+0x61]`), and use it in the row-03 clamp input
+   (the clamp stays behind the NULL slot; the cell is unit-pinned).
+5. **Slot branch B (R11 item 3).** `FUN_00079C20`: `target = pos + dir*0x80`,
+   `y = 0`, then clamp x ±0x720 / z ±0xB10. The engine already has the body as
+   `fifa96_action_move_target`; wire it into the row-03 slot branch B in place
+   of the `timer7b = timer79` stand-in, then fall through to the camera/tail
+   (native `0x7E3C0` -> `0x7E3A6`).
 
 **Tests:** add a direct row-03 fixture that reaches the `0xAE0` branch (a
 record with `pos_x` in the `0x751..0x780` window, `pos_z` far away — a metric
@@ -94,17 +104,19 @@ is not dispatched).
 
 ---
 
-## Task 3 — wire row `0x03` (T2b; conditional on R11: clamp inputs portable)
+## Task 3 — wire row `0x03` (T2b) — **DEFERRED (R11 ruling, 2026-11-04)**
 
-If R11 shows `FUN_0008C418` + the opponent selector are portable in one small
-task: port them, fill the clamp inputs in `fifa96_match_action_03`, wire
-`fifa96_match_action_table[0x03]`, update `action_expect[0x03]` to
-`FIFA96_OK`, the M2 NULL pins, the census (`wired 58→59`, `install_live
-64→65`, `action 39/45`), README/ENGINE, and re-pin M2 **v28** with the
-measured first-diff/frame diff (predicted: first moved line `frame=29`,
-hash-only tail, no `state=` changes). If R11 says the clamp needs asset data
-the engine lacks, the slot stays NULL and the wiring becomes the FU177-L1
-carried leg; record that ruling.
+R11 (`/tmp/opencode/recon51/R11.md`) shows `FUN_0008C418`'s clamp bounds are
+**data-blocked**: the role-band line percentages come from the `PCCD.POG`
+`PCDB` payload (`+0x1E..+0x21`, `+0x10`), and the port has no PCCD payload
+codec. The honest path keeps the row-`0x03` slot `NULL`. The two portable
+sub-inputs land in Task 2 instead (the opponent selector cell `last_defender7c3`
+and slot branch B `FUN_00079C20`, both M2-neutral while the slot is NULL).
+Wiring is carried as FU177-L1 until the PCCD/PCDB decode slice.
+
+*(Ruling: R51-T2b-defer — the clamp cannot be faked; the natural count stays
+58/80 this phase. Cost if wrong: row `0x03` waits one data slice; no code is
+thrown away.)*
 
 ---
 
