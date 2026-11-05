@@ -3796,3 +3796,33 @@ close-out below).
   `port/spec/FU-342_act9_stage0_sinks.md`, FU-181/FU-170 Task-3 errata, and
   this register. The `0x8D040[0x15] = 0x8D77B` walk arm stays the FU170-L2
   residual; the act-9 stage-1/2 gates stay FU170-L1.
+
+- **P2 usable menu — LANG/font decode + Game Select / Team Select
+  (2026-11-05).** The interactive front-end is now the native screen family
+  from A3. New `fifa96_lang.c/.h` decodes `/FEDATA/LANG000.POG`
+  (`10 FB 00 27 54` RefPack -> `"LANGO"`, base `0x94C`, 591 NUL strings) and
+  `/FEGFX/HELV12.POG` (`10 FB 00 13 10` -> FNTI parsed by
+  `fifa96_font_parse`: 32..127, 12x13, 4 bpp, 256x31). `fifa96_lang_string(id)`
+  is the `FUN_0001771C(id)` lookup (Friendly `0x81`, Options `0xD8`, Quit to
+  DOS `0xF3`, Game Select `0x84`, Team Select `0x13D`, Home `0x98`, Visitor
+  `0x14A`, Brazil `0x23`, Italy `0xA6`; the 44 A3 §2.3 team ids).
+  `fifa96_menu_art_init_native` decodes MOD2.POG frame 0 (640x480 + type-0x22
+  palette, scaled 1/2) as the background; OPTIONS.INV/fallback stay the
+  no-asset path. Game Select carries the nine `FUN_0001FC50` items with
+  Friendly/Options/Quit live and the other six dim/disabled; Team Select
+  scrolls the 44 national names in Home/Visitor columns (native entry cells
+  0/4 = Brazil/Germany) with arrows selecting/column-switching, Return
+  starting and X/Backspace backing out. The `fifa96_frontend_run` handoff
+  carries `team_id[2]`, `team_name[2][16]`, derived `team_code[2][4]` and
+  `formation[2]`; the bridge calls `fifa96_match_run_set_formation` and writes
+  the 3-letter codes into `mr->render.hud_name` after `begin`, so the HUD
+  shows the chosen teams (windowed BRA/ITA measured). The native menu is
+  enabled only on the non-headless asset-backed boot; the headless M1/M2 tapes
+  keep the legacy FU-135 render and the hash-pinned fallback. New
+  `test_engine_lang` + `test_engine_menu_model`, plus an ISO-gated MOD2 case in
+  `test_engine_menu_art`; `make check` 114/114, M1 `09b726b7…` exact, M2 v29
+  `7c3874f7…` unchanged, census unchanged. Legs: P2-L1 the six unported native
+  screens, P2-L2 the Options stand-in, P2-L3 MOD2 banners 1–19, P2-L4
+  PCCD/PCDB short names/roster ids, P2-L5 absent `ftmsel.inv`/`ptmsel.inv`,
+  P2-L6 derived two-column navigation, P2-L7 ASCII-only `FUN_00017748`, P2-L8
+  the headless gate, P2-L9 no formation chooser.

@@ -444,6 +444,8 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_match_locomotion_tables.c
   src/fifa96_loader/fifa96_keeper_cpu.c
   src/fifa96_engine/fifa96_menu_art.c
+  src/fifa96_engine/fifa96_menu_model.c
+  src/fifa96_engine/fifa96_lang.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror
@@ -516,6 +518,21 @@ target_link_libraries(test_engine_menu_art PRIVATE fifa96_engine)
 target_compile_options(test_engine_menu_art PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_menu_art PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_menu_art COMMAND test_engine_menu_art
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
+
+add_executable(test_engine_lang tests/test_engine_lang.c)
+target_link_libraries(test_engine_lang PRIVATE fifa96_engine)
+target_compile_options(test_engine_lang PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_lang PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_lang COMMAND test_engine_lang
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
+
+add_executable(test_engine_menu_model tests/test_engine_menu_model.c)
+target_link_libraries(test_engine_menu_model PRIVATE fifa96_engine)
+target_include_directories(test_engine_menu_model PRIVATE src)
+target_compile_options(test_engine_menu_model PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_menu_model PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_menu_model COMMAND test_engine_menu_model
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
 
 add_executable(test_engine_m1 tests/test_engine_m1.c)

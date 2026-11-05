@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fifa96_engine/fifa96_engine_internal.h"
+#include "fifa96_engine/fifa96_lang.h"
 #include "fifa96_engine/fifa96_match_bridge.h"
 #include "fifa96_engine/fifa96_menu_art.h"
 
@@ -134,6 +135,18 @@ int fifa96_engine_boot(struct fifa96_engine *e) {
     return -1;
   }
   fifa96_menu_art_init(e->assets);
+  /* P2: the native Game Select/Team Select screen is the interactive front-end.
+   * The deterministic headless M1/M2 tapes (which run with the ISO mounted)
+   * keep the legacy FU-135 frames and the hash-pinned fallback, so the native
+   * path is gated on the interactive (non-headless) engine here; the asset
+   * decode itself still soft-fails to the legacy path. */
+  if (!e->cfg.headless &&
+      fifa96_lang_init(&e->frontend.lang, e->assets) == 0 &&
+      fifa96_lang_ready(&e->frontend.lang) &&
+      fifa96_lang_font(&e->frontend.lang) != NULL) {
+    fifa96_menu_art_init_native(e->assets);
+    fifa96_frontend_run_enable_native(&e->frontend, 1);
+  }
   e->mode = e->intro_active ? FIFA96_ENGINE_MODE_INTRO : FIFA96_ENGINE_MODE_FRONTEND;
   e->plat->audio_open(e->plat->self, 22050u, 2);
   /* Clock baseline: in real-time mode discard everything that happened before
@@ -274,6 +287,7 @@ void fifa96_engine_destroy(struct fifa96_engine *e) {
    * outlive this call; end it before the engine state is freed. */
   if (e->match) fifa96_match_run_end(e->match);
   if (e->booted) e->plat->shutdown(e->plat->self);
+  fifa96_lang_shutdown(&e->frontend.lang);
   fifa96_surface_destroy(e->surface);
   fifa96_cache_destroy(e->cache);
   fifa96_asset_unmount(e->assets);

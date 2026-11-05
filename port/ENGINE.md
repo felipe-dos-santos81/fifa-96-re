@@ -8957,3 +8957,82 @@ FU342-L6 — `0x36208`. FU342-L7 — the FU326-L4 `0x1104AB` init row. The
 `0x8D040[0x15] = 0x8D77B` walk arm stays the FU170-L2 residual; the act-9
 stage-1/2 gates stay FU170-L1 (the original FU-181 §7 item 5), not the
 phase-53 stage-0 scope. `make check` green (112/112).
+
+## P2 register — the usable front-end (2026-11-05)
+
+**Status.** A readable, keyboard-only front-end now starts a friendly match
+with two chosen teams. M1 `09b726b7…` is byte-identical, M2 v29 `7c3874f7…` is
+unchanged, the census is unchanged (**78/78** bodies, **58/80** natural,
+**64/80** install-live, **6** blocked, action **38/45**, phase **26/35**), and
+`make check` is green (114/114: two new tests plus the MOD2 case). No dispatch
+row is wired.
+
+**LANG000.POG.** New `fifa96_lang.c/.h` decodes the RefPack record
+(`10 FB 00 27 54`, declared length 10068) with `fifa96_record_decode`. The
+decoded image is `"LANGO"` + `02 00 00` + `base = 0x94C` at +8 + the u32
+relative offset table at +0x10 (`count = (0x94C-0x10)/4 = 591`).
+`fifa96_lang_string(id)` is the `FUN_0001771C(id)` lookup; every offset is
+bounds/NUL-validated at init. Verified ids: Game Select `0x84`, Team Select
+`0x13D`, Friendly `0x81`, Options `0xD8`, Quit to DOS `0xF3`, Home `0x98`,
+Visitor `0x14A`, Brazil `0x23`, Italy `0xA6`; the 44 national-team ids are the
+A3 §2.3 list.
+
+**HELV12.POG.** The same module decodes the RefPack record
+(`10 FB 00 13 10`, 4880 B) and parses the FNTI with the ported
+`fifa96_font_parse`: first 32 / last 127 / 96 glyphs, default 12x13, 4 bpp,
+bitmap 256x31. `fifa96_menu_art` draws labels with the real font (white body,
+black +1 shadow; the selected row inverts to black on light yellow).
+
+**Menu art.** `fifa96_menu_art_init_native` decodes `/FEGFX/MOD2.POG` frame 0
+through `fifa96_record_decode` -> `fifa96_sprite_bank_parse` -> entry 0 ->
+`fifa96_sprite_frame_parse` + the type-`0x22` chunk palette, and scales the
+640x480 image to the 320x240 surface. The legacy `fifa96_menu_art_init`
+(OPTIONS.INV only) and the compiled-in fallback remain unchanged.
+
+**Game Select (A3 §1.1).** Nine native items in the `FUN_0001FC50` order:
+right column Friendly (`0x81`/code 4), Leagues (`0x1BF`/5), Tournaments
+(`0x1BB`/6), Playoffs (`0x1BD`/7), Practise (`0xEA`/8); left column Load Game
+(`0xB3`/9), Options (`0xD8`/1), Modem Setup (`0xC2`/2), Quit to DOS
+(`0xF3`/3). Friendly/Options/Quit are live; the other six are drawn
+dim/disabled (P2-L1). Up/Down walk the active column, Left/Right switch
+columns; Return activates and the QUIT key exits the engine.
+
+**Team Select (A3 §2.3).** Home/Visitor columns over the 44 LANG national
+names, 7-row scrolling windows, native entry defaults `team[0] = 0` (Brazil)
+and `team[1] = 4` (Germany). Up/Down change the active column's team with
+wrap, Left/Right switch columns, Return starts, X/Backspace backs out. Names
+resolve from LANG000; fallback literals exist only for the synthetic tests.
+
+**Handoff (A3 §3.2).** `fifa96_frontend_run` carries `team_id[2]`,
+`team_name[2][16]`, `team_code[2][4]` and `formation[2]`. On Team Select
+Return it sets `match_start`; after `fifa96_match_run_begin` the bridge calls
+`fifa96_match_run_set_formation(side, formation[side])` and writes the
+3-letter codes into `mr->render.hud_name[side]` (windowed BRA/ITA measured).
+The simulation and the match renderer are untouched.
+
+**Gate.** The engine enables the native menu only for the interactive
+(non-headless) boot with both LANG000/HELV12 decoded. The deterministic
+headless M1/M2 tapes keep the legacy FU-135 render and the hash-pinned
+fallback, which is what keeps the ISO-present M1 golden byte-identical; this
+is the derived stand-in P2-L8.
+
+**Tests.** New `test_engine_lang` (synthetic LANGO lookup/malformed tables +
+FNTI parse/blit; ISO-gated retail decode) and `test_engine_menu_model` (item
+table/nav, the 44-team table, a full keyboard fixture through Team Select ->
+bridge with BRA/ITA in `render.hud_name`). `test_engine_menu_art` gains an
+ISO-gated MOD2 frame-0 case. Full suite 114/114.
+
+**Legs.** P2-L1 the six other native Game Select screens (Leagues,
+Tournaments, Playoffs, Practise, Load Game, Modem Setup) are disabled labels,
+not ported screens (A3-L2/A3-L3). P2-L2 Options is a labeled stand-in (the
+FU-66 options driver is not re-wired here). P2-L3 MOD2 frames 1–19 decode as
+noise (A3-L1); only frame 0 is used and titles are drawn with HELV12. P2-L4
+PCCD/PCDB is not decoded: `team_id` is the LANG id and the 3-letter HUD codes
+are derived stand-ins; `fifa96_match_run` still has no roster/kit consumer
+(A3-L3/A3-L4). P2-L5 `ftmsel.inv`/`ptmsel.inv` are absent from the CD
+(A3-L7), so Team Select is drawn from MOD2 + HELV12. P2-L6 the native
+two-column navigation/selection semantics are not fully decomposed; the port's
+column model is derived from the widget order. P2-L7 `FUN_00017748` is only
+the ASCII identity (A3-L5); accented language strings are not remapped. P2-L8
+the native menu is disabled on the headless engine to keep M1/M2 deterministic.
+P2-L9 no formation chooser: formation ids stay 0.
