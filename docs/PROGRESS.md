@@ -3683,3 +3683,12 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   4 -> 5 because the removed draw shifts the deterministic stream. M1/M2 stay
   byte-identical; census unchanged (`78/78`, `57/80`, `63/80`, `6` blocked);
   `make check` 112/112.
+
+- **phase-49 row-08 process byte and tracked compare (FU142 / OL-82,
+  2026-11-04).** Row 08 now stages `[0x15872F]` from
+  `entities.ball.pos_counter_f` and drains the native `0x814A0` increment back
+  to it; `is_ball_track` compares the record id with `render.camera.tracked`,
+  not the controlled actor. A unit pins the increment with tracked NONE and the
+  no-increment twin with a different controlled actor. M1/M2 stay
+  byte-identical; census unchanged (`78/78`, `57/80`, `63/80`, `6` blocked);
+  `make check` 112/112.

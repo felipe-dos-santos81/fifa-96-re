@@ -2983,16 +2983,15 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
  * words +0x6B/+0x6D, the ball height (0x157750), the [0x157A83] controlled
  * actor and the two team blocks for the inactive-arm clears. Row 08 installs
  * no code, so there is no install arm. The native pointers the pool does not
- * model are staged as documented stand-ins: [0x1577CA] is the pool controlled
- * entity, `[team+0x7B2]`/`[team+0x7B6]` are the pool target/second ids,
- * `[[team+0x7A6]+0x7B2]` the opponent team target, and the +0x44/+0x99
- * record bytes, the rec[+4] descriptor bytes, the +0x7D word, the
- * [0x15877D]/[0x15872F] process bytes and the 0x1577C0/C2 lead words are
+ * model are staged as documented stand-ins: `[team+0x7B2]`/`[team+0x7B6]`
+ * are the pool target/second ids, `[[team+0x7A6]+0x7B2]` the opponent team
+ * target, and the +0x44/+0x99 record bytes, the rec[+4] descriptor bytes, the
+ * +0x7D word, the [0x15877D] process byte and the 0x1577C0/C2 lead words are
  * staged zero by this row with the OL-82 consumer leg (the lead cells
- * themselves are the live `camera.vel_x`/`vel_z`); [0x15877D]/[0x15872F]
- * writes
- * have no derived home (OL-82). The step's reset request runs
- * `match_row_reset` and the receiver-timer request applies the tested
+ * themselves are the live `camera.vel_x`/`vel_z`). `[0x1577CA]` is the live
+ * camera tracked id; `[0x15872F]` is `entities.ball.pos_counter_f` (the same
+ * process byte row 09 arm 3 writes and row 05 reads). The step's reset
+ * request runs `match_row_reset` and the receiver-timer request applies the tested
  * `0x79B58` effect (the +0x99 callee gate is staged 0, as row 04). */
 static int fifa96_match_action_08(struct fifa96_match_run *mr) {
   struct fifa96_match_run_record *r = &mr->record;
@@ -3019,7 +3018,7 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
                                      * flag (derived at the dispatch staging) */
   s.byte3d = r->frame;              /* native +0x3D, staged live (OL-80) */
   s.byte_15877d = 0;                /* [0x15877D] producer unported (OL-82) */
-  s.byte_15872f = 0;                /* [0x15872F] producer unported (OL-82) */
+  s.byte_15872f = (int8_t)mr->entities.ball.pos_counter_f;  /* [0x15872F] */
   s.is_team_target = id == mr->entities.team[team].target ? 1u : 0u;
   s.is_team_second = id == mr->entities.team[team].second ? 1u : 0u;
   s.user_present = controlled >= 0 ? 1u : 0u;
@@ -3045,7 +3044,8 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
    * (`camera.pos_y`), a signed 32-bit compare; the FU-75 §1.6 ball-record
    * stand-in is retired. */
   s.ball_height = (int32_t)mr->render.camera.pos_y;
-  s.is_ball_track = id == controlled ? 1u : 0u;   /* [0x1577CA] stand-in */
+  s.is_ball_track =
+      id == mr->render.camera.tracked ? 1u : 0u;  /* native 0x81498 compare */
   s.camera_x = mr->render.camera.pos_x;
   s.camera_y = mr->render.camera.pos_y;
   s.camera_z = mr->render.camera.pos_z;
@@ -3071,12 +3071,14 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
     mr->entities.team[team].second = FIFA96_MATCH_ENTITY_NONE;
   if (out.reset != 0) match_row_reset(mr, e);
   if (out.receiver_timer != 0) e->timer93 = 0x10;   /* 0x79B58 (0x99 staged 0) */
+  if (out.byte_15872f_set != 0)
+    mr->entities.ball.pos_counter_f = out.byte_15872f;  /* 0x814A0 */
   /* out.anim (0x6E598, OL-52), out.ball_stage (the 0x7A490 staging call,
    * OL-62), out.events/event_code/event_sound (the 0x8ED40/0x8F188/0x92820/
    * 0x974F0/0x651F0 sinks, OL-82), out.face_angle (+0x7D has no pool field,
-   * OL-82), the out.byte_15877d/byte_15872f process-byte writes (OL-82) and
-   * out.snap beyond the target copy (0x79B1C's lane/velocity zeroes, OL-82)
-   * have no derived consumer. */
+   * OL-82), the out.byte_15877d process-byte write (OL-82) and out.snap
+   * beyond the target copy (0x79B1C's lane/velocity zeroes, OL-82) have no
+   * derived consumer. */
   return FIFA96_OK;
 }
 

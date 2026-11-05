@@ -3488,3 +3488,23 @@ compile at BASE; tests first): `test_score_display_gate`,
 **108/108**; M1 `09b726b7…` and M2 `2e709151…` byte-identical (the M2 tape
 stays dormant: no tape record reaches the half-line band and no pan producer
 fires; the m62 freshness block now also pins the fresh display cells).
+
+## Phase-49 erratum — row-08 `[0x15872F]` and the tracked compare (2026-11-04)
+
+Fresh `disassemble_bytes 0x811d0..0x814af` confirms row 08's stage-2 tail:
+`0x81498 CMP EBP,dword[0x1577CA]` skips the increment for the tracked record,
+and `0x814A0 INC byte[0x15872F]` increments the shared process byte otherwise.
+The engine already models that byte as `entities.ball.pos_counter_f` (row 09
+arm 3 writes it, row 05 reads it), so `fifa96_match_action_08` now stages
+`s.byte_15872f` from it and drains `out.byte_15872f` on `byte_15872f_set`.
+`is_ball_track` now compares the record id with `render.camera.tracked`, not
+the controlled actor.
+
+`test_action_08_tracked_process_byte` pins both directions: with tracked NONE
+and `controlled == 0`, the record increments 5 -> 6; with tracked id 0 and
+`controlled == 1`, it stays 5. The old staged fallback fails both (the first
+skips the increment, the second adds one). `[0x15877D]`, the event/sound
+sinks, the descriptor bytes and the 0x79B1C snap residue remain OL-82.
+M1/M2 are byte-identical; census unchanged: **78/78 bodies, 57/80 natural,
+63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make check`
+**112/112**.

@@ -2500,6 +2500,37 @@ static void test_action_08_ball_height_reads_camera_y(void) {
   drop_fixture(&f);
 }
 
+/* FU-142 App. K.6 / OL-82: row 08 stage 2 reads the native `[0x1577CA]`
+ * record pointer and increments `[0x15872F]` when the record is not tracked.
+ * The process byte is the live pool `ball.pos_counter_f`; the controlled
+ * actor is not a fallback. */
+static void test_action_08_tracked_process_byte(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 1;
+  f.mr.entities.ball.pos_counter_f = 5;
+  f.mr.entities.controlled = 0;       /* old fallback: id 0 looked tracked */
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.entities.ball.pos_counter_f == 6);   /* 0x814A0 increment */
+  drop_fixture(&f);
+
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 1;
+  f.mr.entities.ball.pos_counter_f = 5;
+  f.mr.entities.controlled = 1;       /* old fallback: id 0 looked untracked */
+  f.mr.render.camera.tracked = 0;     /* native [0x1577CA] == rec */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.entities.ball.pos_counter_f == 5);   /* tracked: no increment */
+  drop_fixture(&f);
+}
+
 /* FU-139 §9 (Task 11): the wired row-07 machine. Stage 0 gates/latches and
  * the stage-target arm run over `mr->record`; the stage-2 `+0x44` tail resets
  * and hands the ball/receiver through the pool. The kick requests run the
@@ -5928,6 +5959,7 @@ int main(void) {
   test_action_05_ball_height_reads_camera_y();
   test_action_04_and_08_wired();
   test_action_08_ball_height_reads_camera_y();
+  test_action_08_tracked_process_byte();
   test_action_06_ball_height_reads_camera_y();
   test_action_04_stages_lane_fields();
   test_action_04_ball_track_side_from_tracked();

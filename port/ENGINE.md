@@ -8532,3 +8532,18 @@ removed draw shifts the stream.
 M1/M2 stay byte-identical; census unchanged: **78/78 bodies, 57/80 natural,
 63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make check`
 **112/112**.
+
+## Phase 49 — row-08 process byte and tracked compare (FU142 / OL-82, 2026-11-04)
+
+Row 08 stage 2 now reads `[0x15872F]` from `entities.ball.pos_counter_f` and
+drains the `0x814A0` increment back to it; `is_ball_track` compares the record
+id with `render.camera.tracked` (`0x81498 EBP,dword[0x1577CA]`), not the
+controlled actor. The process byte is shared with row 09 arm 3 and row 05, so
+the stage-2 increment is a live consumer. `test_action_08_tracked_process_byte`
+pins the increment (tracked NONE, controlled record) and the no-increment twin
+(tracked record, different controlled actor). The old controlled fallback
+fails both directions.
+
+M1/M2 stay byte-identical; census unchanged: **78/78 bodies, 57/80 natural,
+63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make check`
+**112/112**.
