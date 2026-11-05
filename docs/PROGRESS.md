@@ -3920,3 +3920,11 @@ close-out below).
   there after 1.8 s), a 300 ms held Return entered Team Select once and did not
   start the match, then the live match started. Screenshots:
   `/tmp/opencode/play/fix-menu-held.png`, `fix-teams-held.png`.
+
+- **P5 follow-up — bounded catch-up (playable SDL, 2026-11-05).** A live
+  80-kick play-test exposed the A6-L7 spiral: a long host stall was replayed
+  as thousands of 100 Hz match frames in one engine step, freezing the
+  window. The engine now clamps each step's delta to 10 ticks (100 ms) and
+  drops the excess; the headless tapes stay byte-identical and
+  `test_engine_platform` pins the clamp. The repeated live sequence stays
+  responsive (match clock 00:23, no WM hang).

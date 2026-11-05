@@ -193,7 +193,19 @@ int fifa96_engine_step(struct fifa96_engine *e) {
   /* Fixed-step clock first, then present: with the null backend (now_ns()
    * advances on present) every step contributes exactly one step_ns delta. */
   uint64_t now = e->plat->now_ns(e->plat->self);
-  e->step_ticks = (uint32_t)fifa96_clock_advance_ns(&e->clock, now - e->last_ns);
+  uint64_t delta = now - e->last_ns;
+  /* FU-343 P5/A6-L7: bound the host catch-up. The 100 Hz tick hook runs a
+   * full match frame body per tick, so replaying a long host stall (window
+   * drag, debugger, starved X server, the WM's "not responding" dialog)
+   * unbounded turns one engine step into thousands of frames and freezes the
+   * window. Keep at most 10 ticks (100 ms) per step; the excess is dropped,
+   * as a normal game drops frames. The null/headless tapes advance exactly
+   * one 10 ms tick, so their transcripts are unchanged. */
+  if (e->clock.tick_ns != 0) {
+    uint64_t max_delta = e->clock.tick_ns * 10u;
+    if (delta > max_delta) delta = max_delta;
+  }
+  e->step_ticks = (uint32_t)fifa96_clock_advance_ns(&e->clock, delta);
   e->last_ns = now;
   if (e->mode == FIFA96_ENGINE_MODE_INTRO) {
     /* Input-skip during the intro: QUIT exits, any other mapped press aborts

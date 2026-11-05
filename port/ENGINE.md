@@ -9347,3 +9347,20 @@ starts (ITA 0-0 ENG, clock running). Screenshots:
 This closes the "front-end held-key repeat cadence" leg under the hold policy
 for the native interactive menu; the legacy FU-135 panel path keeps the
 original every-state-1 consumption by design (headless/M1-pinned).
+
+## Phase 57 — P5 follow-up: bounded host catch-up (FU-343, 2026-11-05)
+
+The live play-test (80 scripted kicks with the right direction held) exposed
+the A6-L7 catch-up spiral: `fifa96_engine_step` fed the whole
+`now - last_ns` delta to `fifa96_clock_advance_ns`, whose unbounded
+`while (pending >= tick_ns)` loop runs the 100 Hz tick hook — a full match
+frame body — once per fired tick. A long host stall (window drag, debugger,
+a starved X server, or the WM's own "not responding" dialog) therefore
+replayed thousands of match frames in one engine step, pinning a core and
+freezing the window. The fix clamps the per-step delta to 10 ticks (100 ms
+at the 10 ms engine tick) and drops the excess, as a normal game drops
+frames; headless/null tapes advance exactly one 10 ms tick and are
+byte-identical (M1 `09b726b7…`, M2 v29 `7c3874f7…` verified by `cmp`).
+Regression `test_engine_platform` drives a virtual 1 s step and asserts the
+clamp fires exactly 10 ticks. Re-running the same 80-kick live sequence
+leaves the window responsive and the match clock advancing (00:23).
