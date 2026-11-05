@@ -3743,3 +3743,21 @@ close-out below).
   M1 `09b726b7…` and M2 v27 `54f44987…` byte-identical; `make check` 112/112.
   Docs: new `port/spec/FU-341_row03_arm_fidelity.md`, FU-340/FU-338/FU-166/
   FU-150/FU-287/FU-71/FU303 append-only errata, and this register.
+
+- **phase-52 control-selection switch (FU-75 L4.5, 2026-11-05).** The native
+  input-row handler `FUN_0007D1D4` (`0x7D1D4..0x7D35E`) is closed. The pure
+  helper `fifa96_outfield_select_step` ports the native-order body (self return,
+  the camera-keyed `0xC0`/`0x120` lane gate, the `0x157788` anchor triple with
+  the slot-byte/lead fallback, the `0x8DB6C` A/B search arms, the `[0x1587AC]`
+  reject), and `fifa96_match_run_select_step` binds it to the pool: the
+  `0x786A0` swap, the guarded slot rebind + the moved block's 7-word clear
+  (`fifa96_control_slot_merge_reset`) + the `0x78B00` `+0x24` byte, and
+  `[team+0x7CB] = 0`. The released-row `case 0x7D1D4u` returns the handler's
+  0/1 and the `0x7CB03` direct-arm consumer is wired (latent while
+  `[0x157AB0]` is staged 0). New engine fixtures pin the PASS release switch
+  (slot 3 -> nearest mate 4), the controlled-self return 0, and the no-slot
+  clear negative. Residual: the `[0x1587A8]`/`[0x1587AC]` set-piece producers
+  (`spawn_id`/`recv_id` = NONE), `[0x157AB0]`, the OL-68 block move elsewhere
+  and the slot `+0x24` reader. M1 `09b726b7…` and M2 `54f44987…` stay
+  byte-identical; census unchanged (`78/78`, `58/80`, `64/80`, 6 blocked,
+  action 38/45, phase 26/35); `make check` 112/112.

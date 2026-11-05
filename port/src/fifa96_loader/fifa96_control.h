@@ -21,6 +21,12 @@ typedef struct fifa96_control_slot {
   uint8_t anim_c;
   int8_t active;
   uint8_t counter;
+  /* M2 phase-52 T2: the native slot block's byte `+0x24`, the third cell
+   * `FUN_00078B00` (`0x78B00..0x78B14`: word +0xA, word +0x16, byte +0x24)
+   * clears. Its meaning is unproven and it has no reader in the ported
+   * bodies (OL-68 residual); the field exists so the `0x7D1D4` handler's
+   * `0x78B00(result+0x20)` call is modelled rather than dropped. */
+  uint8_t byte24;
 } fifa96_control_slot;
 
 typedef struct fifa96_control_candidate {

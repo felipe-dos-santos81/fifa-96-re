@@ -23,6 +23,7 @@ _Static_assert(offsetof(fifa96_control_slot, anim_b) == 0x20, "anim_b");
 _Static_assert(offsetof(fifa96_control_slot, anim_c) == 0x21, "anim_c");
 _Static_assert(offsetof(fifa96_control_slot, active) == 0x22, "active");
 _Static_assert(offsetof(fifa96_control_slot, counter) == 0x23, "counter");
+_Static_assert(offsetof(fifa96_control_slot, byte24) == 0x24, "byte24");
 
 _Static_assert(offsetof(fifa96_control_candidate, rank) == 0x00, "rank");
 _Static_assert(offsetof(fifa96_control_candidate, skip_98) == 0x02, "skip_98");

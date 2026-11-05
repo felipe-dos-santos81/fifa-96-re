@@ -8766,3 +8766,44 @@ FU-71 announce table / `0x71C94` tracked tails / **FU303-L12** no-slot
 `0x8948D` stale-local read (the remaining FU166-L6 residuals, not L6 as a
 whole); phase-52 act-9 stage-0 camera/placement sinks (FU181-L5); the six
 un-dispatchable action rows and dead phase rows from R9.
+
+## Phase 52 — the control-selection switch (`0x7D1D4`, FU-75 L4.5, 2026-11-05)
+
+FU-75 L4.5 is closed. The native input-row handler `FUN_0007D1D4`
+(`0x7D1D4..0x7D35E`, RET at `0x7D35E`) is ported as the pure loader helper
+`fifa96_outfield_select_step` (Task 1: self return, the camera-keyed lane
+gate, the anchor triple with the slot-byte/lead fallback, the NSEARCH A/B
+arms through `fifa96_action_duel_search`, the `[0x1587AC]` reject and the
+switch out; six `test_outfield` fixtures) and bound to the pool by
+`fifa96_match_run_select_step` (Task 2). The binder stages the native state
+from the record / team / camera / slot cells and applies the result: the
+`0x786A0` record-visible swap, the guarded `slot.entity` rebind + the moved
+block's `0x786A0` tail (`fifa96_control_slot_merge_reset`) + the `0x78B00`
+`+0x24` byte (only when the pre-swap slot was this record's and it held
+one), and `[team+0x7CB] = 0` (`timer7cb`) on the switch result. The
+released-row `case 0x7D1D4u` returns the handler's 0/1; the `0x7CB03`
+direct-arm consumer calls the same binder.
+
+Errata: the tail is `0x7D350 MOV EAX,1` / `0x7D355 ADD ESP,0xC` /
+`0x7D35E RET` (not `0x7D355` as the "MOV EAX,1"); the arm-A side-matched
+skip is `sext8([[0x1587A8]+0x8D])` used as an NSEARCH **record index**
+(the `+0x8A>>24` alias), else -1; `0x78B00`'s only new cell after the
+`0x786A0` tail is slot `+0x24`. Residual legs (OL-68/OL-72): the
+`[0x1587A8]`/`[0x1587AC]` set-piece producers have no engine cell
+(`spawn_id`/`recv_id` stage `NONE`; arm A is dead, the unstaged-pointer
+reject edge is reproduced), `[0x157AB0]` has no producer (the direct arm is
+latent and its consumer is wired), the `0x786A0` block move remains OL-68
+at the other call sites, and slot `+0x24` has no reader.
+
+Tests: `test_engine_match_input::test_control_switch_moves_slot` /
+`_self_returns_zero` / `_non_slot_does_not_clear` (the real PASS
+press/release frame, the handler return and the slot-clear negative),
+`test_outfield::test_input_row_scan` (the latent direct-arm pin) and the
+`test_control` `byte24` offset assert. Mutation-RED: stubbing the
+`0x7D1D4` case, dropping the `has_slot` term of the clear guard, and
+dropping `0x7D33B` each fail the engine fixture.
+
+M1 `09b726b7…` and M2 v27 `54f44987…` byte-identical (`cmp`); census
+unchanged: **78/78** bodies, **58/80 natural**, **64/80 install-live**,
+**6 blocked**, action **38/45**, phase **26/35**; `make check`
+**112/112**.

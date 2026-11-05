@@ -487,6 +487,161 @@ static void test_engine_step_quit_in_match(void) {
   drop_fixture(f);
 }
 
+/* ===== M2 phase-52 T2 / FU-75 L4.5: the control-selection switch ==========
+ *
+ * `FUN_0007D1D4` (`0x7D1D4..0x7D35E`, recon R12 §1) is reached through the
+ * released-row scan (`released_0[1]`: mask 0x7FF, want 0x20, handler 0x7D1D4)
+ * when the slot-bearing record is not the controlled actor. The fixture stages
+ * that same pool (a slot record, a different controlled actor and team target,
+ * one near team-mate at the `0x157788` camera anchor) and drives the real
+ * PASS press/release edge through `fifa96_match_run_input` + the granted frame
+ * body. The direct binder `fifa96_match_run_select_step` pins the return value
+ * and the no-slot guard; the record-visible effects are the `0x786A0` swap,
+ * the slot rebind, `timer7cb = 0` and the `0x78B00` clear. */
+static void stage_select_common(struct fifa96_match_run *mr) {
+  struct fifa96_match_entity *mate;
+  uint32_t i;
+  fifa96_match_run_init(mr);
+  mr->state.phase = 0;             /* no phase-2 forced/chase installs */
+  mr->state.period_length = 90;    /* no period end inside the test window */
+  /* [0x157A83] = record 1; [team+0x7B2] also record 1 (neither is the slot
+   * record 3, so the self check and the distance gate both pass). */
+  mr->entities.controlled = 1;
+  mr->entities.team[0].target = 1;
+  mr->entities.team[0].timer7cb = 0x2A;
+  mr->entities.team[0].timer820 = 0x3C;   /* decays 2/frame, never clears */
+  /* The 0x157788/8C/90 anchor is the arm-B search origin (the slot dir bytes
+   * are zeroed by the FU-70 update with no input, so the 0x1577C0/C2 lead
+   * fallback runs with vel 0). The camera walk is a no-op at speed 0. */
+  mr->render.camera.pos_y = 0;
+  mr->render.camera.speed = 0;
+  mr->render.camera.event_param = 0;
+  mr->render.camera.anchor_x = 0x100;
+  mr->render.camera.anchor_y = 0;
+  mr->render.camera.anchor_z = 0x200;
+  mr->render.camera.vel_x = 0;
+  mr->render.camera.vel_z = 0;
+  for (i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &mr->entities.team[0].records[i];
+    e->pos_x = 0x2000;
+    e->pos_z = 0x2000;
+    e->target_x = e->pos_x;        /* the mover must not drift the pool */
+    e->target_z = e->pos_z;
+    e->lane_x = 0;
+    e->skip_98 = 0;
+    e->skip_9a = 0;
+    e->code = 0;
+    e->active = (uint8_t)i;
+  }
+  mate = &mr->entities.team[0].records[4];
+  mate->pos_x = 0x100;
+  mate->pos_z = 0x200;
+  mate->target_x = mate->pos_x;
+  mate->target_z = mate->pos_z;
+  mr->slot.entity = 3;
+  mr->slot.player = 0;
+  mr->slot.map_select = 1;
+  mr->entities.team[0].records[3].has_slot = 1;
+}
+
+/* The switch: record 3 (slot, non-controlled) releases PASS (0x20); the
+ * nearest free record (record 4 at the anchor) takes the slot. */
+static void test_control_switch_moves_slot(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *owner;
+  struct fifa96_match_entity *mate;
+  int32_t new_controlled;
+  stage_select_common(&mr);
+  owner = &mr.entities.team[0].records[3];
+  mate = &mr.entities.team[0].records[4];
+  assert(owner->has_slot == 1 && mate->has_slot == 0);
+  mr.slot.reserved_08[0] = 0x11;   /* the 0x786A0 tail clears word +8 */
+  mr.slot.reserved_08[2] = 0x22;   /* ... and word +0xA (the 0x78B00 cell) */
+  mr.slot.reserved_14[2] = 0x33;   /* ... and word +0x16 */
+  mr.slot.byte24 = 0x77;           /* the 0x78B00 +0x24 byte */
+
+  /* 0x7D1D4 is the released word 0x20 (PASS); the press frame's 0x20 matches
+   * no pressed row, so only the release frame switches. */
+  press_key(&mr, FIFA96_ENGINE_KEY_PASS);
+  grant_frame(&mr);
+  assert(owner->has_slot == 1 && mr.slot.entity == 3);
+  no_input(&mr);
+  grant_frame(&mr);
+
+  new_controlled = mr.slot.entity;
+  assert(new_controlled == 4);                 /* the new slot owner */
+  assert(mate->has_slot == 1 && owner->has_slot == 0);
+  assert(mr.slot.released == 0);               /* the 0x786A0 tail cleared +6 */
+  assert(mr.slot.reserved_08[0] == 0 && mr.slot.reserved_08[2] == 0);
+  assert(mr.slot.reserved_14[2] == 0);
+  assert(mr.slot.byte24 == 0);                 /* 0x78B00 +0x24 */
+  assert(mr.entities.team[0].timer7cb == 0);   /* 0x7D33B */
+  assert(mr.entities.team[0].timer820 == 0x38);/* the per-frame decay ran */
+  /* `0x7D1D4` rewrites the slot binding, never `[0x157A83]`. */
+  assert(mr.entities.controlled == 1);
+}
+
+/* The self path: when the slot record is the controlled actor the handler
+ * returns 0 before the gate/tail (0x7D1DF..0x7D1EF); the slot, `timer7cb` and
+ * the block bytes all stay. */
+static void test_control_switch_self_returns_zero(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *owner;
+  stage_select_common(&mr);
+  mr.entities.team[0].records[3].has_slot = 0;
+  owner = &mr.entities.team[0].records[1];
+  owner->has_slot = 1;
+  mr.slot.entity = 1;              /* controlled == target == slot record */
+  mr.slot.reserved_08[0] = 0x11;
+  mr.slot.byte24 = 0x77;
+
+  press_key(&mr, FIFA96_ENGINE_KEY_PASS);
+  grant_frame(&mr);
+  no_input(&mr);
+  grant_frame(&mr);
+
+  assert(mr.slot.entity == 1);
+  assert(owner->has_slot == 1);
+  assert(mr.entities.team[0].records[4].has_slot == 0);
+  assert(mr.slot.reserved_08[0] == 0x11 && mr.slot.byte24 == 0x77);
+  assert(mr.entities.team[0].timer7cb == 0x2A);   /* no 0x7D33B clear */
+  assert(mr.entities.team[0].timer820 == 0x38);
+  /* The native handler return is observable through the binder. */
+  assert(fifa96_match_run_select_step(&mr, 1) == 0);
+  assert(mr.slot.entity == 1 && owner->has_slot == 1);
+}
+
+/* The 0x78B00 clear is tied to the actual slot move: a record without the
+ * slot (a contrived direct-binder call — the machine's 0x7CB0D gate keeps it
+ * unreachable from the frame) runs the search and reports the switch result,
+ * but the 0x786A0 from-held precondition fails, so neither the `slot.entity`
+ * rebind nor the moved-block clears run. `0x7D33B` still clears `+0x7CB`. */
+static void test_control_switch_non_slot_does_not_clear(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *non_slot;
+  stage_select_common(&mr);
+  non_slot = &mr.entities.team[0].records[3];
+  non_slot->has_slot = 0;
+  mr.slot.pressed = 0x11;
+  mr.slot.released = 0x22;
+  mr.slot.held = 0x33;
+  mr.slot.reserved_08[0] = 0x44;
+  mr.slot.reserved_08[2] = 0x55;
+  mr.slot.reserved_14[2] = 0x66;
+  mr.slot.byte24 = 0x77;
+
+  assert(fifa96_match_run_select_step(&mr, 3) == 1);
+  assert(non_slot->has_slot == 0);
+  assert(mr.entities.team[0].records[4].has_slot == 0);
+  assert(mr.slot.entity == 3);
+  assert(mr.slot.pressed == 0x11 && mr.slot.released == 0x22);
+  assert(mr.slot.held == 0x33);
+  assert(mr.slot.reserved_08[0] == 0x44 && mr.slot.reserved_08[2] == 0x55);
+  assert(mr.slot.reserved_14[2] == 0x66);
+  assert(mr.slot.byte24 == 0x77);
+  assert(mr.entities.team[0].timer7cb == 0);   /* 0x7D33B on the switch result */
+}
+
 int main(void) {
   test_init_initializes_input_and_slot();
   test_null_guards();
@@ -500,6 +655,9 @@ int main(void) {
   test_300_grants_advance_slot_by_frame_delta();
   test_engine_step_polls_match_input();
   test_engine_step_quit_in_match();
+  test_control_switch_moves_slot();
+  test_control_switch_self_returns_zero();
+  test_control_switch_non_slot_does_not_clear();
   puts("test_engine_match_input OK");
   return 0;
 }

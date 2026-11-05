@@ -707,6 +707,125 @@ struct match_input_ctx {
   uint8_t invoke_code;   /* an ECX=1 install the seam dispatches after the scan */
 };
 
+_Static_assert(FIFA96_OUTFIELD_SELECT_RECORDS == FIFA96_MATCH_ENTITY_RECORDS,
+               "the 0x7D1D4 NSEARCH block is the 11-record team block");
+
+/* ===== M2 phase-52 T2 / FU-75 L4.5: the 0x7D1D4 engine binder ==============
+ *
+ * `FUN_0007D1D4` (`0x7D1D4..0x7D35E`; recon R12 §1) is a function with two
+ * native callers: the released-row tables (`released_0[1]`, `released_2/3/4[0]`,
+ * handler `0x7D1D4`) and the direct-arm pre-gate `0x7CB01 MOV EAX,EBP; 0x7CB03
+ * CALL 0x7D1D4; 0x7CB08 JMP 0x7CC82`. Both dispatch through this binder so the
+ * input-row handler and the `out.direct_arm` consumer apply one body.
+ *
+ * The state is staged from the pool in the native units (R12 §3 engine map):
+ * `rec`'s absolute id / team base / `+0x59/+0x61` position word / `+0x6B`
+ * `lane_x`; `[0x157A83]` = `entities.controlled`; `[team+0x7B2]` = `team->target`;
+ * `[team+0x829]` = `team->search_gate`; `[0x157A4A]>>24` = `state.phase`;
+ * `team+0x826` = `team->side`; `[0x157750]` dword = `camera.pos_y`;
+ * `0x157788/8C/90` = `camera.anchor_x/y/z`; `word[0x1577C0]`/`word[0x1577C2]`
+ * = the signed `camera.vel_x`/`vel_z` leads; the slot `+0x20`/`+0x21` bytes =
+ * `slot.anim_b`/`anim_c` (the same source as the frame staging at
+ * `fifa96_match_run.c:1458`). `[0x1587A8]`/`[0x1587AC]` have no engine cell
+ * (their native writers `FUN_000832A8`/the set-piece tails are unported), so
+ * both stage `NONE` — the named OL-72/OL-68 residual; the derived `NONE/NONE`
+ * comparison reproduces the native unstaged-pointer reject edge (Task 1).
+ *
+ * Apply, native order (`0x7D332..0x7D34C`):
+ *   - `fifa96_action_duel_swap` (`0x786A0`) moves the record-visible `has_slot`;
+ *   - only when the swap really moved the engine slot — pre-swap `slot.entity ==
+ *     rec` **and** `rec.has_slot != 0` — rebind `slot.entity` (the `0x786A0`
+ *     `[[slot]] = to` store) and run the moved block's clears: the `0x786A0`
+ *     tail via `fifa96_control_slot_merge_reset` (words +4/+6/+8/+A/+C/+14/+16)
+ *     plus the `0x78B00` `+0x24` byte. If the record held no slot the native
+ *     swap is a no-op and `0x78B00([result+0x20])` reads NULL;
+ *   - `[team+0x7CB] = 0` (`0x7D33B`) unconditionally on a switch result.
+ * Returns the native handler return 0/1 (1 stops the row scan). */
+int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id) {
+  struct fifa96_match_team *team;
+  struct fifa96_match_entity *e;
+  struct fifa96_match_entity *to;
+  fifa96_outfield_select_state s;
+  fifa96_outfield_select_out out;
+  fifa96_action_duel_candidate mates[FIFA96_OUTFIELD_SELECT_RECORDS];
+  uint32_t t;
+  uint32_t i;
+  uint8_t slot_owned;
+  if (mr == NULL || id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  t = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  i = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  team = &mr->entities.team[t];
+  e = &team->records[i];
+  memset(&s, 0, sizeof s);
+  memset(mates, 0, sizeof mates);
+  for (uint32_t m = 0; m < FIFA96_OUTFIELD_SELECT_RECORDS; m++) {
+    const struct fifa96_match_entity *mate = &team->records[m];
+    mates[m].pos_x = (int16_t)mate->pos_x;
+    mates[m].pos_z = (int16_t)mate->pos_z;
+    mates[m].has_slot = mate->has_slot;
+    mates[m].skip_98 = mate->skip_98;
+    mates[m].skip_9a = mate->skip_9a;
+    mates[m].is_chosen =
+        team->chosen == (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + m) ? 1u : 0u;
+  }
+  s.rec_id = id;
+  s.team_base = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS);
+  s.pos_x = (int16_t)e->pos_x;                            /* rec +0x59 */
+  s.pos_z = (int16_t)e->pos_z;                            /* rec +0x61 */
+  s.lane_x = e->lane_x;                                   /* word rec+0x6B */
+  s.controlled_id = mr->entities.controlled;              /* [0x157A83] */
+  s.target_id = team->target;                             /* [team+0x7B2] */
+  s.spawn_id = FIFA96_OUTFIELD_SELECT_NONE;               /* [0x1587A8] leg */
+  s.recv_id = FIFA96_OUTFIELD_SELECT_NONE;                /* [0x1587AC] leg */
+  s.spawn_side = 0;                                       /* no spawn record */
+  s.spawn_8d = 0;
+  s.record0_gate = team->search_gate;                     /* [team+0x829] */
+  s.phase = (uint8_t)mr->state.phase;                     /* [0x157A4A]>>24 */
+  s.side = team->side;                                    /* [team+0x826] */
+  s.camera_y = mr->render.camera.pos_y;                   /* dword [0x157750] */
+  s.anchor_x = mr->render.camera.anchor_x;                /* 0x157788 */
+  s.anchor_y = mr->render.camera.anchor_y;                /* 0x15778C */
+  s.anchor_z = mr->render.camera.anchor_z;                /* 0x157790 */
+  s.lead_x = mr->render.camera.vel_x;                     /* word 0x1577C0 */
+  s.lead_z = mr->render.camera.vel_z;                     /* word 0x1577C2 */
+  s.slot_anim_b = mr->slot.entity == id ? (int8_t)mr->slot.anim_b : 0;
+  s.slot_anim_c = mr->slot.entity == id ? (int8_t)mr->slot.anim_c : 0;
+  s.mates = mates;
+  s.mate_count = FIFA96_OUTFIELD_SELECT_RECORDS;
+  if (fifa96_outfield_select_step(&s, &out) != FIFA96_OK) return 0;
+  if (out.switched == 0 || out.new_controlled == FIFA96_OUTFIELD_SELECT_NONE)
+    return out.ret;
+  if (out.new_controlled < 0 ||
+      out.new_controlled >=
+          (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return out.ret;
+  to = &mr->entities
+            .team[(uint32_t)out.new_controlled / FIFA96_MATCH_ENTITY_RECORDS]
+            .records[(uint32_t)out.new_controlled % FIFA96_MATCH_ENTITY_RECORDS];
+  /* The native 0x786A0 reads the rec's `+0x20`; the engine slot must be the one
+   * bound to this record for the block move to be representable. */
+  slot_owned = (uint8_t)((mr->slot.entity == id && e->has_slot != 0) ? 1u : 0u);
+  {
+    fifa96_action_duel_slot from;
+    fifa96_action_duel_slot to_slot;
+    from.has_slot = e->has_slot;
+    to_slot.has_slot = to->has_slot;
+    if (fifa96_action_duel_swap(&from, &to_slot) == FIFA96_OK) {
+      e->has_slot = from.has_slot;
+      to->has_slot = to_slot.has_slot;
+    }
+  }
+  if (slot_owned != 0) {
+    mr->slot.entity = out.new_controlled;                 /* 0x786A0 [[slot]] */
+    (void)fifa96_control_slot_merge_reset(&mr->slot);     /* 0x786A0 tail */
+    mr->slot.byte24 = 0;                                  /* 0x78B00 +0x24 */
+  }
+  team->timer7cb = 0;                                     /* 0x7D33B */
+  return out.ret;
+}
+
 static void match_input_install(struct match_input_ctx *c, uint8_t code, uint8_t invoke) {
   if (fifa96_match_entities_install(c->e, (uint8_t)c->mr->state.phase, code, 0) == 1 &&
       invoke != 0)
@@ -857,12 +976,12 @@ static int match_input_handler(uint32_t handler, void *context) {
       team->timer820 = 0x3C;
       return 1;
     }
-    case 0x7D1D4u:   /* the control-selection switch */
-      /* 0x7D1DF: the controlled actor returns 0 immediately. The switch body
-       * for the other records (which runs the camera/nearest selection and
-       * returns 1 on its non-self paths, FU-75 §6.4) is leg L4.5, so the
-       * stub's 0 is the self-path return only. */
-      return 0;
+    case 0x7D1D4u:   /* the control-selection switch (M2 phase-52 T2 / L4.5) */
+      /* `0x7D1D4..0x7D35E`: the full body through the pool binder (self gate,
+       * camera-keyed lane gate, the anchor triple, the NSEARCH arm and the
+       * `0x786A0` slot move + `0x7CB` clear + `0x78B00` clears). The scan's
+       * first matching released word is 0x20 (PASS release). */
+      return fifa96_match_run_select_step(c->mr, c->id);
     default:
       return 0;
   }
@@ -956,6 +1075,13 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
   c.invoke_code = 0;
   if (fifa96_outfield_input_row(&s, match_input_handler, &c, &out) != FIFA96_OK)
     return -FIFA96_ERR_INVALID;
+  /* 0x7CB03: the direct-arm pre-gate calls `FUN_0007D1D4` and jumps straight to
+   * the 0x7CC82 tail (`0x7CB01..0x7CB08`), replacing the row scan. The gate is
+   * live only when `[0x157AB0] != 0`; that cell has no engine producer and is
+   * staged 0 (OL-72), so `out.direct_arm` is latent today. The consumer is
+   * wired to the same binder the released-row handler uses, so the arm lands
+   * with its producer. */
+  if (out.direct_arm != 0) (void)fifa96_match_run_select_step(mr, id);
   /* The native tail (step 5) runs after the input-row scan (step 3) and so
    * gates on the post-install `byte[+0x91]`; the loader state is the entry
    * snapshot, so when a scan handler installed a code, recompute the

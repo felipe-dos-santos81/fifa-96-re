@@ -1222,6 +1222,32 @@ void fifa96_match_run_init(struct fifa96_match_run *mr);
 int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_key *keys,
                            size_t count);
 
+/* ===== M2 phase-52 T2 / FU-75 L4.5: the 0x7D1D4 control-selection switch =====
+ *
+ * The engine binder of `FUN_0007D1D4` (`0x7D1D4..0x7D35E`; recon R12 §1), the
+ * "select the nearest player" handler. `id` is the absolute pool id of the
+ * acting record. The binder stages the native state from the pool (record
+ * `+0x59/+0x61/+0x6B`, `[0x157A83]` = `entities.controlled`, `[team+0x7B2]` =
+ * `team->target`, `[team+0x829]` = `team->search_gate`, `[0x157A4A]>>24` =
+ * `state.phase`, `team+0x826` = `team->side`, `[0x157750]` dword =
+ * `camera.pos_y`, `0x157788/8C/90` = `camera.anchor_x/y/z`, the `0x1577C0/C2`
+ * words = `camera.vel_x/vel_z`, the slot `+0x20/+0x21` bytes =
+ * `slot.anim_b/anim_c`), calls `fifa96_outfield_select_step`, and applies the
+ * result: the `0x786A0` `fifa96_action_duel_swap` on the two records'
+ * `has_slot`; when the pre-swap `slot.entity == id` and `rec.has_slot != 0`,
+ * the `slot.entity` rebind plus the moved block's `0x786A0` tail
+ * (`fifa96_control_slot_merge_reset`) and the `0x78B00` `+0x24` byte; and
+ * `[team+0x7CB] = 0` (`team->timer7cb`) on any switch result. `[0x1587A8]` /
+ * `[0x1587AC]` have no engine cell (their native set-piece producers are
+ * unported, OL-72/OL-68), so `spawn_id`/`recv_id` stage `NONE`.
+ *
+ * Two callers mirror the native two: the released-row `0x7D1D4` case in the
+ * input seam and the `0x7CB03` direct-arm consumer (latent while `[0x157AB0]`
+ * is staged 0). Returns the native handler return 0/1 (1 stops the row scan);
+ * an out-of-range `id` returns 0. Exposed so the engine fixture can pin the
+ * self and no-slot cases without a second match drive. */
+int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id);
+
 /* M2 phase-10 T2 (FU-148 §12/§13): stage the native front-end options block
  * (13 dwords 0x105274..0x1052A4, edited by FUN_0001C728 / queried by
  * FUN_0001CAEC) and rebuild the run's eight consumed config cells

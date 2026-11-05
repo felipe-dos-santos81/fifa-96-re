@@ -715,6 +715,123 @@ landing named as the L4.1 residual. Fresh
   longer dispatch from the tape's forcing (documented in `test_engine_m2.c`
   v9.1; their non-phase-2 reset entries stay fixture-covered).
 
+## 13. T2 port landing — the control-selection switch (`0x7D1D4`, L4.5) (2026-11-05)
+
+M2 phase-52 closes **FU-75 §9 leg 3 / L4.5**. The derivation base is recon
+R12 (`/tmp/opencode/recon51/R12.md`, fresh `disassemble_bytes
+0x7D1D4..0x7D363`); re-read first-hand this task: `0x7D1D4..0x7D32F`
+(128 instructions), `0x7D330..0x7D35E` (17), `0x786A0..0x786EB` (24) and
+`0x78B00..0x78B14` (6) on program `/FIFA96.EXE`. Task 1 landed the pure
+helper `fifa96_outfield_select_step` (`fifa96_outfield.c/.h`, six
+`test_outfield` fixtures); Task 2 wires the engine binder, the
+`0x7D1D4` handler case and the `out.direct_arm` consumer.
+
+**Body (quoted from the fresh listing).** `0x7D1DF` self (`rec ==
+[0x157A83]` -> `0x7D1E9 XOR EAX,EDX; JMP 0x7D355` -> return 0);
+`0x7D1F0` the camera-keyed lane gate (`CMP dword[0x157750],0x50; JGE`,
+threshold `0xC0`/`0x120`, reject only when `word[rec+0x6B]` is below the
+threshold **and** `rec == [team+0x7B2]`); `0x7D241` the
+`0x157788/8C/90` anchor triple displaced by `sext8(slot+0x20)<<7` /
+`sext8(slot+0x21)<<7` (the `[slot+0x1D]>>24`/`[slot+0x1E]>>24` aliases),
+or by `sext16(word[0x1577C0])<<4` / `sext16(word[0x1577C2])<<4` (the
+`0x7D286`/`0x7D296` dword SAR-16 reads); `0x7D2AE` arm A when
+`[0x1587A8] != 0` and the phase is 3/4/7 (origin `rec+0x59`, skip
+`sext8([[0x1587A8]+0x8D])` on equal sides else -1), otherwise arm B
+(origin the triple, skip -1), both `XOR ECX,ECX` before the `0x8DB6C`
+call (`0x7D2F2`/`0x7D2FE`, `0x7D325`); `0x7D305` reject the staged
+receiver `[0x1587AC]`; `0x7D32E` no result -> 1; `0x7D332` the
+`0x786A0(rec, result)` swap, `0x7D33B` `[team+0x7CB] = 0`, `0x7D348`
+`0x78B00([result+0x20])`; `0x7D350 MOV EAX,1`; shared epilogue
+`0x7D355 ADD ESP,0xC` + six pops, `0x7D35E RET`.
+
+**Errata (quoted; the stored §1.4/§6.4 text is not rewritten).**
+
+1. **The tail addresses.** §1.4 names the span `0x7D1DF..0x7D355`; the
+   fresh listing has `0x7D350 MOV EAX,1` (5 bytes `B8 01 00 00 00`),
+   `0x7D355 ADD ESP,0xC`, `0x7D358..0x7D35D` the six pops and
+   `0x7D35E RET`. So the no-result `JZ 0x7D350` returns 1, while the
+   self path's `JMP 0x7D355` lands on the epilogue and returns 0.
+   R12's header sentence "`0x7D355` (that is the `MOV EAX,1`)" is loose:
+   the instruction is at `0x7D350`; `0x7D355` is the epilogue's first
+   instruction. The function end is `0x7D35E` (Ghidra `body_end` and the
+   `RET` byte agree).
+2. **The arm-A side-matched skip.** The fresh `0x7D2D9`/`0x7D2DF` reads
+   are `CL = byte[spawn_team+0x826]`, `CH = byte[rec_team+0x826]`
+   (`0x7D2D4 MOV ECX,[EBX]` is the spawn record's team block,
+   `0x7D2D6 MOV EDX,[EBP]` the searched team), then `0x7D2E8 CMP CL,CH`.
+   Equal sides take `0x7D2EC MOV EBX,[EBX+0x8A]; 0x7D2F4 SAR EBX,0x18`
+   — the `+0x8A>>24` alias of **byte `+0x8D`** — as the NSEARCH `BX` skip
+   index; unequal sides take `0x7D2F9 MOV EBX,0xFFFFFFFF`. The same byte
+   is used as a skip index by `FUN_000832A8` (`0x832F3..0x8330A`). The
+   stored §1.4 condition ("when the side matches else skip -1") stands;
+   the errata supply the operand bytes and the meaning: the matched-side
+   skip is a **record index**, not an "active" test, and the same byte is
+   the arm-A skip at both sites (R12 §6 leg 1). The port carries it
+   literally as an index.
+3. **The OL-68 slot-block move.** `0x786A0` requires
+   `from[+0x20] != 0` and `to[+0x20] == 0` (`0x786A2/0x786A9/0x786AC`),
+   then stores `to[+0x20] = from[+0x20]`, `[[slot]] = to`, `from[+0x20]
+   = 0` (`0x786B0..0x786B5`) and zeroes the moved block's seven words
+   +4/+6/+8/+A/+14/+16/+C (`0x786BF..0x786E3`). The port's
+   `fifa96_action_duel_swap` moves only the record-visible `has_slot`.
+   The `0x7D1D4` binder now applies the block's field clears on the
+   **actual** move (`fifa96_control_slot_merge_reset`, the `0x786A0`
+   tail) and rebinds `slot.entity` only under the same pre-swap guard
+   `slot.entity == rec && rec.has_slot != 0`: a from-free call is a
+   `0x786A0` no-op, after which `0x7D348`'s `[result+0x20]` read is NULL.
+   The other `0x786A0` call sites keep OL-68.
+4. **The `0x78B00` `+0x24` byte.** Fresh `0x78B00..0x78B14`:
+   `TEST EAX,EAX; JZ 0x78B14; word[EAX+0xA] = 0; word[EAX+0x16] = 0;
+   byte[EAX+0x24] = 0; RET`. The +0xA/+0x16 words are already in the
+   `0x786A0` tail, so the block's only new effect is **byte `+0x24`**.
+   The port adds `fifa96_control_slot.byte24` at offset `0x24` (a
+   `test_control` `_Static_assert`) and clears it in the same binder.
+   The byte has no reader in the ported bodies yet (OL-68 residual).
+5. **The `spawn_id`/`recv_id` leg.** `[0x1587A8]` has one writer,
+   `0x832FF` (`FUN_000832A8`); `[0x1587AC]` has three, `0x8330A`,
+   `0x838D7`, `0x85777` — live native set-piece producers with **no
+   engine cell**. The binder therefore stages `spawn_id = recv_id = NONE`
+   (the `is_1578a8`/`is_1578ac` stance, staged 0, OL-72), so arm A is
+   dead until those producers land; arm B (the anchor search) is live.
+   The helper reproduces the native pointer-compare reject edge for the
+   both-NONE case (Task 1's documented note): the native compares record
+   pointers, and the two unstaged cells are both 0. The `[ESP+0x60]`
+   half of §9 leg 3 is closed outright: the word is the incoming `ECX`
+   (`0x8DB7D`), and both call sites zero ECX, so the NSEARCH fallback arm
+   is unreachable from this handler. R12 §2.3 also voids §9 leg 3's
+   `[0x158730]` premise: the dword cell is not read anywhere in
+   `0x7D1D4..0x7D35E`.
+
+**Engine wiring (M2 phase-52 T2).** `fifa96_match_run_select_step`
+(`fifa96_match_run.c`, declared in `fifa96_match_run.h`) is the binder of
+the native function. It stages record id/team base/`+0x59`/`+0x61`/`+0x6B`,
+`[0x157A83]` = `entities.controlled`, `[team+0x7B2]` = `team->target`,
+`[team+0x829]` = `team->search_gate`, `[0x157A4A]>>24` = `state.phase`,
+`team+0x826` = `team->side`, `[0x157750]` dword = `camera.pos_y`, the
+`0x157788/8C/90` anchor, the `0x1577C0/C2` words = `camera.vel_x/vel_z`
+and the slot `+0x20/+0x21` bytes = `slot.anim_b/anim_c`, then applies the
+helper's result (swap, guarded rebind + clears, `timer7cb = 0`). Both
+native callers are wired: the released-row `case 0x7D1D4u` now returns
+the binder's 0/1, and the `0x7CB03` direct-arm consumer calls the binder
+when `out.direct_arm` fires. The direct arm is **latent** today —
+`[0x157AB0]` has no engine producer and is staged 0 (OL-72) — and a
+`test_outfield` pin shows the same type-3 / released-`0x20` edge with the
+flag clear takes the ordinary `released_0` scan into `0x7D1D4`. The
+`FIFA96_OUTFIELD_SELECT_RECORDS` macro is now used by the engine binder's
+11-entry mates array (a `_Static_assert` ties it to the pool's
+`FIFA96_MATCH_ENTITY_RECORDS`). Tests:
+`test_engine_match_input` `test_control_switch_moves_slot` (real PASS
+press/release frame: slot 3 -> nearest mate 4, rebind, `timer7cb` clear,
+`0x78B00` cells), `test_control_switch_self_returns_zero` (handler return
+0, nothing moves) and `test_control_switch_non_slot_does_not_clear` (the
+direct binder on a slot-less record: the swap is a no-op, no rebind and
+no block clears, while `0x7D33B` still clears `+0x7CB`); `test_control`
+pins the new byte offset.
+
+M1 `09b726b7…` and M2 v27 `54f44987…` stay byte-identical (`cmp`); the
+census is untouched (`78/78`, `58/80`, `64/80`, 6 blocked, action `38/45`,
+phase `26/35`); `make check` 112/112.
+
 ## Provenance
 
 Ghidra MCP on `/fifa96_le.bin`: `get_current_program_info`;

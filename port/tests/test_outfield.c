@@ -470,6 +470,22 @@ static void test_input_row_scan(void) {
   s.released = 0x40;
   assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
   assert(out.direct_arm == 0);
+
+  /* M2 phase-52 T2: the direct-arm consumer is latent while `[0x157AB0]` is
+   * staged 0 (the engine has no producer for the cell, OL-72). With the flag
+   * clear the same type-3/released-0x20 edge takes the ordinary row scan and
+   * reaches the 0x7D1D4 released row (`released_0[1]`), so the switch is
+   * still reachable without the direct arm. */
+  s = input_state();
+  s.pressed = 0;
+  s.released = 0x20;
+  s.flag_157ab0 = 0;
+  s.type = 3;
+  log.count = 0;
+  log.accept = 0;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.direct_arm == 0 && out.scan_ran == 1 && out.scan_code == 0);
+  assert(log.count == 2 && log.handlers[0] == 0x7D1D4 && log.handlers[1] == 0x7CEB0);
 }
 
 static void test_input_row_tail(void) {
