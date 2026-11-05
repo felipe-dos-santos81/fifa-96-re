@@ -182,9 +182,24 @@ static void test_team_table(void) {
   assert(fifa96_menu_team_code(99) == NULL);
 }
 
-static void press(struct fifa96_frontend_run *fr, int32_t code) {
-  fifa96_platform_key k = {.raw_code = code, .state = 1};
+static void key_event(struct fifa96_frontend_run *fr, int32_t code, int state) {
+  fifa96_platform_key k = {.raw_code = code, .state = state};
   assert(fifa96_frontend_run_input(fr, &k, 1) == 0);
+}
+
+static void idle(struct fifa96_frontend_run *fr) {
+  assert(fifa96_frontend_run_input(fr, NULL, 0) == 0);
+}
+
+/* A discrete tap: press and release in one poll, then the run step consumes
+ * the queue. The F1 edge latch clears key_down on the release, so the same
+ * key can be pressed again on the next poll. */
+static void press(struct fifa96_frontend_run *fr, int32_t code) {
+  fifa96_platform_key k[2] = {
+    {.raw_code = code, .state = 1},
+    {.raw_code = code, .state = 0},
+  };
+  assert(fifa96_frontend_run_input(fr, k, 2) == 0);
 }
 
 static void step(struct fifa96_frontend_run *fr, struct fifa96_surface *s) {
@@ -214,6 +229,7 @@ static void test_native_fixture_reaches_handoff(void) {
   assert(fifa96_engine_boot(e) == 0);
   assert(fifa96_lang_init_memory(&e->frontend.lang, lang, lang_len, font, font_len) == 0);
   fifa96_frontend_run_enable_native(&e->frontend, 1);
+  idle(&e->frontend);   /* F1: one neutral poll arms the native edge latch */
 
   struct fifa96_surface *s = e->surface;
   step(&e->frontend, s);
@@ -257,11 +273,99 @@ static void test_native_fixture_reaches_handoff(void) {
   fifa96_platform_destroy(plat);
 }
 
+/* F1: the SDL3 backend re-presents every physically held key with state == 1
+ * on every 10 ms poll. Two consecutive held CONFIRM polls on Game Select must
+ * enter Team Select once, never activate START_MATCH; only a release followed
+ * by a fresh press starts the match. */
+static void test_native_held_confirm_latch(void) {
+  struct fifa96_surface *s = fifa96_surface_create(320, 240);
+  assert(s != NULL);
+  struct fifa96_frontend_run fr;
+  assert(fifa96_frontend_run_init(&fr, s) == 0);
+  fifa96_frontend_run_enable_native(&fr, 1);   /* armed after one neutral poll */
+  idle(&fr);
+  assert(fr.input_armed == 1);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_TEAM_SELECT);
+  assert(fr.match_start == 0);
+
+  /* The same held key on the next poll is not a fresh press. */
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_TEAM_SELECT);
+  assert(fr.match_start == 0);
+
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 0);
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
+  step(&fr, s);
+  assert(fr.match_start == 1);
+
+  fifa96_surface_destroy(s);
+}
+
+/* F1: reset happens while the result key is still down. The held CONFIRM/ESC
+ * must be ignored until a neutral (released) poll and a fresh press; a held
+ * ESC must not set quit_requested. */
+static void test_native_held_input_after_reset(void) {
+  struct fifa96_surface *s = fifa96_surface_create(320, 240);
+  assert(s != NULL);
+  struct fifa96_frontend_run fr;
+  assert(fifa96_frontend_run_init(&fr, s) == 0);
+  fifa96_frontend_run_enable_native(&fr, 1);
+  idle(&fr);
+  step(&fr, s);
+
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
+  assert(fifa96_frontend_run_reset(&fr, s) == 0);
+  assert(fr.input_armed == 0);
+  assert(fr.key_down[FIFA96_ENGINE_KEY_CONFIRM] == 0);
+
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+  assert(fr.match_start == 0);
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+  assert(fr.match_start == 0);
+
+  /* Release arms the latch; the next press is fresh. */
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 0);
+  assert(fr.input_armed == 1);
+  key_event(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_TEAM_SELECT);
+
+  /* Held ESC after reset: no quit_requested, no process exit. */
+  assert(fifa96_frontend_run_reset(&fr, s) == 0);
+  key_event(&fr, FIFA96_ENGINE_KEY_QUIT, 1);
+  step(&fr, s);
+  assert(fr.quit_requested == 0);
+  key_event(&fr, FIFA96_ENGINE_KEY_QUIT, 1);
+  step(&fr, s);
+  assert(fr.quit_requested == 0);
+
+  /* Release + fresh ESC is still a deliberate quit. */
+  key_event(&fr, FIFA96_ENGINE_KEY_QUIT, 0);
+  key_event(&fr, FIFA96_ENGINE_KEY_QUIT, 1);
+  int quit = 0;
+  assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  assert(quit == 1);
+
+  fifa96_surface_destroy(s);
+}
+
 int main(void) {
   test_item_table();
   test_game_select_navigation();
   test_team_select();
   test_team_table();
+  test_native_held_confirm_latch();
+  test_native_held_input_after_reset();
   test_native_fixture_reaches_handoff();
   puts("test_engine_menu_model OK");
   return 0;

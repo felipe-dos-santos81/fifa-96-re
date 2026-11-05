@@ -193,6 +193,8 @@ static void test_run_reset_after_match(void) {
   fr.queue[0] = 8;
   fr.queue[1] = -10;
   fr.frames = 42;
+  fr.key_down[FIFA96_ENGINE_KEY_CONFIRM] = 1;
+  fr.input_armed = 1;
   const struct fifa96_lang lang_before = fr.lang;
 
   assert(fifa96_frontend_run_reset(&fr, s) == 0);
@@ -203,6 +205,8 @@ static void test_run_reset_after_match(void) {
   assert(fr.team_name[0][0] == '\0' && fr.team_code[0][0] == '\0');
   assert(fr.queue_len == 0 && fr.frames == 0);
   assert(fr.native_menu == 1);
+  assert(fr.input_armed == 0);
+  for (size_t i = 0; i < sizeof fr.key_down; i++) assert(fr.key_down[i] == 0);
   assert(fr.phase == FIFA96_FRONTEND_PHASE_FRONTEND);
   assert(fr.entry_state == 17);
   assert(fr.lang.lang_owner == lang_before.lang_owner &&

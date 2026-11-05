@@ -3898,3 +3898,21 @@ close-out below).
   the HUD and the panel shows `FULL TIME / score / ENTER: MENU` instead. M1
   and M2 v29 remain byte-identical; README now documents the menu and match
   controls.
+
+- **F1 native front-end held-key edge latch (playable SDL review fix,
+  2026-11-05).** The SDL back end re-presents physically held keys every poll,
+  and the native Game Select/Team Select path queued every `state == 1`: a held
+  Return skipped Team Select into START_MATCH, held arrows repeated at 100 Hz,
+  and after the post-match reset a held Enter re-activated Friendly while a
+  held ESC quit the process. `fifa96_frontend_run` now carries `key_down[16]` +
+  `input_armed` and edge-latches native input only (the legacy FU-135 path and
+  the M1/M2 tapes stay byte-identical): a held key never requeues, a held ESC
+  is not a quit (a fresh press still is), and `run_reset`, `enable_native` and
+  both INTRO -> FRONTEND handoffs disarm until a neutral poll and a fresh
+  press. New held-key regression cases in `test_engine_menu_model` plus
+  reset-latch asserts in `test_engine_frontend`. `make check` 115/115; M1
+  `09b726b7…` and M2 v29 `7c3874f7…` exact. Windowed `DISPLAY=:1` real-input
+  check: a held Return skipped the intro without advancing Game Select (still
+  there after 1.8 s), a 300 ms held Return entered Team Select once and did not
+  start the match, then the live match started. Screenshots:
+  `/tmp/opencode/play/fix-menu-held.png`, `fix-teams-held.png`.

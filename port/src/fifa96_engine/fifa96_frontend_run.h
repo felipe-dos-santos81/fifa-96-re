@@ -41,6 +41,10 @@ struct fifa96_frontend_run {
   char     team_code[2][4];         /* derived 3-letter HUD code (P2-L4) */
   uint8_t  formation[2];            /* native [0x14C1E4]/[0x14C1E5] ids */
   int      team_selected;           /* bridge stages teams/formation */
+  uint8_t  key_down[16];            /* F1: raw engine key codes currently held
+                                     * (native edge latch; 1..10 in use) */
+  int      input_armed;             /* F1: 0 = drop held input until a neutral
+                                     * poll; 1 = edge-latch fresh presses */
 };
 
 int fifa96_frontend_run_init(struct fifa96_frontend_run *fr, struct fifa96_surface *s);
@@ -59,5 +63,13 @@ int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surf
 
 /* P2 test/engine seam: switch between the legacy FU-135 render (0) and the
  * native Game Select model (1). The engine enables it only for the
- * asset-backed interactive boot; tests may call it directly. */
+ * asset-backed interactive boot; tests may call it directly. Enabling the
+ * native path disarms the F1 input latch, so a key already held when control
+ * is handed over is ignored until it is released. */
 void fifa96_frontend_run_enable_native(struct fifa96_frontend_run *fr, int enable);
+
+/* F1: disarm the native input edge latch and forget held keys. The next
+ * native poll with no key down re-arms it; only a fresh press after that is
+ * queued. Used on the INTRO -> FRONTEND handoff so the key that skipped the
+ * intro cannot activate the menu (and after a post-match reset). */
+void fifa96_frontend_run_disarm_input(struct fifa96_frontend_run *fr);

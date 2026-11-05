@@ -232,6 +232,11 @@ int fifa96_engine_step(struct fifa96_engine *e) {
       }
       if (!e->intro_active) e->mode = FIFA96_ENGINE_MODE_FRONTEND;
     }
+    /* F1: either the skip above or the natural end lands here. Disarm the
+     * native latch so the held Return (or any key held across the handoff)
+     * cannot be queued as a fresh press by the front-end poll. */
+    if (e->mode == FIFA96_ENGINE_MODE_FRONTEND)
+      fifa96_frontend_run_disarm_input(&e->frontend);
   } else if (e->mode == FIFA96_ENGINE_MODE_FRONTEND) {
     fifa96_platform_key keys[32];
     int n = 0;

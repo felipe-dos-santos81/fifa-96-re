@@ -157,6 +157,10 @@ int fifa96_frontend_run_init(struct fifa96_frontend_run *fr, struct fifa96_surfa
   fifa96_menu_art_init(NULL);
   fr->surface = s;
   fr->phase = fr->frontend.phase;
+  /* F1: a fresh run is armed for normal first use. The engine's native boot
+   * disarms again when it enables the native menu; the legacy path ignores
+   * the latch entirely. */
+  fr->input_armed = 1;
   uint32_t state = 0;
   if (fifa96_frontend_entry_state(&fr->frontend, &state) == 1) fr->entry_state = state;
   return 0;
@@ -170,6 +174,10 @@ int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surf
   fr->phase = fr->frontend.phase;
   fr->queue_len = 0;
   memset(fr->queue, 0, sizeof fr->queue);
+  /* F1: a match ends with the result key possibly still held; ignore it (and
+   * any other held key) until a neutral poll and a fresh press. */
+  fr->input_armed = 0;
+  memset(fr->key_down, 0, sizeof fr->key_down);
   fr->frames = 0;
   fr->quit_requested = 0;
   fr->match_start = 0;
@@ -189,11 +197,67 @@ int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surf
 void fifa96_frontend_run_enable_native(struct fifa96_frontend_run *fr, int enable) {
   if (!fr) return;
   fr->native_menu = enable != 0;
+  if (fr->native_menu) {
+    fr->input_armed = 0;
+    memset(fr->key_down, 0, sizeof fr->key_down);
+  }
+}
+
+void fifa96_frontend_run_disarm_input(struct fifa96_frontend_run *fr) {
+  if (!fr) return;
+  fr->input_armed = 0;
+  memset(fr->key_down, 0, sizeof fr->key_down);
+}
+
+/* F1 native input edge latch. The SDL3 backend re-presents every physically
+ * held key with state == 1 on every 10 ms poll, so a raw press event is not an
+ * edge by itself. While disarmed, held keys are only recorded and a poll with
+ * nothing down re-arms the latch; once armed, a key queues only on its 0 -> 1
+ * transition and a held key never repeats. The legacy path below keeps the
+ * original press-event behavior so the M1/M2 tapes stay byte-identical. */
+static int frontend_run_native_input(struct fifa96_frontend_run *fr,
+                                     const fifa96_platform_key *keys, size_t count) {
+  if (!fr->input_armed) {
+    for (size_t i = 0; i < count; i++) {
+      int32_t raw = keys[i].raw_code;
+      if (raw <= 0 || (size_t)raw >= sizeof fr->key_down) continue;
+      if (keys[i].state == 1) fr->key_down[raw] = 1;
+      else if (keys[i].state == 0) fr->key_down[raw] = 0;
+    }
+    int any_down = 0;
+    for (size_t k = 0; k < sizeof fr->key_down; k++) {
+      if (fr->key_down[k] != 0) {
+        any_down = 1;
+        break;
+      }
+    }
+    if (!any_down) fr->input_armed = 1;
+    return 0;
+  }
+  for (size_t i = 0; i < count; i++) {
+    int32_t raw = keys[i].raw_code;
+    if (raw <= 0 || (size_t)raw >= sizeof fr->key_down) continue;
+    if (keys[i].state == 0) {
+      fr->key_down[raw] = 0;
+      continue;
+    }
+    if (keys[i].state != 1 || fr->key_down[raw] != 0) continue;
+    fr->key_down[raw] = 1;
+    if (raw == FIFA96_ENGINE_KEY_QUIT) {
+      fr->quit_requested = 1;
+      continue;
+    }
+    int code = 0;
+    if (!frontend_run_map_key(raw, &code)) continue;
+    if (fr->queue_len < FRONTEND_RUN_QUEUE_CAP) fr->queue[fr->queue_len++] = code;
+  }
+  return 0;
 }
 
 int fifa96_frontend_run_input(struct fifa96_frontend_run *fr, const fifa96_platform_key *keys,
                               size_t count) {
   if (!fr || (keys == NULL && count != 0)) return -1;
+  if (fr->native_menu) return frontend_run_native_input(fr, keys, count);
   for (size_t i = 0; i < count; i++) {
     if (keys[i].state != 1) continue;   /* press events only for now */
     if (keys[i].raw_code == FIFA96_ENGINE_KEY_QUIT) {

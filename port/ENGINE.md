@@ -9288,3 +9288,48 @@ shows `FULL TIME`, the staged `HOME score - score AWAY`, and
 `ENTER: MENU`. This closes P4-L6 as a display fix; the native screen-3
 timer/armer remains P4-L2. README gains a **Play** section with the exact
 menu and match controls (arrows, Z/C/V, Esc pause, the 120-second halves).
+
+## Phase 57 — F1: native front-end held-key edge latch (FU-343, 2026-11-05)
+
+The Phase 8 T3 hold policy above re-presents every physically held key with
+`state == 1` on every 10 ms poll. The native Game Select/Team Select input path
+queued every `state == 1`, so a normal held Return advanced Game Select ->
+Team Select and the next poll activated START_MATCH; held arrows repeated at
+100 Hz, and after the post-match reset a held Enter re-activated Friendly while
+a held ESC set `quit_requested` and quit the process. The final review of the
+playable-SDL wave caught this as Critical 1.
+
+Fix (native path only; the legacy FU-135 path and the M1/M2 tapes are
+byte-identical): `struct fifa96_frontend_run` gains `key_down[16]` (raw engine
+codes) and `input_armed`. `fifa96_frontend_run_input` edge-latches when
+`native_menu` is set — while disarmed, held keys are only recorded and a poll
+with nothing down re-arms; once armed, a key queues only on its 0 -> 1
+transition and a held key never requeues. QUIT follows the same latch, so a
+held ESC is not a quit (a fresh press still is). `run_init` arms the latch;
+`run_reset` and `fifa96_frontend_run_enable_native(…, 1)` disarm and clear it;
+`fifa96_engine_step` calls the new `fifa96_frontend_run_disarm_input` on both
+INTRO -> FRONTEND handoffs (the input skip and the natural end), so the Return
+that skipped the intro cannot activate the menu. The match-side `match_esc_held`
+edge handling stays as landed.
+
+Tests: `test_engine_menu_model` adds `test_native_held_confirm_latch` (two held
+CONFIRM polls enter Team Select once and do not start a match; release + a
+fresh press starts) and `test_native_held_input_after_reset` (a held CONFIRM/
+ESC is ignored after reset until a neutral poll and a fresh press; a held ESC
+does not set `quit_requested`). The existing handoff fixture feeds one neutral
+poll and uses press/release taps; `test_engine_frontend` pins the reset latch
+state.
+
+**Verification (2026-11-05).** `make check` 115/115. M1
+`./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt` exact
+(`09b726b7…`); M2 v29 exact (`7c3874f7…`), legacy path unchanged. Windowed
+`DISPLAY=:1` with the retail ISO and real XTest key events: the intro skip is a
+held Return (300 ms down, up); Game Select is still showing 1.8 s later (no
+auto-advance). A 300 ms held Return then enters Team Select once, and it is
+still Team Select 1.2 s later (no START_MATCH); teams select and the live match
+starts (ITA 0-0 ENG, clock running). Screenshots:
+`/tmp/opencode/play/fix-menu-held.png`, `fix-teams-held.png` (plus
+`fix-menu-held-late.png`, `fix-teams-held-late.png`, `fix-match-held.png`).
+This closes the "front-end held-key repeat cadence" leg under the hold policy
+for the native interactive menu; the legacy FU-135 panel path keeps the
+original every-state-1 consumption by design (headless/M1-pinned).
