@@ -405,8 +405,12 @@ pushes (`0x88F81..0x88F99`) and the gate clear `0x88F9A` **precede**
 `CALL 0x700F4` at `0x88FA0`. The corrected order is: gate clear `0x88F9A` →
 camera reset `0x88FA0` (`0x700F4`) → `0x73E28` `0x88FA5` → phase write
 `0x88FB8` (`0x740A0`, landed phase 41) → `0x73E08` `0x88FBD` → presentation
-bind `0x88FD1` (`0x4C324`) → timer 0 / stage++. The `0x10F328/2C/30` triple is
-a constant zero (fresh `read_memory`, 24 B all `00`; 20 xrefs, no writer).
+bind `0x88FD1` (`0x4C324`) → timer 0 / stage++. The pushed
+`0x10F328/2C/30` triple is a constant zero: the fresh `read_memory 0x10F328`
+(24 B, this session) is `00 ×13, 01 01 01, 00, FF FF FF, 01 01, 00, FF`
+(hex `0000000000000000000000000001010100ffffff010100ff`), so the 12 B triple
+at `0x10F328..0x10F333` is all `00` and the bytes from `0x10F334` are not;
+the 20 xrefs include no writer.
 
 **Erratum 2 — the `0x700F4` pan constants.** The engine's
 `fifa96_camera_init` (the `0x700F4` port) zeroed `pan_decay`/`pan_rate_hi`/
@@ -417,7 +421,9 @@ a constant zero (fresh `read_memory`, 24 B all `00`; 20 xrefs, no writer).
 stages 10/16/24; the camera unit fixture that relied on the zero decay was
 re-derived (`test_update_event_interpolates_negative_remaining`: the first pan
 step decays `0x20 → 0xA`, so the re-arm is the height arm `F2 = 13`,
-`timer_limit = 26`).
+`timer_limit = 26`). The hardcoded image-default row is also the **FU326-L4**
+residual tracked for `fifa96_camera_event_set`; L4 now covers both call sites
+(the init path has no `[0x14C2FE]`/`[0x14C2FA]` table indexing either).
 
 **Landed — `0x88FA0`.** `fifa96_match_action_phase_1F` stage 0 now calls
 `fifa96_camera_init(&mr->render.camera, 0, 0, 0)` after

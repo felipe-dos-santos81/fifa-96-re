@@ -8834,7 +8834,10 @@ corrected stage-0 order and the two `0x700F4` omissions.
 now stages the native pan constants `pan_decay = 10`, `pan_rate_hi = 16`,
 `pan_rate_lo = 24` (`0x7011C/0x7013D/0x70146`, the image-default `0x1104AB`
 row) instead of zeros; stage 0 calls it after the gate clear and before the
-phase write (`0x88FA0`). New `mr->present_side` (native dword `[0x1074A4]`)
+phase write (`0x88FA0`). The hardcoded image-default row is the **FU326-L4**
+residual (the `[0x14C2FE]`/`[0x14C2FA]` table indexing is still unmodelled on
+both the init and the `fifa96_camera_event_set` paths). New `mr->present_side`
+(native dword `[0x1074A4]`)
 and `fifa96_match_run_present_bind` port `0x4C324`: mode `[0x157AC2] >= 4`
 with a live `[0x1587D4]` record -> the record team's `+0x826` side through
 `fifa96_action_duel_bind` + `FUN_00036200(0)`; else `[0x1587E3]>>24`

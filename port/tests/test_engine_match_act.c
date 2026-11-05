@@ -131,13 +131,15 @@ static void test_sit0c_install_invokes_stage0(void) {
   assert(mr.global_5882a == 1u);        /* no body ran */
 }
 
-/* Phase-53 T1 (FU-181 L5 / FU-342): the act-9 stage-0 sinks in one invoke, in
- * the native order 0x88F9A gate clear -> 0x88FA0 camera reset (`0x700F4`,
- * `[0x10F328/2C/30]` = the constant zero) -> 0x88FB8 phase-0x15 write ->
- * 0x88FD1 presentation bind (`0x4C324`, all args unused). A dirty camera proves
- * the reset; `present_side` proves the bind's first arm. Mutation-RED: dropping
- * the camera call leaves the dirty triple/tracked/pan cells; dropping the bind
- * leaves `present_side` staged. */
+/* Phase-53 T1 (FU-181 L5 / FU-342): the act-9 stage-0 sinks in one invoke.
+ * The fixture proves the sinks ran and their final cells — the gate clear, the
+ * camera reset (`0x88FA0`/`0x700F4`, the constant-zero pushed `0x10F328/2C/30`
+ * triple), the phase-0x15 write (`0x88FB8`) and the presentation bind
+ * (`0x88FD1`/`0x4C324`, all args unused) — not the inter-sink order (that is
+ * the source statement order). A dirty camera proves the reset; `present_side`
+ * proves the bind's first arm. Mutation-RED: dropping the camera call leaves
+ * the dirty triple/tracked/pan/prev cells; dropping the bind leaves
+ * `present_side` staged. */
 static void test_act9_stage0_camera_and_present_bind(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -147,6 +149,9 @@ static void test_act9_stage0_camera_and_present_bind(void) {
   mr.render.camera.pos_x = 0x1234;
   mr.render.camera.pos_y = 0x2345;
   mr.render.camera.pos_z = 0x3456;
+  mr.render.camera.prev_x = 0x6789;
+  mr.render.camera.prev_y = 0x789A;
+  mr.render.camera.prev_z = 0x89AB;
   mr.render.camera.target_x = 0x4567;
   mr.render.camera.anchor_z = 0x5678;
   mr.render.camera.tracked = 5;
@@ -163,6 +168,8 @@ static void test_act9_stage0_camera_and_present_bind(void) {
   assert(mr.global_5882a == 0u);                    /* 0x88F9A */
   assert(mr.render.camera.pos_x == 0 && mr.render.camera.pos_y == 0 &&
          mr.render.camera.pos_z == 0);              /* 0x88FA0 */
+  assert(mr.render.camera.prev_x == 0 && mr.render.camera.prev_y == 0 &&
+         mr.render.camera.prev_z == 0);             /* 0x700F4 prev clear */
   assert(mr.render.camera.target_x == 0 && mr.render.camera.target_y == 0 &&
          mr.render.camera.target_z == 0);
   assert(mr.render.camera.anchor_x == 0 && mr.render.camera.anchor_y == 0 &&
