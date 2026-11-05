@@ -7400,16 +7400,19 @@ static void test_restart_chain_fixture(void) {
   assert(mr.act.id == 9);                /* the act slot installed (0x8890A) */
   assert(mr.act.stage == 3u);            /* stage 0 ran on the install invoke */
   /* The sit-0xC arm is invoke-now (`0x8AF0E MOV EBX,1` -> `0x88937 CALL
-   * dword[0x158808]`): the stage-0 head adds once on the install and the
-   * clock-tail tick (`0x8B672`) adds again in the same frame — the native
-   * same-frame double-run. */
-  assert(mr.act.timer == 4);             /* two head adds (0x88F51) */
+   * dword[0x158808]`): the stage-0 head adds once on the install, the
+   * stage-0 body zeroes the timer (`0x88FE0`), and the clock-tail tick
+   * (`0x8B672`) adds once more in the same frame — the native same-frame
+   * double-run with the native zero. */
+  assert(mr.act.timer == 2);             /* zero + one stage-3 head add */
 
-  /* the stage-3 timer: 28 more granted frames reach 0x3C (4 + 28*2) */
+  /* the stage-3 timer: 27 more granted frames reach 56; the 29th reaches 60 */
   for (int i = 0; i < 27; i++) one_granted_frame(&mr);
-  assert(mr.act.timer == 58);
+  assert(mr.act.timer == 56);
   assert(mr.act.id == 9 && mr.global_5882a == 0u);
-  one_granted_frame(&mr);                /* the 28th tick: 4 + 56 = 0x3C */
+  one_granted_frame(&mr);                /* 58, still short */
+  assert(mr.act.id == 9 && mr.global_5882a == 0u);
+  one_granted_frame(&mr);                /* the 29th tick: 60 = 0x3C */
   assert(mr.global_5882a == 1u);
   assert(mr.act.id == 0);                /* the act ends (0x890D3 clears the slot) */
   assert(mr.act.timer == 0);             /* the completion zeroes it */

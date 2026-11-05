@@ -3646,3 +3646,15 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   x mirror, velocity negation and the zone-set no-op. M1/M2 stay exact (the
   tape has `input_bit0 == 0`); census unchanged (`78/78`, `57/80`, `63/80`,
   `6` blocked); `make check` 112/112.
+
+- **phase-45 act-9 stage-0 timer zero (2026-11-04).** The act-9 stage-0 body
+  now zeroes `word[0x158818]` (`0x88FE0`) before the stage-3 wait. The restart
+  window moves: the `21/1-0` state tag extends through frame 469 and phase-4
+  starts four frames later. M2 is re-pinned **v26**
+  `6f402095beeb7d50923964cd918874059f03b874e6a134c9c331881209cecf30`
+  (295087 bytes, 6522 lines; first diff line 466, 5985 lines differ: 4
+  state-only, 6 hash+state, 5975 hash-only; state set/counts unchanged). The
+  act restart fixture pins timer 2 after the install frame and 56 after 27
+  more. M1 `09b726b7…` exact; census unchanged (`78/78`, `57/80`, `63/80`,
+  `6` blocked); `make check` 112/112. The camera/`0x73E28`/`0x4C324` stage-0
+  sinks remain FU181-L5 legs.

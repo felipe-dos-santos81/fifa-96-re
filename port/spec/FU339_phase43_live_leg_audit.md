@@ -216,3 +216,11 @@ The unarmed `0x7131C` mirror described in §4 is now wired:
 and armer-gate fail paths, and the `0x720..0x730` gap mirrors without arming.
 The angle arm remains FU-71 leg 9.6. The row-05 claim tail is still deferred
 for the probe re-characterization described in §2.1.
+
+## Phase-45 erratum — the stage-0 timer zero landed (2026-11-04)
+
+The native `0x88FE0` timer zero from §3 is now handler-owned. M2 is re-pinned
+to v26 `6f402095…` (first diff line 466; the `21/1-0` window extends four
+frames; 5985 lines differ, state set/counts unchanged). The camera reset,
+`0x73E28`, placement commit and `0x4C324` remain legs because adding them
+alone moves the live/M2 baselines.

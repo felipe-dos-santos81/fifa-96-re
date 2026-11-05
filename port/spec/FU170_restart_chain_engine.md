@@ -518,3 +518,12 @@ Adding the native timer zero moved the M2 restart gate assertion
 adding zero camera init plus placement moved the M2 scenario record placement
 and the live held-key position. Those pieces need a dedicated M2 re-pin with
 the full stage context; this phase leaves them as FU181-L5/FU170-L2 legs.
+
+## Phase-45 erratum — stage-0 timer zero landed (2026-11-04)
+
+The `0x88FE0` timer zero is now handler-owned. M2 is re-pinned to v26
+`6f402095…`: the `21/1-0` window extends through frame 469 and phase-4
+starts four frames later (first diff line 466, 5985 lines differ, state
+set/counts unchanged). The camera reset `0x700F4`, `0x73E28`, the `0x73E08`
+placement and `0x4C324` remain FU181-L5/FU170-L2 legs because adding them
+alone also moves the live/M2 baselines.

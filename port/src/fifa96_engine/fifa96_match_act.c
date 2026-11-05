@@ -72,14 +72,15 @@ int fifa96_match_action_phase_1F(struct fifa96_match_run *mr) {
   a->timer = (int16_t)(a->timer + (int16_t)mr->state.frame_delta);
   if (a->stage == 0u) {
     /* Stage 0 (0x88F81): clear the [0x15882A] gate (0x88F9A), write phase
-     * 0x15 through the shared FUN_000740A0 port, then advance to the stage-3
-     * wait. The native stage 0 also resets the camera and calls
-     * FUN_00073E28/FUN_00073E08; those presentation/placement sinks stay
-     * FU181-L5. Stages 1/2 (0x88FED/0x89064) are compressed to pass
+     * 0x15 through the shared FUN_000740A0 port, zero the timer (0x88FE0),
+     * then advance to the stage-3 wait. The native stage 0 also resets the
+     * camera and calls FUN_00073E28/FUN_00073E08; those presentation/placement
+     * sinks stay FU181-L5. Stages 1/2 (0x88FED/0x89064) are compressed to pass
      * (FU170-L1). */
     mr->global_5882a = 0u;                           /* 0x88F9A */
     if (fifa96_match_run_write_phase(mr, 0x15u) != 0)
       return -FIFA96_ERR_INVALID;
+    a->timer = 0;                                    /* 0x88FE0 */
     a->stage = 3u;
     return FIFA96_OK;
   }

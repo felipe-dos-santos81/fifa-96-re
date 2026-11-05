@@ -8468,3 +8468,24 @@ negation and the zone-set no-op. The M2 tape keeps `input_bit0 == 0`, so the
 golden is byte-identical; the live frame suite passes. Census unchanged:
 **78/78 bodies, 57/80 natural, 63/80 install-live, 6 blocked, action 38/45,
 phase 25/35**.
+
+## Phase 45 — act-9 stage-0 timer zero (2026-11-04)
+
+The phase-0x1F/act-9 stage-0 body now zeroes `word[0x158818]` at `0x88FE0`
+before the stage-3 wait, matching the native `0x88F81..0x88FE7` order. This
+is the first native stage-0 write the handler was missing; the camera reset
+`0x700F4`, `0x73E28`, `0x73E08` placement and `0x4C324` presentation remain
+FU181-L5 legs (adding them alone also moves live/M2 behavior).
+
+The change moves the restart window: the act-9 state tag `21/1-0` now extends
+through frame 469 instead of 465, and phase-4 (`4/1-0`) starts four frames
+later. M2 is re-pinned **v26**:
+`6f402095beeb7d50923964cd918874059f03b874e6a134c9c331881209cecf30`
+(295087 bytes, 6522 lines, 6517 `state=` lines). First differing line 466;
+5985 lines differ (4 state-only, 6 hash+state, 5975 hash-only); the state-tag
+set/counts are unchanged. The act restart fixture now pins timer 2 after the
+install frame (stage-0 zero + one stage-3 head add) and 56 after 27 more
+frames. M1 `09b726b7…` stays exact.
+
+Census unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live, 6
+blocked, action 38/45, phase 25/35**; `make check` **112/112**.

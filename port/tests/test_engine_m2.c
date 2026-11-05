@@ -30,6 +30,15 @@
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m2 > port/tests/golden/engine/m2-frames.txt
  *
+ * v26 re-pin (2026-11-04): the act-9 stage-0 timer zero (`0x88FE0`) is now
+ * live. The phase-0x15 window keeps its hashes through frame 541; the state
+ * tag `21/1-0` extends from frame 466 through 469 (the old `4/1-0` entry is
+ * four frames later), and the transcript grows by one byte (295087). The
+ * first differing line is 466; 5985 of 6522 lines differ (4 state-only, 6
+ * hash+state, 5975 hash-only); the state-tag set/counts are unchanged. New
+ * sha `6f402095beeb7d50923964cd918874059f03b874e6a134c9c331881209cecf30`
+ * (old `ea18ee1d…`). M1 `09b726b7…` stays exact.
+ *
  * v25 re-pin (2026-11-04): the row-0x24 stage-0 threshold wait
  * (`0x865CB..0x8660B`, FU188-L3) is now live. It moves the first bind from
  * record 12 to record 21, so the FU333 natural-pan witness is re-derived on
@@ -7326,15 +7335,15 @@ int main(void) {
    * M2_POST_RESTART_FRAMES. */
   assert(res.gate_step > res.phase15_step);
   assert(res.gate_step < res.phase4_step);
-  assert(res.gate_step - res.phase15_step == 93);
+  assert(res.gate_step - res.phase15_step == 96);
   assert(res.phase15_armed == 1u);
   assert(res.phase15_gate == 0u);
   assert(res.gate_marker == 1u);
   assert(res.gate_armed == 0u);
-  assert(res.phase4_step - res.phase15_step == 96);
+  assert(res.phase4_step - res.phase15_step == 100);
   assert(res.phase4_corner == 1u);
   assert(res.phase4_screen_step == 3u);       /* holding at PHASE for phase 2 */
-  assert(res.restart_step - res.phase4_step == 304);
+  assert(res.restart_step - res.phase4_step == 303);
   assert(res.restart_screen_step == 4u);      /* the POST idle */
   assert(res.restart_pending == 0u);
   /* v21 (M2 phase-21 T6, FU-230 §2.2.3): the live period-end anchors. The tape

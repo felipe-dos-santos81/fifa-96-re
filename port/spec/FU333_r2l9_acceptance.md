@@ -726,3 +726,14 @@ M2 re-pinned to **v25** `ea18ee1d54c51f4283e0bde1b7fbe8bebfd1e8611353b4b48507b76
 lines, one hash-only tail **852..6522**; 295086 bytes / 6522 lines / 6517
 `state=` lines; the 10-tag set and counts are unchanged. M1 `09b726b7…` is
 exact. Census unchanged (78/78, 57/80 natural, 63/80 install-live, 6 blocked).
+
+## Phase-45 erratum — M2 v26 after the stage-0 timer zero (2026-11-04)
+
+The act-9 `0x88FE0` timer zero re-pins M2 to **v26**
+`6f402095beeb7d50923964cd918874059f03b874e6a134c9c331881209cecf30`
+(295087 bytes / 6522 lines / 6517 `state=` lines). The natural FU333 witness
+is unchanged (gate f 703 / step 2352; event f 704 / step 2355; 13-frame -38
+pan). The restart window moves only: `21/1-0` extends through frame 469 and
+phase-4 starts four frames later; first diff line 466, 5985 lines differ
+(4 state-only, 6 hash+state, 5975 hash-only), same tag set/counts. M1
+`09b726b7…` exact; census unchanged.

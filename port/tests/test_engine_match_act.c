@@ -12,8 +12,9 @@
  *   - act `a` selects phase `0x16 + a` (the act base `0x1107EC` = the phase
  *     table `0x110794 + 0x16*4`; phase 0x1F = act 9 = `0x88F4C`);
  *   - the phase-0x1F/act-9 body (`0x88F4C`): head `0x88F51 word[0x158818] +=
- *     word[0x157A64]`; stage 0 `0x88F81` clears `[0x15882A]` (`0x88F9A`) and
- *     writes phase 0x15 on the controlled side; stage 3 `0x890B1` gates on
+ *     word[0x157A64]`; stage 0 `0x88F81` clears `[0x15882A]` (`0x88F9A`),
+ *     writes phase 0x15 on the controlled side and zeroes the timer
+ *     (`0x88FE0`); stage 3 `0x890B1` gates on
  *     `word[0x158818] >= 0x3C` (the `[0x158816] SAR 0x10` load = the act
  *     timer; the old `[0x15881A]` reading was the alias misread), then sets
  *     `[0x15882A]=1` (`0x890C4`) and clears the act slot
@@ -90,7 +91,7 @@ static void test_dispatch_invoke_runs_handler(void) {
   assert(mr.global_5882a == 0u);             /* 0x88F9A stage-0 clear */
   assert(mr.state.phase == 0x15u);           /* the stage-0 write */
   assert(mr.act.stage == 3u);                /* stages 1/2 compressed */
-  assert(mr.act.id == 9 && mr.act.timer == 2);
+  assert(mr.act.id == 9 && mr.act.timer == 0);   /* stage 0 zeroes it */
   /* act 1 resolves to phase 0x17, registered by T4 (FU-203): the invoke runs
    * the phase-0x17 stage-0 kickoff entry (clear the gate + the phase-1 write) */
   fifa96_match_run_init(&mr);
@@ -154,9 +155,11 @@ static void test_tick_timer_and_completion(void) {
     assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
     assert(mr.act.id == 9);
   }
-  assert(mr.act.timer == 58);                 /* 29 * 2, still short of 0x3C */
+  assert(mr.act.timer == 56);                 /* the first tick zeroes, 28 * 2 */
   assert(mr.act.stage == 3u);                 /* stage 0 ran on the first tick */
   assert(mr.state.phase == 0x15u);            /* stage-0 phase write */
+  assert(mr.global_5882a == 0u && mr.act9_gate == 0u);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* 58 */
   assert(mr.global_5882a == 0u && mr.act9_gate == 0u);
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* 60 */
   assert(mr.global_5882a == 1u);              /* 0x890C4 */
