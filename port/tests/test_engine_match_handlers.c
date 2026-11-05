@@ -2531,6 +2531,46 @@ static void test_action_08_tracked_process_byte(void) {
   drop_fixture(&f);
 }
 
+/* FU142 App. K.6 / OL-82: `[0x15877D]` is the row-08 stage flag. The stage-1
+ * gate (`0x811D6`) reads it, the hit arm writes 1 (`0x8141C`), and the stage-2
+ * tail writes 0 (`0x8147E`). The run cell is the native global byte; the
+ * unported FUN_00083428 is the only outside reader. */
+static void test_action_08_stage_flag_15877d(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;
+  f.mr.record.row44 = 0;
+  f.mr.record.frame = 1;
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.delta = 0;
+  f.mr.entities.team[0].records[0].lane_x = 1;
+  f.mr.entities.team[0].records[0].lane_z = 1;
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_z = 0;
+  f.mr.process_15877d = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.process_15877d == 1);   /* the projection hit's 0x8141C */
+  drop_fixture(&f);
+
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;
+  f.mr.record.row44 = 0;
+  f.mr.record.frame = 0;
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.delta = 0;
+  f.mr.process_15877d = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2);   /* the 0x811D6 gate advanced */
+  assert(f.mr.record.timer89 == 0);
+  drop_fixture(&f);
+}
+
 /* FU-139 §9 (Task 11): the wired row-07 machine. Stage 0 gates/latches and
  * the stage-target arm run over `mr->record`; the stage-2 `+0x44` tail resets
  * and hands the ball/receiver through the pool. The kick requests run the
@@ -5960,6 +6000,7 @@ int main(void) {
   test_action_04_and_08_wired();
   test_action_08_ball_height_reads_camera_y();
   test_action_08_tracked_process_byte();
+  test_action_08_stage_flag_15877d();
   test_action_06_ball_height_reads_camera_y();
   test_action_04_stages_lane_fields();
   test_action_04_ball_track_side_from_tracked();

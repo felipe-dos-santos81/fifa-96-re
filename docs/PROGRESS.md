@@ -3692,3 +3692,11 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   no-increment twin with a different controlled actor. M1/M2 stay
   byte-identical; census unchanged (`78/78`, `57/80`, `63/80`, `6` blocked);
   `make check` 112/112.
+
+- **phase-50 row-08 stage flag (FU142 / FU253, 2026-11-04).** `[0x15877D]` is
+  now the live `run.process_15877d`: row 08 stages it, the stage-1 gate
+  (`0x811D6`) reads it, the scan hit writes 1 (`0x8141C`), and the stage-2
+  tail writes 0 (`0x8147E`/`0x811CA`). The only outside readers are in the
+  unported `FUN_00083428` throw machine. A unit pins the producer and the gate;
+  M1/M2 stay byte-identical; census unchanged (`78/78`, `57/80`, `63/80`, `6`
+  blocked); `make check` 112/112.

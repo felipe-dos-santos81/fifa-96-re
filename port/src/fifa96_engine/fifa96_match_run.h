@@ -809,6 +809,12 @@ struct fifa96_match_run {
   uint8_t match09_seq_flag_15877c;
   uint8_t match09_event_id;
   uint8_t match0c_event_id;
+  /* FU142/OL-82: `byte[0x15877D]`, the row-08 stage flag (writes
+   * `0x811CA`=0, `0x8141C`=1, `0x8147E`=0). The only reader outside row 08
+   * is the unported `FUN_00083428` throw machine (`0x834B6/0x834F6`), so the
+   * engine keeps the live cell here for the row-08 gate and future consumer
+   * wiring. Init/begin zero it. */
+  uint8_t process_15877d;
   /* FU302 (phase-28 T7): the row-0x1B wide-path completion — the seed + Blocks
    * A-G through the `0x71C94` seat (`0x77423`) and the install tree
    * (`0x77428..0x774D2`). The values the port computes but whose sinks are

@@ -2266,6 +2266,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->match09_seq_flag_15877c = 0;    /* FU-178 arm 1: [0x15877C] */
   mr->match09_event_id = 0xFF;        /* FU-178: no row-09 event yet */
   mr->match0c_event_id = 0xFF;        /* FU-169: no row-0C event yet */
+  mr->process_15877d = 0;             /* FU142/OL-82: [0x15877D] */
   /* FU302 (phase-28 T7): the row-0x1B wide-path observables and the
    * `[0x157823]`/`[0x157ACC]`/`[0x157AD0]` sit cells. */
   mr->match1b_hypot = 0;
@@ -2447,6 +2448,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->match09_seq_flag_15877c = 0;
   mr->match09_event_id = 0xFF;
   mr->match0c_event_id = 0xFF;
+  mr->process_15877d = 0;
   /* FU302 (phase-28 T7): fresh wide-path observables + sit cells. */
   mr->match1b_hypot = 0;
   mr->match1b_pan_x = 0;

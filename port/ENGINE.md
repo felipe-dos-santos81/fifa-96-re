@@ -8547,3 +8547,16 @@ fails both directions.
 M1/M2 stay byte-identical; census unchanged: **78/78 bodies, 57/80 natural,
 63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make check`
 **112/112**.
+
+## Phase 50 — row-08 stage flag (FU142 / FU253, 2026-11-04)
+
+`[0x15877D]` is now live as `run.process_15877d`: row 08 stages it into the
+outfield state, the stage-1 gate (`0x811D6`) reads it, the projection hit
+writes 1 (`0x8141C`), and the stage-2 tail writes 0 (`0x8147E`/`0x811CA`). The
+only outside readers are in the unported `FUN_00083428` throw machine
+(`0x834B6`/`0x834F6`). `test_action_08_stage_flag_15877d` pins the producer and
+the gate; the old zero-staged input fails both.
+
+M1/M2 stay byte-identical; census unchanged: **78/78 bodies, 57/80 natural,
+63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make check`
+**112/112**.

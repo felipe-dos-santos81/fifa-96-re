@@ -3508,3 +3508,21 @@ sinks, the descriptor bytes and the 0x79B1C snap residue remain OL-82.
 M1/M2 are byte-identical; census unchanged: **78/78 bodies, 57/80 natural,
 63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make check`
 **112/112**.
+
+## Phase-50 erratum — row-08 `[0x15877D]` stage flag (2026-11-04)
+
+The row-08 stage flag is the native global `byte[0x15877D]` (FU253 §3): stage 1
+gates on it at `0x811D6`, the projection hit writes 1 at `0x8141C`, and the
+stage-2 tail writes 0 at `0x8147E`/`0x811CA`. Fresh `get_xrefs_to 0x15877D`
+gives the only outside readers in the unported `FUN_00083428` throw machine
+(`0x834B6`/`0x834F6`), so the engine keeps the live cell as
+`run.process_15877d`: row 08 stages it in and drains `out.byte_15877d` on
+`byte_15877d_set`.
+
+`test_action_08_stage_flag_15877d` pins the producer (stage-1 scan hit sets
+the cell to 1) and the consumer (a pre-set cell advances `+0x92` from 1 to 2
+with `+0x89 = 0` at the `0x811D6` gate). The old zero-staged input leaves the
+producer at 0 and the gate un-fired. Event/sound sinks, descriptor bytes and
+the 0x79B1C snap residue remain OL-82. M1/M2 are byte-identical; census
+unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live, 6 blocked,
+action 38/45, phase 25/35**; `make check` **112/112**.
