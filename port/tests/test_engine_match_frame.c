@@ -2730,7 +2730,9 @@ static void test_live_long_ball_mode40_band2_follow(void) {
      * F6 = F2 - ramp(0x100 - 0x70 = 0x90) = 59 - 45 = 14; the pan step fires
      * on the first frame with timer > F4 and timer advances by delta 2, so
      * the window is (118 - 14)/2 = 52 granted frames. */
-    assert(window == 52);
+    /* FU316-L2: the landing arm (`prev_y > 0 && pos_y <= 0`) fires one frame
+     * before the timer gate, so the pan window is 51, not 52. */
+    assert(window == 51);
     assert(mr.render.camera.pan_counter == 1);
     /* the lockout: the call-site gate 1 refuses until a new setter call. */
     assert(fifa96_match_run_camera_follow(&mr) == 0);

@@ -178,6 +178,7 @@ static void test_update_bucket_negative_timer(void) {
 static void test_update_rate_param_gates(void) {
   fifa96_camera cam = fresh_camera();
   fifa96_camera_init(&cam, 10, 20, 30);
+  cam.pos_y = 0;              /* no landing pan in this rate-gate fixture */
   cam.vel_x = 1;
   cam.speed = 1;
   cam.anchor_time = 0x7FFF;
@@ -195,6 +196,7 @@ static void test_update_rate_param_gates(void) {
 static void test_update_rate_zero_gate(void) {
   fifa96_camera cam = fresh_camera();
   fifa96_camera_init(&cam, 10, 20, 30);
+  cam.pos_y = 0;              /* no landing pan in this rate-gate fixture */
   cam.vel_x = 1;
   cam.speed = 1;
   cam.anchor_time = 0x7FFF;
@@ -914,6 +916,36 @@ static void test_update_walk_gate(void) {
   assert(b.pan_counter == 1);
   assert(b.vel_x == 1 && b.vel_z == 2);
   assert(fifa96_camera_update_walk(NULL, &rng, 1, 0, 0, 0) == -FIFA96_ERR_INVALID);
+}
+
+/* FU316-L2: `0x737C8..0x737DA` admits the pan step when the camera lands
+ * (`prev_y > 0 && pos_y <= 0`) even though the timer has not passed its
+ * limit. The 0x73756/0x7375b copy seeds prev_y from the entering pos_y; the
+ * 0x70B94 arc then drops pos_y to zero. */
+static void test_update_walk_landing_pan(void) {
+  fifa96_camera a = fresh_camera();
+  fifa96_camera b = fresh_camera();
+  fifa96_camera_init(&a, 0, 0x40, 0);
+  fifa96_camera_init(&b, 0, 0, 0);
+  a.event_param = 0x20;
+  b.event_param = 0x20;
+  a.event_peak = 0;                 /* arc height 0 at timer 0 */
+  b.event_peak = 0;
+  a.speed = 1;
+  b.speed = 1;
+  a.timer = 0;
+  b.timer = 0;
+  a.timer_limit = 0x10;
+  b.timer_limit = 0x10;
+  assert(fifa96_camera_update_walk(&a, NULL, 2, 0, 0, 0) == FIFA96_OK);
+  assert(a.prev_y == 0x40);
+  assert(a.pos_y == 0);
+  assert(a.pan_counter == 1);       /* the landing arm ran */
+
+  assert(fifa96_camera_update_walk(&b, NULL, 2, 0, 0, 0) == FIFA96_OK);
+  assert(b.prev_y == 0);
+  assert(b.pos_y == 0);
+  assert(b.pan_counter == 0);       /* no landing edge */
 }
 
 /* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08 — the
@@ -1663,6 +1695,11 @@ static void test_camera_height_producer(void) {
   assert(cam.pos_y == 17);             /* t = 116, the descending arc */
   assert(fifa96_camera_update(&cam, 2, 0, 0) == FIFA96_OK);
   assert(cam.pos_y == 0);              /* t = 118 >= limit: the guard arm */
+  /* The landing arm ran the pan step and rewrote the event cells; restore
+   * the arc's own peak/height for the direct unit read below. */
+  cam.event_peak = 59;
+  cam.event_param = 0x100;
+  cam.timer_limit = 118;
   /* the arc's direct read (the unit contract). */
   cam.timer = 58;
   cam.pos_y = 0;
@@ -1813,6 +1850,7 @@ int main(void) {
   test_pan_step_walk();
   test_pan_step_invalid();
   test_update_walk_gate();
+  test_update_walk_landing_pan();
   test_record_event_reflect_and_event();
   test_record_event_height_ramp();
   test_record_event_chaser_ramp_param_one();

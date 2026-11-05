@@ -15,6 +15,7 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->pos_x = x;
   cam->pos_y = y;
   cam->pos_z = z;
+  cam->prev_y = 0;                    /* [0x15775C] starts clear */
   cam->target_x = x;
   cam->target_y = y;
   cam->target_z = z;
@@ -61,8 +62,9 @@ int fifa96_camera_set_tracked(fifa96_camera *cam, int32_t id) {
   return FIFA96_OK;
 }
 
-/* FU-152 §2.9 (T2): FUN_000709D0 is defined below the integrator; the native
- * FUN_000736AC calls it in-line (0x737da) when `timer > timer_limit`. */
+/* FU-152 §2.9 (T2) / FU316-L2: FUN_000709D0 is defined below the integrator;
+ * the native FUN_000736AC calls it in-line (0x737da) when `timer >
+ * timer_limit` or when the camera lands (`prev_y > 0 && pos_y <= 0`). */
 static int camera_pan_step_internal(fifa96_camera *cam, struct fifa96_rng *rng,
                                     int walk_gate, int32_t *class_of,
                                     int32_t *param);
@@ -76,6 +78,9 @@ int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
                               int walk_gate) {
   int16_t gate_speed;
   if (!cam) return -FIFA96_ERR_INVALID;
+  /* FU316-L2: 0x73756/0x7375b copies the camera triple to 0x157758 before
+   * the pause check; its +4 dword is the landing cell 0x15775C. */
+  cam->prev_y = cam->pos_y;
   if (cam->paused) {
     cam->follow_speed = (int16_t)cam->speed;
     return FIFA96_OK;
@@ -91,10 +96,12 @@ int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
      * store precedes the pan-step check (0x737b9) and the integration. */
     if ((int16_t)cam->event_param != 0)
       cam->pos_y = fifa96_camera_height(cam);
-    /* FU-152 §2.9 (T2) / FUN_000736AC 0x737b9..0x737da: the timer-driven pan
-     * step runs before the same frame's integration; the walk gate is the
-     * native ([0x14C1D4]|[0x14C1D6]) & 4 read at 0x70ab1..0x70ac2 (T3). */
-    if ((int16_t)cam->timer > (int16_t)cam->timer_limit) {
+    /* FU-152 §2.9 (T2) / FU316-L2 / FUN_000736AC 0x737b9..0x737da: the pan
+     * step runs before the same frame's integration on the timer arm or the
+     * landing arm (`prev_y > 0 && pos_y <= 0`); the walk gate is the native
+     * ([0x14C1D4]|[0x14C1D6]) & 4 read at 0x70ab1..0x70ac2 (T3). */
+    if ((int16_t)cam->timer > (int16_t)cam->timer_limit ||
+        (cam->prev_y > 0 && cam->pos_y <= 0)) {
       (void)camera_pan_step_internal(cam, rng, walk_gate, NULL, NULL);
       gate_speed = (int16_t)cam->speed;
     }

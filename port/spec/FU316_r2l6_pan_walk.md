@@ -741,3 +741,14 @@ with `tracked == NONE` and `lane >= 0x40`, the record now reaches the
 returned early. A unit pins both the NONE and tracked cases. M1/M2 are
 byte-identical (the tape's gate frames already carry a live tracked cell);
 census unchanged.
+
+## Phase-47 erratum — FU316-L2 landing pan admission closed (2026-11-04)
+
+`fifa96_camera` now carries `prev_y` (`[0x15775C]`, the entering camera Y
+copied by `0x73756/0x7375b` before the `0x70B94` height update). The integrator
+admits the pan step on the native landing arm
+(`prev_y > 0 && pos_y <= 0`, `0x737C8..0x737DA`) as well as
+`timer > timer_limit`. The camera unit pins a landing (arc drops to 0, timer
+still below the limit: `pan_counter == 1`) and the no-landing twin. The live
+long-ball window moves 52 -> 51 because the landing arm fires one frame before
+the timer gate. M1/M2 stay byte-identical; census unchanged.

@@ -6,6 +6,11 @@ struct fifa96_rng;
 
 typedef struct fifa96_camera {
   int32_t pos_x, pos_y, pos_z;
+  /* FU316-L2: the native `[0x15775C]` landing cell — the previous frame's
+   * camera Y, copied by the integrator before the 0x70B94 height update
+   * (`0x73756`). `0x737C8..0x737DA` admits the pan step when
+   * `prev_y > 0 && pos_y <= 0` even if the timer has not passed its limit. */
+  int32_t prev_y;
   int32_t target_x, target_y, target_z;
   int32_t anchor_x, anchor_y, anchor_z;
   int32_t anchor2_x, anchor2_y, anchor2_z;
@@ -347,8 +352,9 @@ int32_t fifa96_camera_shift_step(int32_t v, int n);
  * `0x76CEA`) consume it. */
 int16_t fifa96_camera_mul16(int32_t a, int32_t b);
 
-/* FU-152 §2.9 (T2): FUN_000709D0, the timer-driven pan step FUN_000736AC
- * calls when `timer > timer_limit`. Bands the event height into the
+/* FU-152 §2.9 (T2) / FU316-L2: FUN_000709D0, the pan step FUN_000736AC
+ * calls when `timer > timer_limit` or the camera lands (`prev_y > 0 &&
+ * pos_y <= 0`). Bands the event height into the
  * FUN_00065CF8 sink arguments (returned through `class_of`/`param`, left
  * untouched at height 0), advances [0x157821] (cap 100), decays the height by
  * pan_decay/0x20, runs the ([0x14C1D4]|[0x14C1D6]) & 4 random walk when

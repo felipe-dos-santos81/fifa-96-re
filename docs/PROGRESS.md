@@ -3666,3 +3666,11 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   receiver timer (`e->timer93 = 0x10`); the old fallback returned early. A
   unit pins the NONE and tracked cases. M1/M2 are byte-identical; census
   unchanged (`78/78`, `57/80`, `63/80`, `6` blocked); `make check` 112/112.
+
+- **phase-47 landing pan admission (FU316-L2, 2026-11-04).** Added the camera
+  `prev_y` cell (`[0x15775C]`) and the native landing arm
+  (`prev_y > 0 && pos_y <= 0`) to the pan-step admission, alongside
+  `timer > timer_limit`. Camera units pin the landing edge and its no-landing
+  twin. The live long-ball window moves from 52 to 51 because the landing arm
+  fires one frame before the timer gate. M1/M2 stay byte-identical; census
+  unchanged (`78/78`, `57/80`, `63/80`, `6` blocked); `make check` 112/112.

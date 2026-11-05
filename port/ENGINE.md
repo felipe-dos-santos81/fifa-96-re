@@ -8504,3 +8504,18 @@ M1/M2 are byte-identical: the tape's gate frames already carry a live tracked
 cell, and the row-04 caller path is unchanged. Census unchanged: **78/78
 bodies, 57/80 natural, 63/80 install-live, 6 blocked, action 38/45, phase
 25/35**; `make check` **112/112**.
+
+## Phase 47 — landing pan-step admission (FU316-L2, 2026-11-04)
+
+`fifa96_camera` now carries `prev_y`, the native `[0x15775C]` entering camera
+Y copied by `0x73756/0x7375b` before the `0x70B94` height update. The
+integrator admits the pan step on the landing arm (`prev_y > 0 &&
+pos_y <= 0`, `0x737C8..0x737DA`) as well as on `timer > timer_limit`. A camera
+unit pins the landing edge (the arc drops to 0 while the timer is still below
+its limit, `pan_counter` advances) and the no-landing twin.
+
+The live long-ball camera window moves 52 -> 51 because the landing arm fires
+one frame before the timer gate; the fixture is updated with that measured
+value. M1/M2 stay byte-identical; census unchanged: **78/78 bodies, 57/80
+natural, 63/80 install-live, 6 blocked, action 38/45, phase 25/35**; `make
+check` **112/112**.
