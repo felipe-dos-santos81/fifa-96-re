@@ -1,4 +1,9 @@
-/* port/tests/test_engine_match_completion.c — Task 3: match completion (periods, score, exit). */
+/* port/tests/test_engine_match_completion.c — Task 3: match completion (periods, score, exit).
+ *
+ * P8 (FU-346): the live Friendly regulation end (win and draw) reaches the
+ * phase-0x0C full-time result/return instead of the port's phase-0x13 ET
+ * re-arm; the non-live/competition route keeps the native flag/phase-0x13
+ * behaviour. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -50,6 +55,53 @@ static struct fixture make_fixture(uint64_t step_ns) {
 static void drop_fixture(struct fixture f) {
   fifa96_engine_destroy(f.engine);
   fifa96_platform_destroy(f.plat);
+}
+
+/* P8 (FU-346): the live Friendly regulation-end fixtures drive the shipped
+ * windowed path (engine steps + the KICK cadence the half-time sit-1 kickoff
+ * release needs). The tape is the same 10/90 KICK pulse the P6/P7 live tests
+ * use; no score/phase is staged at the end — the score is the derived goal
+ * writer and the two periods are produced by the real FU-62 clock. */
+#define P8_TAPE_LEN 20000u
+static fifa96_platform_key p8_tape[P8_TAPE_LEN];
+static int p8_tape_ready;
+
+static void p8_tape_init(void) {
+  if (p8_tape_ready) return;
+  for (uint32_t i = 0; i < P8_TAPE_LEN; i++) {
+    memset(&p8_tape[i], 0, sizeof p8_tape[i]);
+    if (i % 90u < 10u) {
+      p8_tape[i].raw_code = FIFA96_ENGINE_KEY_KICK;
+      p8_tape[i].state = 1;
+    } else if (i % 300u < 3u) {
+      p8_tape[i].raw_code = FIFA96_ENGINE_KEY_UP;
+      p8_tape[i].state = 1;
+    }
+  }
+  p8_tape_ready = 1;
+}
+
+static struct fixture make_p8_live_fixture(void) {
+  p8_tape_init();
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.step_ns = 10000000ull;
+  pcfg.tape = p8_tape;
+  pcfg.tape_len = P8_TAPE_LEN;
+  struct fixture f;
+  f.plat = fifa96_platform_null_create(&pcfg);
+  assert(f.plat != NULL);
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  f.engine = fifa96_engine_create(&ecfg, f.plat);
+  assert(f.engine != NULL);
+  assert(fifa96_engine_boot(f.engine) == 0);
+  assert(fifa96_match_run_set_live_start(&f.engine->match_run, 1) == 0);
+  assert(fifa96_match_run_begin(&f.engine->match_run, f.engine, 0) == 0);
+  return f;
 }
 
 /* v22 (M2 phase-22 review, Fix 1): the extra-time terminal seed shared by the
@@ -304,7 +356,11 @@ static void test_live_period_end_exits_to_frontend(void) {
  * restart that re-arms the next period (FUN_00088860 / FUN_0004B02C) is the
  * unported FU-143 §5 / FU213-L2 leg — so this is the strongest loop-backed
  * form this harness admits (the completion and `state.period` are both produced
- * by the real `fifa96_match_run_frame` clock, not hand-set). */
+ * by the real `fifa96_match_run_frame` clock, not hand-set).
+ *
+ * P8 (FU-346) scope: this is the NON-live (competition/tape) route. The live
+ * windowed Friendly path is pinned by `test_live_friendly_regulation_win_full_time`
+ * / `..._draw_full_time` below and deliberately does not enter phase 0x13. */
 static void test_loopbacked_tiebreak_completion(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -835,6 +891,146 @@ static void test_live_post_dwell_and_skip(void) {
   drop_fixture(f2);
 }
 
+/* P8 (FU-346): a live Friendly regulation end reaches the full-time result, not
+ * the extra-time arm. Fresh native evidence (see the phase_drive comment):
+ * `[0x157AC0]` is raised on a differing regulation score (W2 0x8B2AC), but the
+ * flag's phase-0x13 arm is the class-0 post-match stats/result presentation
+ * (phase-0x13 installs the row-0x25 stats sequence when the score differs,
+ * 0x8D76C/0x8D772; the end machine holds a decisive screen at 0x8BDA2), not a
+ * clocked ET half. Friendly is Game-Select mode 0 (`FUN_00024B00 0x24BEB XOR
+ * EAX,EAX` -> `FUN_0001B7B8`), so `FUN_0003749C` leaves the `[0x14C2EE]`
+ * force-ET override 0; the competition/tie ET route stays separate. The
+ * native phase-0x13 stats screen body is unported (P8-L1), so the live Friendly
+ * winner uses the existing phase-0x0C result terminal (the same terminal a
+ * Friendly draw uses). This test drives the real clock through half-time and
+ * the second half: 1-0 in, phase 0x0C / act 0x0B / flag 0 out, end word 1,
+ * OVER -> POST -> EXIT -> front-end, score intact. */
+static void test_live_friendly_regulation_win_full_time(void) {
+  struct fixture f = make_p8_live_fixture();
+  struct fifa96_match_run *mr = &f.engine->match_run;
+  assert(mr->live_start == 1u);
+  assert(fifa96_match_run_set_period(mr, 1, 1) == 0);
+  mr->state.phase = 2;                         /* class 1: the clock runs */
+  assert(fifa96_match_run_add_goal(mr, 0) == 0);   /* the derived 1-0 score */
+
+  /* The first completion (half-time) parks phase 0x0C and rolls index 1. */
+  int steps = 0;
+  while (mr->state.period != 1u && steps < 6000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 6000);
+  assert(mr->state.phase == 0x0Cu);
+  assert(mr->global_157ac2 == 1u);
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+
+  /* The live sit-1 restart releases the second half. */
+  steps = 0;
+  while (mr->state.phase != 2u && steps < 6000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 6000);
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+
+  /* The real second-half clock: regulation end. */
+  steps = 0;
+  while (mr->state.period != 2u && steps < 6000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 6000);
+  assert(mr->state.phase == 0x0Cu);            /* not the ET phase 0x13/0x14 */
+  assert(mr->global_157ac0 == 0u);             /* no ET flag on the live Friendly arm */
+  assert(mr->act.id == 0x0Bu);                 /* the no-ET period-end act */
+  assert(mr->global_157ac2 == 2u);             /* the roll 0x8B58A */
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+
+  /* The phase-0x0C end machine stages word 1 after the act/dwell gates. */
+  steps = 0;
+  while (mr->end_word_158822 != 1u && steps < 3000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 3000);
+  assert(fifa96_match_run_should_mark_over(mr) == 1);
+
+  /* OVER -> POST (the FULL TIME panel dwell), then the skip returns. The
+   * engine step consumes OVER into POST in the same step, so the observable
+   * terminal is POST with the result panel holding. */
+  steps = 0;
+  while (mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE && steps < 3000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 3000);
+  assert(mr->lc.screen == FIFA96_MATCH_SCREEN_POST);
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  assert(fifa96_match_run_result_continue(mr) == 0);
+  for (int i = 0; i < 8 && mr->running; i++)
+    assert(fifa96_engine_step(f.engine) == 0);
+  assert(mr->running == 0u);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(f.engine->match == NULL);
+  drop_fixture(f);
+}
+
+/* P8 (FU-346): the Friendly draw is a full-time result too. Fresh native:
+ * a tied regulation end takes W2's equal-score else-arm, and for mode 0
+ * `[0x14C1D0]==0` sets the `[0x10F378]` no-extra-time latch (0x8B2DA); the
+ * phase-0x0C end machine then calls `0x37F54` -> `[0x105FFC]=5`
+ * (0x8BC80..0x8BC97), the no-ET terminal. The engine has no screen-5 cell
+ * (FU231-L2), so the existing phase-0x0C result terminal stands in. The score
+ * is 0-0 in the shipped path (no staging). */
+static void test_live_friendly_regulation_draw_full_time(void) {
+  struct fixture f = make_p8_live_fixture();
+  struct fifa96_match_run *mr = &f.engine->match_run;
+  assert(fifa96_match_run_set_period(mr, 1, 1) == 0);
+  mr->state.phase = 2;
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+
+  int steps = 0;
+  while (mr->state.period != 1u && steps < 6000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 6000);
+  steps = 0;
+  while (mr->state.phase != 2u && steps < 6000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 6000);
+  steps = 0;
+  while (mr->state.period != 2u && steps < 6000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 6000);
+  assert(mr->state.phase == 0x0Cu);            /* the no-ET phase-0x0C terminal */
+  assert(mr->global_157ac0 == 0u);             /* W2 equal-score arm: flag clear */
+  assert(mr->act.id == 0x0Bu);
+  assert(mr->global_157ac2 == 2u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+
+  steps = 0;
+  while (mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE && steps < 4000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 4000);
+  assert(mr->end_word_158822 == 1u);           /* the regulation-over word */
+  assert(mr->lc.screen == FIFA96_MATCH_SCREEN_POST);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(fifa96_match_run_result_continue(mr) == 0);
+  for (int i = 0; i < 8 && mr->running; i++)
+    assert(fifa96_engine_step(f.engine) == 0);
+  assert(mr->running == 0u);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(f.engine->match == NULL);
+  drop_fixture(f);
+}
+
 /* v22 (M2 phase-22 T4, FU-234 §4.2/§4.3): the run's return to the front-end.
  * `fifa96_match_run_end` maps the native leave/teardown
  * (`[0x105FFC]=4`/`[0x107304]=3`) to the mode switch
@@ -907,6 +1103,8 @@ int main(void) {
   test_phase_13_14_rng_gate();
   test_live_pause_holds_pace();
   test_live_post_dwell_and_skip();
+  test_live_friendly_regulation_win_full_time();
+  test_live_friendly_regulation_draw_full_time();
   test_run_end_lands_frontend();
   test_mark_over_only_past_half_time();
   test_score_plumbing();

@@ -4160,3 +4160,28 @@ close-out below).
   kick target, loft/receive, full AI/possession, P6-L4 extra-time branch,
   replay/captions, rosters, commentary/music, gamepad kick/pass, six menu
   screens.
+
+- **P8 Friendly full-time branch (FU-346, 2026-11-06).** A finished live
+  Friendly now reaches FULL TIME and Game Select on a **1-0** and a **0-0**;
+  it no longer enters the port's extra-time re-arm on a winner. Fresh native
+  re-read: `[0x157AC0]` is set on a **differing** regulation score (W2
+  `0x8B2AC`), but phase `0x13`/`0x14` are class-0 post-match stats/result
+  screens (row-0x25 stats at `0x8D76C/0x8D772`; decisive hold at
+  `0x8BD95/0x8BDA2`), not clocked ET halves. The ET override is competition
+  (`FUN_0003749C 0x374D1/0x374E9`: `[0x14C2EE]=1` only for Game-Select modes
+  1/2; Friendly is mode 0, `FUN_00024B00 0x24BEB`), and a Friendly draw takes
+  the `[0x10F378]` no-ET latch (`0x8B2DA`) -> `0x37F54` `[0x105FFC]=5`
+  (`0x8BC80..0x8BC97`). The fix is one live-gated term in `phase_drive`'s W2:
+  the shipped live Friendly winner keeps the phase-`0x0C` result terminal; the
+  non-live/competition route and M1/M2 are unchanged. New live completion
+  tests cover 1-0 and 0-0 (phase `0x0C`/act `0x0B`, end word 1, POST, score
+  preserved, return to FRONTEND). `make check` green; M1 `09b726b7…` / M2 v29
+  `7c3874f7…` exact; census unchanged (78/78, 58/80, 64/80, action 38/45,
+  phase 26/35). Shipped `DISPLAY=:1` Brazil/Italy, default 2-minute halves,
+  first Z seeds live control, second Z scores (BRA 1-0 at 00:06), C/PASS
+  releases the half-time sit-1 kickoff, second half to the terminal ->
+  `p8-fulltime.png` (FULL TIME BRA 1-0, period 2) and `p8-return-menu.png`
+  (Game Select). Remaining: P8-L1 phase-`0x13` stats
+  screen unported; P8-L2 competition ET/penalties separate; P8-L3 screen-5
+  no-ET terminal unported; P8-L4 half-time release needs the KICK path;
+  P8-L5 `[0x14C1D0]`/`[0x14C2EE]` cells unmodelled.
