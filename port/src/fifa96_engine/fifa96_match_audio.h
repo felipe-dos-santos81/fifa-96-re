@@ -86,6 +86,7 @@ struct fifa96_match_audio {
   uint8_t last_whistle_gain; /* mixer gain byte of that whistle (0..0x7F) */
   uint32_t whistle_cues;
   uint32_t goal_cues;
+  uint8_t last_goal_gain;    /* mixer gain byte of the most recent goal cue */
   uint64_t frames_submitted;
 };
 

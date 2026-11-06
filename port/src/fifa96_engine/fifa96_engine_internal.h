@@ -44,6 +44,13 @@ struct fifa96_engine {
   uint8_t match_esc_held;
 };
 
+/* P6 test seam: the match-audio percent derived from the Options block.
+ * Sound Effects (value[0x01]) off -> 0; otherwise SFX Volume (value[0x11])
+ * clamped to 0..100. `engine_match_audio_begin` passes this to
+ * fifa96_match_audio_start, so the gate and the 0 => silence contract are
+ * unit-pinned independently of the live engine step. */
+int32_t fifa96_engine_audio_percent(const struct fifa96_engine *e);
+
 /* M2 interactive Task 1: the FU-77 shared-mover tables pinned first-hand from
  * /FIFA96.EXE (see fifa96_match_locomotion_tables.c). The heading flat
  * 0x1104D2 (32 bytes) and the 0x10F680 stride-velocity row (0x500 words). */

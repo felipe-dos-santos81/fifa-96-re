@@ -9849,3 +9849,19 @@ new vector/code re-latches. **P7-L10** the native loft arc/ball height and
 receive/bounce hand-off are not modelled (target_y is 0, the goal armer sees
 y=0). **P7-L11** natural menu-input scoring (arrows+Z without harness staging)
 still depends on the live AI/aim legs; the native chain itself is green.
+
+**Errata (P6 T3 review, 2026-11-06 — append-only; the Task 3 section above
+stands as written).** Two reads are corrected by a fresh `read_memory` /
+`disassemble_bytes` re-read. (1) Player Names' choice array at `0x105328` is
+the three dwords `0xD2, 0x1C8, 0x1C9` = Off / Names / Numbers (LANG000
+`0x1C8` = "Names", `0x1C9` = "Numbers"); the earlier `0xC8/0xC9` reading was
+a width misread (those are the low bytes of `0x1C8/0x1C9`, which decode to
+"Name"/"Netherlands"). There is no retail Netherlands bug: P6-L5's Player
+Names clause is withdrawn and P6-L5 remains only the dead slot 19. (2) Slot 19
+is descriptor 66 at `0x105340 + 66*9 = 0x105592`; its dword is `0x001C0000`
+(bytes `00 00 1C 00`), not `0x1F` (`0x1F` is the byte at `0x105590`; `0x1C`
+is at `0x105594`). Descriptor 66 is still dead data and the model still never
+selects it. The model and test now use `{0xD2,0x1C8,0x1C9}` with the
+Off/Names/Numbers fallbacks. The review's remaining gaps are closed by the
+native Options state-fill case (`test_engine_menu_model`) and the goal-gain /
+Sound-Effects gate cases (`test_engine_audio`).

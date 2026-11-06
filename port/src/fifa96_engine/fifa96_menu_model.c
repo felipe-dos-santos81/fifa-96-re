@@ -82,11 +82,12 @@ static int menu_item_at(int col, int row) {
 }
 
 /* P6: the choice LANG-id arrays from the descriptor records at 0x105340
- * (read_memory 0x1052B4..0x105320). Off/On is {0xD2,0xD7}; the language list
- * is {0x6F,0x59,0x7D,0x72,0x135,0xA5}; half length is 0x248..0x24E. */
+ * (read_memory 0x1052B4..0x105340, the range the records point into). Off/On
+ * is {0xD2,0xD7}; the language list is {0x6F,0x59,0x7D,0x72,0x135,0xA5};
+ * Player Names is {0xD2,0x1C8,0x1C9}; half length is 0x248..0x24E. */
 static const uint32_t option_off_on[] = {0xD2u, 0xD7u};
 static const uint32_t option_language[] = {0x6Fu, 0x59u, 0x7Du, 0x72u, 0x135u, 0xA5u};
-static const uint32_t option_names[] = {0xD2u, 0xC8u, 0xC9u};
+static const uint32_t option_names[] = {0xD2u, 0x1C8u, 0x1C9u};
 static const uint32_t option_replay[] = {0xD2u, 0xD7u, 0xF5u};
 static const uint32_t option_game_type[] = {0x09u, 0x11Au};
 static const uint32_t option_fouls[] = {0xD2u, 0xCDu, 0xD7u};
@@ -99,10 +100,8 @@ static const uint32_t option_skill[] = {0x110u, 0xECu};
 static const char *const text_off_on[] = {"Off", "On"};
 static const char *const text_language[] = {"English", "German", "French",
                                             "Spanish", "Swedish", "Italian"};
-/* Retail bug (P6-L5): the third choice is LANG 0xC9 "Netherlands", intended
- * 0x1C9 "Numbers" (E3 in /tmp/opencode/play/P6-options.md). Shown honestly;
- * the row is stored-only in this port. */
-static const char *const text_names[] = {"Off", "Name", "Netherlands"};
+/* The retail LANG000 entries 0x1C8/0x1C9 decode to "Names"/"Numbers". */
+static const char *const text_names[] = {"Off", "Names", "Numbers"};
 static const char *const text_replay[] = {"Off", "On", "Random"};
 static const char *const text_game_type[] = {"Action", "Simulation"};
 static const char *const text_fouls[] = {"Off", "No Bookings", "On"};

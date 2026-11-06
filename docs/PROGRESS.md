@@ -4076,3 +4076,18 @@ close-out below).
   scan. Legs: P7-L7 native per-code target algebra/receive target (OL-62),
   P7-L8 live facing/aim AI, P7-L9 identical-pair re-latch, P7-L10 loft
   arc/receive hand-off, P7-L11 natural menu-input scoring (AI/aim).
+
+- **P6 T3 review fixes (2026-11-06).** Player Names' native choices at
+  `0x105328` are `0xD2/0x1C8/0x1C9` (Off/Names/Numbers); the earlier
+  `0xC8/0xC9` values were a width misread, so there is no retail
+  "Netherlands" bug and P6-L5 now covers only the dead slot 19. Descriptor
+  66's dword at `0x105592` is `0x001C0000` (the earlier `0x1F` read was
+  shifted two bytes); it remains dead and never selectable. The model, the
+  fallback text and `test_engine_menu_model` use the corrected ids. New
+  coverage: the native Game Select -> Options state-fill case asserts the
+  draw-ready `fifa96_menu_state` rows/values/page/scroll/Controls fill and the
+  Back return with the setting preserved; `test_engine_audio` now pins the
+  goal-cue gain (100/91/50/0) and the engine Sound Effects gate (off ->
+  percent 0 -> crowd/whistle/goal silent). `make check` 118/118; M1
+  `09b726b7…` and M2 v29 `7c3874f7…` exact by `cmp`; census unchanged
+  (78/78 bodies, 58/80 natural, 64/80 install-live).

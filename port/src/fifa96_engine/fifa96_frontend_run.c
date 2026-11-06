@@ -132,8 +132,8 @@ static const char *frontend_native_option_label(const struct fifa96_frontend_run
   return id != 0 ? frontend_native_string(fr, id, fallback) : fallback;
 }
 
-static void frontend_native_menu_state(const struct fifa96_frontend_run *fr,
-                                       struct fifa96_menu_state *st) {
+static void frontend_native_menu_state_fill(const struct fifa96_frontend_run *fr,
+                                            struct fifa96_menu_state *st) {
   memset(st, 0, sizeof *st);
   st->screen = fr->menu.screen;
   st->font = fifa96_lang_font(&fr->lang);
@@ -214,6 +214,12 @@ static void frontend_native_menu_state(const struct fifa96_frontend_run *fr,
   }
 }
 
+void fifa96_frontend_run_menu_state(const struct fifa96_frontend_run *fr,
+                                    struct fifa96_menu_state *st) {
+  if (fr == NULL || st == NULL) return;
+  frontend_native_menu_state_fill(fr, st);
+}
+
 /* P2 native input path: the same mapped queue drives the model. The library
  * state machine is not stepped, so its phase stays FRONTEND; the engine's
  * bridge consumes `match_start` exactly as it does for the panel path. */
@@ -240,7 +246,7 @@ static int frontend_native_step(struct fifa96_frontend_run *fr, struct fifa96_su
   frontend_native_sync_teams(fr);
   fr->phase = fr->frontend.phase;
   struct fifa96_menu_state menu = {0};
-  frontend_native_menu_state(fr, &menu);
+  fifa96_frontend_run_menu_state(fr, &menu);
   fifa96_menu_art_draw(s, &menu);
   fr->frames++;
   *quit = fr->quit_requested ? 1 : 0;

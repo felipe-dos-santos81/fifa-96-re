@@ -108,14 +108,18 @@ static void match_audio_play_whistle(struct fifa96_match_audio *a) {
  * SFX_GAME clip (6.78 s) and is fired on a score increase. */
 static void match_audio_play_goal(struct fifa96_match_audio *a) {
   struct fifa96_sfx_opts opts;
+  struct fifa96_sfx_voice out[2];
   memset(&opts, 0, sizeof opts);
   opts.pan = -1;
   opts.volume = match_audio_scale_volume(FIFA96_MATCH_AUDIO_CROWD_VOLUME,
                                          a->sfx_percent);
   opts.master = FIFA96_MATCH_AUDIO_MASTER;
+  memset(out, 0, sizeof out);
   if (fifa96_sfx_play_id(&a->mixer, &a->ids, FIFA96_MATCH_AUDIO_GOAL_ID,
-                         &opts, NULL) >= 0)
+                         &opts, out) >= 0) {
+    a->last_goal_gain = out[0].gain;
     a->goal_cues++;
+  }
 }
 
 int fifa96_match_audio_step(struct fifa96_match_audio *a,
