@@ -9849,3 +9849,49 @@ new vector/code re-latches. **P7-L10** the native loft arc/ball height and
 receive/bounce hand-off are not modelled (target_y is 0, the goal armer sees
 y=0). **P7-L11** natural menu-input scoring (arrows+Z without harness staging)
 still depends on the live AI/aim legs; the native chain itself is green.
+
+## P7 addendum 2 — live shot aim and kickoff goal (FU-345, 2026-11-06)
+
+**Shot aim.** The derived flight target was `kicker + 2*direction` from the
+record's static `+0x8E`/pair direction, so a normal kickoff shot missed the
+mouth. `match_run_live_kick_latch` now recognises the human KICK row
+(pair flags mode `0x10`; `(flags & 0x10) != 0` and `(flags & 0x60) == 0`) and
+sets the flight target to the opponent goal-mouth centre: `x = 0`,
+`z = side == 0 ? +0xB30 : -0xB30`, `target_y = 0`. The sign is the one verified
+by the successful windowed goal (side 0 attacks +z). PASS/LONG_BALL
+(`0x20`/`0x40`) keep the staged kicker-relative direction. KICK goal shots use
+the bounded 600-frame flight window (the kickoff-to-mouth travel); the existing
+speed clamp `8..16` and the native metric/heading/velocity/ramp/integration,
+goal armer and goal scan are unchanged. This is a labelled [D] shot-aim
+stand-in for the unported native aim/camera director; it writes no score,
+phase or goal cell. No held-direction intent is consumed: the human KICK always
+aims at the mouth centre.
+
+**Tests.** `test_engine_live_control` now has the no-staging
+`test_live_kickoff_shot_scores` for both sides. It starts from the real live
+kickoff (ball `(480,0,0)`, no ball/taker/camera staging), presses/releases KICK
+through `fifa96_match_run_input`, asserts the latched target is
+`(0, ±0xB30)` with the 600-frame window, then drives the native goal chain to
+score 1-0 (side 0) and 0-1 (side 1, controlled side flipped through
+`phase_machine.side_controlled` after begin), phase 5, `goal_record_side` =
+the scoring side, `goal_armed`/`goal_zone`, then the native phase-1 restart and
+phase-2 resume with the score preserved. No ball position or score is staged in
+this test. The staged attack fixture and the earlier four cases remain.
+
+**Windowed evidence (shipped menu path, no harness).** `./build/fifa96
+data/game/FIFAPCCD96.iso` on `DISPLAY=:1`, Friendly -> Brazil vs Italy, wait
+for the kickoff (`p7-natural-kickoff.png`, 00:01), press Z once: the native
+shot flies from the kickoff spot and scores BRA 1 ITA 0.
+`/tmp/opencode/play/p7-natural-goal.png` (1-0, ball on the goal line) and
+`p7-natural-restart.png` (1-0, kickoff circle) are the captures; the score and
+ball are native, nothing is staged. The first Z produced the goal; a second Z
+was used to release the native phase-1 kickoff gate and reach the restart
+capture (the same FU-70 release the kickoff state machine waits for). The
+windowed build's clock/frames run faster than wall time, so the 4-6 s capture
+window was sampled until the score appeared.
+
+**Additional leg (P7-L12).** The native aim/camera director (held-direction
+intent, goal-side selection, keeper/defender blocking) is unported; the KICK
+row always aims at the mouth centre, so a keeper or off-centre save cannot
+happen. P7-L7 (native per-code target algebra/receive target) and P7-L10 (loft
+arc/receive hand-off) still stand.
