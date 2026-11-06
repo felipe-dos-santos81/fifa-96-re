@@ -4399,3 +4399,13 @@ close-out below).
   the 640 surface (the 320 tape path keeps the 1:1 blit). Remaining: native 3dwpts
   stadium/goal nets, Team Select flags, native Options art, native 640 HUD art,
   native camera director. `make check` 119/119; M1/M2 exact by `cmp`.
+
+- **P10 gameplay camera/stadium correction (2026-11-06).** The live match
+  restored the native camera-0 sideline rig (`focus + (-1920,160,30)`, yaw
+  `0xBF9C`, pitch 200, full lens, native sprite scale), replacing the P10
+  behind-goal broadcast camera that left the play tiny at the horizon. The
+  derived far-stand wall now uses the real GAMESTD1 `STARcovr` seating,
+  `STAScovr` EA Sports hoarding and `STABcovr` banner banks plus the 128x128
+  crowd, so the stand has tiers, advertising and a roof in perspective. The
+  native 3dwpts bowl and goal nets remain **P10-L2**. `make check` 119/119;
+  M1/M2 exact by `cmp`.

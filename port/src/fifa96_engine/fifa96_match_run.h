@@ -2631,8 +2631,9 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
  *
  * Fields: /ART/GAMEFLD1.PVI -> `FplainH.fsh`/`FplainV.fsh` (64x64 tiles; the
  * retail GAMEFLD3 carries FHstripH/V and is the fallback, A1 §1) and
- * /ART/GAMESTD1.PVI -> `STACcovr.fsh` (a 64x64 crowd frame), both through the
- * engine asset table into the render-owned fifa96_pitch arena (A1 §1/§3).
+ * /ART/GAMESTD1.PVI -> the `STACcovr` crowd (128x128 preferred), plus the
+ * `STARcovr`/`STAScovr`/`STABcovr` stand banks, all through the engine asset
+ * table into the render-owned fifa96_pitch arena (A1 §1/§3).
  * Kits: /ART/GAMEART0.PVI `PALteam.fsh` frame 0 supplies the real colours for
  * the sprite body bands (the derived PALsys frame-2 base leaves them magenta,
  * A7 §4); frame 2 supplies the team-1 band colours. The live palette is built

@@ -1369,12 +1369,12 @@ static void test_live_start_gate_and_eye(void) {
 
   mr.live_start = 1;
   fifa96_match_run_eye(&mr, &eye);
-  /* P10 graphics: the live broadcast rig sits behind the controlled goal and
-   * looks down the pitch (the goal mouth is on the z axis). */
-  assert(eye.x == 480 + 30 && eye.y == 320 && eye.z == -120 - 2000);
-  assert(eye.x - mr.render.camera.pos_x == 30);
-  assert(eye.y - mr.render.camera.pos_y == 320);
-  assert(eye.z - mr.render.camera.pos_z == -2000);
+  /* FU-343 / native camera 0: the live sideline rig is focus + (-1920,160,30);
+   * the P10 behind-goal broadcast offset was a visual regression. */
+  assert(eye.x == 480 - 1920 && eye.y == 0 + 160 && eye.z == -120 + 30);
+  assert(eye.x - mr.render.camera.pos_x == -1920);
+  assert(eye.y - mr.render.camera.pos_y == 160);
+  assert(eye.z - mr.render.camera.pos_z == 30);
   fifa96_match_run_eye(NULL, &eye);
   fifa96_match_run_eye(&mr, NULL);
 }
@@ -1387,6 +1387,11 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   assert(r->pitch_art.staged == 1);
   assert(r->pitch_art.tile_h != NULL && r->pitch_art.tile_v != NULL);
   assert(r->pitch_art.crowd != NULL);
+  /* The same GAMESTD1 container carries the derived far-stand wall banks. */
+  assert(r->pitch_art.stand != NULL && r->pitch_art.stand_w == FIFA96_PITCH_STAND_W);
+  assert(r->pitch_art.ad != NULL && r->pitch_art.ad_w == FIFA96_PITCH_AD_W);
+  assert(r->pitch_art.banner != NULL &&
+         r->pitch_art.banner_w == FIFA96_PITCH_BANNER_W);
   assert(r->team_remap_ready == 1);
 
   /* Camera bootstrap: one seeded event; the tracked bind is the controlled
@@ -1419,12 +1424,12 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   assert(fifa96_engine_step(f.engine) == 0);
   fifa96_render_pos eye;
   fifa96_match_run_eye(&f.mr, &eye);
-  assert(eye.x == r->camera.pos_x + 30);
-  assert(eye.y == r->camera.pos_y + 320);
-  assert(eye.z == r->camera.pos_z - 2000);
+  assert(eye.x == r->camera.pos_x - 1920);
+  assert(eye.y == r->camera.pos_y + 160);
+  assert(eye.z == r->camera.pos_z + 30);
 
-  /* The rendered live frame is mostly pitch (the floor plus the crowd band),
-   * not the cleared background. */
+  /* The rendered live frame is mostly pitch (the floor plus the derived
+   * stand wall), not the cleared background. */
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
   uint32_t non_background = 0;
   const uint32_t total = (uint32_t)f.s->width * (uint32_t)f.s->height;

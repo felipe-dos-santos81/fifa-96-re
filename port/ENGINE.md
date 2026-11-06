@@ -10700,3 +10700,37 @@ remain explicitly derived stand-ins.
 **Gate.** `make check` **119/119**; M1/M2 exact by `cmp` remain the authority.
 The surface-size change is windowed-only; the M1/M2 tests continue to request
 320x240 and the hash change is byte-compatible with the pinned frames.
+
+## Phase 63 — P10 gameplay camera/stadium correction (2026-11-06)
+
+**Errata.** Phase 62's *"The broadcast camera, sprite scale and stadium layers
+remain explicitly derived stand-ins"* and Phase 61's *"The live eye now sits
+behind the controlled side's goal ... yaw 0x0300 side 0 / 0x8300 side 1, pitch
+0x0700 ... a 3/4-width lens ... the 22 player slots draw at 3x"* are superseded
+for the windowed live view. The native view object is camera 0 (`[0x107DC8] =
+0x107508`; first-hand `read_memory 0x107510` = `80 f8 ff ff a0 00 00 00 1e 00
+00 00` -> position (-1920,160,30); `read_memory 0x107560` = `9c bf 00 00 c8 00
+00 00` -> yaw 0xBF9C, pitch 200). The live eye is now `focus +
+(-1920,160,30)` with `r->yaw`/`r->pitch` (the FU-154 statics already defined as
+`MATCH_RUN_VIEW_YAW`/`MATCH_RUN_VIEW_PITCH`), the full 640x480 lens and the
+native sprite scale. The P10 behind-goal offset `(30,320,-2000*dir)`, its
+0x0300/0x8300 yaw, 0x0700 pitch, 3/4 lens and 2.5x live player scale are
+removed; they produced the empty foreground and tiny far players in the
+previous p10g-match-view screenshot.
+
+**Stadium.** The native 3dwpts bowl is still unported (**P10-L2**); the retail
+attract footage shows the real tiered bowl and goal-net mesh. The live pitch
+now draws a derived far-stand wall at `x = +0x7E0 + 64` using the real
+GAMESTD1 banks: `STARcovr.fsh` (64x128 seating rows), `STAScovr.fsh` (194x87
+EA Sports hoarding) and `STABcovr.fsh` (128x16 banner), plus the existing
+128x128 `STACcovr` crowd. The wall is inverse-projected per pixel through the
+same projection matrix as the floor, so the stand base, tiers and roof follow
+the camera-0 view. `test_engine_match_render` asserts the stand/ad/banner banks
+are staged and pins the camera-0 eye. This remains explicitly derived: the
+native 3dwpts point/quad renderer (`FUN_000610C4` and the
+`0x15438C`/`0x1543D4` projected arrays) and the goal-net pass are still the
+P10-L2 open leg.
+
+**Gate.** `make check` **119/119**; M1/M2 exact by `cmp` remain the authority.
+Only live_start pixels changed; the headless 320 tapes and the pinned goldens
+are untouched.

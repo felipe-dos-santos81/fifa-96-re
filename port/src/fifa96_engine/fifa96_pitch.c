@@ -192,13 +192,21 @@ int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *e
   uint8_t *tile_h;
   uint8_t *tile_v;
   uint8_t *crowd;
+  uint8_t *stand;
+  uint8_t *ad;
+  uint8_t *banner;
   if (!pitch || !eng || !eng->assets || !field_path || !stadium_path)
     return -FIFA96_ERR_INVALID;
-  owner = calloc(2u * FIFA96_PITCH_TILE_BYTES + FIFA96_PITCH_CROWD_MAX_BYTES, 1);
+  owner = calloc(2u * FIFA96_PITCH_TILE_BYTES + FIFA96_PITCH_CROWD_MAX_BYTES +
+                     FIFA96_PITCH_STAGE_EXTRA_BYTES,
+                 1);
   if (!owner) return -FIFA96_ERR_IO;
   tile_h = owner;
   tile_v = owner + FIFA96_PITCH_TILE_BYTES;
   crowd = owner + 2u * FIFA96_PITCH_TILE_BYTES;
+  stand = crowd + FIFA96_PITCH_CROWD_MAX_BYTES;
+  ad = stand + FIFA96_PITCH_STAND_BYTES;
+  banner = ad + FIFA96_PITCH_AD_BYTES;
 
   if (fifa96_asset_read(eng->assets, field_path, &bytes, &len) != FIFA96_OK) {
     free(owner);
@@ -227,6 +235,17 @@ int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *e
     have_crowd = pitch_container_tile_wh(bytes, len, "STACcovr.fsh", NULL, crowd,
                                          crowd_w, crowd_h);
   }
+  /* The same GAMESTD1 container carries the stand facade (STARcovr, 64x128),
+   * the EA Sports hoarding (STAScovr, 194x87) and the banner strip (STABcovr,
+   * 128x16). They are optional: a container without them keeps the old
+   * screen-space crowd band fallback. */
+  int have_stand = pitch_container_tile_wh(bytes, len, "STARcovr.fsh", NULL, stand,
+                                           FIFA96_PITCH_STAND_W, FIFA96_PITCH_STAND_H);
+  int have_ad = pitch_container_tile_wh(bytes, len, "STAScovr.fsh", NULL, ad,
+                                        FIFA96_PITCH_AD_W, FIFA96_PITCH_AD_H);
+  int have_banner = pitch_container_tile_wh(bytes, len, "STABcovr.fsh", NULL, banner,
+                                            FIFA96_PITCH_BANNER_W,
+                                            FIFA96_PITCH_BANNER_H);
   fifa96_asset_free(bytes);
   if (!have_crowd) {
     free(owner);
@@ -240,6 +259,15 @@ int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *e
   pitch->crowd = crowd;
   pitch->crowd_w = crowd_w;
   pitch->crowd_h = crowd_h;
+  pitch->stand = have_stand ? stand : NULL;
+  pitch->stand_w = have_stand ? FIFA96_PITCH_STAND_W : 0;
+  pitch->stand_h = have_stand ? FIFA96_PITCH_STAND_H : 0;
+  pitch->ad = have_ad ? ad : NULL;
+  pitch->ad_w = have_ad ? FIFA96_PITCH_AD_W : 0;
+  pitch->ad_h = have_ad ? FIFA96_PITCH_AD_H : 0;
+  pitch->banner = have_banner ? banner : NULL;
+  pitch->banner_w = have_banner ? FIFA96_PITCH_BANNER_W : 0;
+  pitch->banner_h = have_banner ? FIFA96_PITCH_BANNER_H : 0;
   pitch->staged = 1;
   pitch->sky_index = FIFA96_PITCH_SKY_INDEX;
   pitch->line_index = FIFA96_PITCH_LINE_INDEX;
@@ -292,6 +320,205 @@ static int pitch_marking(int32_t wx, int32_t wz) {
     if (d2 >= lo * lo && d2 <= hi * hi) return 1;                   /* circle */
   }
   return 0;
+}
+
+/* The far-stand wall [D]: the native 3dwpts bowl is a set of projected stand
+ * quads (P10-L2). This derived layer uses the real GAMESTD1 banks on a single
+ * wall just behind the far touchline (x = +0x7E0 + 64) and inverse-projects
+ * each pixel onto it. It gives the crowd, seating rows and advertising boards
+ * correct perspective relative to the camera-0 sideline rig, while keeping the
+ * native 3dwpts renderer a numbered open leg. */
+#define FIFA96_PITCH_WALL_X (FIFA96_PITCH_HALF_LENGTH + 64)
+#define FIFA96_PITCH_WALL_TOP 1500
+#define FIFA96_PITCH_WALL_AD 180
+#define FIFA96_PITCH_WALL_SEAT 700
+#define FIFA96_PITCH_WALL_CROWD 1280
+
+struct pitch_wall_colors {
+  uint8_t blue;
+  uint8_t blue_light;
+  uint8_t blue_dark;
+  uint8_t red;
+  uint8_t red_light;
+  uint8_t red_dark;
+  uint8_t white;
+  uint8_t grey;
+  uint8_t dark;
+};
+
+static uint8_t pitch_nearest_rgb(const uint8_t *pal, int r, int g, int b) {
+  int best = 0;
+  int best_d = 0x7fffffff;
+  for (int i = 0; i < 256; i++) {
+    int dr = (int)pal[i * 3] - r;
+    int dg = (int)pal[i * 3 + 1] - g;
+    int db = (int)pal[i * 3 + 2] - b;
+    int d = dr * dr + dg * dg + db * db;
+    if (d < best_d) {
+      best_d = d;
+      best = i;
+    }
+  }
+  return (uint8_t)best;
+}
+
+/* The stand banks are indexed for the live match palette, but their seat and
+ * hoarding pixels were authored to read as bright rows/text rather than as
+ * the raw match colours. Use a three-level tint (light row, seat colour, dark
+ * shadow) so the derived wall reads as blue/red seating and a white-lettered
+ * EA Sports board instead of a dark noise field. */
+static uint8_t pitch_wall_tint(uint8_t idx, uint8_t tint, uint8_t tint_light,
+                               uint8_t tint_dark, uint8_t white) {
+  if (idx >= 240) return white;
+  if (idx >= 140) return tint_light;
+  if (idx >= 60) return tint;
+  return tint_dark;
+}
+
+static uint8_t pitch_ad_tint(uint8_t idx, const struct pitch_wall_colors *col) {
+  if (idx >= 140) return col->white;
+  if (idx >= 60) return col->blue_dark;
+  return col->dark;
+}
+
+static uint8_t pitch_wall_pixel(const struct fifa96_pitch *pitch, int32_t wy, int32_t wz,
+                                const struct pitch_wall_colors *col) {
+  const int32_t half_w = (int32_t)FIFA96_PITCH_HALF_WIDTH;
+  int32_t u;
+  int32_t v;
+  if (pitch_abs32(wy - FIFA96_PITCH_WALL_AD) <= 4 ||
+      pitch_abs32(wy - FIFA96_PITCH_WALL_SEAT) <= 4 ||
+      pitch_abs32(wy - FIFA96_PITCH_WALL_CROWD) <= 4 ||
+      pitch_abs32(wy - (FIFA96_PITCH_WALL_AD + FIFA96_PITCH_WALL_SEAT) / 2) <= 4)
+    return col->white;
+  if (wy < FIFA96_PITCH_WALL_AD) {
+    if (pitch->banner && pitch->banner_w > 0 && pitch->banner_h > 0 && wy < 48) {
+      u = (int32_t)(((int64_t)(wz + half_w) * pitch->banner_w) / 512);
+      u %= pitch->banner_w;
+      if (u < 0) u += pitch->banner_w;
+      v = (48 - wy) * pitch->banner_h / 48;
+      if (v < 0) v = 0;
+      if (v >= pitch->banner_h) v = pitch->banner_h - 1;
+      return pitch_wall_tint(
+          pitch->banner[(size_t)v * (size_t)pitch->banner_w + (size_t)u],
+          col->blue, col->blue_light, col->blue_dark, col->white);
+    }
+    if (pitch->ad && pitch->ad_w > 0 && pitch->ad_h > 0) {
+      u = (int32_t)(((int64_t)(wz + half_w) * pitch->ad_w) / 1200);
+      u %= pitch->ad_w;
+      if (u < 0) u += pitch->ad_w;
+      v = (FIFA96_PITCH_WALL_AD - wy) * pitch->ad_h / FIFA96_PITCH_WALL_AD;
+      if (v < 0) v = 0;
+      if (v >= pitch->ad_h) v = pitch->ad_h - 1;
+      return pitch_ad_tint(
+          pitch->ad[(size_t)v * (size_t)pitch->ad_w + (size_t)u], col);
+    }
+  }
+  if (wy < FIFA96_PITCH_WALL_SEAT) {
+    if (pitch->stand && pitch->stand_w > 0 && pitch->stand_h > 0) {
+      const int32_t mid = (FIFA96_PITCH_WALL_AD + FIFA96_PITCH_WALL_SEAT) / 2;
+      uint8_t tint = wy < mid ? col->blue : col->red;
+      uint8_t tint_light = wy < mid ? col->blue_light : col->red_light;
+      uint8_t tint_dark = wy < mid ? col->blue_dark : col->red_dark;
+      u = (int32_t)(((int64_t)(wz + half_w) * pitch->stand_w) / 512);
+      u %= pitch->stand_w;
+      if (u < 0) u += pitch->stand_w;
+      v = (FIFA96_PITCH_WALL_SEAT - wy) * pitch->stand_h /
+          (FIFA96_PITCH_WALL_SEAT - FIFA96_PITCH_WALL_AD);
+      if (v < 0) v = 0;
+      if (v >= pitch->stand_h) v = pitch->stand_h - 1;
+      return pitch_wall_tint(
+          pitch->stand[(size_t)v * (size_t)pitch->stand_w + (size_t)u], tint,
+          tint_light, tint_dark, col->white);
+    }
+  }
+  if (wy < FIFA96_PITCH_WALL_CROWD) {
+    if (pitch->crowd && pitch->crowd_w > 0 && pitch->crowd_h > 0) {
+      u = (int32_t)(((int64_t)(wz + half_w) * pitch->crowd_w) / 1024);
+      u %= pitch->crowd_w;
+      if (u < 0) u += pitch->crowd_w;
+      v = (FIFA96_PITCH_WALL_CROWD - wy) * pitch->crowd_h /
+          (FIFA96_PITCH_WALL_CROWD - FIFA96_PITCH_WALL_SEAT);
+      if (v < 0) v = 0;
+      if (v >= pitch->crowd_h) v = pitch->crowd_h - 1;
+      return pitch->crowd[(size_t)v * (size_t)pitch->crowd_w + (size_t)u];
+    }
+  }
+  {
+    /* Dark roof field with light truss uprights; the old band used the sky
+     * shade here, which read as a second blue sky above the crowd. */
+    uint8_t roof = col->dark;
+    if (((wz + half_w) & 383) < 18) roof = col->grey;
+    if (wy > FIFA96_PITCH_WALL_TOP - 24) roof = col->grey;
+    return roof;
+  }
+}
+
+static void pitch_wall_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s,
+                            const struct fifa96_render_pos *eye, const int32_t mt[9],
+                            const fifa96_render_clip *clip,
+                            const fifa96_projection_point *center, int32_t fov_w,
+                            int32_t fov_h) {
+  if (!pitch->stand || pitch->stand_w <= 0) return;
+  int32_t left = clip->left;
+  int32_t top = clip->top;
+  int32_t right = clip->right;
+  int32_t bottom = clip->bottom;
+  if (left < 0) left = 0;
+  if (top < 0) top = 0;
+  if (right > s->width) right = s->width;
+  if (bottom > s->height) bottom = s->height;
+  if (right <= left || bottom <= top) return;
+  if (eye->x >= FIFA96_PITCH_WALL_X) return;
+  struct pitch_wall_colors col;
+  col.blue = pitch->sky_index;
+  col.blue_light = pitch->line_index;
+  col.blue_dark = pitch->shade ? pitch->shade[pitch->sky_index] : pitch->sky_index;
+  col.red = pitch->sky_index;
+  col.red_light = pitch->line_index;
+  col.red_dark = col.blue_dark;
+  col.white = pitch->line_index;
+  col.grey = pitch->shade ? pitch->shade[pitch->line_index] : pitch->line_index;
+  col.dark = 0x00;
+  if (pitch->palette) {
+    col.blue = pitch_nearest_rgb(pitch->palette, 40, 80, 180);
+    col.blue_light = pitch_nearest_rgb(pitch->palette, 110, 160, 230);
+    col.blue_dark = pitch_nearest_rgb(pitch->palette, 5, 15, 60);
+    col.red = pitch_nearest_rgb(pitch->palette, 190, 40, 40);
+    col.red_light = pitch_nearest_rgb(pitch->palette, 230, 150, 150);
+    col.red_dark = pitch_nearest_rgb(pitch->palette, 70, 10, 15);
+    col.white = pitch_nearest_rgb(pitch->palette, 245, 245, 245);
+    col.grey = pitch_nearest_rgb(pitch->palette, 120, 120, 120);
+    col.dark = pitch_nearest_rgb(pitch->palette, 0, 0, 0);
+  }
+  for (int32_t sy = top; sy < bottom; sy++) {
+    int32_t dy = (int32_t)(((int64_t)center->y - ((int64_t)sy << 16)) /
+                           (int64_t)fov_h);
+    uint8_t *row = s->indexed + (size_t)sy * (size_t)s->width;
+    for (int32_t sx = left; sx < right; sx++) {
+      int32_t dx = (int32_t)((((int64_t)sx << 16) - (int64_t)center->x) /
+                             (int64_t)fov_w);
+      fifa96_projection_vec cam_dir = {dx, dy, 1 << 16};
+      fifa96_projection_vec world_dir;
+      if (fifa96_projection_transform(mt, &cam_dir, &world_dir) != FIFA96_OK) continue;
+      if (world_dir.x <= 0) continue;
+      int64_t t = ((int64_t)(FIFA96_PITCH_WALL_X - eye->x) << 16) / world_dir.x;
+      if (t <= 0) continue;
+      int64_t wy = (int64_t)eye->y + (t * world_dir.y >> 16);
+      if (wy < 0 || wy >= FIFA96_PITCH_WALL_TOP) continue;
+      /* If the ground ray reaches the wall plane closer than the wall, the
+       * pitch is in front of the stand. */
+      if (world_dir.y < 0) {
+        int64_t tg = -((int64_t)eye->y << 16) / world_dir.y;
+        if (tg > 0) {
+          int64_t gx = (int64_t)eye->x + (tg * world_dir.x >> 16);
+          if (gx < FIFA96_PITCH_WALL_X) continue;
+        }
+      }
+      int64_t wz = (int64_t)eye->z + (t * world_dir.z >> 16);
+      row[sx] = pitch_wall_pixel(pitch, (int32_t)wy, (int32_t)wz, &col);
+    }
+  }
 }
 
 int fifa96_pitch_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s,
@@ -347,6 +574,13 @@ int fifa96_pitch_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s
   uint32_t crowd_u_off = (uint32_t)((yaw & 0xFFFF) >> 9);
   for (int32_t sy = top; sy < horizon; sy++) {
     uint8_t *row = s->indexed + (size_t)sy * (size_t)s->width;
+    if (pitch->stand) {
+      /* The projected stand wall (pitch_wall_draw) replaces the old
+       * screen-space band; paint sky first and let the wall overwrite the
+       * stand area. */
+      for (int32_t sx = left; sx < right; sx++) row[sx] = pitch->sky_index;
+      continue;
+    }
     if (sy < band_top) {
       /* The native broadcast view is inside the stadium: the top of the
        * frame is the stand roof, not open sky. Draw a lighter top edge, a
@@ -420,5 +654,6 @@ int fifa96_pitch_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s
       }
     }
   }
+  pitch_wall_draw(pitch, s, eye, mt, clip, center, fov_w, fov_h);
   return 0;
 }

@@ -3993,16 +3993,14 @@ void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *
      * `read_memory 0x107510` = 80 f8 ff ff a0 00 00 00 1e 00 00 00), while the
      * FU-71 triple 0x15774C/50/54 is the follow/focus cell. The engine's
      * focus is render.camera; the eye is the separate rig. */
-    /* P10 graphics: the native match view looks down the pitch (the goal
-     * mouth is on the z axis, `z = +/-0xB30`), so the broadcast rig sits
-     * behind the controlled side's goal and is lifted for a readable view. */
-    int32_t side = mr->phase_machine.side_controlled & 1;
-    int32_t dir = side != 0 ? -1 : 1;
-    /* Offset the rig to the side of the goal so the pitch reads diagonally,
-     * like the native broadcast camera, instead of a symmetric centre line. */
-    out->x = mr->render.camera.pos_x + 30;
-    out->y = mr->render.camera.pos_y + 320;
-    out->z = mr->render.camera.pos_z - 2000 * dir;
+    /* FU-343 P1 / A1 §4, A2 §2: the native match renders from camera object 0
+     * at `focus + (-1920,160,30)`; that is the sideline rig (x is the short
+     * axis, z runs goal-to-goal). P10 briefly replaced it with a behind-goal
+     * broadcast rig, which left a huge empty foreground and pushed the play
+     * to the horizon. Restore the native camera-0 placement. */
+    out->x = mr->render.camera.pos_x - 1920;
+    out->y = mr->render.camera.pos_y + 160;
+    out->z = mr->render.camera.pos_z + 30;
   } else {
     out->x = mr->render.camera.pos_x;
     out->y = mr->render.camera.pos_y;
@@ -7316,34 +7314,16 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   int32_t matrix[9];
   int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
   int32_t recip_y[FIFA96_PROJECTION_RECIP_COUNT];
-  /* FU-343 (P1): the live lens. The native camera-0 record's +0x4C ratio
-   * 0x1500 is the near-threshold field, not an entity FOV term (FU-88 §5), and
-   * the fixed 320-wide projection crops most of the kickoff formation at the
-   * native near-goal standoff. The live path halves the horizontal focal
-   * dimension only, so the camera frames both halves and both teams stay
-   * readable at the native sprite scale; the vertical lens is unchanged. The
-   * non-live projection keeps the pinned dimensions byte-identically. Derived
-   * stand-in for the unported native lens director (FU-157 R2-L1, leg). */
+  /* FU-343 P1 / FU-154 §2.2: the live pose uses the native camera-0 statics
+   * (`r->yaw` = 0xBF9C, `r->pitch` = 200) and the full surface lens. The
+   * camera-0 record's +0x4C ratio 0x1500 is the near-threshold field, not an
+   * entity FOV term (FU-88 §5); the earlier 3/4 live lens and broadcast
+   * yaw/pitch were compensation for the removed behind-goal rig, not native
+   * values. Non-live keeps the pinned projection dimensions. */
   int32_t lens_w = s->width;
   int32_t lens_h = s->height;
-  /* P10 graphics: the live camera sits behind the goal like the native
-   * broadcast rig, so the lens is doubled to keep the players and pitch
-   * readable. The old half-width live lens squashed every sprite
-   * horizontally; the full native lens restores the aspect. Non-live path
-   * unchanged. */
-  /* P10 graphics: a slightly wider live lens (aspect preserved) frames the
-   * formation; the live sprite scale below keeps the players readable. */
-  if (mr->live_start) {
-    lens_w = s->width * 3 / 4;
-    lens_h = s->height * 3 / 4;
-  }
   int32_t view_yaw = r->yaw;
   int32_t view_pitch = r->pitch;
-  if (mr->live_start) {
-    int32_t side = mr->phase_machine.side_controlled & 1;
-    view_yaw = side != 0 ? (0x8000 + 0x0300) : 0x0300;
-    view_pitch = 0x0700;
-  }
   fifa96_err_t err = fifa96_projection_matrix(view_yaw, view_pitch, matrix);
   if (err != FIFA96_OK) return (int)err;
   err = fifa96_projection_reciprocal(lens_w, recip_x);
@@ -7366,6 +7346,7 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
    * path draws it; the pitch and sprite passes share `cam`. */
   if (mr->live_start && r->pitch_art.staged) {
     r->pitch_art.shade = r->pitch_shade;
+    r->pitch_art.palette = r->palette;
     err = (fifa96_err_t)fifa96_pitch_draw(&r->pitch_art, s, &cam, view_yaw, matrix,
                                           &clip, &center, lens_w, lens_h);
     if (err != FIFA96_OK) return (int)err;
@@ -7529,10 +7510,9 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     if (mr->live_start && r->team_remap_ready &&
         slot < (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
       sprite_remap = r->remap_team[slot / FIFA96_MATCH_ENTITY_RECORDS];
-    /* P10 graphics: the native sprite scale is tuned for the VGA camera; at
-     * the live broadcast framing the players read too small, so scale the 22
-     * player slots up (the ball keeps its native size). Live-only. */
-    if (mr->live_start && slot < 22u) scale = (scale * 5) / 2;
+    /* The native projection already sizes players for the camera-0 sideline
+     * rig; the P10 2.5x live upscale was only compensation for the removed
+     * behind-goal camera. Keep the native scale for every slot. */
     int rc = match_run_draw_sprite(s, &sprite, sprite_remap, x, y, scale, frame.mirrored,
                                    &clip);
     if (rc != 0) return rc;
