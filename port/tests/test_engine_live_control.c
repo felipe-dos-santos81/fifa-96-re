@@ -845,41 +845,286 @@ static void test_live_defender_blocks_shot(uint32_t side) {
   assert((mr->dispatched_ok & (1ull << 7u)) != 0ull);
   assert(mr->live_kick_active == 1u);
   assert(mr->live_kick_shot == 1u);
-  defending_team = lc_team_for_side(mr, (uint8_t)(side ^ 1u));
-  assert(defending_team >= 0);
-  defender_id = defending_team * FIFA96_MATCH_ENTITY_RECORDS + 2;
-  for (int i = 0; i < 240 && saved == 0; i++) {
-    if (mr->live_kick_active &&
-        lc_abs32(mr->entities.ball.z) >= FIFA96_MATCH_LIVE_SAVE_ZONE) {
-      struct fifa96_match_entity *d =
+  {
+    /* The exact staged kick, saved for the repeat-shot recovery check. */
+    struct fifa96_ball_pair_state repeat_pair = mr->entities.ball.pair;
+    assert((repeat_pair.flags & 0x70u) != 0u);
+    defending_team = lc_team_for_side(mr, (uint8_t)(side ^ 1u));
+    assert(defending_team >= 0);
+    defender_id = defending_team * FIFA96_MATCH_ENTITY_RECORDS + 2;
+    for (int i = 0; i < 240 && saved == 0; i++) {
+      if (mr->live_kick_active &&
+          lc_abs32(mr->entities.ball.z) >= FIFA96_MATCH_LIVE_SAVE_ZONE) {
+        struct fifa96_match_entity *d =
+            &mr->entities.team[(uint32_t)defending_team].records[2];
+        d->pos_x = mr->entities.ball.x;
+        d->pos_z = mr->entities.ball.z;
+        d->target_x = d->pos_x;
+        d->target_z = d->pos_z;
+      }
+      one_granted_frame(mr);
+      if (mr->live_save_hold != 0u) saved = 1;
+    }
+    assert(saved == 1);
+    assert(mr->live_save_record == defender_id);
+    assert(mr->live_kick_active == 0u);
+    assert(mr->live_kick_shot == 0u);
+    assert(mr->goal_armed == 0u);
+    assert(mr->score[0] == 0u && mr->score[1] == 0u);
+    assert(mr->state.phase == 2u);
+    /* The FU-73 launch pair is cleared so it cannot re-latch, and the consumed
+     * kick signature is dropped so the exact repeat can. */
+    assert(mr->entities.ball.pair.actor == 0);
+    assert(mr->entities.ball.pair.receiver == 0);
+    assert(mr->entities.ball.pair.traj == 0);
+    assert((mr->entities.ball.pair.flags & 0x70u) == 0x20u);
+    assert(mr->entities.ball.pair.code == 2u);
+    assert(mr->live_kick_sig_actor == FIFA96_MATCH_ENTITY_NONE);
+    assert(mr->live_kick_pair_consumed == 0u);
+    {
+      const struct fifa96_match_entity *d =
           &mr->entities.team[(uint32_t)defending_team].records[2];
-      d->pos_x = mr->entities.ball.x;
-      d->pos_z = mr->entities.ball.z;
+      int32_t ddx = mr->entities.ball.x - d->pos_x;
+      int32_t ddz = mr->entities.ball.z - d->pos_z;
+      assert(fifa96_entity_distance(ddx, ddz) <= FIFA96_MATCH_LIVE_SAVE_RADIUS);
+    }
+    /* The 30-frame pin: the save frame pinned, then every remaining hold frame
+     * keeps the ball on the block position. */
+    {
+      const int32_t pinned_x = mr->entities.ball.x;
+      const int32_t pinned_z = mr->entities.ball.z;
+      const uint16_t hold = mr->live_save_hold;
+      assert(hold == FIFA96_MATCH_LIVE_SAVE_HOLD - 1u);
+      for (uint16_t i = 0; i < hold; i++) {
+        one_granted_frame(mr);
+        assert(mr->entities.ball.x == pinned_x);
+        assert(mr->entities.ball.z == pinned_z);
+        assert(mr->score[0] == 0u && mr->score[1] == 0u);
+      }
+      assert(mr->live_save_hold == 0u);
+    }
+    for (int i = 0; i < 10; i++) {
+      one_granted_frame(mr);
+      assert(mr->score[0] == 0u && mr->score[1] == 0u);
+      assert(mr->state.phase == 2u);
+    }
+    /* Repeat the identical kick: the block cleared the pair, the signature and
+     * the consumed marker, so the same actor/traj/vector/flags/code must latch
+     * again. Move the ball and the defending records out of the save zone first
+     * so the new flight is not immediately blocked by fixture leftovers. */
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *d =
+          &mr->entities.team[(uint32_t)defending_team].records[i];
+      d->pos_x = 0x700;
+      d->pos_z = 0x700;
       d->target_x = d->pos_x;
       d->target_z = d->pos_z;
     }
+    stage_ball(mr, 480, 0, 0);
+    mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+    mr->live_kick_active = 0u;
+    mr->live_kick_shot = 0u;
+    mr->live_save_hold = 0u;
+    mr->entities.controlled = repeat_pair.actor;
+    mr->entities.ball.pair = repeat_pair;
     one_granted_frame(mr);
-    if (mr->live_save_hold != 0u) saved = 1;
-  }
-  assert(saved == 1);
-  assert(mr->live_save_record == defender_id);
-  assert(mr->live_kick_active == 0u);
-  assert(mr->live_kick_shot == 0u);
-  assert(mr->goal_armed == 0u);
-  assert(mr->score[0] == 0u && mr->score[1] == 0u);
-  assert(mr->state.phase == 2u);
-  {
-    const struct fifa96_match_entity *d =
-        &mr->entities.team[(uint32_t)defending_team].records[2];
-    int32_t ddx = mr->entities.ball.x - d->pos_x;
-    int32_t ddz = mr->entities.ball.z - d->pos_z;
-    assert(fifa96_entity_distance(ddx, ddz) <= FIFA96_MATCH_LIVE_SAVE_RADIUS);
-  }
-  for (int i = 0; i < 40; i++) {
-    one_granted_frame(mr);
+    assert(mr->live_kick_active == 1u);
+    assert(mr->live_kick_shot == 1u);
     assert(mr->score[0] == 0u && mr->score[1] == 0u);
     assert(mr->state.phase == 2u);
   }
+  drop_lc_fixture(&f);
+}
+
+/* P8 (FU-346) helpers: park a team's outfield records (all visible) far from
+ * the ball and stage a live KICK flight at a chosen ball z. Fixture staging
+ * only; no score/phase/goal-cell write. */
+static void lc_park_outfield(struct fifa96_match_run *mr, int32_t team,
+                             int32_t x, int32_t z, uint8_t skip_9a) {
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &mr->entities.team[(uint32_t)team].records[i];
+    e->pos_x = x;
+    e->pos_z = z;
+    e->target_x = x;
+    e->target_z = z;
+    e->skip_98 = 0u;
+    e->skip_9a = skip_9a;
+  }
+}
+
+static void lc_stage_live_shot(struct fifa96_match_run *mr, int32_t ball_x,
+                               int32_t ball_z) {
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_hold = 0u;
+  mr->live_kick_active = 1u;
+  mr->live_kick_shot = 1u;
+  mr->live_kick_frames = 600u;
+  mr->live_kick_target_x = 0;
+  mr->live_kick_target_z = 0xB30;
+  mr->goal_armed = 0u;
+  mr->live_save_hold = 0u;
+  mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  stage_ball(mr, ball_x, 0, ball_z);
+}
+
+/* P8 (FU-346) flight-end signature: a completed flight clears the value
+ * signature but keeps the consumed-pair marker, so the still-staged FU-73 word
+ * cannot relaunch by itself (the goal/restart phantom-kick guard). A genuine
+ * new dispatch clears the marker, and the identical pair then latches again.
+ * The block path clears both and is covered by the block test above. */
+static void test_live_flight_end_stale_pair_guard(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t actor = mr->entities.controlled;
+  assert(actor >= 0 && actor != 0);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(mr, &kick, 1) == 0);
+  }
+  one_granted_frame(mr);
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  for (int i = 0; i < 8 && (mr->dispatched_ok & (1ull << 7u)) == 0ull; i++)
+    one_granted_frame(mr);
+  assert(mr->live_kick_active == 1u);
+  assert(mr->entities.ball.pair.actor == actor);
+  assert(mr->live_kick_pair_consumed == 1u);
+
+  /* End the flight through the bounded window (no goal/phase change). */
+  mr->live_kick_frames = 1u;
+  one_granted_frame(mr);
+  assert(mr->live_kick_active == 0u);
+  assert(mr->live_kick_shot == 0u);
+  assert(mr->live_kick_sig_actor == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr->live_kick_pair_consumed == 1u);
+
+  /* The same staged pair, with no new dispatch, must not relaunch. */
+  stage_ball(mr, 480, 0, 0);
+  mr->entities.controlled = actor;
+  mr->slot.entity = actor;
+  mr->live_kick_active = 0u;
+  one_granted_frame(mr);
+  assert(mr->live_kick_active == 0u);
+
+  /* A new dispatch clears the consumed marker (match_kick_run); the identical
+   * pair then latches a fresh flight. */
+  mr->entities.controlled = actor;
+  mr->slot.entity = actor;
+  mr->live_kick_pair_consumed = 0u;
+  one_granted_frame(mr);
+  assert(mr->live_kick_active == 1u);
+  assert(mr->live_kick_shot == 1u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(mr->state.phase == 2u);
+  drop_lc_fixture(&f);
+}
+
+/* P8 (FU-346) mouth edge: the block must leave the goal mouth to the native
+ * armer/scan. A ball just inside `fifa96_match_goal_zone` with a defender on it
+ * arms and scores instead of recording a save; the same ball one unit outside
+ * the classifier is still blockable. */
+static void test_live_shot_block_mouth_edge(void) {
+  int32_t team;
+  {
+    struct lc_fixture f = make_lc_fixture();
+    struct fifa96_match_run *mr = f.mr;
+    team = lc_team_for_side(mr, 1u);
+    assert(team >= 0);
+    /* Just inside: |z| = 0xB40 is in 0xB10..0xB90, |x| = 0 < 0xD0, y = 0. */
+    assert(fifa96_match_goal_zone(0, 0, 0xB40));
+    lc_park_outfield(mr, team, 0x700, 0x700, 0u);
+    {
+      struct fifa96_match_entity *d = &mr->entities.team[(uint32_t)team].records[2];
+      d->pos_x = 0;
+      d->pos_z = 0xB40;
+      d->target_x = 0;
+      d->target_z = 0xB40;
+    }
+    lc_stage_live_shot(mr, 0, 0xB40);
+    one_granted_frame(mr);
+    assert(mr->live_save_hold == 0u);
+    assert(mr->live_save_record == FIFA96_MATCH_ENTITY_NONE);
+    assert(mr->goal_armed == 1u);
+    for (int i = 0; i < 8 && mr->score[0] == 0u; i++) one_granted_frame(mr);
+    assert(mr->score[0] == 1u && mr->score[1] == 0u);
+    assert(mr->live_save_record == FIFA96_MATCH_ENTITY_NONE);
+    assert(mr->live_save_hold == 0u);
+    drop_lc_fixture(&f);
+  }
+  {
+    struct lc_fixture f = make_lc_fixture();
+    struct fifa96_match_run *mr = f.mr;
+    team = lc_team_for_side(mr, 1u);
+    assert(team >= 0);
+    /* Just outside: 0xB0F is below the 0xB10 classifier bound. */
+    assert(!fifa96_match_goal_zone(0, 0, 0xB0F));
+    lc_park_outfield(mr, team, 0x700, 0x700, 0u);
+    {
+      struct fifa96_match_entity *d = &mr->entities.team[(uint32_t)team].records[2];
+      d->pos_x = 0;
+      d->pos_z = 0xB0F;
+      d->target_x = 0;
+      d->target_z = 0xB0F;
+    }
+    lc_stage_live_shot(mr, 0, 0xB0F);
+    one_granted_frame(mr);
+    assert(mr->live_save_hold != 0u);
+    assert(mr->live_save_record ==
+           (int32_t)((uint32_t)team * FIFA96_MATCH_ENTITY_RECORDS + 2u));
+    assert(mr->score[0] == 0u && mr->score[1] == 0u);
+    assert(mr->goal_armed == 0u);
+    drop_lc_fixture(&f);
+  }
+}
+
+/* P8 (FU-346) hidden records: the block scan uses the native +0x98/+0x9A
+ * exclusions. A hidden defender sitting on the ball must not block; the same
+ * record with the exclusion cleared does (and a visible record outside the
+ * radius never blocks). */
+static void test_live_shot_block_skips_hidden_defender(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t team = lc_team_for_side(mr, 1u);
+  int32_t defender_id = team * FIFA96_MATCH_ENTITY_RECORDS + 2;
+  assert(team >= 0);
+  lc_park_outfield(mr, team, 0x700, 0x700, 0u);
+  {
+    struct fifa96_match_entity *d = &mr->entities.team[(uint32_t)team].records[2];
+    d->pos_x = 0;
+    d->pos_z = 0xA00;
+    d->target_x = 0;
+    d->target_z = 0xA00;
+    d->skip_9a = 1u;                 /* hidden/occupied record on the ball */
+  }
+  {
+    struct fifa96_match_entity *d = &mr->entities.team[(uint32_t)team].records[3];
+    d->pos_x = 0;
+    d->pos_z = 0xA00 + FIFA96_MATCH_LIVE_SAVE_RADIUS + 8;
+    d->target_x = d->pos_x;
+    d->target_z = d->pos_z;
+  }
+  lc_stage_live_shot(mr, 0, 0xA00);
+  one_granted_frame(mr);
+  assert(mr->live_save_hold == 0u);
+  assert(mr->live_save_record == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr->live_kick_active == 1u);
+  assert(mr->live_kick_shot == 1u);
+  /* Un-hide the same record: it is now the nearest and blocks. */
+  {
+    struct fifa96_match_entity *d = &mr->entities.team[(uint32_t)team].records[2];
+    d->pos_x = 0;
+    d->pos_z = 0xA00;
+    d->target_x = 0;
+    d->target_z = 0xA00;
+    d->skip_9a = 0u;
+  }
+  lc_stage_live_shot(mr, 0, 0xA00);
+  one_granted_frame(mr);
+  assert(mr->live_save_hold != 0u);
+  assert(mr->live_save_record == defender_id);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(mr->state.phase == 2u);
   drop_lc_fixture(&f);
 }
 
@@ -1002,6 +1247,9 @@ int main(void) {
   test_live_opponent_presses_and_claims();
   test_live_opponent_far_claim_rejected();
   test_live_defender_blocks_both_sides();
+  test_live_shot_block_mouth_edge();
+  test_live_shot_block_skips_hidden_defender();
+  test_live_flight_end_stale_pair_guard();
   test_live_shot_still_scores_wide();
   test_live_shot_block_ignores_pass();
   printf("test_engine_live_control: ok\n");

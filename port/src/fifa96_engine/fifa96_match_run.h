@@ -1248,6 +1248,14 @@ struct fifa96_match_run {
   int16_t live_kick_sig_traj;
   int16_t live_kick_sig_vx, live_kick_sig_vh, live_kick_sig_vz;
   uint8_t live_kick_sig_flags, live_kick_sig_code;
+  /* P8 / FU-346 (save-retry guard): the launch pair consumed by the last
+   * live-kick latch and the flag saying it is still the staged FU-73 word.
+   * A new kick dispatch (`match_kick_run`) clears the flag, so an identical
+   * repeat can latch; while the flag is set the pair-matched latch is skipped,
+   * which keeps a goal/restart from re-launching the stale pair as a phantom
+   * kick. Live-only; init/begin and the block clear it. */
+  struct fifa96_ball_pair_state live_kick_consumed_pair;
+  uint8_t live_kick_pair_consumed;
   /* P8 / live shot block (derived [D]): set by the KICK-row latch so the
    * defender block only consumes a shot, never a PASS/LONG_BALL. The block
    * clears `live_kick_active`, pins the ball for `live_save_hold` frames (the

@@ -287,9 +287,17 @@ static void test_option_descriptors(void) {
   const char *const *help = fifa96_menu_model_controls_text(&help_count);
   assert(help != NULL && help_count == 13);
   assert(strcmp(help[0], "CONTROLS") == 0);
-  assert(strcmp(help[10], "PAD A/SOUTH  KICK / CONFIRM") == 0);
-  assert(strcmp(help[11], "PAD B/EAST   PASS / BACK") == 0);
-  assert(strcmp(help[help_count - 1], "PAD WEST     LONG BALL") == 0);
+  /* The real dual roles: the shared CONFIRM/DECLINE codes are pad A/South and
+   * keyboard Enter, and pad B/East and keyboard X/Backspace. */
+  assert(strcmp(help[1], "A/SOUTH or ENTER") == 0);
+  assert(strcmp(help[2], "  MENU: SELECT / CONFIRM") == 0);
+  assert(strcmp(help[3], "  PLAY: KICK") == 0);
+  assert(strcmp(help[4], "B/EAST or X/BACKSPACE") == 0);
+  assert(strcmp(help[5], "  MENU: BACK / DECLINE") == 0);
+  assert(strcmp(help[6], "  PLAY: PASS") == 0);
+  assert(strcmp(help[7], "Z KICK   C PASS   V LONG BALL") == 0);
+  assert(strcmp(help[8], "HALF-TIME: C/PASS STARTS 2ND HALF") == 0);
+  assert(strcmp(help[help_count - 1], "PAD WEST  LONG BALL") == 0);
 }
 
 static void test_option_defaults_and_values(void) {
@@ -659,9 +667,9 @@ static void test_native_options_state_fill(void) {
   assert(st.help_count == (int)help_count);
   for (size_t i = 0; i < help_count; i++) assert(strcmp(st.help[i], help[i]) == 0);
   assert(strcmp(st.help[0], "CONTROLS") == 0);
-  assert(strcmp(st.help[st.help_count - 1], "PAD WEST     LONG BALL") == 0);
-  assert(strcmp(st.help[st.help_count - 2], "PAD B/EAST   PASS / BACK") == 0);
-  assert(strcmp(st.help[st.help_count - 3], "PAD A/SOUTH  KICK / CONFIRM") == 0);
+  assert(strcmp(st.help[st.help_count - 1], "PAD WEST  LONG BALL") == 0);
+  assert(strcmp(st.help[st.help_count - 2], "     MATCH: PAUSE") == 0);
+  assert(strcmp(st.help[st.help_count - 3], "ESC  MENU: QUIT TO DOS") == 0);
 
   /* Back -> list (window kept), Back -> Game Select; the setting survives. */
   press(&fr, FIFA96_ENGINE_KEY_DECLINE);
