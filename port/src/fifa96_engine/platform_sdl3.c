@@ -26,8 +26,11 @@
  * keyboard handler leaves the key's flag set while the key is physically down.
  * The backend therefore keeps the pressed set and re-presents every held
  * engine key on each poll (a state sample), instead of relying on the OS
- * auto-repeat cadence, whose initial delay would pulse the hold. */
-#define SDL3_HELD_CODES (FIFA96_ENGINE_KEY_PASS + 1)
+ * auto-repeat cadence, whose initial delay would pulse the hold.
+ * P9: the set must cover the whole match action block through LONG_BALL (10);
+ * stopping at PASS (9) made a held V / pad West a one-shot pulse, so the
+ * engine derived a release on the next poll instead of holding 0x40. */
+#define SDL3_HELD_CODES (FIFA96_ENGINE_KEY_LONG_BALL + 1)
 
 struct sdl_state {
   SDL_Window *win;
