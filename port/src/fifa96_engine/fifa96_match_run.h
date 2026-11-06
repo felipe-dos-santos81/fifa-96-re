@@ -141,6 +141,35 @@ struct fifa96_match_matchup {
  * FU203-L2). */
 #define FIFA96_MATCH_RUN_KICKOFF_PHASE 1u
 
+/* P8 live contest stand-ins (derived [D], live_start only).
+ *
+ * `FIFA96_MATCH_LIVE_OPPONENT_CLAIM_RANGE` is the contact radius the live
+ * row-05 claim repair uses: the native possession block `[0x158724]` becomes
+ * the pool `ball.carrier` with no distance gate in the port
+ * (`fifa96_match_handlers.c`, row 05 `0x7F1BF..0x7F205`), so a far opponent
+ * team-target latches possession across the pitch (recon probe: carrier at
+ * distance ~1127). While `live_start`, a non-controlled team's row-05 claim is
+ * accepted only at/inside this radius; the reference scale is the P7 control
+ * range (`MATCH_RUN_LIVE_CONTROL_RANGE` 0x400) narrowed to contact.
+ *
+ * `FIFA96_MATCH_LIVE_SAVE_RADIUS` / `..._SAVE_ZONE` / `..._SAVE_HOLD` are the
+ * derived live shot-block tuning: a defending **outfield** record (1..10)
+ * within the radius of the ball while the shot is in the final approach zone
+ * (`|ball.z| >= SAVE_ZONE`) blocks the live KICK flight for the hold frames.
+ * The block is **defender-only** (outfield records 1..10): in windowed live
+ * play the keeper charges the camera/ball to ~0x1F from the shot, so a
+ * keeper-inclusive 0x28 block always stopped the shipped centre shot (windowed
+ * debug tick 467: team 1 record 0 distance 31) and a 0x18 variant also left a
+ * second windowed run 0-0 (00:09), i.e. the shipped path unscored. The early
+ * rotating-defender interception at ~0x6B2 is outside the final zone. No
+ * native open-play save exists (recon §2:
+ * `0x88940`/`0x70074` are record-free), so this is a labelled stand-in, never a
+ * native claim; the keeper's own save is P8-L3. */
+#define FIFA96_MATCH_LIVE_OPPONENT_CLAIM_RANGE 0x40
+#define FIFA96_MATCH_LIVE_SAVE_RADIUS 0x28
+#define FIFA96_MATCH_LIVE_SAVE_ZONE 0x900
+#define FIFA96_MATCH_LIVE_SAVE_HOLD 30u
+
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus
  * the FU-84 row +8 sprite-bank (animator) index the FU-85 resolver consumes.
  * `anim_timer`/`anim_turn` are the FU-84 `FUN_0008E008` per-frame driver state
@@ -1219,6 +1248,16 @@ struct fifa96_match_run {
   int16_t live_kick_sig_traj;
   int16_t live_kick_sig_vx, live_kick_sig_vh, live_kick_sig_vz;
   uint8_t live_kick_sig_flags, live_kick_sig_code;
+  /* P8 / live shot block (derived [D]): set by the KICK-row latch so the
+   * defender block only consumes a shot, never a PASS/LONG_BALL. The block
+   * clears `live_kick_active`, pins the ball for `live_save_hold` frames (the
+   * ball machine serves `target = ball` and zero velocity while the hold is
+   * nonzero), records the defending pool id in `live_save_record` and gives it
+   * `ball.carrier`. It writes no score/phase/goal cell. Live-only; init/begin
+   * clear it and the non-live path never reads it. */
+  uint8_t live_kick_shot;
+  uint16_t live_save_hold;
+  int32_t live_save_record;            /* defending pool id or NONE */
   /* P7 / FU-345 (restart): set while a live phase-1 restart is pending, then
    * consumed on the phase-1 -> phase-2 transition to bind the human control to
    * its nearest outfield record without awarding the ball (the opponent keeps

@@ -4202,3 +4202,39 @@ close-out below).
   check` **119/119**; M1 `09b726b7…` and M2 v29 `7c3874f7…` exact by `cmp`;
   census unchanged (78/78, 58/80, 64/80, action 38/45, phase 26/35). Closes
   P6-L6 and P7-L5.
+
+- **P8 live opponent movement and shot block (FU-346, 2026-11-06).** The live
+  opponent now contests: `match_run_live_opponent_update` re-runs the ported
+  `fifa96_match_entities_team_select` (`0x8D9B2 CALL 0x8DE8C`) at the native
+  third-template anchor (`0x8D948..0x8D9B7`, `camera.pos + camera.vel*32`),
+  gated to the opponent team and `live_start` only; a 0x400 hysteresis avoids
+  per-frame thrash. The row-05 claim (`0x7F1BF..0x7F205`) is repaired for live
+  opponents: a non-controlled team cannot set `ball.carrier` beyond 0x40, and a
+  stale far opponent carrier is cleared, so possession is contact-only instead
+  of the recon-measured ~1127-unit latch. A labelled live shot block
+  (`match_run_live_shot_block`, before `match_run_live_goal_arm`) stops a KICK
+  flight when a defending **outfield** record is within 0x28 of the ball in the
+  final approach zone (`|z| >= 0x900`): it clears the flight/pair, pins the ball
+  for 30 frames (`live_save_hold`) and records `live_save_record`; no score,
+  phase or goal cell is written. The block is defender-only because the live
+  keeper charges to ~0x1F from the shipped shot; the 0x28 windowed debug hit
+  and a 0x18 windowed run both left the shipped centre shot unscored, so the
+  keeper's open-play save stays a leg. New `test_engine_live_control` cases
+  cover the target/record approach, the far/near claim split, a staged defender
+  block on both sides, the shipped 1-0 with the nearest final-zone outfield
+  defender outside the radius, and the PASS non-trigger. `make check`
+  **119/119**; M1 `09b726b7…` / M2 v29 `7c3874f7…` exact; census unchanged
+  (78/78, 58/80, 64/80, action 38/45, phase 26/35). Shipped `DISPLAY=:1`
+  Brazil/Italy: first Z clears the opening latch, second Z runs the row-07
+  kick/flight/native scan -> **BRA 1-0 at 00:05**; `p8-ai-goal.png` (1-0, ball
+  at the goal area), `p8-opponent-move.png`/`p8-opponent-move-before.png`
+  (00:07/00:08 live contest after the restart). No save occurred on the shipped
+  defender-only path, so no `p8-save.png` is claimed; the staged-defender tests
+  are the save proof. Half-time was released with C/PASS and the second half
+  ended at **FULL TIME, BRA 1-0 ITALY, PERIOD 2**
+  (`p8-ai-fulltime.png`; `p8-ai-return-menu.png` for the Game Select return).
+  Remaining: P8-L1
+  native target-select clears / row-05 fallback `FUN_0007F7E0` (P9), P8-L2
+  possession-range root cause, P8-L3 open-play keeper save, P8-L4 native ball
+  hold, P8-L5 target hysteresis/demotion, P8-L6 full 10-player AI/row 03,
+  P8-L7 live shot camera follow, P8-L8 native aim/camera director.

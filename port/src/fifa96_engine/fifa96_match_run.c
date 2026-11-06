@@ -1910,7 +1910,16 @@ static void match_run_entity_drain(struct fifa96_match_run *mr) {
  * native rig smoothing and the live orientation director stay open legs. */
 static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   struct fifa96_camera *cam = &mr->render.camera;
-  if (cam->event_param != 0 || cam->speed != 0) return;   /* native pan active */
+  /* P8: a human live shot (and its save hold) keeps the derived ball-follow even
+   * while a native pan event is active. The opponent contest can emit a row-04
+   * camera event of its own; without this the live focus froze at the pitch
+   * centre and the native camera-out-of-bounds armer never reached the goal
+   * (probe: event_param 0x19 from F100, goal lost). This only keeps the [D]
+   * FU-310 live camera stand-in on the ball during the shot; non-shot frames
+   * still honour an active native pan. */
+  if ((cam->event_param != 0 || cam->speed != 0) &&
+      mr->live_kick_active == 0u && mr->live_save_hold == 0u)
+    return;   /* native pan active */
   int32_t tracked = mr->entities.controlled;
   if (tracked == FIFA96_MATCH_ENTITY_NONE) tracked = mr->slot.entity;
   if (tracked != FIFA96_MATCH_ENTITY_NONE && cam->tracked != tracked)
@@ -2670,6 +2679,7 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   mr->live_kick_frames =
       kick_row ? MATCH_RUN_LIVE_FLIGHT_GOAL_FRAMES : MATCH_RUN_LIVE_FLIGHT_FRAMES;
   mr->live_kick_active = 1u;
+  mr->live_kick_shot = kick_row ? 1u : 0u;   /* P8: the shot block's gate */
   mr->live_kick_sig_actor = id;
   mr->live_kick_sig_traj = pair->traj;
   mr->live_kick_sig_vx = pair->vector.x;
@@ -2687,6 +2697,7 @@ static int match_run_live_kick_flight_step(struct fifa96_match_run *mr,
   if (!mr || !mr->live_start || !mr->live_kick_active) return 0;
   if (mr->state.phase != 2u || mr->goal_armed) {
     mr->live_kick_active = 0;
+    mr->live_kick_shot = 0;
     return 0;
   }
   b->target_x = mr->live_kick_target_x;
@@ -2712,8 +2723,10 @@ static void match_run_live_kick_flight_end(struct fifa96_match_run *mr,
   if (mr->live_kick_frames != 0u) mr->live_kick_frames--;
   if (mr->live_kick_frames == 0u || mr->goal_armed || mr->state.phase != 2u ||
       ax > 0x6C0 || az > 0xC00 ||
-      (dx <= 0x20 && dx >= -0x20 && dz <= 0x20 && dz >= -0x20))
+      (dx <= 0x20 && dx >= -0x20 && dz <= 0x20 && dz >= -0x20)) {
     mr->live_kick_active = 0;
+    mr->live_kick_shot = 0;
+  }
 }
 
 /* P7 / FU-345 (restart): bind the human control to its nearest outfield record
@@ -2781,6 +2794,9 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
       mr->live_restart_pending = 1u;
     mr->live_kickoff_touch = 0u;
     mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+    mr->live_kick_shot = 0u;
+    mr->live_save_hold = 0u;
+    mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
     return;
   }
   if (mr->live_restart_pending != 0u) {
@@ -2789,6 +2805,9 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
      * and any stale flight so the contact tackle/claim is live again. */
     mr->live_kick_hold = 0u;
     mr->live_kick_active = 0u;
+    mr->live_kick_shot = 0u;
+    mr->live_save_hold = 0u;
+    mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
     match_run_live_restart_bind(mr);
   }
   match_run_live_kick_latch(mr);
@@ -2888,6 +2907,158 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
         mr->entities.ball.carrier == id && e->code != 5u && e->code != 7u)
       (void)fifa96_match_entities_install(e, (uint8_t)mr->state.phase, 5u, 0);
   }
+}
+
+/* P8 / live opponent contest (derived [D], live_start only).
+ *
+ * The native pre-pass `FUN_0008D8EC` re-selects a team target only while
+ * `[team+0x7B2] == 0 || [0x157A83] == 0` (fresh gate bytes `0x8D932 CMP
+ * dword[EBP+0x7B2],0` / `0x8D93B CMP dword[0x157A83],0`), and the native
+ * clears that re-open the gate live in the unported row bodies /
+ * `FUN_0007F7E0` (P9). The port therefore keeps the kickoff target forever and
+ * only that one outfield record moves; row 03 (the hold/clamp body) is NULL, so
+ * the rest sit at code 3. The live repair re-runs the native nearest select at
+ * the native **third template** anchor (`0x8D948..0x8D9B7`: template 2 =
+ * `0x157770` + `dword[0x1577BE]>>16<<5` / `dword[0x1577C0]>>16<<5`; the port
+ * packs those live lead words as `camera.speed`/`camera.vel_x`/`camera.vel_z`,
+ * see `match_run_entity_frame`). With the FU-300 unpacking that anchor is
+ * `camera.pos + camera.vel*32`, and the select is the same ported
+ * `fifa96_match_entities_team_select` (`0x8D9B2 CALL 0x8DE8C`, nearest with
+ * skip 0) that `team_select_target` would call. Only the opponent team block is
+ * re-targeted (never the human's selected record). A hysteresis
+ * (`MATCH_RUN_LIVE_OPPONENT_RETARGET`) keeps a target that is already close to
+ * the anchor, so the old code-5 record is not abandoned every frame (P8-L5).
+ *
+ * The second half is the [D] far-carrier repair (P8-L2): row 05 maps the native
+ * possession block `[0x158724]` onto `ball.carrier` with no distance gate
+ * (`0x7F1BF..0x7F205`); the probe measured a target record claiming at ~1127
+ * units. A live opponent carrier farther than the contact range from the ball
+ * is cleared, so it can only hold possession at contact. This writes only the
+ * ball possession cell, never a record, score, phase or goal cell. */
+#define MATCH_RUN_LIVE_OPPONENT_RETARGET 0x400
+
+static void match_run_live_opponent_update(struct fifa96_match_run *mr) {
+  int32_t human;
+  uint32_t opp;
+  int32_t anchor_x;
+  int32_t anchor_z;
+  int32_t target;
+  int32_t base;
+  if (!mr || !mr->live_start || mr->state.phase != 2u) return;
+  human = match_run_live_control_team(mr);
+  if (human < 0) return;
+  opp = 1u - (uint32_t)human;
+  base = (int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS);
+  anchor_x = mr->render.camera.pos_x +
+             (int32_t)(int16_t)mr->render.camera.vel_x * 32;
+  anchor_z = mr->render.camera.pos_z +
+             (int32_t)(int16_t)mr->render.camera.vel_z * 32;
+  target = mr->entities.team[opp].target;
+  if (target < base ||
+      target >= base + (int32_t)FIFA96_MATCH_ENTITY_RECORDS) {
+    (void)fifa96_match_entities_team_select(&mr->entities, opp,
+                                            (int16_t)anchor_x,
+                                            (int16_t)anchor_z);
+  } else {
+    const struct fifa96_match_entity *e =
+        &mr->entities.team[opp].records[(uint32_t)(target - base)];
+    int32_t dx = e->pos_x - anchor_x;
+    int32_t dz = e->pos_z - anchor_z;
+    if (fifa96_entity_distance(dx, dz) > MATCH_RUN_LIVE_OPPONENT_RETARGET)
+      (void)fifa96_match_entities_team_select(&mr->entities, opp,
+                                              (int16_t)anchor_x,
+                                              (int16_t)anchor_z);
+  }
+  {
+    int32_t carrier = mr->entities.ball.carrier;
+    if (carrier >= base &&
+        carrier < base + (int32_t)FIFA96_MATCH_ENTITY_RECORDS) {
+      const struct fifa96_match_entity *ce =
+          &mr->entities.team[opp].records[(uint32_t)(carrier - base)];
+      int32_t dx = mr->entities.ball.x - ce->pos_x;
+      int32_t dz = mr->entities.ball.z - ce->pos_z;
+      if (fifa96_entity_distance(dx, dz) >
+          FIFA96_MATCH_LIVE_OPPONENT_CLAIM_RANGE)
+        mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+    }
+  }
+}
+
+/* P8 / live shot block (derived [D], live_start only; P8-L3/L4).
+ *
+ * No native open-play save exists: the native goal scan `FUN_00088940` and mouth
+ * classifier `FUN_00070074` are record-free (recon §2), and the only keeper dive
+ * producer is the phase-6 penalty arm (`0x8D558`, `match_run_phase_arm`). This
+ * live stand-in runs immediately before `match_run_live_goal_arm` (so it sees
+ * the same frame-start shot the armer would) and, while a live KICK flight is
+ * in its final approach zone (`|ball.z| >= FIFA96_MATCH_LIVE_SAVE_ZONE`), finds
+ * the nearest defending outfield record (1..10) within
+ * `FIFA96_MATCH_LIVE_SAVE_RADIUS` of the ball. The keeper is excluded: its live
+ * charge reaches ~0x1F from the shipped shot path: the 0x28 debug hit and a 0x18
+ * windowed run both left the shipped centre shot unscored (P8-L3). On a hit it clears the flight,
+ * clears the FU-73 pair so the launch pair cannot re-latch, pins the ball for
+ * `FIFA96_MATCH_LIVE_SAVE_HOLD` frames through the ball-machine hold branch,
+ * records the defending pool id and gives it the ball possession cell. It
+ * writes no score/phase/goal cell; the native armer/scan keep that authority.
+ *
+ * Beatable by construction [D]: the shipped kickoff shot's closest defender is
+ * the keeper at ~0x2F sampled (> 0x28), and the early rotating-defender
+ * interception (~0x6B2) is outside the final zone, so the shipped path still
+ * reaches the native goal. A staged/near defender inside the radius stops it.
+ * The hold is a pin, not a possession install on the record (no code write). */
+static int match_run_live_shot_block(struct fifa96_match_run *mr) {
+  int32_t defending_side;
+  int32_t team;
+  int32_t best = -1;
+  int16_t best_distance = 0;
+  uint32_t magnitude;
+  if (!mr || !mr->live_start) return 0;
+  if (mr->state.phase != 2u || !mr->live_kick_active || mr->live_kick_shot == 0u ||
+      mr->goal_armed)
+    return 0;
+  magnitude = (uint32_t)mr->entities.ball.z;
+  if (mr->entities.ball.z < 0) magnitude = 0u - magnitude;
+  if ((int16_t)(uint16_t)magnitude < FIFA96_MATCH_LIVE_SAVE_ZONE) return 0;
+  /* The shot is aimed at the goal in `live_kick_target_z`'s direction: that
+   * side is the defending team. */
+  defending_side = mr->live_kick_target_z > 0 ? 1 : 0;
+  team = -1;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    if (mr->entities.team[t].side == (uint8_t)defending_side) team = (int32_t)t;
+  if (team < 0) return 0;
+  /* Defender-only [D]: the live keeper charges the camera/ball (windowed
+   * measurement: 0x1F from the ball at z 0x9D2, debug tick 467), so a
+   * keeper-inclusive 0x28 block always stopped the shipped centre shot and made
+   * the match unwinnable. A keeper-inclusive 0x18 variant also left a second
+   * windowed run 0-0 (00:09). Outfield defenders 1..10 only; the keeper's
+   * open-play save has no native producer (P8-L3). */
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e =
+        &mr->entities.team[(uint32_t)team].records[i];
+    int32_t dx = mr->entities.ball.x - e->pos_x;
+    int32_t dz = mr->entities.ball.z - e->pos_z;
+    int32_t d = fifa96_entity_distance(dx, dz);
+    if (best < 0 || d < (int32_t)best_distance) {
+      best = (int32_t)i;
+      best_distance = (int16_t)d;
+    }
+  }
+  if (best < 0 || best_distance > FIFA96_MATCH_LIVE_SAVE_RADIUS) return 0;
+  mr->live_kick_active = 0u;
+  mr->live_kick_frames = 0u;
+  mr->live_kick_shot = 0u;
+  mr->live_save_hold = FIFA96_MATCH_LIVE_SAVE_HOLD;
+  mr->live_save_record =
+      (int32_t)((uint32_t)team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)best);
+  (void)fifa96_ball_pair_clear(&mr->entities.ball.pair);
+  mr->entities.ball.carrier = mr->live_save_record;
+  mr->entities.ball.target_x = mr->entities.ball.x;
+  mr->entities.ball.target_y = mr->entities.ball.y;
+  mr->entities.ball.target_z = mr->entities.ball.z;
+  mr->entities.ball.vel_x = 0;
+  mr->entities.ball.vel_z = 0;
+  mr->entities.ball.speed = 0;
+  return 1;
 }
 
 /* Release the Task 2 staging arena. Runs only on initialized runs: init must
@@ -3121,6 +3292,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->live_kick_sig_vz = 0;
   mr->live_kick_sig_flags = 0;
   mr->live_kick_sig_code = 0;
+  mr->live_kick_shot = 0;              /* P8: no live shot flight */
+  mr->live_save_hold = 0;              /* P8: no live save hold */
+  mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
   mr->live_restart_pending = 0;
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
@@ -3186,6 +3360,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->live_kick_sig_vz = 0;
   mr->live_kick_sig_flags = 0;
   mr->live_kick_sig_code = 0;
+  mr->live_kick_shot = 0;              /* P8: fresh live shot marker */
+  mr->live_save_hold = 0;              /* P8: fresh live save hold */
+  mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
   mr->live_restart_pending = 0;
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
@@ -5449,6 +5626,25 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
   int32_t delta = (int32_t)mr->state.frame_delta;
   int live_flight = 0;
   b->max_speed = 5;                                         /* 0x8BB08 */
+  /* P8 / live shot block: while the save hold is nonzero, pin the ball on its
+   * current record position and skip the phase-2 lead/velocity/integration.
+   * The hold is decremented here (one per granted frame); it is live-only and
+   * init/begin clear it. This is the derived stand-in for the unported
+   * keeper-hold callers (P8-L4); it writes only ball cells. */
+  if (mr->live_start && mr->live_save_hold != 0u) {
+    mr->live_save_hold--;
+    b->target_x = b->x;
+    b->target_y = b->y;
+    b->target_z = b->z;
+    b->vel_x = 0;
+    b->vel_z = 0;
+    b->speed = 0;
+    b->metric = 0;
+    b->metric_dx = 0;
+    b->metric_dz = 0;
+    b->machine_ran = 1;
+    return;
+  }
   /* P7 / FU-345: the live kick flight override (derived; see
    * match_run_live_kick_latch). Non-live runs never set live_start. */
   if (mr->live_start) live_flight = match_run_live_kick_flight_step(mr, b);
@@ -5728,6 +5924,11 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * the referee/phase tail (the frame draws this camera). Non-live runs keep
      * the event/pan-only camera (M2 byte-identical). */
     if (mr->live_start) match_run_live_camera_follow(mr);
+    /* P8 / [D]: the live opponent contest. Runs after this frame's camera
+     * follow (the third-template anchor is camera.pos + camera.vel*32) and
+     * after the entity chain, so the re-selected opponent target is consumed by
+     * the next frame's outfield machine / row-05 dispatch. Live-only. */
+    if (mr->live_start) match_run_live_opponent_update(mr);
     /* FU-150 P2: the referee machine (the native phase-body/act invocation
      * runs inside the entity/phase chain) once per granted frame. Idle when no
      * machine is active, so a fresh run's tape is unchanged. */
@@ -5777,6 +5978,10 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
         mr->act.id == 0 && mr->global_157ac0 == 1u &&
         (mr->global_157ac2 == 2u || mr->global_157ac2 == 3u))
       fifa96_match_run_period_over_rearm(mr);
+    /* P8 / [D]: the live defender/keeper shot block. It must see the same
+     * frame-start ball as the armer and clear the flight before the armer, so
+     * a blocked shot never reaches the goal cells. Live-only. */
+    if (mr->live_start) (void)match_run_live_shot_block(mr);
     /* P6 task 2 / P6-L1 (FU-344): the live ball-position armer runs after
      * this frame's phase/entity ball update and immediately before the native
      * clock-tail scan (0x8B623 FUN_00088940), so a ball in the mouth arms and
