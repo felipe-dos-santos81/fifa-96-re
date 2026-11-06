@@ -34,7 +34,9 @@
 #define MENU_OPT_PITCH 16
 #define MENU_OPT_ROW_H 14
 #define MENU_OPT_HELP_TOP 28
-#define MENU_OPT_HELP_PITCH 14
+/* P9: 15 help lines (the dual pad/keyboard roles and the half-time hint) must
+ * clear the y=225 footer; 13 keeps the last line above it at 320x240. */
+#define MENU_OPT_HELP_PITCH 13
 
 enum {
   MENU_IDX_BG = 1,

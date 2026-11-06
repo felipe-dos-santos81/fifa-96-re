@@ -10555,3 +10555,28 @@ P9-L9 the goal-side gate is a plain current-z test, not a native dive reach;
 P9-L10 the half-time sit-1 gate still needs repeated KICK/C pulses in the
 windowed path; row-05 `FUN_0007F7E0`, row 03 and the full 10-player AI remain
 open.
+
+## P9 final acceptance and evidence erratum (2026-11-06)
+
+**Shipped loop.** `DISPLAY=:1`, Friendly Brazil/Italy, default halves: a
+centre Z at the kickoff is saved by the live keeper (**0-0** at 00:06); hold
+Up or Down with Z to aim at ±0x80 along the goal-mouth width; Z+Up scored
+**BRA 1-0** at 00:05; the match reached **FULL TIME BRA 1-0 ITALY, PERIOD 2**.
+The keeper goal-side gate, stale-aim clearing, aim-axis/side cases and the
+coverage asserts are in the deterministic suite. `make check` **119/119**;
+M1 `09b726b7…`/M2 v29 `7c3874f7…` exact by `cmp`; census unchanged (78/78,
+58/80, 64/80, action 38/45, phase 26/35).
+
+**Erratum (append-only; earlier P9 text remains historical).** The P9 and
+P9-fix2 sentences that `p9-save.png`/`p9-save2.png` show the ball at the
+defending keeper are corrected: both captures show 0-0 at ~00:06 from
+midfield and do not show the save. The deterministic
+`test_live_keeper_saves_centre` (keeper carrier/pin, no score) is the save
+proof; the screenshots corroborate only the 0-0 score. The 15-line Controls
+help block now clears the footer via `MENU_OPT_HELP_PITCH 13`.
+
+**Remaining legs.** Native aim/camera director and per-code target/loft
+(P9-L7), native open-play keeper save/dive and reach (P9-L8/L9), repeated
+half-time sit-1 pulses (P9-L10), row-05 `FUN_0007F7E0`/row 03/full AI,
+Practice/Leagues/Tournaments/Playoffs/Load Game/Modem Setup, replay/captions,
+rosters, commentary/music. Each is numbered; none is claimed native.

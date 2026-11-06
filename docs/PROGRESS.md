@@ -4341,3 +4341,18 @@ close-out below).
   (P9-L7), native open-play keeper save (P9-L8), current-z goal-side gate
   (P9-L9), repeated half-time pulses (P9-L10), row-05 `FUN_0007F7E0`/row 03
   and full 10-player AI.
+
+- **P9 final acceptance and evidence erratum (2026-11-06).** Shipped
+  `DISPLAY=:1`, Friendly Brazil/Italy, default halves: centre Z at the
+  kickoff -> live keeper save, **0-0** at 00:06; Z+Up -> **BRA 1-0** at
+  00:05; **FULL TIME BRA 1-0 ITALY, PERIOD 2**. Aim is Up/Down at ±0x80; the
+  keeper goal-side/stale-aim/coverage cases are deterministic. `make check`
+  **119/119**; M1 `09b726b7…`/M2 `7c3874f7…` exact; census unchanged (78/78,
+  58/80, 64/80). **Erratum (append-only):** `p9-save.png`/`p9-save2.png` show
+  0-0 at ~00:06 from midfield, not the ball at the keeper; the deterministic
+  `test_live_keeper_saves_centre` is the save proof, the screenshots only
+  corroborate the 0-0. The 15-line Controls help block clears the footer via
+  `MENU_OPT_HELP_PITCH 13`. Remaining legs: native aim/camera director and
+  per-code target/loft, native open-play keeper save/dive/reach, repeated
+  half-time pulses, row-05/FUN_0007F7E0, row 03/full AI, the six other Game
+  Select modes, replay/captions, rosters, commentary/music.
