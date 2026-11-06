@@ -174,15 +174,17 @@ struct fifa96_match_matchup {
  * (`|keeper.x - live_kick_target_x| <= 0x40`). The near-ball gate
  * (`distance(ball, keeper) <= FIFA96_MATCH_LIVE_KEEPER_SAVE_NEAR`) keeps a
  * keeper parked at the origin (the no-ISO fixture's unterminated formation)
- * from "saving" a shot from 2000 units away; the shipped ISO keeper stands at
- * `(0, ±0x9EA)`, so the centre shot passes within ~0x30 and is saved. The
- * lateral reach is deliberately the target-x band, not the instantaneous
- * ball distance: a ±0x80 aim is 0x80 from the keeper's x at the goal line and
- * beats it. The keeper must also be goal-side of the ball (`pos_z >= ball.z`
- * for a +z goal, `<=` for -z), so a shot already past the keeper is not
- * pinned. This is the P9 stand-in for the unported native open-play keeper
- * save (P8-L3/P8-A3); the native per-code target/loft and aim/camera director
- * remain legs. */
+ * from "saving" a shot from 2000 units away. The shipped ISO keeper tracks to
+ * `(0, ±0x9EA)` at the shot: the P8 AI recon (`P8-ai-recon.md`) finding-4
+ * engine probe has the defending keeper at `(0,2706)` on the first live frame
+ * and `(0,2538)` when the centre shot passes within `0x2F`, so the centre shot
+ * is saved. The lateral reach is deliberately the target-x band, not the
+ * instantaneous ball distance: a ±0x80 aim is 0x80 from the keeper's x at the
+ * goal line and beats it. The keeper must also be goal-side of the ball
+ * (`pos_z >= ball.z` for a +z goal, `<=` for -z), so a shot already past the
+ * keeper is not pinned. This is the P9 stand-in for the unported native
+ * open-play keeper save (P8-L3/P8-A3); the native per-code target/loft and
+ * aim/camera director remain legs. */
 #define FIFA96_MATCH_LIVE_OPPONENT_CLAIM_RANGE 0x40
 #define FIFA96_MATCH_LIVE_SAVE_RADIUS 0x28
 #define FIFA96_MATCH_LIVE_SAVE_ZONE 0x900
@@ -191,6 +193,19 @@ struct fifa96_match_matchup {
 #define FIFA96_MATCH_LIVE_KEEPER_SAVE_REACH 0x40
 #define FIFA96_MATCH_LIVE_KEEPER_SAVE_ZONE 0x9C0
 #define FIFA96_MATCH_LIVE_KEEPER_SAVE_NEAR 0x180
+/* P9 / FU-347 aim sampler: the FU-70 action bits (0x10 KICK, 0x20 PASS,
+ * 0x40 LONG_BALL) and the native Up/Down depth bits. The live update samples
+ * their union and detects a rising edge on either half. */
+#define FIFA96_MATCH_LIVE_AIM_ACTION_MASK 0x70u
+#define FIFA96_MATCH_LIVE_AIM_DEPTH_MASK 0x03u
+#define FIFA96_MATCH_LIVE_AIM_SAMPLE_MASK \
+  (FIFA96_MATCH_LIVE_AIM_ACTION_MASK | FIFA96_MATCH_LIVE_AIM_DEPTH_MASK)
+#define FIFA96_MATCH_LIVE_AIM_UP 0x01u
+#define FIFA96_MATCH_LIVE_AIM_DOWN 0x02u
+/* The native mouth classifier `FUN_00070074` bounds reused by the keeper
+ * stand-in: `|z| >= 0xB10` and `|x| < 0xD0` (0x70087..0x700BB). */
+#define FIFA96_MATCH_LIVE_GOAL_MOUTH_Z 0xB10
+#define FIFA96_MATCH_LIVE_GOAL_MOUTH_X 0xD0
 
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus
  * the FU-84 row +8 sprite-bank (animator) index the FU-85 resolver consumes.
@@ -1275,12 +1290,15 @@ struct fifa96_match_run {
    * logic), so the live update captures the aim on a real action-button rising
    * edge (or a depth-key edge while the action is held) into this cell and the
    * KICK latch consumes it. `live_aim_prev_input` is the action+depth sample
-   * used for that edge; a new action press with no depth bits clears the aim
-   * to the centre, so an unaimed KICK pressed while another direction is held
-   * cannot inherit a stale ±0x80. Live-only; init/begin/phase change/latch/
-   * save/flight-end clear it. */
-  int32_t live_aim_x;
-  uint8_t live_aim_prev_input;   /* previous action (0x70) + depth (0x03) */
+   * used for that edge; a new action press with no depth bits clears the
+   * goal-x aim to the centre, so an unaimed KICK pressed while another
+   * direction is held cannot inherit a stale ±0x80. The single
+   * `match_run_live_aim_reset` helper clears the latch everywhere and drops
+   * the action/depth sample on init/begin and a phase change/restart; the
+   * latch-consume, save and flight-end resets keep the sample so a held press
+   * cannot re-arm the aim. Live-only; the M1/M2 tapes never read it. */
+  int32_t live_aim_goal_x;
+  uint8_t live_aim_prev_input;   /* previous aim sample (0x73) */
   int32_t live_kick_sig_actor;
   int16_t live_kick_sig_traj;
   int16_t live_kick_sig_vx, live_kick_sig_vh, live_kick_sig_vz;

@@ -18,11 +18,12 @@
  *  - the live flight consumer turns the staged FU-73 vector into a real ball
  *    target, and an authentic attack-position kick scores through the native
  *    goal scan (1-0, phase 5, restart, score preserved);
- *  - P9 / FU-347: the KICK row's goal-mouth aim is steered by the held lateral
- *    input (left -0x80, right +0x80, none/both centre), so the human can beat
+ *  - P9 / FU-347: the KICK row's goal-mouth aim is steered by the held depth
+ *    input (Up +0x80, Down -0x80, none/both centre), so the human can beat
  *    a live keeper; the defending record 0 saves a centre shot (P9 stand-in,
  *    no score/phase write) while a ±0x80 aim or a displaced keeper scores
- *    through the same native chain.
+ *    through the same native chain. The centre save is also pinned on the real
+ *    kickoff with only a one-time keeper placement, no per-frame staging.
  *
  * Everything here is live-only (the M1/M2 headless tapes never set live_start).
  */
@@ -163,10 +164,13 @@ static void lc_press_kick(struct fifa96_match_run *mr, int32_t aim_key) {
   assert(fifa96_match_run_input(mr, keys, count) == 0);
 }
 
-/* The shipped ISO keeper stands at `(0, ±0x9EA)` (the +z keeper for side 1).
- * The headless fixture has no formation seed, so record 0 otherwise starts at
- * the origin; the keeper tests pin the real goal spot each frame (fixture
- * staging only — no score/ball write). */
+/* The shipped ISO keeper tracks to `(0, ±0x9EA)` at the shot (P8 AI recon,
+ * `P8-ai-recon.md` finding 4: engine probe, defending keeper `(0,2706)` ->
+ * `(0,2538)`, the centre shot passes at distance `0x2F`). The headless fixture
+ * has no formation seed, so record 0 otherwise starts at the origin; the
+ * keeper tests pin that goal spot (fixture staging only — no score/ball
+ * write). The no-staging kickoff variant pins it once and then lets the live
+ * AI run. */
 #define LC_KEEPER_GOAL_Z 0x9EA
 static int32_t lc_keeper_goal_z(uint8_t defending_side) {
   return defending_side == 1u ? LC_KEEPER_GOAL_Z : -LC_KEEPER_GOAL_Z;
@@ -180,14 +184,13 @@ static void lc_pin_keeper(struct fifa96_match_run *mr, int32_t team, int32_t x,
   k->target_z = z;
 }
 
-/* The pool team indices for the controlled side and the defending side. */
+/* The pool team index for the defending side. The controlled side is the
+ * complement; callers that need it use `lc_team_for_side` directly. */
 static void lc_sides(struct fifa96_match_run *mr, uint8_t controlled,
-                     int32_t *human_team, int32_t *defending_team,
-                     uint8_t *defending_side) {
+                     int32_t *defending_team, uint8_t *defending_side) {
   *defending_side = (uint8_t)(controlled ^ 1u);
-  *human_team = lc_team_for_side(mr, controlled);
   *defending_team = lc_team_for_side(mr, *defending_side);
-  assert(*human_team >= 0 && *defending_team >= 0);
+  assert(*defending_team >= 0);
 }
 
 /* The live begin seed: nearest controlled-side outfield record to the ball is
@@ -450,7 +453,6 @@ static void test_live_kick_flight_scores(void) {
 static void test_live_kickoff_shot_scores_side(uint32_t side) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
-  int32_t human_team;
   int32_t def_team;
   uint8_t def_side;
   int32_t aim_key = side == 0u ? FIFA96_ENGINE_KEY_UP : FIFA96_ENGINE_KEY_DOWN;
@@ -470,8 +472,7 @@ static void test_live_kickoff_shot_scores_side(uint32_t side) {
     one_granted_frame(mr);
     one_granted_frame(mr);
   }
-  lc_sides(mr, (uint8_t)side, &human_team, &def_team, &def_side);
-  (void)human_team;
+  lc_sides(mr, (uint8_t)side, &def_team, &def_side);
   taker = mr->entities.controlled;
   assert(taker >= (int32_t)(side * FIFA96_MATCH_ENTITY_RECORDS));
   assert(taker < (int32_t)((side + 1u) * FIFA96_MATCH_ENTITY_RECORDS));
@@ -1364,7 +1365,6 @@ static void test_live_aim_depth_axis(void) {
 static void test_live_keeper_saves_centre_side(uint32_t side) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
-  int32_t human_team;
   int32_t def_team;
   uint8_t def_side;
   int32_t keeper_id;
@@ -1374,7 +1374,7 @@ static void test_live_keeper_saves_centre_side(uint32_t side) {
     one_granted_frame(mr);
     one_granted_frame(mr);
   }
-  lc_sides(mr, (uint8_t)side, &human_team, &def_team, &def_side);
+  lc_sides(mr, (uint8_t)side, &def_team, &def_side);
   keeper_id = def_team * FIFA96_MATCH_ENTITY_RECORDS;
   if (side != 0u) {
     int32_t taker = mr->entities.controlled;
@@ -1402,7 +1402,7 @@ static void test_live_keeper_saves_centre_side(uint32_t side) {
   assert(saved == 1);
   assert(mr->live_save_record == keeper_id);
   assert(mr->entities.ball.carrier == keeper_id);
-  assert(mr->live_aim_x == 0);
+  assert(mr->live_aim_goal_x == 0);
   assert(mr->live_kick_active == 0u);
   assert(mr->live_kick_shot == 0u);
   assert(mr->goal_armed == 0u);
@@ -1441,6 +1441,60 @@ static void test_live_keeper_saves_centre(void) {
   test_live_keeper_saves_centre_side(1u);
 }
 
+/* P9 (FU-347) no-staging keeper save: the real side-0 kickoff, no ball or
+ * taker staging, and the keeper placed at the probed ISO goal spot once before
+ * the kick. The live AI then runs untouched for the whole flight (no per-frame
+ * re-pin); the centre shot is still saved by record 0, with no score/phase
+ * write. Side 1 keeps the per-frame fixture in
+ * `test_live_keeper_saves_centre` because its kickoff needs the fixture
+ * controlled-side switch. */
+static void test_live_keeper_saves_centre_no_staging(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t def_team;
+  uint8_t def_side;
+  int32_t keeper_id;
+  int32_t saved = 0;
+  assert(mr->entities.ball.x == 480 && mr->entities.ball.y == 0 &&
+         mr->entities.ball.z == 0);
+  lc_sides(mr, 0u, &def_team, &def_side);
+  keeper_id = def_team * FIFA96_MATCH_ENTITY_RECORDS;
+  /* One-time fixture placement only: the keeper's probed goal spot. */
+  lc_pin_keeper(mr, def_team, 0, lc_keeper_goal_z(def_side));
+  lc_press_kick(mr, 0);                    /* centre shot: no lateral aim */
+  one_granted_frame(mr);
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  for (int i = 0; i < 8 && (mr->dispatched_ok & (1ull << 7u)) == 0ull; i++)
+    one_granted_frame(mr);
+  assert((mr->dispatched_ok & (1ull << 7u)) != 0ull);
+  assert(mr->live_kick_active == 1u);
+  assert(mr->live_kick_shot == 1u);
+  assert(mr->live_kick_target_x == 0);
+  for (int i = 0; i < 500 && saved == 0; i++) {
+    one_granted_frame(mr);                 /* no keeper re-pin here */
+    if (mr->live_save_hold != 0u) saved = 1;
+  }
+  assert(saved == 1);
+  assert(mr->live_save_record == keeper_id);
+  assert(mr->entities.ball.carrier == keeper_id);
+  assert(mr->live_aim_goal_x == 0);
+  assert(mr->live_kick_active == 0u);
+  assert(mr->live_kick_shot == 0u);
+  assert(mr->goal_armed == 0u);
+  assert(mr->goal_zone == 0u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(mr->state.phase == 2u);
+  {
+    const struct fifa96_match_entity *k =
+        &mr->entities.team[(uint32_t)def_team].records[0];
+    int32_t dx = mr->entities.ball.x - k->pos_x;
+    int32_t dz = mr->entities.ball.z - k->pos_z;
+    assert(fifa96_entity_distance(dx, dz) <=
+           FIFA96_MATCH_LIVE_KEEPER_SAVE_NEAR);
+  }
+  drop_lc_fixture(&f);
+}
+
 /* P9 (FU-347) wide-aim goal: the same real kickoff centre path but with a held
  * depth key, against a keeper pinned at the shipped goal spot. The aim is
  * 0x80 from the keeper's x (outside `..._KEEPER_SAVE_REACH`), so the native
@@ -1450,7 +1504,6 @@ static void test_live_keeper_beaten_by_aim_side(uint32_t side, int32_t aim_key,
                                                 int32_t aim_x) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
-  int32_t human_team;
   int32_t def_team;
   uint8_t def_side;
   int goal = 0;
@@ -1459,8 +1512,7 @@ static void test_live_keeper_beaten_by_aim_side(uint32_t side, int32_t aim_key,
     one_granted_frame(mr);
     one_granted_frame(mr);
   }
-  lc_sides(mr, (uint8_t)side, &human_team, &def_team, &def_side);
-  (void)human_team;
+  lc_sides(mr, (uint8_t)side, &def_team, &def_side);
   if (side != 0u) {
     int32_t taker = mr->entities.controlled;
     struct fifa96_match_entity *e =
@@ -1506,12 +1558,10 @@ static void test_live_keeper_beaten_by_aim(void) {
 static void test_live_keeper_displaced_centre_goal(void) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
-  int32_t human_team;
   int32_t def_team;
   uint8_t def_side;
   int goal = 0;
-  lc_sides(mr, 0u, &human_team, &def_team, &def_side);
-  (void)human_team;
+  lc_sides(mr, 0u, &def_team, &def_side);
   lc_press_kick(mr, 0);
   one_granted_frame(mr);
   assert(fifa96_match_run_input(mr, NULL, 0) == 0);
@@ -1693,7 +1743,7 @@ static void test_live_stale_aim_two_kicks(void) {
     one_granted_frame(mr);
   assert(mr->live_kick_active == 1u);
   assert(mr->live_kick_target_x == 0);
-  assert(mr->live_aim_x == 0);
+  assert(mr->live_aim_goal_x == 0);
   assert(mr->score[0] == 0u && mr->score[1] == 0u);
   assert(mr->state.phase == 2u);
   drop_lc_fixture(&f);
@@ -1717,6 +1767,7 @@ int main(void) {
   test_live_shot_block_ignores_pass();
   test_live_aim_depth_axis();
   test_live_keeper_saves_centre();
+  test_live_keeper_saves_centre_no_staging();
   test_live_keeper_beaten_by_aim();
   test_live_keeper_displaced_centre_goal();
   test_live_keeper_goal_side();

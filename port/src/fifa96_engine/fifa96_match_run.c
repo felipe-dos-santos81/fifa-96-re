@@ -2498,13 +2498,21 @@ static int match_run_live_control_bind(struct fifa96_match_run *mr, int32_t id,
   return 1;
 }
 
-/* P7 / FU-345: the controlled team index (the side byte the phase machine
- * carries), or -1 when neither team block matches. */
-static int32_t match_run_live_control_team(const struct fifa96_match_run *mr) {
-  uint8_t side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
+/* P7 / FU-345: the pool team index carrying `side`, or -1 when neither team
+ * block matches. The live control follow, the outfield shot block and the
+ * keeper save all locate a side through this scan. */
+static int32_t match_run_live_team_for_side(const struct fifa96_match_run *mr,
+                                            uint8_t side) {
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
     if (mr->entities.team[t].side == side) return (int32_t)t;
   return -1;
+}
+
+/* P7 / FU-345: the controlled team index (the side byte the phase machine
+ * carries), or -1 when neither team block matches. */
+static int32_t match_run_live_control_team(const struct fifa96_match_run *mr) {
+  return match_run_live_team_for_side(
+      mr, (uint8_t)(mr->phase_machine.side_controlled & 1u));
 }
 
 /* P7 / FU-345: the live kickoff seed. Called once at the end of the live
@@ -2647,6 +2655,17 @@ static void match_run_live_kick_consumed_clear(struct fifa96_match_run *mr) {
          sizeof mr->live_kick_consumed_pair);
 }
 
+/* P9 / FU-347: reset the shot aim. One helper owns the latch; `reset_edge`
+ * also drops the action/depth sample. The latch-consume, save and flight-end
+ * resets keep the sample so a held action+depth cannot re-arm the aim from
+ * the same press, while init/begin, a phase change and a restart start a
+ * fresh edge. */
+static void match_run_live_aim_reset(struct fifa96_match_run *mr,
+                                     int reset_edge) {
+  mr->live_aim_goal_x = 0;
+  if (reset_edge) mr->live_aim_prev_input = 0;
+}
+
 static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   struct fifa96_ball_pair_state *pair;
   struct fifa96_match_entity *e;
@@ -2696,16 +2715,17 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
    * opponent goal mouth (z=±0xB30) instead of the derived kicker-relative
    * target. P9 / FU-347: the held **depth** input aims the mouth target —
    * mapped Up (0x01) -> x=+0x80, Down (0x02) -> x=-0x80, none/both -> x=0 —
-   * inside the |x| < 0xD0 mouth (Left/Right are the goal-side z axis, not aim
-   * inputs). PASS/LONG_BALL (0x20/0x40) keep the staged direction. This
+   * inside the `FIFA96_MATCH_LIVE_GOAL_MOUTH_X` mouth (Left/Right are the
+   * goal-side z axis, not aim inputs). PASS/LONG_BALL (0x20/0x40) keep the
+   * staged direction. This
    * remains a labelled [D] shot-aim stand-in for the unported aim/camera
    * director; it never writes score, phase or the goal cells. */
   kick_row = ((pair->flags & 0x10u) != 0u && (pair->flags & 0x60u) == 0u);
   if (kick_row) {
     /* P9 / FU-347: consume the depth aim captured by the live update (the
      * slot's released word only arrives after the held keys drop). */
-    mr->live_kick_target_x = mr->live_aim_x;
-    mr->live_aim_x = 0;                  /* consume: next kick needs a new edge */
+    mr->live_kick_target_x = mr->live_aim_goal_x;
+    match_run_live_aim_reset(mr, 0);     /* consume: next kick needs a new edge */
     mr->live_kick_target_z =
         mr->entities.team[team8].side == 0u ? 0xB30 : -0xB30;
   } else {
@@ -2768,7 +2788,7 @@ static void match_run_live_kick_flight_end(struct fifa96_match_run *mr,
       (dx <= 0x20 && dx >= -0x20 && dz <= 0x20 && dz >= -0x20)) {
     mr->live_kick_active = 0;
     mr->live_kick_shot = 0;
-    mr->live_aim_x = 0;                  /* P9-fix2: no stale aim */
+    match_run_live_aim_reset(mr, 0);     /* P9-fix2: no stale aim */
     match_run_live_kick_sig_clear(mr);
   }
 }
@@ -2839,20 +2859,22 @@ static int match_run_live_control_tackle(struct fifa96_match_run *mr, uint32_t t
  * the held depth bits, so an unaimed KICK pressed while another direction is
  * held clears a stale ±0x80 instead of inheriting it. */
 static void match_run_live_aim_update(struct fifa96_match_run *mr) {
-  uint8_t current = (uint8_t)(mr->input.held & 0x73u);   /* action + Up/Down */
+  uint8_t current =
+      (uint8_t)(mr->input.held & FIFA96_MATCH_LIVE_AIM_SAMPLE_MASK);
   uint8_t rising = (uint8_t)(current & (uint8_t)~mr->live_aim_prev_input);
   uint8_t depth;
   mr->live_aim_prev_input = current;
-  if ((rising & 0x70u) == 0u &&
-      !((rising & 0x03u) != 0u && (current & 0x70u) != 0u))
+  if ((rising & FIFA96_MATCH_LIVE_AIM_ACTION_MASK) == 0u &&
+      !((rising & FIFA96_MATCH_LIVE_AIM_DEPTH_MASK) != 0u &&
+        (current & FIFA96_MATCH_LIVE_AIM_ACTION_MASK) != 0u))
     return;
-  depth = (uint8_t)(current & 0x03u);
-  if (depth == 0x01u)
-    mr->live_aim_x = FIFA96_MATCH_LIVE_SHOT_AIM_X;
-  else if (depth == 0x02u)
-    mr->live_aim_x = -FIFA96_MATCH_LIVE_SHOT_AIM_X;
+  depth = (uint8_t)(current & FIFA96_MATCH_LIVE_AIM_DEPTH_MASK);
+  if (depth == FIFA96_MATCH_LIVE_AIM_UP)
+    mr->live_aim_goal_x = FIFA96_MATCH_LIVE_SHOT_AIM_X;
+  else if (depth == FIFA96_MATCH_LIVE_AIM_DOWN)
+    mr->live_aim_goal_x = -FIFA96_MATCH_LIVE_SHOT_AIM_X;
   else
-    mr->live_aim_x = 0;                 /* none/both depth keys = centre */
+    mr->live_aim_goal_x = 0;            /* none/both depth keys = centre */
 }
 
 static void match_run_live_control_update(struct fifa96_match_run *mr) {
@@ -2867,8 +2889,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_kickoff_touch = 0u;
     mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
     mr->live_kick_shot = 0u;
-    mr->live_aim_x = 0;
-    mr->live_aim_prev_input = 0;
+    match_run_live_aim_reset(mr, 1);
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
     return;
@@ -2880,8 +2901,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_kick_hold = 0u;
     mr->live_kick_active = 0u;
     mr->live_kick_shot = 0u;
-    mr->live_aim_x = 0;
-    mr->live_aim_prev_input = 0;
+    match_run_live_aim_reset(mr, 1);
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
     match_run_live_restart_bind(mr);
@@ -3072,7 +3092,7 @@ static void match_run_live_save_apply(struct fifa96_match_run *mr, int32_t recor
   mr->live_kick_active = 0u;
   mr->live_kick_frames = 0u;
   mr->live_kick_shot = 0u;
-  mr->live_aim_x = 0;                  /* P9-fix2: no stale aim */
+  match_run_live_aim_reset(mr, 0);     /* P9-fix2: no stale aim */
   match_run_live_kick_sig_clear(mr);
   match_run_live_kick_consumed_clear(mr);
   mr->live_save_hold = FIFA96_MATCH_LIVE_SAVE_HOLD;
@@ -3137,9 +3157,7 @@ static int match_run_live_shot_block(struct fifa96_match_run *mr) {
   /* The shot is aimed at the goal in `live_kick_target_z`'s direction: that
    * side is the defending team. */
   defending_side = mr->live_kick_target_z > 0 ? 1 : 0;
-  team = -1;
-  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
-    if (mr->entities.team[t].side == (uint8_t)defending_side) team = (int32_t)t;
+  team = match_run_live_team_for_side(mr, (uint8_t)defending_side);
   if (team < 0) return 0;
   /* Defender-only [D]: the live keeper charges the camera/ball (windowed
    * measurement: 0x1F from the ball at z 0x9D2, debug tick 467), so a
@@ -3182,13 +3200,18 @@ static int match_run_live_shot_block(struct fifa96_match_run *mr) {
  * (the non-controlled side's record 0). It is gated exactly like the shot
  * block (live phase-2 KICK flight, not armed, not already inside the native
  * mouth classifier) and additionally requires the latched target to be inside
- * the goal mouth (`|target_x| < 0xD0`, `|target_z| >= 0xB10`). The keeper
+ * the goal mouth (`|target_x| < FIFA96_MATCH_LIVE_GOAL_MOUTH_X`,
+ * `|target_z| >= FIFA96_MATCH_LIVE_GOAL_MOUTH_Z`). The keeper
  * covers the shot when its own x is within
  * `FIFA96_MATCH_LIVE_KEEPER_SAVE_REACH` of the target x; a ±0x80 aim is
  * outside that band and beats it. The near-ball gate is the honesty guard for
  * the no-ISO/headless fixture, where the formation seed is absent and the
  * keeper starts at the origin: a keeper thousands of units from the ball must
- * not "save" from the halfway line. It writes no score/phase/goal cell. */
+ * not "save" from the halfway line. The shipped ISO keeper goal spot
+ * `(0, ±0x9EA)` is the P8 AI recon (`/tmp/opencode/play/P8-ai-recon.md`)
+ * finding-4 engine probe (the keeper tracks `(0,2706)` -> `(0,2538)` and the
+ * centre shot passes at distance `0x2F`), not a static formation constant. It
+ * writes no score/phase/goal cell. */
 static int match_run_live_keeper_save(struct fifa96_match_run *mr) {
   int32_t defending_side;
   int32_t team;
@@ -3213,8 +3236,11 @@ static int match_run_live_keeper_save(struct fifa96_match_run *mr) {
   target_x = mr->live_kick_target_x;
   target_z = mr->live_kick_target_z;
   target_mag = target_z < 0 ? -target_z : target_z;
-  if (target_mag < 0xB10) return 0;                    /* not a goal-mouth shot */
-  if (target_x <= -0xD0 || target_x >= 0xD0) return 0; /* outside the mouth */
+  if (target_mag < FIFA96_MATCH_LIVE_GOAL_MOUTH_Z)
+    return 0;                                          /* not a goal-mouth shot */
+  if (target_x <= -FIFA96_MATCH_LIVE_GOAL_MOUTH_X ||
+      target_x >= FIFA96_MATCH_LIVE_GOAL_MOUTH_X)
+    return 0;                                          /* outside the mouth */
   if (target_z > 0 ? mr->entities.ball.z <= 0 : mr->entities.ball.z >= 0)
     return 0;                                          /* ball must head goal-side */
   ball_mag = mr->entities.ball.z < 0 ? -mr->entities.ball.z : mr->entities.ball.z;
@@ -3222,9 +3248,7 @@ static int match_run_live_keeper_save(struct fifa96_match_run *mr) {
   /* The shot is aimed at the goal in `live_kick_target_z`'s direction: that
    * side is the defending team (the non-controlled side for a human KICK). */
   defending_side = target_z > 0 ? 1 : 0;
-  team = -1;
-  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
-    if (mr->entities.team[t].side == (uint8_t)defending_side) team = (int32_t)t;
+  team = match_run_live_team_for_side(mr, (uint8_t)defending_side);
   if (team < 0) return 0;
   keeper = (int32_t)((uint32_t)team * FIFA96_MATCH_ENTITY_RECORDS);
   e = &mr->entities.team[(uint32_t)team].records[0];
@@ -3477,8 +3501,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   match_run_live_kick_sig_clear(mr);
   match_run_live_kick_consumed_clear(mr);
   mr->live_kick_shot = 0;              /* P8: no live shot flight */
-  mr->live_aim_x = 0;                  /* P9: centre shot aim */
-  mr->live_aim_prev_input = 0;         /* P9-fix2: fresh action/depth edge */
+  match_run_live_aim_reset(mr, 1);     /* P9: centre shot aim */
   mr->live_save_hold = 0;              /* P8: no live save hold */
   mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
   mr->live_restart_pending = 0;
@@ -3542,8 +3565,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   match_run_live_kick_sig_clear(mr);
   match_run_live_kick_consumed_clear(mr);
   mr->live_kick_shot = 0;              /* P8: fresh live shot marker */
-  mr->live_aim_x = 0;                  /* P9: fresh centre shot aim */
-  mr->live_aim_prev_input = 0;         /* P9-fix2: fresh action/depth edge */
+  match_run_live_aim_reset(mr, 1);     /* P9: fresh centre shot aim */
   mr->live_save_hold = 0;              /* P8: fresh live save hold */
   mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
   mr->live_restart_pending = 0;
@@ -6168,8 +6190,10 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * side) runs immediately after it, so a defender on the ball keeps the
      * block authority and the keeper stops the centre shot the outfielders
      * miss. */
-    if (mr->live_start) (void)match_run_live_shot_block(mr);
-    if (mr->live_start) (void)match_run_live_keeper_save(mr);
+    if (mr->live_start) {
+      (void)match_run_live_shot_block(mr);
+      (void)match_run_live_keeper_save(mr);
+    }
     /* P6 task 2 / P6-L1 (FU-344): the live ball-position armer runs after
      * this frame's phase/entity ball update and immediately before the native
      * clock-tail scan (0x8B623 FUN_00088940), so a ball in the mouth arms and

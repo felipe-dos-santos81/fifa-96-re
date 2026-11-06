@@ -12,7 +12,8 @@
  *   up/left and down/right axis assignment.
  *   button 0x10 = kick (Ctrl/A flags 0x112BC1/0x112BC2, OR at 0x468DE)
  *   button 0x20 = pass (Alt/S flags 0x112BDC/0x112BC3, OR at 0x468F4)
- *   buttons 0x40 (Space/D/Enter) and 0x80 (W) have no engine key in this task.
+ *   button 0x40 = long ball (native Space/D/Enter word; the port's
+ *   `FIFA96_ENGINE_KEY_LONG_BALL` maps it, P9); 0x80 (W) has no engine key.
  *   P8: the pad's South/East engine codes (CONFIRM/DECLINE) also map to the
  *   kick/pass words in an unpaused ACTIVE match; the front-end keeps its own
  *   mapping.
@@ -192,6 +193,40 @@ static void test_button_and_diagonal_codes(void) {
   assert(mr.slot.anim_a == fu70_t1[0x5]);   /* 2 */
   assert(mr.slot.anim_b == fu70_t2[2]);     /* 1 */
   assert(mr.slot.anim_c == fu70_t3[2]);     /* 255 */
+}
+
+/* P9 (FU-347): LONG_BALL (V / pad West) is a native match action word (0x40),
+ * not only an SDL queue entry. A held press maps through `match_run_map_key`
+ * and stays held across polls; the release reports the 0x40 word. */
+static void test_held_long_ball_maps_to_native_code(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+
+  press_key(&mr, FIFA96_ENGINE_KEY_LONG_BALL);
+  assert(mr.input.prev[0] == 0x40);
+  assert(mr.input.edge[0] == 0x40);
+  assert(mr.input.held == 0x40 && mr.input.fresh == 0x40);
+  assert(mr.input_state[0] == 0x40);
+  grant_frame(&mr);
+  assert(mr.slot.raw == 0x40);
+  assert(mr.slot.prev_mapped == 0x40);
+  assert(mr.slot.pressed == 0x40);
+
+  /* Still held: the repeat poll is not a new edge, but the native 0x40 sample
+   * persists instead of decaying to rest (the BASE SDL pulse bug). */
+  press_key(&mr, FIFA96_ENGINE_KEY_LONG_BALL);
+  assert(mr.input.prev[0] == 0x40);
+  assert(mr.input.edge[0] == 0);
+  assert(mr.input.held == 0x40 && mr.input.fresh == 0);
+  assert(mr.input_state[0] == 0x40);
+  grant_frame(&mr);
+  assert(mr.slot.raw == 0x40);
+  assert(mr.slot.pressed == 0);
+
+  no_input(&mr);
+  grant_frame(&mr);
+  assert(mr.input.held == 0);
+  assert(mr.slot.released == 0x40);
 }
 
 /* P8: the pad's South/East buttons arrive as CONFIRM/DECLINE and double as
@@ -774,6 +809,7 @@ int main(void) {
   test_null_guards();
   test_direction_codes_and_animation();
   test_button_and_diagonal_codes();
+  test_held_long_ball_maps_to_native_code();
   test_gamepad_confirm_decline_map();
   test_edges_fire_once_per_press();
   test_slot_hold_machine_and_counter();
