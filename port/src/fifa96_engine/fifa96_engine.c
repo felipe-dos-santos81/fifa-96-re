@@ -84,6 +84,21 @@ static int engine_keys_down(const fifa96_platform_key *keys, int count,
   return 0;
 }
 
+/* P6: the live audio gain is the Options SFX Volume (0x11, 0..100) gated by
+ * Sound Effects (0x01): settings.value[1] ? value[0x11] : 0. The default
+ * 91 scales the crowd base 0x60 to 0x57; Music/Speech Volume have no
+ * consumer (P6-L2). */
+int32_t fifa96_engine_audio_percent(const struct fifa96_engine *e) {
+  if (e == NULL) return 0;
+  int32_t percent = e->frontend.menu.settings.value[0x01] != 0
+                        ? e->frontend.menu.settings.value[0x11]
+                        : 0;
+  if (percent < 0) percent = 0;
+  if (percent > (int32_t)FIFA96_MATCH_AUDIO_PERCENT_UNITY)
+    percent = (int32_t)FIFA96_MATCH_AUDIO_PERCENT_UNITY;
+  return percent;
+}
+
 /* P3: start match audio on the first MATCH step with a live run. The banks are
  * borrowed from the cache (created here when boot had no intro asset), and a
  * missing ISO/bank is a soft failure: the match stays silent and playable.
@@ -97,16 +112,7 @@ static int engine_match_audio_begin(struct fifa96_engine *e) {
   size_t sfx_len = 0, crowd_len = 0;
   const uint8_t *sfx = fifa96_cache_get(e->cache, "/SOUND/SFX_GAME.BNK", &sfx_len);
   const uint8_t *crowd = fifa96_cache_get(e->cache, "/SOUND/CHN_GEN1.BNK", &crowd_len);
-  /* P6: the live audio gain is the Options SFX Volume (0x11, 0..100) gated by
-   * Sound Effects (0x01): settings.value[1] ? value[0x11] : 0. The default
-   * 91 scales the crowd base 0x60 to 0x57; Music/Speech Volume have no
-   * consumer (P6-L2). */
-  int32_t percent = e->frontend.menu.settings.value[0x01] != 0
-                        ? e->frontend.menu.settings.value[0x11]
-                        : 0;
-  if (percent < 0) percent = 0;
-  if (percent > (int32_t)FIFA96_MATCH_AUDIO_PERCENT_UNITY)
-    percent = (int32_t)FIFA96_MATCH_AUDIO_PERCENT_UNITY;
+  int32_t percent = fifa96_engine_audio_percent(e);
   return fifa96_match_audio_start(&e->audio, e->match, sfx, sfx_len,
                                   crowd, crowd_len, (uint32_t)percent);
 }

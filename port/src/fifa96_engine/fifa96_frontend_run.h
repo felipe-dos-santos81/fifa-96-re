@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "fifa96_engine/fifa96_keys.h"
 #include "fifa96_engine/fifa96_lang.h"
+#include "fifa96_engine/fifa96_menu_art.h"
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_engine/fifa96_surface.h"
@@ -68,6 +69,14 @@ int fifa96_frontend_run_init(struct fifa96_frontend_run *fr, struct fifa96_surfa
 int fifa96_frontend_run_input(struct fifa96_frontend_run *fr, const fifa96_platform_key *keys,
                               size_t count);
 int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surface *s, int *quit);
+
+/* P6 test/engine seam: fill `st` with the draw-ready snapshot of the current
+ * native menu screen, exactly as the native step passes it to
+ * fifa96_menu_art_draw. This makes the Options list/Controls fill observable
+ * without duplicating the front-end formatting in a test. `st` is cleared
+ * first; NULL arguments are ignored. */
+void fifa96_frontend_run_menu_state(const struct fifa96_frontend_run *fr,
+                                    struct fifa96_menu_state *st);
 
 /* FU-343 (P4): reset the interactive front-end after a match ends, without
  * discarding the decoded language/font or the native-menu enable flag. The

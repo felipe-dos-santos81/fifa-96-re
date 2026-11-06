@@ -334,8 +334,10 @@ static void test_options_screen_draw(void) {
   assert(s->indexed[92 * 320 + 66] != 6);
 
   /* The Controls page is a separate frame from the list (the selection bar is
-   * gone). Text rendering itself is font-dependent and covered by the front-end
-   * state test; this art case pins the geometry/layout branches. */
+   * gone). This art case only pins the geometry/layout branches: the
+   * draw-ready state fill (labels/values/scroll/Controls text) is covered by
+   * test_engine_menu_model's native Options state case, which drives the real
+   * step with a decoded font. */
   st.option_page = FIFA96_MENU_OPTION_PAGE_CONTROLS;
   st.help_count = 2;
   st.help[0] = "CONTROLS";

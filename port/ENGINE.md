@@ -9695,3 +9695,19 @@ should be `0x1C9` "Numbers". **P6-L6** gamepad match buttons: South/East do
 not reach `match_run_map_key`; only West (long ball) works. **P6-L7**
 Time Display / Player Names / Auto Replay / Super VGA remain stored-only and
 dim until consumers land.
+
+**Errata (P6 T3 review, 2026-11-06 — append-only; the Task 3 section above
+stands as written).** Two reads are corrected by a fresh `read_memory` /
+`disassemble_bytes` re-read. (1) Player Names' choice array at `0x105328` is
+the three dwords `0xD2, 0x1C8, 0x1C9` = Off / Names / Numbers (LANG000
+`0x1C8` = "Names", `0x1C9` = "Numbers"); the earlier `0xC8/0xC9` reading was
+a width misread (those are the low bytes of `0x1C8/0x1C9`, which decode to
+"Name"/"Netherlands"). There is no retail Netherlands bug: P6-L5's Player
+Names clause is withdrawn and P6-L5 remains only the dead slot 19. (2) Slot 19
+is descriptor 66 at `0x105340 + 66*9 = 0x105592`; its dword is `0x001C0000`
+(bytes `00 00 1C 00`), not `0x1F` (`0x1F` is the byte at `0x105590`; `0x1C`
+is at `0x105594`). Descriptor 66 is still dead data and the model still never
+selects it. The model and test now use `{0xD2,0x1C8,0x1C9}` with the
+Off/Names/Numbers fallbacks. The review's remaining gaps are closed by the
+native Options state-fill case (`test_engine_menu_model`) and the goal-gain /
+Sound-Effects gate cases (`test_engine_audio`).

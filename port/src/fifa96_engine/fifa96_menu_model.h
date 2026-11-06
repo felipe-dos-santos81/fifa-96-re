@@ -26,8 +26,9 @@
  * 0x105340 = {u32 label LANG id; u32 choice LANG-id array; u8 max}, indexed by
  * the setting number. The screen order is the 20-byte table at 0x10542A:
  * 0,18,1,17,2,19,3,4,6,7,21,9,10,11,12,13,14,15,16,66. Slot 19 is the dead
- * descriptor 66 (FUN_0001D948(66) reads 0x1F, not a descriptor); the model
- * never selects it. Rows 0..18 are therefore the 19 real native rows, and two
+ * descriptor 66: `FUN_0001D948(66)` reads the dword at `0x105340 + 66*9 =
+ * 0x105592`, which is `0x001C0000`, not a descriptor; the model never selects
+ * it. Rows 0..18 are therefore the 19 real native rows, and two
  * port additions follow: the Controls page and Reset Defaults. Both are
  * labelled in comments and the docs as port additions (there is no native
  * options row for either). */

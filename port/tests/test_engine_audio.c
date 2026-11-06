@@ -16,7 +16,9 @@
  *  - the durable whistle_seq counter increments only at the native 0x1E
  *    writers, makes a clear+re-set inside one step audible, and fires one cue
  *    per pending write (two writes -> two cues);
- *  - a score increase fires the A6-L2 goal stand-in once.
+ *  - a score increase fires the A6-L2 goal stand-in once;
+ *  - P6: SFX Volume scales the crowd/whistle/goal base gains (100/91/50/0)
+ *    and the engine's Sound Effects gate yields percent 0 and silence.
  *
  * ISO-gated: without data/game/FIFAPCCD96.iso the retail half prints SKIP and
  * the no-bank half still runs, matching the M1/M2 no-ISO convention.
@@ -29,6 +31,7 @@
 
 #include "fifa96_engine/fifa96_asset.h"
 #include "fifa96_engine/fifa96_cache.h"
+#include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_match_audio.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_loader/fifa96_err.h"
@@ -118,7 +121,10 @@ static void test_whistle_seq_counter(void) {
 }
 
 /* P6: the Options SFX Volume scales the base gains. 100 is unity, the default
- * 91 gives crowd 0x60*91/100 = 0x57, 50 gives 0x30 and 0 gives silence. */
+ * 91 gives a crowd caller volume of 0x60*91/100 = 0x57, 50 gives 0x30 and 0
+ * gives silence. The goal cue uses the same crowd caller volume (A6-L2
+ * stand-in); id 15's own descriptor base volume is 0x32, so its mixer gain is
+ * 0x32 * caller * master / 0x3F01 (100 -> 0x25, 50 -> 0x12, 0 -> 0). */
 static void test_volume_scale(const uint8_t *sfx, size_t sfx_len,
                               const uint8_t *crowd, size_t crowd_len) {
   static const struct {
@@ -129,8 +135,12 @@ static void test_volume_scale(const uint8_t *sfx, size_t sfx_len,
     struct fifa96_match_run *mr = calloc(1, sizeof *mr);
     assert(mr != NULL);
     struct fifa96_match_audio a;
+    struct audio_capture cap;
+    memset(&cap, 0, sizeof cap);
     fifa96_platform plat;
     memset(&plat, 0, sizeof plat);
+    plat.audio_submit = capture_submit;
+    plat.self = &cap;
     assert(fifa96_match_audio_start(&a, mr, sfx, sfx_len, crowd, crowd_len,
                                     cases[i].percent) == 0);
     assert(a.active == 1 && a.have_sfx == 1 && a.have_crowd == 1);
@@ -149,9 +159,85 @@ static void test_volume_scale(const uint8_t *sfx, size_t sfx_len,
     uint8_t expected_gain = (uint8_t)(0x7Fu * caller * 0x7Fu / 0x3F01u);
     assert(a.last_whistle_gain == expected_gain);
 
+    /* Goal edge: the id-15 cue caller volume is the crowd base scaled by
+     * percent; the descriptor base 0x32 then forms the mixer gain. */
+    mr->score[0] = 1;
+    assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+    assert(a.goal_cues == 1u);
+    uint32_t goal_caller = 0x60u * cases[i].percent / 100u;
+    uint8_t expected_goal_gain =
+        (uint8_t)(0x32u * goal_caller * 0x7Fu / 0x3F01u);
+    assert(a.last_goal_gain == expected_goal_gain);
+
+    /* One 10 ms tick renders 2205 frames; at percent 0 the crowd loop, the
+     * held whistle and the goal cue must all be silent. */
+    assert(fifa96_match_audio_step(&a, mr, &plat, 10) == 0);
+    assert(cap.frames == FIFA96_MATCH_AUDIO_RATE / 10u);
+    if (cases[i].percent == 0) {
+      assert(a.last_whistle_gain == 0u);
+      assert(a.last_goal_gain == 0u);
+      assert(cap.energy == 0);
+    } else {
+      assert(cap.energy > 0);
+    }
+
     fifa96_match_audio_stop(&a);
     free(mr);
   }
+}
+
+/* P6 (T3 review F4): the engine's Sound Effects gate. `engine_match_audio_begin`
+ * passes fifa96_engine_audio_percent() to fifa96_match_audio_start; off must be
+ * percent 0, and a percent-0 start must leave the crowd/whistle/goal silent. */
+static void test_sound_effects_gate(const uint8_t *sfx, size_t sfx_len,
+                                    const uint8_t *crowd, size_t crowd_len) {
+  struct fifa96_engine *e = calloc(1, sizeof *e);
+  assert(e != NULL);
+  e->frontend.menu.settings.value[0x01] = 1;   /* Sound Effects On */
+  e->frontend.menu.settings.value[0x11] = 91;  /* default SFX Volume */
+  assert(fifa96_engine_audio_percent(e) == 91);
+  e->frontend.menu.settings.value[0x01] = 0;
+  assert(fifa96_engine_audio_percent(e) == 0);
+  e->frontend.menu.settings.value[0x01] = 1;
+  e->frontend.menu.settings.value[0x11] = -5;
+  assert(fifa96_engine_audio_percent(e) == 0);   /* low clamp */
+  e->frontend.menu.settings.value[0x11] = 150;
+  assert(fifa96_engine_audio_percent(e) == 100); /* high clamp */
+  e->frontend.menu.settings.value[0x11] = 50;
+  assert(fifa96_engine_audio_percent(e) == 50);
+  assert(fifa96_engine_audio_percent(NULL) == 0);
+  e->frontend.menu.settings.value[0x01] = 0;     /* Off -> 0 regardless */
+  e->frontend.menu.settings.value[0x11] = 91;
+  uint32_t percent = (uint32_t)fifa96_engine_audio_percent(e);
+  assert(percent == 0u);
+
+  struct fifa96_match_run *mr = calloc(1, sizeof *mr);
+  assert(mr != NULL);
+  struct fifa96_match_audio a;
+  struct audio_capture cap;
+  memset(&cap, 0, sizeof cap);
+  fifa96_platform plat;
+  memset(&plat, 0, sizeof plat);
+  plat.audio_submit = capture_submit;
+  plat.self = &cap;
+  assert(fifa96_match_audio_start(&a, mr, sfx, sfx_len, crowd, crowd_len,
+                                  percent) == 0);
+  assert(a.sfx_percent == 0u);
+  assert(a.crowd_voice >= 0);
+  assert(a.mixer.voices[a.crowd_voice].volume == 0u);
+  mr->whistle_seq = 1;
+  mr->ref_whistle = FIFA96_MATCH_AUDIO_WHISTLE_ID;
+  mr->score[1] = 1;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.whistle_cues == 1u && a.last_whistle_gain == 0u);
+  assert(a.goal_cues == 1u && a.last_goal_gain == 0u);
+  assert(fifa96_match_audio_step(&a, mr, &plat, 10) == 0);
+  assert(cap.frames == FIFA96_MATCH_AUDIO_RATE / 10u);
+  assert(cap.energy == 0);
+
+  fifa96_match_audio_stop(&a);
+  free(mr);
+  free(e);
 }
 
 static void test_retail_banks(void) {
@@ -249,6 +335,7 @@ static void test_retail_banks(void) {
 
   fifa96_match_audio_stop(&a);
   test_volume_scale(sfx, sfx_len, crowd, crowd_len);
+  test_sound_effects_gate(sfx, sfx_len, crowd, crowd_len);
   fifa96_cache_destroy(cache);
   fifa96_asset_unmount(assets);
   free(mr);

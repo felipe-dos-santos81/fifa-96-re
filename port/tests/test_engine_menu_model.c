@@ -44,15 +44,42 @@ static void put16le(uint8_t *p, uint16_t v) {
 
 static const char *fixture_string(uint32_t id) {
   switch (id) {
+    case 0x009u: return "Action";
     case 0x023u: return "Brazil";
+    case 0x036u: return "Clock";
+    case 0x042u: return "Continuous";
+    case 0x06Fu: return "English";
+    case 0x07Cu: return "Fouls";
     case 0x081u: return "Friendly";
     case 0x084u: return "Game Select";
+    case 0x087u: return "Game Type";
+    case 0x093u: return "Half Length";
     case 0x098u: return "Home";
+    case 0x09Fu: return "Injuries";
     case 0x0A6u: return "Italy";
+    case 0x0AFu: return "Language";
+    case 0x0C7u: return "Music";
+    case 0x0D2u: return "Off";
+    case 0x0D5u: return "Offside";
+    case 0x0D7u: return "On";
     case 0x0D8u: return "Options";
+    case 0x0DDu: return "Pitch Condition";
+    case 0x0DFu: return "Play by Play";
     case 0x0F3u: return "Quit to DOS";
+    case 0x0F5u: return "Random";
+    case 0x113u: return "Sound Effects";
+    case 0x11Du: return "Skill Level";
+    case 0x131u: return "Super VGA";
     case 0x13Du: return "Team Select";
+    case 0x142u: return "Time Display";
     case 0x14Au: return "Visitor";
+    case 0x184u: return "Music Volume";
+    case 0x185u: return "Speech Volume";
+    case 0x18Bu: return "Player Names";
+    case 0x191u: return "SFX Volume";
+    case 0x1C8u: return "Names";
+    case 0x1C9u: return "Numbers";
+    case 0x21Bu: return "4-Button Joypad";
     default: return "";
   }
 }
@@ -225,7 +252,10 @@ static void test_option_descriptors(void) {
   assert(d[1].label_id == 0x113u && strcmp(d[1].label, "Sound Effects") == 0);
   assert(d[3].label_id == 0xAFu && d[3].max == 6);
   assert(d[3].choices[0] == 0x6Fu && d[3].choices[4] == 0x135u);
-  assert(d[7].choices[1] == 0xC8u && d[7].choices[2] == 0xC9u);
+  assert(d[7].choices[0] == 0xD2u && d[7].choices[1] == 0x1C8u &&
+         d[7].choices[2] == 0x1C9u);
+  assert(strcmp(d[7].choice_text[1], "Names") == 0);
+  assert(strcmp(d[7].choice_text[2], "Numbers") == 0);
   assert(d[10].label_id == 0x7Cu && d[10].choices[1] == 0xCDu);
   assert(d[14].label_id == 0x93u && d[14].max == 7);
   assert(d[14].choices[0] == 0x248u && d[14].choices[6] == 0x24Eu);
@@ -516,6 +546,154 @@ static void step(struct fifa96_frontend_run *fr, struct fifa96_surface *s) {
   assert(quit == 0);
 }
 
+/* P6 (T3 review F3): the Options screen was only pinned at the model layer and
+ * the art test fabricated its snapshot. This case drives the real native step
+ * with the decoded LANGO/FNTI fixtures (the existing font fixture: the FNTI
+ * image is parsed by fifa96_lang_init_memory and the same step draws it), then
+ * asserts the draw-ready fifa96_menu_state: rows/labels/values, the selected
+ * row and scroll window, the Controls page fill, and Back -> Game Select with
+ * the changed setting preserved. */
+static void test_native_options_state_fill(void) {
+  uint8_t lang[8192];
+  uint8_t font[2048];
+  size_t lang_len = build_lango(lang, sizeof lang);
+  size_t font_len = build_font(font, sizeof font);
+
+  struct fifa96_surface *s = fifa96_surface_create(320, 240);
+  assert(s != NULL);
+  struct fifa96_frontend_run fr;
+  assert(fifa96_frontend_run_init(&fr, s) == 0);
+  assert(fifa96_lang_init_memory(&fr.lang, lang, lang_len, font, font_len) == 0);
+  fifa96_frontend_run_enable_native(&fr, 1);
+  idle(&fr);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+
+  struct fifa96_menu_state st;
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(st.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+  assert(st.font != NULL);
+  assert(st.item_count == FIFA96_MENU_ITEM_COUNT && st.selected_item == 0);
+  assert(strcmp(st.title, "Game Select") == 0);
+  assert(strcmp(st.items[0].label, "Friendly") == 0);
+  assert(st.items[0].enabled == 1 && st.items[1].enabled == 0);
+
+  /* Game Select -> left column -> Options -> Enter. */
+  press(&fr, FIFA96_ENGINE_KEY_RIGHT);
+  step(&fr, s);
+  assert(fr.menu.item == 5);
+  press(&fr, FIFA96_ENGINE_KEY_DOWN);
+  step(&fr, s);
+  assert(fr.menu.item == 6);
+  press(&fr, FIFA96_ENGINE_KEY_CONFIRM);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_OPTIONS);
+
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(st.screen == FIFA96_MENU_SCREEN_OPTIONS);
+  assert(st.font != NULL);
+  assert(strcmp(st.title, "Options") == 0);
+  assert(st.option_page == FIFA96_MENU_OPTION_PAGE_LIST);
+  assert(st.option_count == FIFA96_MENU_OPTION_ROW_COUNT);
+  assert(st.option_selected == 0 && st.option_scroll == 0);
+  static const char *const window_labels[FIFA96_MENU_OPTION_VISIBLE] = {
+      "Music", "Music Volume", "Sound Effects", "SFX Volume",
+      "Play by Play", "Speech Volume", "Language", "Super VGA"};
+  static const char *const window_values[FIFA96_MENU_OPTION_VISIBLE] = {
+      "On", "93", "On", "91", "On", "98", "English", "Off"};
+  static const int window_enabled[FIFA96_MENU_OPTION_VISIBLE] = {
+      0, 0, 1, 1, 0, 0, 0, 0};
+  static const int window_slider[FIFA96_MENU_OPTION_VISIBLE] = {
+      -1, 93, -1, 91, -1, 98, -1, -1};
+  for (int k = 0; k < FIFA96_MENU_OPTION_VISIBLE; k++) {
+    assert(strcmp(st.options[k].label, window_labels[k]) == 0);
+    assert(strcmp(st.options[k].value, window_values[k]) == 0);
+    assert(st.options[k].enabled == window_enabled[k]);
+    assert(st.options[k].slider_pct == window_slider[k]);
+  }
+
+  /* Scroll to Half Length (row 16 -> scroll 9) and check the scrolled fill. */
+  for (int i = 0; i < 16; i++) {
+    press(&fr, FIFA96_ENGINE_KEY_DOWN);
+    step(&fr, s);
+  }
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(st.option_selected == 16 && st.option_scroll == 9);
+  assert(st.option_count == FIFA96_MENU_OPTION_ROW_COUNT);
+  static const char *const scroll_labels[FIFA96_MENU_OPTION_VISIBLE] = {
+      "Player Names", "4-Button Joypad", "Game Type", "Fouls",
+      "Injuries", "Pitch Condition", "Clock", "Half Length"};
+  static const char *const scroll_values[FIFA96_MENU_OPTION_VISIBLE] = {
+      "Off", "Off", "Action", "On", "On", "Random", "Continuous", "2 min"};
+  static const int scroll_enabled[FIFA96_MENU_OPTION_VISIBLE] = {
+      0, 0, 0, 1, 1, 0, 0, 1};
+  for (int k = 0; k < FIFA96_MENU_OPTION_VISIBLE; k++) {
+    assert(strcmp(st.options[k].label, scroll_labels[k]) == 0);
+    assert(strcmp(st.options[k].value, scroll_values[k]) == 0);
+    assert(st.options[k].enabled == scroll_enabled[k]);
+    assert(st.options[k].slider_pct == -1);
+  }
+
+  /* 2 min -> 4 min; the next snapshot reflects it. */
+  press(&fr, FIFA96_ENGINE_KEY_RIGHT);
+  step(&fr, s);
+  assert(fr.menu.settings.value[0x0E] == 1);
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(strcmp(st.options[7].value, "4 min") == 0);
+
+  /* Controls: row 19, Enter -> the help page fill. */
+  for (int i = 0; i < 3; i++) {
+    press(&fr, FIFA96_ENGINE_KEY_DOWN);
+    step(&fr, s);
+  }
+  assert(fr.menu.option_row == FIFA96_MENU_OPTION_ROW_CONTROLS);
+  press(&fr, FIFA96_ENGINE_KEY_CONFIRM);
+  step(&fr, s);
+  assert(fr.menu.option_page == FIFA96_MENU_OPTION_PAGE_CONTROLS);
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(st.option_page == FIFA96_MENU_OPTION_PAGE_CONTROLS);
+  size_t help_count = 0;
+  const char *const *help = fifa96_menu_model_controls_text(&help_count);
+  assert(st.help_count == (int)help_count);
+  for (size_t i = 0; i < help_count; i++) assert(strcmp(st.help[i], help[i]) == 0);
+  assert(strcmp(st.help[0], "CONTROLS") == 0);
+  assert(strcmp(st.help[st.help_count - 1], "PAD KICK/PASS NOT MAPPED") == 0);
+
+  /* Back -> list (window kept), Back -> Game Select; the setting survives. */
+  press(&fr, FIFA96_ENGINE_KEY_DECLINE);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_OPTIONS);
+  assert(fr.menu.option_page == FIFA96_MENU_OPTION_PAGE_LIST);
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(st.option_page == FIFA96_MENU_OPTION_PAGE_LIST);
+  assert(st.option_selected == FIFA96_MENU_OPTION_ROW_CONTROLS);
+  assert(st.option_scroll == 12);
+  assert(strcmp(st.options[0].label, "Fouls") == 0);
+  press(&fr, FIFA96_ENGINE_KEY_DECLINE);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(st.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+  assert(st.selected_item == 6);   /* still the Options item */
+  assert(fr.menu.settings.value[0x0E] == 1);
+
+  /* Re-enter: the Options window is re-seeded at the top, the value is kept. */
+  press(&fr, FIFA96_ENGINE_KEY_CONFIRM);
+  step(&fr, s);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_OPTIONS);
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(st.option_selected == 0 && st.option_scroll == 0);
+  for (int i = 0; i < 16; i++) {
+    press(&fr, FIFA96_ENGINE_KEY_DOWN);
+    step(&fr, s);
+  }
+  fifa96_frontend_run_menu_state(&fr, &st);
+  assert(strcmp(st.options[7].value, "4 min") == 0);
+
+  fifa96_lang_shutdown(&fr.lang);
+  fifa96_surface_destroy(s);
+}
+
 static void test_native_fixture_reaches_handoff(void) {
   uint8_t lang[8192];
   uint8_t font[2048];
@@ -765,6 +943,7 @@ int main(void) {
   test_option_descriptors();
   test_option_defaults_and_values();
   test_option_navigation();
+  test_native_options_state_fill();
   test_native_held_confirm_latch();
   test_native_held_input_after_reset();
   test_native_fixture_reaches_handoff();
