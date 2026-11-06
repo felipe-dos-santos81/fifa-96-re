@@ -164,11 +164,31 @@ struct fifa96_match_matchup {
  * rotating-defender interception at ~0x6B2 is outside the final zone. No
  * native open-play save exists (recon §2:
  * `0x88940`/`0x70074` are record-free), so this is a labelled stand-in, never a
- * native claim; the keeper's own save is P8-L3. */
+ * native claim.
+ *
+ * P9 (FU-347) keeps the outfield block above and adds the **defending keeper's**
+ * record-0 save as a separate labelled stand-in: once the KICK flight is in the
+ * keeper zone (`|ball.z| >= FIFA96_MATCH_LIVE_KEEPER_SAVE_ZONE`), the keeper's
+ * own `x` covers the shot when it is within
+ * `FIFA96_MATCH_LIVE_KEEPER_SAVE_REACH` of the latched goal-mouth target x
+ * (`|keeper.x - live_kick_target_x| <= 0x40`). The near-ball gate
+ * (`distance(ball, keeper) <= FIFA96_MATCH_LIVE_KEEPER_SAVE_NEAR`) keeps a
+ * keeper parked at the origin (the no-ISO fixture's unterminated formation)
+ * from "saving" a shot from 2000 units away; the shipped ISO keeper stands at
+ * `(0, ±0x9EA)`, so the centre shot passes within ~0x30 and is saved. The
+ * lateral reach is deliberately the target-x band, not the instantaneous
+ * ball distance: a ±0x80 aim is 0x80 from the keeper's x at the goal line and
+ * beats it. This is the P9 stand-in for the unported native open-play keeper
+ * save (P8-L3/P8-A3); the native per-code target/loft and aim/camera director
+ * remain legs. */
 #define FIFA96_MATCH_LIVE_OPPONENT_CLAIM_RANGE 0x40
 #define FIFA96_MATCH_LIVE_SAVE_RADIUS 0x28
 #define FIFA96_MATCH_LIVE_SAVE_ZONE 0x900
 #define FIFA96_MATCH_LIVE_SAVE_HOLD 30u
+#define FIFA96_MATCH_LIVE_SHOT_AIM_X 0x80
+#define FIFA96_MATCH_LIVE_KEEPER_SAVE_REACH 0x40
+#define FIFA96_MATCH_LIVE_KEEPER_SAVE_ZONE 0x9C0
+#define FIFA96_MATCH_LIVE_KEEPER_SAVE_NEAR 0x180
 
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus
  * the FU-84 row +8 sprite-bank (animator) index the FU-85 resolver consumes.
@@ -1244,6 +1264,14 @@ struct fifa96_match_run {
   uint16_t live_kick_frames;
   int32_t live_kick_target_x, live_kick_target_z;
   int16_t live_kick_speed;
+  /* P9 / FU-347 (aim): the latched lateral shot aim (-0x80 / 0 / +0x80).
+   * The native FU-70 slot only publishes its released button word when every
+   * held key drops (`fifa96_control_slot_update`'s held/held_prev logic), so
+   * at the launch frame the held lateral bit is already gone. The live update
+   * samples the held lateral input each frame into this cell and the KICK
+   * latch consumes it; a fresh KICK/PASS/LONG_BALL press with no lateral clears
+   * it to the centre. Live-only; init/begin/phase change clear it. */
+  int32_t live_aim_x;
   int32_t live_kick_sig_actor;
   int16_t live_kick_sig_traj;
   int16_t live_kick_sig_vx, live_kick_sig_vh, live_kick_sig_vz;

@@ -120,13 +120,15 @@ Gamepad: D-pad moves; **A/South** kicks in play and selects in menus;
 ball. Keyboard **Enter**/**Backspace** share those confirm/back roles and
 therefore also kick/pass in active play.
 
-At the kickoff, **Z** shoots at the opponent goal through the native
-live-control/kick/goal path; after the goal a second **Z** releases the
-kickoff gate, arrows take the nearest defender to the ball for a contact
-tackle/claim, and **Z** kicks again with the score preserved. A live defender
-can block a shot; the open-play keeper save is still unported. The shot always
-aims at the goal centre (the native aim/camera director is a leg), so the
-goal-centre aim and the block are labelled stand-ins, not native AI.
+At the kickoff a **Z** press/release shoots through the native
+live-control/kick/goal path (the same kick releases the opening possession
+latch). Hold **Left** or **Right** with **Z** to aim the shot at ±0x80 inside
+the goal mouth; an unaimed (or both-directions) shot goes to the centre, where
+the defending keeper saves it. After a goal, arrows take the nearest defender
+to the ball for a contact tackle/claim, and **Z** kicks again with the score
+preserved. A live defender can also block a shot. The aim, the keeper save and
+the defender block are labelled live stand-ins for the unported native
+aim/camera director and open-play keeper save, not native AI.
 
 ## Conventions
 
