@@ -5996,16 +5996,31 @@ static void test_action_14_runs_body(void) {
   assert(f.mr.celebration.idx == 0);
   assert(f.mr.state.phase == 1u);
 
-  /* stage 2 on side 1: the reset runs but the release is skipped. */
+  /* stage 2 on side 1 with the goal-side flag clear: the native gate is the
+   * flag byte 0x157A4C, not the record side, so an away-side goal releases. */
   drop_fixture(&f);
   make_fixture(&f);
   f.mr.state.phase = 2u;
   f.mr.record.entity_id = 1;
   f.mr.record.side = 1;
   f.mr.record.stage92 = 2;
+  assert(f.mr.global_157a4c == 0u);
   assert(fifa96_match_dispatch_action(&f.mr, 0x14) == FIFA96_OK);
   assert(f.mr.record.stage92 == 0u);   /* the reset ran */
-  assert(f.mr.state.phase == 2u);      /* side 1 -> no release */
+  assert(f.mr.state.phase == 1u);      /* side 1, flag 0 -> release */
+
+  /* stage 2 with the sit-8 goal-side flag set: the reset runs but the release
+   * is skipped (the native 0x157A4C == 1 gate). */
+  drop_fixture(&f);
+  make_fixture(&f);
+  f.mr.state.phase = 2u;
+  f.mr.record.entity_id = 1;
+  f.mr.record.side = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.global_157a4c = 1u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x14) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0u);   /* the reset ran */
+  assert(f.mr.state.phase == 2u);      /* flag 1 -> no release */
   drop_fixture(&f);
 }
 

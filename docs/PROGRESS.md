@@ -3962,3 +3962,27 @@ close-out below).
   `p6-kits.png` (HUD BRA/ITALY). Legs: roster/AI staging, auto away/keeper
   kits, per-entity translation pool, stadium/field producers, CTEAM, the
   mid-match rebind and the P6-L1..L11 items in `port/ENGINE.md`.
+
+- **P6 live goal path (FU-344, 2026-11-05).** The live windowed match can score
+  and restart for both sides. Native correctness: the row-0x14 celebration
+  release now tests the goal-side flag `[0x157A4C]` (`mr->global_157a4c`), not
+  the record side, so an away-side goal is not frozen in phase 5; the
+  situation-6 fallback passes the scanned side (`match_run_situation_side(mr,
+  6, side, 0)`, native `0x8AC28`). New live-only P6-L1 armer: a ball inside the
+  native goal-mouth classifier (`0xB10..0xB90 |z|`, `|x| < 0xD0`) sets
+  `goal_armed`/snapshot/`goal_zone` through the same cells as the native camera
+  pan, immediately before the goal scan; the live follow keeps the native
+  height `0x50` (`[0x157750]`, the row-04 pan gate) plus a bounded forward
+  lead. No score or phase is fabricated. New `test_engine_live_goal` stages
+  the ball at `(0,0,±0xB30)` and pins both sides' armer/score/phase 5/`0x15`+
+  `0x14` install/phase-1 kickoff `(480,0,0)`/phase 2/no re-score, plus a
+  1-1 short-half lifecycle to half-time and the flag-clear FULL TIME
+  terminal (a differing 1-0 end still arms extra time, a named leg).
+  Windowed evidence: `/tmp/opencode/play/p6-goal.png` (BRA 1-0 ITA),
+  `p6-goal-restart.png` (kickoff) and `p6-goal-result.png` (`FULL TIME`
+  1-0); the result capture stages the M2-style flag-clear terminal because
+  the 1-0 natural end arms extra time. `make check` 116/116, M1 `09b726b7…`
+  and M2 v29 `7c3874f7…` exact by `cmp`, census unchanged. Legs: P6-L1 native
+  FU-310 camera place/focus + camera director, P6-L2 goal caption/replay
+  (absent natively in an ordinary match), P6-L3 half-time caption, P6-L4 the
+  1-0 extra-time detour, P6-L5 derived camera lead.

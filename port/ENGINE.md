@@ -9508,3 +9508,98 @@ GAMEFLD3-FHstrip fallback and GAMESTD1 (FU343-L4). P6-L9 CTEAM/TC override
 modelled. P6-L10 kit-2/3 blue-byte quirk (`FUN_0004C154` reads `+0x27/+0x2A`).
 P6-L11 `FUN_00011620`'s `count<0x10` second-decode branch is unexercised (all
 mode-4 records have 16 players).
+
+## P6 goal-path register — live goals (FU-344, 2026-11-05)
+
+Task 2 of the P6 match-completeness wave (spec
+`docs/superpowers/specs/2026-11-05-fifa96-p6-match-completeness-design.md`;
+recon `/tmp/opencode/play/P6-goal-path.md` §1–§5, `/tmp/opencode/play/A5-lifecycle.md`).
+The live windowed match can now score through the native chain and restart:
+ball in the goal mouth -> P6-L1 arm -> scanner -> situation 6 -> direct
+fallback -> phase 5 -> celebration -> kickoff -> phase 2, for both sides. Every
+new behaviour is `mr->live_start`-gated except the celebration gate, which is a
+native-correctness fix that is a no-op on the side-0 M2 tape. M1 `09b726b7…`
+and M2 v29 `7c3874f7…` are byte-identical (verified by `cmp`, no re-pin);
+census unchanged (**78/78** bodies, **58/80** natural, **64/80** install-live,
+action **38/45**, phase **26/35**); `make check` **116/116**.
+
+**Celebration release gate (native fix).** `fifa96_match_action_14` stage 2
+tested `r->side != 1u`; native `0x87C1A MOV EAX,[0x157A49]; SAR EAX,0x18;
+CMP EAX,1; JZ` reads the high byte of the dword at `0x157A49` = the goal-side
+flag `[0x157A4C]` (`mr->global_157a4c`), not the record's team side. The old
+test froze every away-side celebration in phase 5 (the measured probe stalled
+9 000 steps at `1070,-2152`); it now releases for both sides, and only the
+`global_157a4c == 1` sit-8 state skips. `test_engine_match_handlers` pins both:
+a side-1 record with flag 0 releases to phase 1, a flag-1 record does not.
+The side-1 fix is the only non-live change; side 0 with flag 0 has the same
+release as before.
+
+**Goal side through the fallback.** The situation-6 direct fallback
+(`0x8AC28`) writes the phase and the goal side through `FUN_000740A0(5,side)`;
+the port's `match_run_goal_fallback` called the side-less
+`fifa96_match_run_situation(mr, 6)`, which hardcoded side 0. It now calls
+`match_run_situation_side(mr, 6u, side, 0u)` with the scanned side, so the
+away-side phase-5 arm installs `0x15`/`0x14` on team 1 and the phase-1 release
+runs on the correct record. Side 0 is unchanged.
+
+**P6-L1 live armer (labelled stand-in).** The native armer is a camera-pan
+scan (`0x71390..0x713EC`: phase 2/0x10, `|camZ|_w > 0xB20 || |camX|_w >
+0x730`), and the live follow replaces the unported FU-310 camera place/focus.
+`match_run_live_goal_arm` (frame body, immediately before
+`fifa96_match_run_goal_scan`/`0x8B63E`) checks `live_start`, phase 2, the
+unarmed state and the native goal-mouth classifier `FUN_00070074`
+(`0xB10..0xB90` in `|z|`, `|x| < 0xD0`, `y <= height`); on a hit it sets
+`goal_armed` (`[0x15781D]`), the `0x15777C/80/84` snapshot triple with the
+native y-force 0, and `goal_zone` (`[0x15781E]`). The same frame's scan then
+runs the ordinary direct chain. The producer never writes the score; it is a
+stand-in for the unported native camera director, not a native producer.
+
+**Live camera height and lead.** `match_run_live_camera_follow` now keeps the
+native FU-71 height `[0x157750] = 0x50` instead of pinning y = 0. That is the
+native row-04/set-piece pan-arm gate (`0x20 < y < 0x70`, A2 §2), which was dead
+on every live pan. The camera also keeps a forward lead of the ball velocity
+times the native lead quantum 8, clamped to the ±0x120 ball-machine lead band
+(`0x8BBBB`), so a moving ball is led rather than exactly mirrored. Both are
+**[D]** stand-ins for FU-310/the camera director; the camera-0 render eye is
+unchanged.
+
+**Deterministic test.** New `port/tests/test_engine_live_goal.c` (CMake
+`test_engine_live_goal`, ASan/UBSan): live `begin` (phase 2, session gate 0),
+ball staged at `(0,0,±0xB30)` (position and target only, no score/phase write),
+KICK pulses for the kickoff taker. For each side it asserts the armer
+(`goal_armed`/`goal_zone`/snapshot `y = 0`, `z = ±0xB30`), score 1-0 / 0-1,
+phase 5, the goal record's side and the phase-5 install (`0x15` on the scoring
+side, `0x14` on the goal record, code 0 on the other team), the stage-2 release
+to phase 1 with the kickoff ball `(480,0,0)` and the live camera height `0x50`,
+phase 2 with the score preserved, and no re-score over 400 further steps. The
+lifecycle case scores **both** sides (1-1), sets 3 s halves, and asserts
+half-time (phase `0x0C`, period index 1), the second-half phase 2, and the
+flag-clear regulation terminal -> OVER/POST with the 1-1 score preserved. The
+1-1 score is deliberate: a differing regulation end arms the existing
+extra-time branch (FU-213), so a tie is the natural full-time route; a natural
+1-0 full time remains a named leg below.
+
+**Windowed evidence (verification-only, not shipped).**
+`/tmp/opencode/play/p6_goal_harness.c` (+ `p6_capture.sh`) boots the SDL3
+backend on the retail ISO, stages the bridge's live art/pitch pair, sets
+BRA/ITA and uses the new armer:
+`/tmp/opencode/play/p6-goal.png` (HUD `BRA 1 - 0 ITA`, goal frame),
+`/tmp/opencode/play/p6-goal-restart.png` (kickoff, score held) and
+`/tmp/opencode/play/p6-goal-result.png` (`FULL TIME`, `BRA 1 - 0 ITA`,
+`PERIOD 2`). The 1-0 natural regulation end arms extra time in the current
+engine, so the FULL TIME capture stages the same flag-clear phase-`0x0C`
+terminal the M2 regulation-over probe uses; the score itself is only the
+native goal output.
+
+**Legs (P6 goal path).** **P6-L1** the native FU-310 camera place/focus and
+the camera director remain unported; the live armer and camera lead are
+labelled stand-ins. **P6-L2** the goal caption/replay: the native ordinary
+match has no goal overlay or replay (Practice-only screen machinery), so the
+HUD score + celebration + restart are the complete native presentation; a
+caption/replay would be a new stand-in. **P6-L3** the half-time caption/dwell:
+native half-time is a phase-`0x0C` flash with no screen write (A5 §1.2).
+**P6-L4** the differing-score regulation end arms the engine's extra-time
+branch, so a natural 1-0 FULL TIME awaits the FU-213/OL-85 native reading (or
+a "no extra time" option producer); the deterministic lifecycle test uses a
+tied 1-1 regulation end. **P6-L5** the live camera lead is the derived
+velocity*8/±0x120 stand-in, not a native lead producer.

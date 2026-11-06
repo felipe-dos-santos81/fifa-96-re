@@ -6203,7 +6203,14 @@ static int fifa96_match_action_14(struct fifa96_match_run *mr) {
   }
   if (stage == 2u) {                                /* 0x87C13 */
     match_row_reset(mr, e);                         /* 0x7DAB4 */
-    if (r->side != 1u) {                            /* 0x87C1A..0x87C25 (FU184-L6) */
+    /* P6 task 2 (FU-344): the release gate is the native goal-side flag byte
+     * `[0x157A4C]`, not the record's team side. `0x87C1A MOV EAX,[0x157A49];
+     * SAR EAX,0x18; CMP EAX,1; JZ` reads the high byte of the dword at
+     * `0x157A49` = `byte[0x157A4C]` (the sit-8 re-init latch); both goal sides
+     * release in an ordinary match, only the sit-8 state skips. The old
+     * `r->side != 1u` test froze every away-side celebration in phase 5
+     * (FU184-L6 corrected here). */
+    if (mr->global_157a4c != 1u) {                  /* 0x87C1A..0x87C25 */
       /* `0x87C2B..0x87C71`: the `[0x10F328/2C/30]` camera reset, the
        * `[0x157AAF] = side ^ 1` display swap (leg) and the phase-1 entry. */
       (void)fifa96_camera_init(&mr->render.camera, 0, 0, 0);   /* 0x700F4 */

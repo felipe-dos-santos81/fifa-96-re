@@ -1885,9 +1885,24 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   if (tracked == FIFA96_MATCH_ENTITY_NONE) tracked = mr->slot.entity;
   if (tracked != FIFA96_MATCH_ENTITY_NONE && cam->tracked != tracked)
     (void)fifa96_camera_set_tracked(cam, tracked);
-  cam->pos_x = mr->entities.ball.x;
-  cam->pos_y = 0;
-  cam->pos_z = mr->entities.ball.z;
+  /* P6 task 2 / P6-L1 (FU-344): the live follow keeps the native FU-71 height
+   * `[0x157750]` = 0x50 instead of pinning y to 0. The native row-04/set-piece
+   * pan arm gate is `0x20 < y < 0x70` (A2 §2, `match_sp_pan_arm`); with y = 0
+   * every live pan stayed dead. The forward lead is the ball's velocity times
+   * the native lead quantum 8, clamped to the ±0x120 ball-machine lead band
+   * (the phase-2 `0x8BBBB` arm), so the camera stays ahead of a moving ball
+   * and the native pan/armer path sees motion first. Both are [D] stand-ins
+   * for the unported FU-310 camera place/focus and the camera director; the
+   * engine's camera-0 render eye is unchanged. */
+  int32_t lead_x = (int32_t)mr->entities.ball.vel_x * 8;
+  int32_t lead_z = (int32_t)mr->entities.ball.vel_z * 8;
+  if (lead_x > 0x120) lead_x = 0x120;
+  if (lead_x < -0x120) lead_x = -0x120;
+  if (lead_z > 0x120) lead_z = 0x120;
+  if (lead_z < -0x120) lead_z = -0x120;
+  cam->pos_x = mr->entities.ball.x + lead_x;
+  cam->pos_y = 0x50;
+  cam->pos_z = mr->entities.ball.z + lead_z;
 }
 
 /* FU-85 §4/FUN_00036C70 (first-hand disassemble_function 0x36C70) stages the
@@ -3865,7 +3880,11 @@ static int match_run_goal_fallback(struct fifa96_match_run *mr, uint8_t side) {
   int rc = fifa96_match_run_add_goal(mr, side);
   if (rc != 0) return rc;
   if (mr->global_157ac2 == 2u || mr->global_157ac2 == 3u) return 0;
-  return fifa96_match_run_situation(mr, 6);
+  /* P6 task 2 (FU-344): `0x8AC28` writes the goal side through
+   * `FUN_000740A0(5, side)`. The old side-less entry hardcoded side 0, so an
+   * away-side goal scored 0-1 but armed the phase-5 presentation as the home
+   * side and never released from the away record. Pass the scanned side. */
+  return match_run_situation_side(mr, 6u, side, 0u);
 }
 
 int fifa96_match_run_goal_queue(struct fifa96_match_run *mr, uint8_t side) {
@@ -4086,6 +4105,27 @@ static uint8_t match_run_ball_side(const struct fifa96_match_run *mr) {
       id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
     return 0u;
   return mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS].side;
+}
+
+/* P6 task 2 / P6-L1 (FU-344): the live ball-position goal armer. The native
+ * armer consumes a camera pan (`0x71390..0x713EC`, |camZ| > 0xB20 || |camX| >
+ * 0x730) and the live follow replaces the FU-310 camera place/focus, so the
+ * pan input is absent by construction. When a live phase-2 ball actually
+ * enters the native goal-mouth classifier `FUN_00070074` (`0xB10..0xB90` in
+ * |z|, |x| < 0xD0, y <= height), arm the same cells the native pan does: the
+ * `[0x15781D]` flag, the `0x15777C/80/84` snapshot (y forced 0) and the
+ * `[0x15781E]` zone. The scan/direct-fallback chain then runs unchanged. This
+ * is a labelled stand-in for the unported live producer (native camera
+ * director/FU-310); it never writes the score. */
+static void match_run_live_goal_arm(struct fifa96_match_run *mr) {
+  const struct fifa96_match_ball *ball = &mr->entities.ball;
+  if (!mr->live_start || mr->state.phase != 2u || mr->goal_armed) return;
+  if (!fifa96_match_goal_zone(ball->x, ball->y, ball->z)) return;
+  mr->goal_armed = 1u;                         /* 0x713DB [0x15781D] = 1 */
+  mr->goal_snap_x = ball->x;                   /* 0x713E3 MOVSD x3 */
+  mr->goal_snap_y = 0;                         /* the native y force */
+  mr->goal_snap_z = ball->z;
+  mr->goal_zone = 1u;                          /* 0x713F2 classifier true */
 }
 
 int fifa96_match_run_goal_scan(struct fifa96_match_run *mr) {
@@ -5126,6 +5166,12 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
         mr->act.id == 0 && mr->global_157ac0 == 1u &&
         (mr->global_157ac2 == 2u || mr->global_157ac2 == 3u))
       fifa96_match_run_period_over_rearm(mr);
+    /* P6 task 2 / P6-L1 (FU-344): the live ball-position armer runs after
+     * this frame's phase/entity ball update and immediately before the native
+     * clock-tail scan (0x8B623 FUN_00088940), so a ball in the mouth arms and
+     * is consumed by the same scan. Live-only; the M2 tape never sets
+     * live_start. */
+    match_run_live_goal_arm(mr);
     /* FU-145 S2 (0x8B63E): the native clock tail FUN_0008AF38 calls the goal
      * scanner FUN_00088940 after the period-end handling; the derived scan
      * carries the phase/armed gate and queues situation 6 (or the wired
