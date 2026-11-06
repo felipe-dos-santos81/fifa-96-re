@@ -78,8 +78,12 @@ static int sdl3_init(void *self, int w, int h, const char *title) {
     SDL_Quit();
     return -1;
   }
-  if (!SDL_CreateWindowAndRenderer(title ? title : "FIFA 96", w * 3, h * 3,
-                                   SDL_WINDOW_RESIZABLE, &s->win, &s->ren)) {
+  /* 320x240 keeps the 3x window; the native 640x480 shell uses 2x so it fits
+     a 1080p display. */
+  const int win_scale = w <= 320 ? 3 : 2;
+  if (!SDL_CreateWindowAndRenderer(title ? title : "FIFA 96", w * win_scale,
+                                   h * win_scale, SDL_WINDOW_RESIZABLE, &s->win,
+                                   &s->ren)) {
     free(s->rgba);
     s->rgba = NULL;
     sdl3_release(s);

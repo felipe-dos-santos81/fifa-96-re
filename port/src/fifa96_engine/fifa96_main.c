@@ -32,7 +32,11 @@ int main(int argc, char **argv) {
     fputs("SDL3 backend unavailable\n", stderr);
     return 1;
   }
-  struct fifa96_engine_config cfg = {.iso_path = iso, .width = 320, .height = 240,
+  /* The windowed shell renders at the native 640x480 SVGA size; the headless
+   tape path stays at the pinned 320x240 Mode-X surface. */
+  struct fifa96_engine_config cfg = {.iso_path = iso,
+                                     .width = headless ? 320 : 640,
+                                     .height = headless ? 240 : 480,
                                      .headless = headless};
   struct fifa96_engine *e = fifa96_engine_create(&cfg, plat);
   if (!e || fifa96_engine_boot(e) != 0) {

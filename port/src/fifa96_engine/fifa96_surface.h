@@ -3,8 +3,9 @@
 #include <stdint.h>
 #include "fifa96_engine/fifa96_platform.h"
 
-#define FIFA96_SURFACE_MAX_W 320
-#define FIFA96_SURFACE_MAX_H 240
+/* Windowed shell: 640x480; headless M1/M2 tapes still allocate 320x240. */
+#define FIFA96_SURFACE_MAX_W 640
+#define FIFA96_SURFACE_MAX_H 480
 
 struct fifa96_surface {
   int width, height;

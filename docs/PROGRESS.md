@@ -4386,3 +4386,16 @@ close-out below).
   `test_engine_match_render` pins the new live eye. Open legs: 640 surface,
   native 3dwpts stadium/goal nets, Team Select flags, native Options art, HUD
   scaling, native camera director. `make check` 119/119; M1/M2 exact.
+
+- **P10 graphics follow-up: native 640x480 windowed surface (2026-11-06).**
+  The windowed build now renders at 640x480 in a 1280x960 window instead of
+  magnifying a 320x240 surface; `fifa96_main.c` keeps the headless tape path at
+  320x240, and `fifa96_surface_hash` now hashes `width * height` pixels so the
+  pinned M1/M2 frames are unchanged. The 640 menu shell takes the 1:1 path (no
+  downsample), the match crowd uses the 128x128 `STACcovr` frame, mowing
+  stripes are a 90% shade at 64-unit bands, player scale is 2.5x, shadows
+  darken the grass through the pitch shade, pitch lines are thinner, the HUD
+  is x-scaled 2x into a wide short bar, and the 320x240 intro stream scales to
+  the 640 surface (the 320 tape path keeps the 1:1 blit). Remaining: native 3dwpts
+  stadium/goal nets, Team Select flags, native Options art, native 640 HUD art,
+  native camera director. `make check` 119/119; M1/M2 exact by `cmp`.

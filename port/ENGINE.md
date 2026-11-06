@@ -10665,3 +10665,38 @@ still hashes 320x240 tapes), **P10-L2** the native 3dwpts stadium / goal-net
 renderer, **P10-L3** Team Select flag mapping (MOD4A/4B/4C), **P10-L4** the
 native Options art, **P10-L5** HUD geometry/scale at 640, **P10-L6** the
 native camera director/aim (the broadcast rig and sprite scale are stand-ins).
+
+## Phase 62 — P10 graphics follow-up: native 640x480 windowed surface (2026-11-06)
+
+**Errata.** Phase 61 said: *"The engine surface is still 320x240; the 640 shell
+is downsampled. Open legs: **P10-L1** the windowed 640x480 surface (crisp
+shell/HUD; the null backend still hashes 320x240 tapes)"*. That is superseded.
+The windowed executable now requests a 640x480 surface (`fifa96_main.c`), the
+surface backing store is 640x480 (`fifa96_surface.h`), and SDL opens a 1280x960
+(2x) window. The headless/tape path still requests 320x240;
+`fifa96_surface_hash` now hashes `width * height` indexed pixels plus the
+palette, so the 320 tapes keep their pinned hashes. **P10-L1 is closed.**
+
+Phase 61 also said *"The 22 player slots draw at 3x the projected scale"* and
+*"a live 75%-brightness shade map for 128-unit mowing stripes"* and the crowd
+was the 64x64 frame. The final values are 2.5x player scale, a 90%-brightness
+shade map at 64-world-unit stripes, and the 128x128 `STACcovr` frame when the
+bank carries it (64x64 fallback). The 640 menu shell now takes the 1:1
+`hires_present` path, so no downsample is applied in the windowed build. The
+HUD is drawn with an x-scale of 2 (wide, short bar); its y layout stays at the
+320 spacing because the 640 SVGA HUD art is not staged. Shadows now darken the
+existing grass through the pitch shade instead of painting a flat black patch,
+and the pitch line half-width is 6 world units. The 320x240 intro stream now
+scales to the windowed surface (nearest fill); the 320 tape path keeps the
+original 1:1 top-left blit, so the M1 intro frames are unchanged.
+
+**Remaining legs.** **P10-L2** native 3dwpts stadium / goal-net renderer (the
+stands are still the derived crowd band + roof/ad wall), **P10-L3** Team Select
+flag mapping (MOD4A/4B/4C), **P10-L4** native Options art, **P10-L5** native
+640 HUD art (the current wide bar is an x-scaled 320 bar), **P10-L6** native
+camera director/aim. The broadcast camera, sprite scale and stadium layers
+remain explicitly derived stand-ins.
+
+**Gate.** `make check` **119/119**; M1/M2 exact by `cmp` remain the authority.
+The surface-size change is windowed-only; the M1/M2 tests continue to request
+320x240 and the hash change is byte-compatible with the pinned frames.

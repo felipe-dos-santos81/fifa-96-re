@@ -3998,6 +3998,8 @@ void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *
      * behind the controlled side's goal and is lifted for a readable view. */
     int32_t side = mr->phase_machine.side_controlled & 1;
     int32_t dir = side != 0 ? -1 : 1;
+    /* Offset the rig to the side of the goal so the pitch reads diagonally,
+     * like the native broadcast camera, instead of a symmetric centre line. */
     out->x = mr->render.camera.pos_x + 30;
     out->y = mr->render.camera.pos_y + 320;
     out->z = mr->render.camera.pos_z - 2000 * dir;
@@ -6534,16 +6536,16 @@ void fifa96_match_run_hud_colors_from_palette(const uint8_t palette[768],
   }
 }
 
-/* P10 graphics: a subtle 75%-brightness palette map for the mowing stripes.
+/* P10 graphics: a subtle 90%-brightness palette map for the mowing stripes.
  * Built once per staged palette alongside the HUD shade. */
 static void match_run_pitch_shade_from_palette(const uint8_t palette[768],
                                                uint8_t shade[256]) {
   if (shade == NULL) return;
   for (int i = 0; i < 256; i++) {
     if (palette == NULL) { shade[i] = (uint8_t)i; continue; }
-    int tr = palette[i * 3 + 0] * 3 / 4;
-    int tg = palette[i * 3 + 1] * 3 / 4;
-    int tb = palette[i * 3 + 2] * 3 / 4;
+    int tr = palette[i * 3 + 0] * 9 / 10;
+    int tg = palette[i * 3 + 1] * 9 / 10;
+    int tb = palette[i * 3 + 2] * 9 / 10;
     int best = 0;
     long best_d = -1;
     for (int j = 0; j < 256; j++) {
@@ -6606,15 +6608,15 @@ static int match_run_hud_ready(const struct fifa96_match_run_render *r) {
  * FUN_0009B850 span stepper is not decomposed). */
 static void match_run_hud_bar(struct fifa96_surface *s,
                               const struct fifa96_match_run *mr, int bar_x,
-                              int bar_y) {
+                              int bar_y, int scale_x, int scale_y) {
   const struct fifa96_match_run_render *r = &mr->render;
   const fifa96_sprite_frame *bar = &r->hud_bar;
   const int live = mr->live_start != 0;
-  int dst_w = bar->width;
-  int dst_h = bar->height;
+  int dst_w = bar->width * scale_x;
+  int dst_h = bar->height * scale_y;
   if (r->window_zoomed) {
-    dst_w = (bar->width * MATCH_HUD_BAR_ZOOM) >> 16;
-    dst_h = (bar->height * MATCH_HUD_BAR_ZOOM) >> 16;
+    dst_w = (dst_w * MATCH_HUD_BAR_ZOOM) >> 16;
+    dst_h = (dst_h * MATCH_HUD_BAR_ZOOM) >> 16;
   }
   for (int dy = 0; dy < dst_h; dy++) {
     int src_y = (int)(((int64_t)dy * bar->height) / dst_h);
@@ -6696,15 +6698,18 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
   int y1 = have_window ? r->window.box.y1 : s->height;
   if (y1 > s->height) y1 = s->height;
 
-  const int row_pitch = zoomed ? 9 : 12;
-  const int x_left = x0 + (zoomed ? 3 : 6);
-  int clock_x = x0 + (zoomed ? 0x23 : 0x32);
-  const int bar_x = x0 + (zoomed ? 1 : 2);
+  const int ui_x = (s->width >= 640 && mr->live_start) ? 2 : 1;
+  const int ui_y = 1;
+  const int row_pitch = (zoomed ? 9 : 12) * ui_y;
+  const int x_left = x0 + (zoomed ? 3 : 6) * ui_x;
+  int clock_x = x0 + (zoomed ? 0x23 : 0x32) * ui_x;
+  const int bar_x = x0 + (zoomed ? 1 : 2) * ui_x;
   int bar_h = r->hud_bar_height;
   if (zoomed) bar_h = (bar_h * MATCH_HUD_BAR_ZOOM + 0x8000) >> 16;
-  const int bar_y = y1 - bar_h - (zoomed ? 1 : 2);
-  const int y2 = bar_y + 2;
-  const int cells_y = bar_y + 2 * row_pitch + (zoomed ? 2 : 3);
+  bar_h *= ui_y;
+  const int bar_y = y1 - bar_h - (zoomed ? 1 : 2) * ui_y;
+  const int y2 = bar_y + 2 * ui_y;
+  const int cells_y = bar_y + 2 * row_pitch + (zoomed ? 2 : 3) * ui_y;
 
   char clock_buf[16];
   char score_buf[2][8];
@@ -6722,13 +6727,13 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
   int wide = mr->score[0] >= 100 || mr->score[1] >= 100 ||
              fifa96_font_text_width(font, r->hud_name[0]) > 0x20 ||
              fifa96_font_text_width(font, r->hud_name[1]) > 0x20;
-  int clock_cell_w = zoomed ? 0x12 : 0x18;
+  int clock_cell_w = (zoomed ? 0x12 : 0x18) * ui_x;
   if (wide) {
-    clock_x += zoomed ? 6 : 8;
-    clock_cell_w += zoomed ? 6 : 8;
+    clock_x += (zoomed ? 6 : 8) * ui_x;
+    clock_cell_w += (zoomed ? 6 : 8) * ui_x;
   }
 
-  match_run_hud_bar(s, mr, bar_x, bar_y);
+  match_run_hud_bar(s, mr, bar_x, bar_y, ui_x, ui_y);
   match_run_hud_text(s, font, r->hud_name[0], x_left, y2, body, shadow);
   match_run_hud_text(s, font, r->hud_name[1], x_left, y2 + row_pitch - 2, body, shadow);
   match_run_hud_text(s, font, score_buf[0],
@@ -7224,7 +7229,8 @@ static void match_run_draw_ball_row(const struct fifa96_match_run *mr,
  * enough to seat the players on the pitch. */
 static void match_run_draw_shadow(struct fifa96_surface *s,
                                   const fifa96_render_clip *clip, int x, int y,
-                                  int rw, int rh, uint8_t color) {
+                                  int rw, int rh, const uint8_t *shade,
+                                  uint8_t fallback) {
   if (s == NULL || clip == NULL || rw <= 0 || rh <= 0) return;
   int left = clip->left < 0 ? 0 : clip->left;
   int top = clip->top < 0 ? 0 : clip->top;
@@ -7241,7 +7247,8 @@ static void match_run_draw_shadow(struct fifa96_surface *s,
     if (x1 >= right) x1 = right - 1;
     if (x1 < x0) continue;
     uint8_t *row = s->indexed + (size_t)py * (size_t)s->width;
-    for (int px = x0; px <= x1; px++) row[px] = color;
+    for (int px = x0; px <= x1; px++)
+      row[px] = shade != NULL ? shade[row[px]] : fallback;
   }
 }
 
@@ -7334,7 +7341,7 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   int32_t view_pitch = r->pitch;
   if (mr->live_start) {
     int32_t side = mr->phase_machine.side_controlled & 1;
-    view_yaw = (side != 0 ? 0x8000 : 0) + 0x0300;
+    view_yaw = side != 0 ? (0x8000 + 0x0300) : 0x0300;
     view_pitch = 0x0700;
   }
   fifa96_err_t err = fifa96_projection_matrix(view_yaw, view_pitch, matrix);
@@ -7420,7 +7427,7 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
       int sy = (int)(slots[i].clean.y >> 16);
       int rw = (i == 22u ? 4 : 10) * shadow_scale;
       int rh = (i == 22u ? 2 : 3) * shadow_scale;
-      match_run_draw_shadow(s, &clip, sx, sy, rw, rh, 0x00);
+      match_run_draw_shadow(s, &clip, sx, sy, rw, rh, r->pitch_shade, 0x00);
     }
   }
 
@@ -7525,7 +7532,7 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     /* P10 graphics: the native sprite scale is tuned for the VGA camera; at
      * the live broadcast framing the players read too small, so scale the 22
      * player slots up (the ball keeps its native size). Live-only. */
-    if (mr->live_start && slot < 22u) scale *= 3;
+    if (mr->live_start && slot < 22u) scale = (scale * 5) / 2;
     int rc = match_run_draw_sprite(s, &sprite, sprite_remap, x, y, scale, frame.mirrored,
                                    &clip);
     if (rc != 0) return rc;

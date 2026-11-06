@@ -60,6 +60,9 @@ static uint64_t fifa96_fnv1a(uint64_t h, const uint8_t *p, size_t n) {
 
 uint64_t fifa96_surface_hash(const struct fifa96_surface *s) {
   if (!s) return 0;
-  uint64_t h = fifa96_fnv1a(14695981039346656037ull, s->indexed, sizeof s->indexed);
+  /* Hash only the live pixels: the static backing store is 640x480, while the
+   headless M1/M2 tapes use 320x240 and must keep their pinned hashes. */
+  uint64_t h = fifa96_fnv1a(14695981039346656037ull, s->indexed,
+                            (size_t)s->width * (size_t)s->height);
   return fifa96_fnv1a(h, s->palette, sizeof s->palette);
 }

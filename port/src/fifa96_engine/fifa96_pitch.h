@@ -38,6 +38,8 @@ struct fifa96_surface;
 #define FIFA96_PITCH_TILE_H 64
 #define FIFA96_PITCH_TILE_BYTES (FIFA96_PITCH_TILE_W * FIFA96_PITCH_TILE_H)
 #define FIFA96_PITCH_CROWD_BAND_ROWS 56
+#define FIFA96_PITCH_CROWD_MAX 128
+#define FIFA96_PITCH_CROWD_MAX_BYTES (FIFA96_PITCH_CROWD_MAX * FIFA96_PITCH_CROWD_MAX)
 
 /* PALsys-index choices for the v1 band/markings. The live match palette is
  * the PALsys frame 0 base with the PALteam band overlay (the P1 measured
@@ -51,7 +53,8 @@ struct fifa96_pitch {
   uint8_t *owner;              /* owned 3-tile arena, or NULL */
   const uint8_t *tile_h;       /* FplainH.fsh frame 0, 64x64 */
   const uint8_t *tile_v;       /* FplainV.fsh frame 0, 64x64 */
-  const uint8_t *crowd;        /* STACcovr.fsh 64x64 frame */
+  const uint8_t *crowd;        /* STACcovr.fsh frame (128x128 preferred) */
+  int crowd_w, crowd_h;        /* selected crowd frame dimensions */
   int staged;                  /* all three tiles present */
   uint8_t sky_index;           /* PALsys index of the sky rows */
   uint8_t line_index;          /* PALsys index of the white markings */

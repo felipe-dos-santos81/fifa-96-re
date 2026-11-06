@@ -42,10 +42,31 @@ int fifa96_intro_step(struct fifa96_intro *in, struct fifa96_surface *s) {
     return -(int)FIFA96_ERR_TRUNCATED;
   size_t need = (size_t)w * (size_t)h;
   if (!frame.pixels || frame.pixels_len < need) return -(int)FIFA96_ERR_TRUNCATED;
-  /* Blit the frame at (0,0); the region outside stays untouched. */
-  for (uint32_t y = 0; y < h; y++) {
-    memcpy(s->indexed + (size_t)y * (size_t)s->width,
-           frame.pixels + (size_t)y * w, w);
+  if (s->width == 320 && s->height == 240) {
+    /* M1 tape path: preserve the original 1:1 top-left blit exactly (the
+     * region outside the frame stays untouched), so the 320x240 intro frames
+     * keep their pinned hashes. */
+    for (uint32_t y = 0; y < h; y++) {
+      memcpy(s->indexed + (size_t)y * (size_t)s->width,
+             frame.pixels + (size_t)y * w, w);
+    }
+  } else if ((uint32_t)s->width == w && (uint32_t)s->height == h) {
+    memcpy(s->indexed, frame.pixels, need);
+  } else {
+    /* Windowed 640x480 shell: the intro stream is still 320x240. Scale the
+     * frame to fill the surface (nearest); VGA 320x200 footage therefore
+     * gets the native 4:3 stretch instead of sitting in the top-left. */
+    for (int y = 0; y < s->height; y++) {
+      uint32_t sy = (uint32_t)(((int64_t)y * h) / s->height);
+      if (sy >= h) sy = h - 1;
+      const uint8_t *src = frame.pixels + (size_t)sy * w;
+      uint8_t *dst = s->indexed + (size_t)y * (size_t)s->width;
+      for (int x = 0; x < s->width; x++) {
+        uint32_t sx = (uint32_t)(((int64_t)x * w) / s->width);
+        if (sx >= w) sx = w - 1;
+        dst[x] = src[sx];
+      }
+    }
   }
   if (frame.palette_changed) fifa96_surface_set_palette8(s, frame.palette);
   return 0;

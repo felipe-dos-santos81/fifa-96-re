@@ -106,7 +106,8 @@ page and Reset Defaults row are port additions). The other six native Game
 Select entries are shown dimmed (not ported yet). The shell composes the real
 640x480 MOD2/MOD1 art, the SLICK title/menu fonts and the animated VS mark;
 the match uses a behind-the-goal broadcast camera with the native stands,
-mowing stripes and player shadows.
+mowing stripes and player shadows. The windowed build renders at the native
+640x480 surface in a 1280x960 window; the headless tape path stays 320x240.
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
 **C** passes, **V** plays a long ball; **Esc** pauses (**Enter** resumes,

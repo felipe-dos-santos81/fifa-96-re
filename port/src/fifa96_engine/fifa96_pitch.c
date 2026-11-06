@@ -122,30 +122,34 @@ static int pitch_entry_decode(const uint8_t *raw, size_t entry_len, size_t raw_l
   return -1;
 }
 
-/* Copy the first 64x64 frame of a decoded SHPI bank. FplainH/V carry a single
- * 64x64 frame; STACcovr carries 32/64/128 LOD frames (A1 §3), so scan for the
- * 64x64 one instead of assuming an index. */
-static int pitch_bank_tile(const uint8_t *bank_data, uint32_t bank_len, uint8_t *dst) {
+/* Copy a frame of the requested size from a decoded SHPI bank. FplainH/V
+ * carry a single 64x64 frame; STACcovr carries 32/64/128 LOD frames (A1 §3),
+ * so the crowd loader asks for the 128x128 one first and falls back to 64. */
+static int pitch_bank_tile_wh(const uint8_t *bank_data, uint32_t bank_len, uint8_t *dst,
+                              int want_w, int want_h) {
   fifa96_sprite_bank bank;
   if (fifa96_sprite_bank_parse(bank_data, bank_len, &bank) != FIFA96_OK) return 0;
+  size_t bytes = (size_t)want_w * (size_t)want_h;
   for (uint32_t i = 0; i < bank.count; i++) {
     fifa96_sprite_entry entry;
     fifa96_sprite_frame frame;
     if (fifa96_sprite_bank_entry(&bank, i, &entry) != FIFA96_OK) continue;
     if (fifa96_sprite_frame_parse(&bank, entry.offset, &frame) != FIFA96_OK) continue;
-    if (frame.width != FIFA96_PITCH_TILE_W || frame.height != FIFA96_PITCH_TILE_H ||
-        frame.pixel_len < FIFA96_PITCH_TILE_BYTES || !frame.pixels)
+    if ((int)frame.width != want_w || (int)frame.height != want_h ||
+        frame.pixel_len < bytes || !frame.pixels)
       continue;
-    memcpy(dst, frame.pixels, FIFA96_PITCH_TILE_BYTES);
+    memcpy(dst, frame.pixels, bytes);
     return 1;
   }
   return 0;
 }
 
+
 /* Find a BIGF entry by name and decode its first 64x64 frame. Returns 1 on
  * success, 0 when the entry/frame is absent or undecodable. */
-static int pitch_container_tile(const uint8_t *file, size_t file_len, const char *name,
-                                const char *alt_name, uint8_t *dst) {
+static int pitch_container_tile_wh(const uint8_t *file, size_t file_len, const char *name,
+                                   const char *alt_name, uint8_t *dst, int want_w,
+                                   int want_h) {
   uint8_t *container = NULL;
   size_t container_len = 0;
   int found = 0;
@@ -166,12 +170,18 @@ static int pitch_container_tile(const uint8_t *file, size_t file_len, const char
       if (pitch_entry_decode(container + off, size, container_len - off, &bank,
                              &bank_len) != 0)
         continue;
-      found = pitch_bank_tile(bank, bank_len, dst);
+      found = pitch_bank_tile_wh(bank, bank_len, dst, want_w, want_h);
       free(bank);
     }
   }
   free(container);
   return found;
+}
+
+static int pitch_container_tile(const uint8_t *file, size_t file_len, const char *name,
+                                const char *alt_name, uint8_t *dst) {
+  return pitch_container_tile_wh(file, file_len, name, alt_name, dst, FIFA96_PITCH_TILE_W,
+                                 FIFA96_PITCH_TILE_H);
 }
 
 int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *eng,
@@ -184,7 +194,7 @@ int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *e
   uint8_t *crowd;
   if (!pitch || !eng || !eng->assets || !field_path || !stadium_path)
     return -FIFA96_ERR_INVALID;
-  owner = calloc(3u, FIFA96_PITCH_TILE_BYTES);
+  owner = calloc(2u * FIFA96_PITCH_TILE_BYTES + FIFA96_PITCH_CROWD_MAX_BYTES, 1);
   if (!owner) return -FIFA96_ERR_IO;
   tile_h = owner;
   tile_v = owner + FIFA96_PITCH_TILE_BYTES;
@@ -207,7 +217,16 @@ int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *e
     free(owner);
     return -FIFA96_ERR_NOT_FOUND;
   }
-  int have_crowd = pitch_container_tile(bytes, len, "STACcovr.fsh", NULL, crowd);
+  int crowd_w = FIFA96_PITCH_CROWD_MAX;
+  int crowd_h = FIFA96_PITCH_CROWD_MAX;
+  int have_crowd = pitch_container_tile_wh(bytes, len, "STACcovr.fsh", NULL, crowd,
+                                           crowd_w, crowd_h);
+  if (!have_crowd) {
+    crowd_w = FIFA96_PITCH_TILE_W;
+    crowd_h = FIFA96_PITCH_TILE_H;
+    have_crowd = pitch_container_tile_wh(bytes, len, "STACcovr.fsh", NULL, crowd,
+                                         crowd_w, crowd_h);
+  }
   fifa96_asset_free(bytes);
   if (!have_crowd) {
     free(owner);
@@ -219,6 +238,8 @@ int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *e
   pitch->tile_h = tile_h;
   pitch->tile_v = tile_v;
   pitch->crowd = crowd;
+  pitch->crowd_w = crowd_w;
+  pitch->crowd_h = crowd_h;
   pitch->staged = 1;
   pitch->sky_index = FIFA96_PITCH_SKY_INDEX;
   pitch->line_index = FIFA96_PITCH_LINE_INDEX;
@@ -248,7 +269,7 @@ static const uint8_t *pitch_tile_pick(const struct fifa96_pitch *pitch, int32_t 
  * native line coordinates (A1 §4 [D]). The pitch rectangle is x ±2155,
  * z ±3102 (FUN_0006D870, A1 §5); the goal lines sit at x ±2016 and the
  * touchlines at z ±3102. */
-#define FIFA96_PITCH_LINE_HALF 10
+#define FIFA96_PITCH_LINE_HALF 6
 #define FIFA96_PITCH_HALF_LENGTH 0x7E0    /* goal line x = ±2016 */
 #define FIFA96_PITCH_HALF_WIDTH 0xC1Eu    /* touchline z = ±3102 */
 #define FIFA96_PITCH_CIRCLE_R 0x3C0       /* centre circle radius [D] */
@@ -320,23 +341,36 @@ int fifa96_pitch_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s
   int32_t band_top = horizon - band_rows;
   int32_t ad_rows = 4 * s->height / 240;
   if (ad_rows < 2) ad_rows = 2;
-  uint8_t roof_index = pitch->shade ? pitch->shade[pitch->sky_index]
-                                    : (uint8_t)(pitch->sky_index >> 1);
+  uint8_t roof_index = pitch->shade
+                           ? pitch->shade[pitch->shade[pitch->sky_index]]
+                           : (uint8_t)(pitch->sky_index >> 1);
   uint32_t crowd_u_off = (uint32_t)((yaw & 0xFFFF) >> 9);
   for (int32_t sy = top; sy < horizon; sy++) {
     uint8_t *row = s->indexed + (size_t)sy * (size_t)s->width;
     if (sy < band_top) {
       /* The native broadcast view is inside the stadium: the top of the
-       * frame is the stand roof, not open sky. A lighter top edge keeps the
-       * structure readable. */
-      uint8_t roof = (sy < 2 * s->height / 240) ? pitch->line_index : roof_index;
-      memset(row + left, roof, (size_t)(right - left));
+       * frame is the stand roof, not open sky. Draw a lighter top edge, a
+       * dark roof field and periodic vertical supports so it reads as a
+       * structure rather than a flat band. */
+      int32_t edge = 2 * s->height / 240;
+      uint8_t edge_col = pitch->shade ? pitch->shade[pitch->line_index]
+                                      : pitch->line_index;
+      uint8_t support = pitch->shade ? pitch->shade[roof_index] : roof_index;
+      for (int32_t sx = left; sx < right; sx++) {
+        uint8_t roof = roof_index;
+        if (sy < edge) roof = edge_col;
+        else if (sy >= band_top - edge) roof = edge_col;
+        else if (((uint32_t)sx % 96u) < 2u) roof = support;
+        row[sx] = roof;
+      }
       continue;
     }
     int32_t band_row = sy - band_top;
-    uint32_t v = ((uint32_t)band_row * 64u) / (uint32_t)band_rows;
-    if (v > 63u) v = 63u;
-    const uint8_t *crowd_row = pitch->crowd + (size_t)v * FIFA96_PITCH_TILE_W;
+    int cw = pitch->crowd_w > 0 ? pitch->crowd_w : FIFA96_PITCH_TILE_W;
+    int ch = pitch->crowd_h > 0 ? pitch->crowd_h : FIFA96_PITCH_TILE_H;
+    uint32_t v = ((uint32_t)band_row * (uint32_t)ch) / (uint32_t)band_rows;
+    if (v >= (uint32_t)ch) v = (uint32_t)(ch - 1);
+    const uint8_t *crowd_row = pitch->crowd + (size_t)v * (size_t)cw;
     if (sy >= horizon - ad_rows) {
       /* Advertising hoardings along the near edge of the stand: a dark wall
        * with a white panel every 64 source pixels. */
@@ -349,7 +383,7 @@ int fifa96_pitch_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s
       continue;
     }
     for (int32_t sx = left; sx < right; sx++) {
-      uint32_t u = ((uint32_t)sx + crowd_u_off) & 63u;
+      uint32_t u = ((uint32_t)sx + crowd_u_off) % (uint32_t)cw;
       row[sx] = crowd_row[u];
     }
   }
@@ -380,7 +414,7 @@ int fifa96_pitch_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s
         uint8_t index = tile[(size_t)v * FIFA96_PITCH_TILE_W + u];
         /* Mowing stripes (derived [D]): alternate the live shade table every
          * 32 world-texel diagonal band. */
-        if (pitch->shade != NULL && (((wx + wz) >> 7) & 1))
+        if (pitch->shade != NULL && (((wx + wz) >> 6) & 1))
           index = pitch->shade[index];
         row[sx] = index;
       }
