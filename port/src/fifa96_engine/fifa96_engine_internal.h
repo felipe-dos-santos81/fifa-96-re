@@ -42,6 +42,15 @@ struct fifa96_engine {
    * held key with state 1 every poll, so the pause toggle acts on the 0->1
    * transition only (otherwise holding ESC would flap pause). */
   uint8_t match_esc_held;
+  /* P8: CONFIRM/DECLINE (pad A/B) are menu keys first and match KICK/PASS
+   * second. The backend re-presents held keys, so the raw down state is
+   * tracked across every mode; a key must first be released after a menu or
+   * pause to arm its match role, and once armed its held state passes through
+   * like Z/C. This keeps a held menu confirm/back from kicking/passing at
+   * match start and a held pause resume/skip key from leaking into the next
+   * frame. */
+  uint8_t match_pad_down;     /* bit 0 = CONFIRM down, bit 1 = DECLINE down */
+  uint8_t match_pad_allowed;  /* same bits, armed for the live match input */
 };
 
 /* P6 test seam: the match-audio percent derived from the Options block.

@@ -10021,3 +10021,53 @@ hand-off (P7-L10), full possession/tackle/AI + native auto-switch (P7-L1/L2),
 regulation-end extra-time branch (P6-L4), replay/captions/half-time dwell,
 rosters/attributes/AI, commentary/music, gamepad kick/pass (P6-L6), and the
 six other Game Select screens. Each is numbered, not claimed.
+
+## P8 — gamepad kick and pass (FU-346, 2026-11-06)
+
+**Mapping.** The SDL3 backend still maps South/A to
+`FIFA96_ENGINE_KEY_CONFIRM`, East/B to `FIFA96_ENGINE_KEY_DECLINE` and West to
+`FIFA96_ENGINE_KEY_LONG_BALL` (`platform_sdl3.c`, now exposed as the pure
+`fifa96_platform_sdl3_map_button`). The front-end keeps its existing
+CONFIRM/DECLINE consumption (`fifa96_frontend_run.c`: -10 confirm, 8
+back/panel). In the live match, `match_run_map_key` additionally maps
+CONFIRM to the FU-61 KICK word `0x10` and DECLINE to PASS `0x20`; keyboard
+Z/C/V and the arrows are unchanged.
+
+**Pause/menu routing.** `fifa96_match_run_input` accepts the two dual-role
+codes only while the run is unpaused and `lc.screen` is ACTIVE, so the pause
+panel's A resume / B exit and the FULL TIME A continue never stage a match
+kick/pass. The engine tracks the raw CONFIRM/DECLINE down state across INTRO,
+FRONTEND and MATCH and passes only an armed hold to the match input
+(`match_pad_down`/`match_pad_allowed` in `fifa96_engine_internal.h`): a key
+held across the menu -> match handoff or through a pause must be released
+before it becomes a match button. A fresh press stays held like Z/C (the
+backend's per-poll state sample), so the pad and keyboard share the same
+FU-70 press/release path.
+
+**Controls page.** `fifa96_menu_model_controls_text` now says the true
+mapping: `PAD A/SOUTH KICK / CONFIRM`, `PAD B/EAST PASS / BACK`, `PAD WEST
+LONG BALL`; the old "PAD KICK/PASS NOT MAPPED" line is gone.
+
+**Tests.** `test_engine_match_input` pins CONFIRM -> 0x10 and DECLINE -> 0x20,
+the paired direction OR (`CONFIRM|UP` -> 0x11), the KICK press/release slot
+path, the ACTIVE-and-unpaused gate, the held pad sample through consecutive
+engine steps, and the pause A-resume/B-exit routes with no KICK/PASS staged.
+`test_engine_sdl3` pins the pure button map without a physical pad (including
+South/East/West/Start and an unmapped North). `test_engine_menu_model` pins
+the new Controls text, and `test_engine_frontend` re-asserts that menu CONFIRM
+still latches/clears `frontend.confirm` and menu DECLINE still returns without
+quitting.
+
+**Gate.** `make check` **119/119** (strict build + ASan/UBSan); M1
+`09b726b7…` and M2 v29 `7c3874f7…` byte-exact by `cmp`; census unchanged
+(**78/78** bodies, **58/80** natural, **64/80** install-live, 6 blocked,
+action 38/45, phase 26/35).
+
+**Doc errata (append-only; earlier P6/P7 text remains historical).**
+**P6-L6** ("South/East do not reach `match_run_map_key`; only West works") is
+CLOSED by the mapping above. **P7-L5** ("P6-L6 still stands") is CLOSED for
+the same reason. The P6 Task 3 sentence "match kick/pass are **not** mapped on
+the pad (P6-L6), and the text says so" is superseded by the Controls page
+update. The dual-role keys deliberately avoid a new engine key so the
+front-end binding stays byte-for-byte the same; the match gate is the only
+new behavior.

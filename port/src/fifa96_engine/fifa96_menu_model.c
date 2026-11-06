@@ -152,9 +152,9 @@ static const uint8_t option_order[FIFA96_MENU_OPTION_ORDER_COUNT] = {
     21u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u, 66u};
 
 /* Port addition: the Controls page. These are the real current mappings
- * (platform_sdl3.c map_scancode/map_button, fifa96_match_run.c input bits);
- * match kick/pass are NOT mapped on the gamepad (P6-L6), so the last line
- * says so instead of claiming a binding. */
+ * (platform_sdl3.c map_scancode/map_button, fifa96_match_run.c input bits).
+ * P8: the pad's South/East buttons keep their front-end CONFIRM/BACK roles
+ * and double as KICK/PASS in live play. */
 static const char *const option_controls_text[] = {
     "CONTROLS",
     "ARROWS       MOVE PLAYER / MENU",
@@ -166,10 +166,9 @@ static const char *const option_controls_text[] = {
     "C            PASS",
     "V            LONG BALL",
     "PAD DPAD     MOVE",
-    "PAD A/SOUTH  CONFIRM",
-    "PAD B/EAST   BACK",
+    "PAD A/SOUTH  KICK / CONFIRM",
+    "PAD B/EAST   PASS / BACK",
     "PAD WEST     LONG BALL",
-    "PAD KICK/PASS NOT MAPPED",
 };
 
 static void menu_model_settings_defaults(struct fifa96_menu_model *model) {
