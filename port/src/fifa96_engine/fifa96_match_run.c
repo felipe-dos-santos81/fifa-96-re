@@ -2694,17 +2694,18 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
    * staged direction is the record's static facing and a normal kickoff shot
    * then misses the mouth. For the KICK row only, aim the flight at the
    * opponent goal mouth (z=±0xB30) instead of the derived kicker-relative
-   * target. P9 / FU-347: the held lateral input aims the mouth target —
-   * mapped left (0x08) -> x=-0x80, right (0x04) -> x=+0x80, none/both ->
-   * x=0 — inside the |x| < 0xD0 mouth. PASS/LONG_BALL (0x20/0x40) keep the
-   * staged direction. This remains a labelled [D] shot-aim stand-in for the
-   * unported aim/camera director; it never writes score, phase or the goal
-   * cells. */
+   * target. P9 / FU-347: the held **depth** input aims the mouth target —
+   * mapped Up (0x01) -> x=+0x80, Down (0x02) -> x=-0x80, none/both -> x=0 —
+   * inside the |x| < 0xD0 mouth (Left/Right are the goal-side z axis, not aim
+   * inputs). PASS/LONG_BALL (0x20/0x40) keep the staged direction. This
+   * remains a labelled [D] shot-aim stand-in for the unported aim/camera
+   * director; it never writes score, phase or the goal cells. */
   kick_row = ((pair->flags & 0x10u) != 0u && (pair->flags & 0x60u) == 0u);
   if (kick_row) {
-    /* P9 / FU-347: consume the lateral aim sampled by the live update (the
+    /* P9 / FU-347: consume the depth aim captured by the live update (the
      * slot's released word only arrives after the held keys drop). */
     mr->live_kick_target_x = mr->live_aim_x;
+    mr->live_aim_x = 0;                  /* consume: next kick needs a new edge */
     mr->live_kick_target_z =
         mr->entities.team[team8].side == 0u ? 0xB30 : -0xB30;
   } else {
@@ -2767,6 +2768,7 @@ static void match_run_live_kick_flight_end(struct fifa96_match_run *mr,
       (dx <= 0x20 && dx >= -0x20 && dz <= 0x20 && dz >= -0x20)) {
     mr->live_kick_active = 0;
     mr->live_kick_shot = 0;
+    mr->live_aim_x = 0;                  /* P9-fix2: no stale aim */
     match_run_live_kick_sig_clear(mr);
   }
 }
@@ -2825,20 +2827,32 @@ static int match_run_live_control_tackle(struct fifa96_match_run *mr, uint32_t t
   return 1;
 }
 
-/* P9 / FU-347: sample the held lateral input into the live shot-aim cell.
- * Left (mapped 0x08) -> -0x80, right (0x04) -> +0x80, none/both -> 0. A fresh
- * action-button press with no lateral clears a stale aim, so a later unaimed
- * KICK goes to the centre rather than inheriting the previous shot's side. */
+/* P9 / FU-347: sample the held **depth** input into the live shot-aim cell.
+ * The live view maps world x to the near/far (goal-mouth width) axis: the
+ * native movement maps Up (mapped 0x01) -> +x and Down (0x02) -> -x, so the
+ * shot aim uses Up -> +0x80, Down -> -0x80, none/both -> 0. Left/Right are the
+ * goal-side z axis (Left -> +z, Right -> -z) and are deliberately not aim
+ * inputs. The native FU-70 slot only publishes its released action word when
+ * every held key drops, so the aim is captured on a real action-button rising
+ * edge (or a depth-key edge while the action is held) and retained until the
+ * KICK latch consumes it. A new action press always recomputes the aim from
+ * the held depth bits, so an unaimed KICK pressed while another direction is
+ * held clears a stale ±0x80 instead of inheriting it. */
 static void match_run_live_aim_update(struct fifa96_match_run *mr) {
-  uint8_t lateral = (uint8_t)(mr->input.held & 0x0Cu);
-  if (lateral == 0x08u)
-    mr->live_aim_x = -FIFA96_MATCH_LIVE_SHOT_AIM_X;
-  else if (lateral == 0x04u)
+  uint8_t current = (uint8_t)(mr->input.held & 0x73u);   /* action + Up/Down */
+  uint8_t rising = (uint8_t)(current & (uint8_t)~mr->live_aim_prev_input);
+  uint8_t depth;
+  mr->live_aim_prev_input = current;
+  if ((rising & 0x70u) == 0u &&
+      !((rising & 0x03u) != 0u && (current & 0x70u) != 0u))
+    return;
+  depth = (uint8_t)(current & 0x03u);
+  if (depth == 0x01u)
     mr->live_aim_x = FIFA96_MATCH_LIVE_SHOT_AIM_X;
-  else if (lateral != 0u)
-    mr->live_aim_x = 0;                 /* both laterals held = centre */
-  else if ((mr->input.fresh & 0x70u) != 0u)
-    mr->live_aim_x = 0;
+  else if (depth == 0x02u)
+    mr->live_aim_x = -FIFA96_MATCH_LIVE_SHOT_AIM_X;
+  else
+    mr->live_aim_x = 0;                 /* none/both depth keys = centre */
 }
 
 static void match_run_live_control_update(struct fifa96_match_run *mr) {
@@ -2854,6 +2868,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
     mr->live_kick_shot = 0u;
     mr->live_aim_x = 0;
+    mr->live_aim_prev_input = 0;
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
     return;
@@ -2866,6 +2881,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_kick_active = 0u;
     mr->live_kick_shot = 0u;
     mr->live_aim_x = 0;
+    mr->live_aim_prev_input = 0;
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
     match_run_live_restart_bind(mr);
@@ -3056,6 +3072,7 @@ static void match_run_live_save_apply(struct fifa96_match_run *mr, int32_t recor
   mr->live_kick_active = 0u;
   mr->live_kick_frames = 0u;
   mr->live_kick_shot = 0u;
+  mr->live_aim_x = 0;                  /* P9-fix2: no stale aim */
   match_run_live_kick_sig_clear(mr);
   match_run_live_kick_consumed_clear(mr);
   mr->live_save_hold = FIFA96_MATCH_LIVE_SAVE_HOLD;
@@ -3214,6 +3231,14 @@ static int match_run_live_keeper_save(struct fifa96_match_run *mr) {
   /* The native nearest/visibility convention (+0x98/+0x9A): a hidden keeper
    * does not cover the shot. */
   if (e->skip_98 != 0u || e->skip_9a != 0u) return 0;
+  /* Goal-side gate (P9-fix2): a keeper whose z is already past the ball on
+   * the goal side cannot save it. For a +z goal the keeper must be at
+   * pos_z >= ball.z; for -z, pos_z <= ball.z. Inclusive equality still allows
+   * a smother at the keeper's feet. Without this a close-range shot from
+   * inside the box (ball already behind the keeper) was pinned. */
+  if (target_z > 0 ? e->pos_z < mr->entities.ball.z
+                   : e->pos_z > mr->entities.ball.z)
+    return 0;
   lateral = e->pos_x - target_x;
   if (lateral < 0) lateral = -lateral;
   if (lateral > FIFA96_MATCH_LIVE_KEEPER_SAVE_REACH) return 0;
@@ -3453,6 +3478,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   match_run_live_kick_consumed_clear(mr);
   mr->live_kick_shot = 0;              /* P8: no live shot flight */
   mr->live_aim_x = 0;                  /* P9: centre shot aim */
+  mr->live_aim_prev_input = 0;         /* P9-fix2: fresh action/depth edge */
   mr->live_save_hold = 0;              /* P8: no live save hold */
   mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
   mr->live_restart_pending = 0;
@@ -3517,6 +3543,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   match_run_live_kick_consumed_clear(mr);
   mr->live_kick_shot = 0;              /* P8: fresh live shot marker */
   mr->live_aim_x = 0;                  /* P9: fresh centre shot aim */
+  mr->live_aim_prev_input = 0;         /* P9-fix2: fresh action/depth edge */
   mr->live_save_hold = 0;              /* P8: fresh live save hold */
   mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
   mr->live_restart_pending = 0;

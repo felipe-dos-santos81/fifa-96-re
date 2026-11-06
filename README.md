@@ -122,13 +122,15 @@ therefore also kick/pass in active play.
 
 At the kickoff a **Z** press/release shoots through the native
 live-control/kick/goal path (the same kick releases the opening possession
-latch). Hold **Left** or **Right** with **Z** to aim the shot at ±0x80 inside
-the goal mouth; an unaimed (or both-directions) shot goes to the centre, where
-the defending keeper saves it. After a goal, arrows take the nearest defender
-to the ball for a contact tackle/claim, and **Z** kicks again with the score
-preserved. A live defender can also block a shot. The aim, the keeper save and
-the defender block are labelled live stand-ins for the unported native
-aim/camera director and open-play keeper save, not native AI.
+latch). Hold **Up** or **Down** with **Z** to aim the shot at ±0x80 along the
+goal-mouth width (the native movement axis: Up = +x, Down = -x); Left/Right
+move along the goal-side axis and are not shot aims. An unaimed (or
+both-Up/Down) shot goes to the centre, where the defending keeper saves it.
+After a goal, arrows take the nearest defender to the ball for a contact
+tackle/claim, and **Z** kicks again with the score preserved. A live defender
+can also block a shot. The aim, the keeper save and the defender block are
+labelled live stand-ins for the unported native aim/camera director and
+open-play keeper save, not native AI.
 
 ## Conventions
 

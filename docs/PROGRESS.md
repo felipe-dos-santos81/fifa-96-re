@@ -4310,3 +4310,34 @@ close-out below).
   state-0 edge, then only KICK/PASS. `make check` **119/119**; M1
   `09b726b7…`/M2 `7c3874f7…` exact; census unchanged (78/78, 58/80, 64/80,
   action 38/45, phase 26/35).
+
+- **P9-fix2 aim axis and keeper goal-side (FU-347, 2026-11-06).** The P9 aim
+  used Left/Right for the goal-mouth width (world x), but the live view/native
+  movement maps Up -> +x (farther/higher) and Down -> -x; Left/Right are the
+  goal-side z axis. The aim now reads the depth bits: Up `0x01` -> `+0x80`,
+  Down `0x02` -> `-0x80`, none/both -> centre, with the goal-side
+  `z=±0xB30` unchanged. The controls page/README state `UP/DOWN + Z AIM SHOT`
+  and `CENTRE SHOT = KEEPER'S`. The keeper save also has a goal-side gate: for
+  a +z goal the keeper must have `pos_z >= ball.z` (for -z, `<=`); a ball
+  already past the keeper is not pinned. The stale-aim bug is fixed with a
+  real action/depth rising-edge sample (`live_aim_prev_input`) plus aim clears
+  on latch/save/flight-end, so an aimed first kick followed by a KICK+Left
+  second kick goes to the centre. New tests: `test_live_aim_depth_axis`,
+  `test_live_keeper_goal_side` (0x9C0 saves; 0x9F0/0xA40 do not),
+  `test_live_keeper_mouth_edge` (near keeper and mouth-gate isolation),
+  `test_live_stale_aim_two_kicks`, and `ball.carrier == keeper_id` in the
+  centre-save test; the kickoff/keeper-beaten tests cover all four
+  side/direction combinations. `make check` **119/119**; M1 `09b726b7…` / M2
+  v29 `7c3874f7…` exact by `cmp`; census unchanged (78/78, 58/80, 64/80,
+  action 38/45, phase 26/35). Shipped `DISPLAY=:1`, Brazil/Italy, default
+  halves: one centre Z -> `p9-save2.png` (0-0 at 00:06, ball at the defending
+  keeper in the penalty area); fresh Z+Up -> **BRA 1-0 ITALY** at 00:06
+  (`p9-aim-goal2.png`, 1-0; the 00:05 frame is still 0-0 while the goal chain
+  completes); the aim run reached **FULL TIME, BRA 1-0 ITALY, PERIOD 2**
+  (`p9-fulltime2.png`) after releasing the post-goal kickoff with Z and the
+  half-time sit-1 gate with long C+Z pulses. No score/ball staging. The old
+  `p9-save.png`/`p9-aim-goal.png`/`p9-fulltime.png` are superseded by the
+  `…2.png` set. Remaining: native per-code target/loft + aim/camera director
+  (P9-L7), native open-play keeper save (P9-L8), current-z goal-side gate
+  (P9-L9), repeated half-time pulses (P9-L10), row-05 `FUN_0007F7E0`/row 03
+  and full 10-player AI.

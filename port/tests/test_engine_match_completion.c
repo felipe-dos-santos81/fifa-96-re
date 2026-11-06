@@ -1050,8 +1050,8 @@ static void test_live_friendly_regulation_draw_full_time(void) {
 }
 
 /* P8 (FU-346) end to end, review minor 9; P9 (FU-347) aimed shot: the real
- * live kickoff (no ball, score or phase staging), a KICK + Right press/release
- * through the live slot input (the +0x80 aim beats the P9 keeper save), the
+ * live kickoff (no ball, score or phase staging), a KICK + Up press/release
+ * through the live slot input (the +0x80 depth aim beats the P9 keeper save), the
  * native flight/armer/scan goal, then the real FU-62 clock through half-time
  * and the second half to the P8 full-time branch (phase 0x0C, end word 1,
  * OVER -> POST -> EXIT -> front-end). Only the period lengths are configured;
@@ -1069,10 +1069,11 @@ static void test_live_aimed_kickoff_goal_to_full_time(void) {
   /* The clock lengths the match config applies; no ball/score staging. */
   assert(fifa96_match_run_set_period(mr, 6, 6) == 0);
 
-  /* The shipped kickoff shot: KICK + Right through the live slot path. */
+  /* The shipped kickoff shot: KICK + Up (P9-fix2 depth aim) through the live
+   * slot path. */
   {
     fifa96_platform_key kick[2] = {
-      {FIFA96_ENGINE_KEY_KICK, 1}, {FIFA96_ENGINE_KEY_RIGHT, 1}
+      {FIFA96_ENGINE_KEY_KICK, 1}, {FIFA96_ENGINE_KEY_UP, 1}
     };
     assert(fifa96_match_run_input(mr, kick, 2) == 0);
   }
