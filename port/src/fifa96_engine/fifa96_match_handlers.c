@@ -2954,15 +2954,33 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
   r->stage92 = out.stage;
   if (out.reset != 0) match_row_reset(mr, e);
   if (out.claim != 0) {                  /* 0x7F1C7/0x7F1FF */
-    mr->entities.ball.carrier = p.carrier;
-    mr->entities.ball.pos_index = p.index;
-    mr->entities.ball.pos_rotation = p.rotation;
-    mr->entities.ball.pos_dir_x = p.dir_x;
-    mr->entities.ball.pos_dir_z = p.dir_z;
-    mr->entities.ball.pos_counter_c = p.counter_c;
-    mr->entities.ball.pos_release = (uint8_t)p.release_timer;
-    mr->entities.ball.pos_counter_e = p.counter_e;
-    mr->entities.ball.pos_counter_f = p.counter_f;
+    /* P8 / [D] far-carrier gate (live only): the native `[0x158724]` claim is a
+     * contact possession, but the port maps it to `ball.carrier` with no
+     * distance gate, so an opponent team target latches possession from across
+     * the pitch (recon probe: ~1127 units). Refuse a non-controlled team's
+     * far claim here so the possession cell only changes at contact; the
+     * possession-block reset (`pos_index` ... `pos_counter_f`) is part of the
+     * claim and is skipped with it. Human/controlled-team claims and non-live
+     * runs keep the exact ported behaviour (M1/M2 never set live_start). */
+    int accept = 1;
+    if (mr->live_start && team->side != mr->phase_machine.side_controlled) {
+      int32_t cdx = mr->entities.ball.x - e->pos_x;
+      int32_t cdz = mr->entities.ball.z - e->pos_z;
+      if (fifa96_entity_distance(cdx, cdz) >
+          FIFA96_MATCH_LIVE_OPPONENT_CLAIM_RANGE)
+        accept = 0;
+    }
+    if (accept) {
+      mr->entities.ball.carrier = p.carrier;
+      mr->entities.ball.pos_index = p.index;
+      mr->entities.ball.pos_rotation = p.rotation;
+      mr->entities.ball.pos_dir_x = p.dir_x;
+      mr->entities.ball.pos_dir_z = p.dir_z;
+      mr->entities.ball.pos_counter_c = p.counter_c;
+      mr->entities.ball.pos_release = (uint8_t)p.release_timer;
+      mr->entities.ball.pos_counter_e = p.counter_e;
+      mr->entities.ball.pos_counter_f = p.counter_f;
+    }
   }
   if (out.team_target != 0) {            /* 0x7F20B..0x7F217 */
     team->target = id;

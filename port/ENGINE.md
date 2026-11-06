@@ -10167,3 +10167,123 @@ the pad (P6-L6), and the text says so" is superseded by the Controls page
 update. The dual-role keys deliberately avoid a new engine key so the
 front-end binding stays byte-for-byte the same; the match gate is the only
 new behavior.
+
+## P8 — live opponent movement and shot block (FU-346, 2026-11-06)
+
+**Answer in one line.** The live opponent is no longer the single kickoff
+target: a derived live re-select runs the ported native nearest query at the
+native third-template anchor, so the nearest outfield record picks up the ball
+and contests; the row-05 possession claim is repaired so an opponent can only
+take `ball.carrier` at contact, not from ~1100 units. A separate labelled live
+shot block lets a defending **outfield** record inside 0x28 of the ball in the
+final approach zone stop a KICK flight; it is tuned (defender-only, 0x28,
+`|z| >= 0x900`) so the shipped kickoff shot still reaches the native goal.
+
+**T1 — opponent target rotation (P8-L1 stand-in).** Fresh recon (authority
+`/tmp/opencode/play/P8-ai-recon.md`) pinned the native gate: `FUN_0008D8EC`
+selects a team target only while `[team+0x7B2] == 0 || [0x157A83] == 0`
+(`0x8D932 CMP dword[EBP+0x7B2],0`; `0x8D93B CMP dword[0x157A83],0`; the
+`0x8D929 CMP EAX,0x2` phase gate). The native clears that re-open the gate live
+in unported row bodies and `FUN_0007F7E0`; the port therefore kept the kickoff
+target forever, row 03 (hold/clamp) is NULL, and only one opponent record moved.
+`match_run_live_opponent_update` (live, phase 2) re-runs the same ported
+`fifa96_match_entities_team_select` (`0x8D9B2 CALL 0x8DE8C`, nearest, skip 0)
+at the native **third template** anchor (`0x8D948..0x8D9B7`, template 2 =
+`0x157770` plus `dword[0x1577BE]>>16<<5` / `dword[0x1577C0]>>16<<5`; the port's
+FU-300 lead unpack makes this `camera.pos + camera.vel*32`). Only the opponent
+team block is re-targeted; the human's selected record/control are never moved.
+A `0x400` hysteresis keeps a target already near the anchor, so the old code-5
+record is not abandoned each frame (P8-L5).
+
+**T1 — far-carrier repair (P8-L2 stand-in).** Row 05 maps the native possession
+block `[0x158724]` onto `ball.carrier` with no distance gate
+(`0x7F1BF..0x7F205`); the recon probe measured an opponent claim at ~1127 units
+(carrier 20 vs ball/target separation). `fifa96_match_action_05` now refuses a
+non-controlled team's claim beyond
+`FIFA96_MATCH_LIVE_OPPONENT_CLAIM_RANGE` (0x40) while live, and
+`match_run_live_opponent_update` clears a stale opponent carrier beyond that
+range. The possession-block reset travels with the claim, so a refused far claim
+does not reset `pos_*`/release either. Human-team claims and every non-live run
+keep the exact ported behaviour (M1/M2 never set `live_start`).
+
+**T2 — live shot block / save (P8-L3/L4 stand-in).** No native open-play save
+exists: the native goal scan `FUN_00088940` and mouth classifier `FUN_00070074`
+are record-free, and the only native dive producer is the phase-6 penalty arm
+(`0x8D558`). `match_run_live_shot_block` runs immediately before
+`match_run_live_goal_arm` (so it sees the same frame-start shot the armer would)
+and, while a live **KICK** flight (`live_kick_shot`, set only by the KICK row)
+is in the final approach zone (`|ball.z| >= FIFA96_MATCH_LIVE_SAVE_ZONE` 0x900),
+finds the nearest defending **outfield** record (1..10) within
+`FIFA96_MATCH_LIVE_SAVE_RADIUS` 0x28 of the ball. On a hit it clears
+`live_kick_active`/`live_kick_shot`, clears the FU-73 pair so the launch pair
+cannot re-latch, pins the ball for `FIFA96_MATCH_LIVE_SAVE_HOLD` 30 frames
+(ball-machine hold branch: `target = ball`, velocity/speed zero), records
+`live_save_record` and gives that defender `ball.carrier`. It writes no score,
+phase or goal cell; the native armer/scan keep those.
+
+**Tuning evidence (windowed, not a claim of native save).** A keeper-inclusive
+0x28 block made the shipped path unwinnable: the live keeper charges the
+camera/ball and was measured at 0x1F from the ball at z 0x9D2 (temporary debug
+tick 467, team 1 record 0, distance 31), so it blocked the centre shot every
+time. A keeper-inclusive 0x18 variant also left a second windowed run 0-0 at
+00:09 (the shipped centre shot unscored). The shipped block is therefore
+**defender-only** (the task's allowed defender-only tuning); the keeper's own
+open-play save stays P8-L3. Outfield
+defenders use 0x28 and the shipped kickoff shot's final-zone outfield nearest
+stays outside it (headless `test_live_shot_still_scores_wide` asserts the
+minimum > 0x28 and 1-0). The block is a labelled stand-in, never a native call.
+
+**Tests.** `port/tests/test_engine_live_control.c` gains five live cases:
+`test_live_opponent_presses_and_claims` (staged opponent record 3 at 0x180
+becomes the re-picked target 14, code 5, and reaches <0x80 of a held ball in 60
+frames; score/phase untouched; human control stays on its team),
+`test_live_opponent_far_claim_rejected` (claimant at 0x300 cannot set
+`ball.carrier` during a live flight; the same record at 0x20 keeps it),
+`test_live_defender_blocks_shot` (both sides: real kickoff, defender staged on
+the ball in the zone -> `live_save_record` = the defender, no score/phase,
+ball pinned within 0x28, 40 more frames still 0-0),
+`test_live_shot_still_scores_wide` (shipped kickoff, min final-zone outfield
+distance > 0x28 -> native 1-0, no save), and `test_live_shot_block_ignores_pass`
+(a PASS latch sets `live_kick_shot == 0` and the full block condition does not
+save). The existing kick/control/restart/side-switch tests are unchanged and
+still pass; the P7 restart helper now accepts the legal loose-ball state the
+far-carrier repair creates.
+
+**Gate.** `make check` **119/119** (strict build + ASan/UBSan); M1
+`09b726b7…` and M2 v29 `7c3874f7…` byte-exact by `cmp`; census unchanged
+(**78/78** bodies, **58/80** natural, **64/80** install-live, action 38/45,
+phase 26/35).
+
+**Windowed evidence.** `./build/fifa96 data/game/FIFAPCCD96.iso`, DISPLAY=:1,
+released ISO, Friendly Brazil/Italy, shipped input only, no harness. The first
+Z at the kickoff clears the opening latch (0-0 at 00:02), the second fires the
+row-07 kick/flight/native scan -> **BRA 1-0** at 00:05; the native goal frame is
+`/tmp/opencode/play/p8-ai-goal.png` (1-0, ball at the +z goal area). The live
+opponent contest is visible after the restart: `/tmp/opencode/play/p8-opponent-move.png`
+(00:08, Italy players spread/moving around the ball) with
+`p8-opponent-move-before.png` (00:07) as the movement reference. No save
+occurred on the shipped defender-only path in this run, so `p8-save.png` is
+**not** claimed/produced; the block is proven by the staged-defender test. The
+match was then played to the terminal: half-time was released with C/PASS (the
+P8-L4 sit-1 gate), and the second half ended at **FULL TIME, BRA 1-0 ITALY,
+PERIOD 2** (`/tmp/opencode/play/p8-ai-fulltime.png`; `p8-ai-return-menu.png`
+captures the Game Select return). The P8 full-time branch itself is unchanged.
+
+**Residual legs.** **P8-L1** the native target-select gate clears and their row
+producers; the faithful row-05 fallback `FUN_0007F7E0` (0x9D2 bytes, 11 callees,
+only xref `0x7F36F`) remains P9. **P8-L2** the opponent possession range is a
+derived 0x40; the native `[0x158724]` vs `ball.carrier` conflation stays the
+root cause. **P8-L3** no native open-play keeper save/dive exists
+(`0x88940`/`0x70074` record-free); the keeper is excluded from the block
+because its live charge made the shipped shot unwinnable. **P8-L4** the ball pin
+is the derived `live_save_hold`, not a native `FUN_0008BAF0` carrier-follow arm.
+**P8-L5** target rotation hysteresis; old code-5 records are not demoted (row 03
+still NULL) so more than one opponent can chase. **P8-L6** full 10-player
+shape/possession AI still needs row 03 wiring (blocked M2) or the bounded
+`FUN_0007F7E0` port; not claimed here. **P8-L7** the live camera follow now
+keeps the ball focus during a human shot even while a native pan event is
+active; this is required because the opponent contest emits a row-04 camera
+event that otherwise froze the live focus and lost the native goal
+(the unported aim/camera director remains the real fix). **P8-L8** native
+aim/camera director (shot-side choice, keeper/defender beatability) remains the
+eventual replacement for the KICK goal-centre aim and this block.
