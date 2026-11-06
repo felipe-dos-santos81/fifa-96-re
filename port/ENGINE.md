@@ -10613,3 +10613,55 @@ adjacent live guard is merged; a no-staging keeper-save test and a
 match-level held-long-ball test were added. `make check` **119/119**; M1
 `09b726b7…`/M2 v29 `7c3874f7…` exact; census unchanged (78/78, 58/80,
 64/80).
+
+## Phase 61 — P10 graphics: native 640x480 shell and broadcast match view (2026-11-06)
+
+**Why.** The play-test rejection was visual: the front-end drew HELV12 labels
+over the native background and solid yellow selection rectangles, while the
+match used the VGA camera-0 rig across the pitch (a wide blue sky, no stadium,
+tiny squashed sprites). The assets were already in the ISO; the shell was not
+composing them.
+
+**Measured assets (retail ISO, first-hand POG decode this slice).**
+`/FEGFX/MOD2.POG` is a 27-frame SHPI bank: frame 0 is the **640x480** Game
+Select background (the menu bars are part of the art), frame 1 is the 300x48
+selected-row bar. `/FEGFX/MOD1.POG` frame 0 is the 640x480 Team Select
+background; `/FEGFX/MOD4A.POG` frame 1 is the 120x91 FIFA globe (the flags are
+frames 3..10). `/FEGFX/VS.POG` is 13 80x80 animated VS frames (transparent
+key `0xFF`). `/FEGFX/SLICK64.POG` and `/FEGFX/SLICK18.POG` parse as FNTI
+fonts (70x59 and 20x18 glyphs), the native title/menu faces; `HELV12` remains
+the HUD/fallback font. `MOD4A` uses its own bank palette, so the globe is
+remapped once onto the MOD1 palette at load.
+
+**Landing.** `fifa96_menu_art` gains a hires shell (`hires_ready`): Game
+Select composes the MOD2 background + the native bar + SLICK64 "GAME SELECT"
+(scaled-mask blit) + SLICK18 item labels + the animated VS mark; Team Select
+composes MOD1 + SLICK64 "FRIENDLY" + the stacked LEAGUE SELECT column + two
+FIFA globes + the SLICK18 team lists; Options/Controls use the MOD1 shell and
+the same font. The shell is built on a 640x480 canvas and sampled to the
+engine surface (nearest); the legacy 320 composition is kept for ISO-less and
+hash-pinned paths. `test_engine_menu_art` still proves native != fallback.
+
+**Match view (derived [D], live_start only).** The goal mouth is on the z
+axis (`live_kick_target_z = ±0xB30`), so the old camera-0 yaw looked across
+the pitch. The live eye now sits behind the controlled side's goal
+(`focus + (30, 320, ∓2000)`) and looks down the pitch (`yaw 0x0300` side 0 /
+`0x8300` side 1, pitch `0x0700`), with a 3/4-width lens (aspect preserved;
+the old half-width lens squashed sprites). The 22 player slots draw at 3x
+the projected scale; the ball keeps native scale; a dark ground shadow is
+drawn at each live pivot. `fifa96_pitch` gains a live 75%-brightness shade
+map for 128-unit mowing stripes, a scaled crowd band with a stand roof and an
+advertising wall, and an extended floor depth (`0x4000`) so the far pitch
+reaches the stand instead of a black band. These are explicitly derived
+stand-ins for the unported native camera director / 3dwpts stadium / goal-net
+passes, not native camera-0 output.
+
+**Gate.** `make check` (final run) and M1/M2 remain the authority; the changes
+are live-gated, so the headless tapes are untouched. `test_engine_match_render`
+now pins the live eye `(+30, +320, -2000)` and the down-pitch yaw. The engine
+surface is still 320x240; the 640 shell is downsampled. Open legs:
+**P10-L1** the windowed 640x480 surface (crisp shell/HUD; the null backend
+still hashes 320x240 tapes), **P10-L2** the native 3dwpts stadium / goal-net
+renderer, **P10-L3** Team Select flag mapping (MOD4A/4B/4C), **P10-L4** the
+native Options art, **P10-L5** HUD geometry/scale at 640, **P10-L6** the
+native camera director/aim (the broadcast rig and sprite scale are stand-ins).

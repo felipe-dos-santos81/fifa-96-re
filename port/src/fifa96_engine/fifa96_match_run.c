@@ -2246,6 +2246,7 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->pitch_art.sky_index = FIFA96_PITCH_SKY_INDEX;
   r->pitch_art.line_index = FIFA96_PITCH_LINE_INDEX;
   for (int i = 0; i < 256; i++) r->remap[i] = (uint8_t)(i == 0 ? 0xFF : i);
+  for (int i = 0; i < 256; i++) r->pitch_shade[i] = (uint8_t)i;
   /* FU-343 (P1): both per-team translations start as the identity; the live
    * kit stage rewrites team 1's shirt/shorts bands into the 230..245 slots
    * (A7 §4). The non-live draw never selects remap_team. */
@@ -3992,9 +3993,14 @@ void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *
      * `read_memory 0x107510` = 80 f8 ff ff a0 00 00 00 1e 00 00 00), while the
      * FU-71 triple 0x15774C/50/54 is the follow/focus cell. The engine's
      * focus is render.camera; the eye is the separate rig. */
-    out->x = mr->render.camera.pos_x - 1920;
-    out->y = mr->render.camera.pos_y + 160;
-    out->z = mr->render.camera.pos_z + 30;
+    /* P10 graphics: the native match view looks down the pitch (the goal
+     * mouth is on the z axis, `z = +/-0xB30`), so the broadcast rig sits
+     * behind the controlled side's goal and is lifted for a readable view. */
+    int32_t side = mr->phase_machine.side_controlled & 1;
+    int32_t dir = side != 0 ? -1 : 1;
+    out->x = mr->render.camera.pos_x + 30;
+    out->y = mr->render.camera.pos_y + 320;
+    out->z = mr->render.camera.pos_z - 2000 * dir;
   } else {
     out->x = mr->render.camera.pos_x;
     out->y = mr->render.camera.pos_y;
@@ -6528,6 +6534,30 @@ void fifa96_match_run_hud_colors_from_palette(const uint8_t palette[768],
   }
 }
 
+/* P10 graphics: a subtle 75%-brightness palette map for the mowing stripes.
+ * Built once per staged palette alongside the HUD shade. */
+static void match_run_pitch_shade_from_palette(const uint8_t palette[768],
+                                               uint8_t shade[256]) {
+  if (shade == NULL) return;
+  for (int i = 0; i < 256; i++) {
+    if (palette == NULL) { shade[i] = (uint8_t)i; continue; }
+    int tr = palette[i * 3 + 0] * 3 / 4;
+    int tg = palette[i * 3 + 1] * 3 / 4;
+    int tb = palette[i * 3 + 2] * 3 / 4;
+    int best = 0;
+    long best_d = -1;
+    for (int j = 0; j < 256; j++) {
+      int dr = palette[j * 3 + 0] - tr;
+      int dg = palette[j * 3 + 1] - tg;
+      int db = palette[j * 3 + 2] - tb;
+      long d = (long)dr * dr + (long)dg * dg + (long)db * db;
+      if (best_d < 0 || d < best_d) { best_d = d; best = j; }
+    }
+    shade[i] = (uint8_t)best;
+  }
+  shade[0] = 0;
+}
+
 static void match_run_hud_colors_refresh(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r = &mr->render;
   /* FU-343 P4 note: on the final live palette the kit stage forces the pitch
@@ -6536,9 +6566,11 @@ static void match_run_hud_colors_refresh(struct fifa96_match_run *mr) {
    * value (the measured staging palette's near-white). */
   if (r->palette_ready) {
     fifa96_match_run_hud_colors_from_palette(r->palette, &r->hud_ink, r->hud_shade);
+    match_run_pitch_shade_from_palette(r->palette, r->pitch_shade);
     r->hud_colors_ready = 1;
   } else {
     fifa96_match_run_hud_colors_from_palette(NULL, &r->hud_ink, r->hud_shade);
+    match_run_pitch_shade_from_palette(NULL, r->pitch_shade);
     r->hud_colors_ready = 0;
   }
 }
@@ -7187,6 +7219,32 @@ static void match_run_draw_ball_row(const struct fifa96_match_run *mr,
   (void)match_run_draw_sprite(s, r->ball_row, r->remap, x, y, 0x10000, 0, &clip);
 }
 
+/* P10 graphics: a soft ground shadow under each live sprite. The indexed
+ * surface has no alpha; a small dark parabolic patch at the projected pivot is
+ * enough to seat the players on the pitch. */
+static void match_run_draw_shadow(struct fifa96_surface *s,
+                                  const fifa96_render_clip *clip, int x, int y,
+                                  int rw, int rh, uint8_t color) {
+  if (s == NULL || clip == NULL || rw <= 0 || rh <= 0) return;
+  int left = clip->left < 0 ? 0 : clip->left;
+  int top = clip->top < 0 ? 0 : clip->top;
+  int right = clip->right > s->width ? s->width : clip->right;
+  int bottom = clip->bottom > s->height ? s->height : clip->bottom;
+  for (int dy = -rh; dy <= rh; dy++) {
+    int py = y + dy;
+    if (py < top || py >= bottom) continue;
+    int span = rw * (rh * rh - dy * dy) / (rh * rh);
+    if (span <= 0) continue;
+    int x0 = x - span;
+    int x1 = x + span;
+    if (x0 < left) x0 = left;
+    if (x1 >= right) x1 = right - 1;
+    if (x1 < x0) continue;
+    uint8_t *row = s->indexed + (size_t)py * (size_t)s->width;
+    for (int px = x0; px <= x1; px++) row[px] = color;
+  }
+}
+
 int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *s) {
   if (!mr || !s) return -FIFA96_ERR_INVALID;
   struct fifa96_match_run_render *r = &mr->render;
@@ -7261,11 +7319,25 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
    * stand-in for the unported native lens director (FU-157 R2-L1, leg). */
   int32_t lens_w = s->width;
   int32_t lens_h = s->height;
+  /* P10 graphics: the live camera sits behind the goal like the native
+   * broadcast rig, so the lens is doubled to keep the players and pitch
+   * readable. The old half-width live lens squashed every sprite
+   * horizontally; the full native lens restores the aspect. Non-live path
+   * unchanged. */
+  /* P10 graphics: a slightly wider live lens (aspect preserved) frames the
+   * formation; the live sprite scale below keeps the players readable. */
   if (mr->live_start) {
-    lens_w = (s->width + 1) / 2;
-    if (lens_w < 1) lens_w = 1;
+    lens_w = s->width * 3 / 4;
+    lens_h = s->height * 3 / 4;
   }
-  fifa96_err_t err = fifa96_projection_matrix(r->yaw, r->pitch, matrix);
+  int32_t view_yaw = r->yaw;
+  int32_t view_pitch = r->pitch;
+  if (mr->live_start) {
+    int32_t side = mr->phase_machine.side_controlled & 1;
+    view_yaw = (side != 0 ? 0x8000 : 0) + 0x0300;
+    view_pitch = 0x0700;
+  }
+  fifa96_err_t err = fifa96_projection_matrix(view_yaw, view_pitch, matrix);
   if (err != FIFA96_OK) return (int)err;
   err = fifa96_projection_reciprocal(lens_w, recip_x);
   if (err != FIFA96_OK) return (int)err;
@@ -7286,8 +7358,9 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
    * before the entity sort so every sprite blits over the floor. Only the live
    * path draws it; the pitch and sprite passes share `cam`. */
   if (mr->live_start && r->pitch_art.staged) {
-    err = (fifa96_err_t)fifa96_pitch_draw(&r->pitch_art, s, &cam, r->yaw, matrix, &clip,
-                                          &center, lens_w, lens_h);
+    r->pitch_art.shade = r->pitch_shade;
+    err = (fifa96_err_t)fifa96_pitch_draw(&r->pitch_art, s, &cam, view_yaw, matrix,
+                                          &clip, &center, lens_w, lens_h);
     if (err != FIFA96_OK) return (int)err;
   }
 
@@ -7337,6 +7410,18 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     jitter_z[i * FIFA96_SCENE_POSITION_DWORDS + 2] = jitter_rot.z;
     list[i] = i;
     drawable[i] = (uint8_t)(slots[i].clean_visible && slots[i].jitter_visible);
+  }
+  if (mr->live_start) {
+    int shadow_scale = s->width / 320;
+    if (shadow_scale < 1) shadow_scale = 1;
+    for (uint32_t i = 0; i < count; i++) {
+      if (!drawable[i]) continue;
+      int sx = (int)(slots[i].clean.x >> 16);
+      int sy = (int)(slots[i].clean.y >> 16);
+      int rw = (i == 22u ? 4 : 10) * shadow_scale;
+      int rh = (i == 22u ? 2 : 3) * shadow_scale;
+      match_run_draw_shadow(s, &clip, sx, sy, rw, rh, 0x00);
+    }
   }
 
   /* FU-89 §2 (corrected first-hand 0x57798..0x577AC): seed keys[k] =
@@ -7437,6 +7522,10 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     if (mr->live_start && r->team_remap_ready &&
         slot < (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
       sprite_remap = r->remap_team[slot / FIFA96_MATCH_ENTITY_RECORDS];
+    /* P10 graphics: the native sprite scale is tuned for the VGA camera; at
+     * the live broadcast framing the players read too small, so scale the 22
+     * player slots up (the ball keeps its native size). Live-only. */
+    if (mr->live_start && slot < 22u) scale *= 3;
     int rc = match_run_draw_sprite(s, &sprite, sprite_remap, x, y, scale, frame.mirrored,
                                    &clip);
     if (rc != 0) return rc;

@@ -13,6 +13,21 @@
 
 #define MENU_ART_DECODE_MAX (64u * 1024u * 1024u)
 
+/* Native shell canvas. MOD1/MOD2/VS/TITLE are 640x480/80x80 assets; the
+ * windowed engine draws them at their native size and downsamples once to the
+ * engine surface. The 320x240 tape path keeps the legacy composition below, so
+ * M1/M2 and the hash-pinned menu tests are untouched. */
+#define MENU_HIRES_W 640
+#define MENU_HIRES_H 480
+#define MENU_VS_FRAMES 13
+#define MENU_VS_SIZE 80
+#define MENU_BAR_W 300
+#define MENU_BAR_H 48
+#define MENU_LOGO_W 120
+#define MENU_LOGO_H 91
+#define MENU_LOGO_MAX (MENU_LOGO_W * MENU_LOGO_H)
+#define MENU_HIRES_PIXELS (MENU_HIRES_W * MENU_HIRES_H)
+
 /* P2 native Game Select geometry (A3 §4.3, measured on MOD2 frame 0 and
  * divided by two): left column 32..143, right 172..292, row pitch 22, height
  * 14, first row y 78; the fifth right slot is at 166. These are 320x240
@@ -53,6 +68,27 @@ static struct {
   int palette_ready;
   uint8_t background[FIFA96_SURFACE_MAX_W * FIFA96_SURFACE_MAX_H];
   uint8_t palette[768];
+  /* Native 640x480 shell (windowed path). Loaded only when the assets exist;
+   * `hires_ready` gates the composition, so an ISO-less boot keeps the legacy
+   * fallback. */
+  int hires_ready;
+  uint8_t game_bg[MENU_HIRES_PIXELS];
+  uint8_t team_bg[MENU_HIRES_PIXELS];
+  uint8_t bar_sel[MENU_BAR_W * MENU_BAR_H];
+  uint8_t fifa_logo[MENU_LOGO_MAX];
+  uint8_t vs[MENU_VS_FRAMES][MENU_VS_SIZE * MENU_VS_SIZE];
+  uint8_t hires_canvas[MENU_HIRES_PIXELS];
+  uint8_t title_layer[1024 * 80];
+  uint8_t hires_pal_game[768];
+  uint8_t hires_pal_team[768];
+  uint8_t hires_pal_flags[768];
+  fifa96_font title_font;
+  fifa96_font menu_font;
+  uint8_t *title_font_data;
+  size_t title_font_len;
+  uint8_t *menu_font_data;
+  size_t menu_font_len;
+  uint32_t vs_frame;
 } menu_art;
 
 static const uint8_t menu_fallback_palette[MENU_PALETTE_COUNT][3] = {
@@ -129,6 +165,176 @@ static int menu_decode_record(const uint8_t *src, size_t src_len, uint8_t **out,
 static void menu_art_reset(void) {
   menu_art.background_ready = 0;
   menu_art.palette_ready = 0;
+  menu_art.hires_ready = 0;
+  free(menu_art.title_font_data);
+  free(menu_art.menu_font_data);
+  menu_art.title_font_data = NULL;
+  menu_art.menu_font_data = NULL;
+  menu_art.title_font_len = 0;
+  menu_art.menu_font_len = 0;
+}
+
+/* Load one frame (index) from a POG/SHPI bank into an owned pixel buffer. The
+ * palette is taken from entry 0 (the shared bank palette) when requested. */
+static int menu_hires_frame(struct fifa96_asset_table *assets, const char *name,
+                            uint32_t index, uint8_t *out, int out_w, int out_h,
+                            uint8_t palette[768]) {
+  const char *path = menu_find_asset(assets, name);
+  if (path == NULL || out == NULL) return 0;
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  if (fifa96_asset_read(assets, path, &bytes, &len) != FIFA96_OK || bytes == NULL)
+    return 0;
+  uint8_t *decoded = NULL;
+  size_t decoded_len = 0;
+  const uint8_t *src = bytes;
+  size_t src_len = len;
+  if (menu_decode_record(bytes, len, &decoded, &decoded_len) != 0) {
+    fifa96_asset_free(bytes);
+    return 0;
+  }
+  if (decoded != NULL) {
+    src = decoded;
+    src_len = decoded_len;
+  }
+  fifa96_sprite_bank bank;
+  fifa96_sprite_entry entry;
+  fifa96_sprite_frame frame;
+  int ok = 0;
+  if (fifa96_sprite_bank_parse(src, src_len, &bank) == FIFA96_OK &&
+      fifa96_sprite_bank_entry(&bank, index, &entry) == FIFA96_OK &&
+      fifa96_sprite_frame_parse(&bank, entry.offset, &frame) == FIFA96_OK &&
+      frame.width == (uint32_t)out_w && frame.height == (uint32_t)out_h &&
+      frame.pixel_len >= (uint32_t)(out_w * out_h) && frame.pixels != NULL) {
+    memcpy(out, frame.pixels, (size_t)out_w * (size_t)out_h);
+    ok = 1;
+    if (palette != NULL) {
+      fifa96_sprite_chunk chunk;
+      const uint8_t *rgb6 = NULL;
+      uint16_t count = 0;
+      int have_palette = 0;
+      memset(palette, 0, 768);
+      /* The frame's own chunk carries the palette for flag/VS/logo banks; the
+       * background and bar frames share entry 0's palette. */
+      if (fifa96_sprite_chunk_parse(&bank, entry.offset, &chunk) == FIFA96_OK &&
+          fifa96_sprite_chunk_palette(&chunk, &rgb6, &count) == FIFA96_OK &&
+          count <= 256)
+        have_palette = 1;
+      if (!have_palette) {
+        fifa96_sprite_entry pal_entry;
+        if (fifa96_sprite_bank_entry(&bank, 0, &pal_entry) == FIFA96_OK &&
+            fifa96_sprite_chunk_parse(&bank, pal_entry.offset, &chunk) == FIFA96_OK &&
+            fifa96_sprite_chunk_palette(&chunk, &rgb6, &count) == FIFA96_OK &&
+            count <= 256)
+          have_palette = 1;
+      }
+      if (have_palette)
+        fifa96_sprite_palette_to_rgb(rgb6, count, palette);
+    }
+  }
+  free(decoded);
+  fifa96_asset_free(bytes);
+  return ok;
+}
+
+static int menu_hires_font(struct fifa96_asset_table *assets, const char *name,
+                           fifa96_font *font, uint8_t **owned, size_t *owned_len) {
+  const char *path = menu_find_asset(assets, name);
+  if (path == NULL) return 0;
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  if (fifa96_asset_read(assets, path, &bytes, &len) != FIFA96_OK || bytes == NULL)
+    return 0;
+  uint8_t *decoded = NULL;
+  size_t decoded_len = 0;
+  if (menu_decode_record(bytes, len, &decoded, &decoded_len) != 0) {
+    fifa96_asset_free(bytes);
+    return 0;
+  }
+  fifa96_asset_free(bytes);
+  const uint8_t *src = decoded != NULL ? decoded : NULL;
+  size_t src_len = decoded_len;
+  if (src == NULL) return 0;
+  if (fifa96_font_parse(src, src_len, font) != 0) {
+    free(decoded);
+    return 0;
+  }
+  free(*owned);
+  *owned = decoded;
+  *owned_len = src_len;
+  return 1;
+}
+
+/* Remap an indexed frame from its own bank palette onto the target screen
+ * palette (nearest RGB). The transparent key is left untouched so the draw
+ * blit still sees it. */
+static void menu_remap_indexed(uint8_t *pixels, size_t count, const uint8_t *src,
+                               const uint8_t *dst, uint8_t key) {
+  if (pixels == NULL || src == NULL || dst == NULL) return;
+  for (size_t p = 0; p < count; p++) {
+    uint8_t idx = pixels[p];
+    if (idx == key) continue;
+    int32_t sr = src[(size_t)idx * 3 + 0];
+    int32_t sg = src[(size_t)idx * 3 + 1];
+    int32_t sb = src[(size_t)idx * 3 + 2];
+    uint32_t best = 0;
+    uint32_t best_d = UINT32_MAX;
+    for (uint32_t i = 0; i < 256u; i++) {
+      int32_t dr = sr - dst[i * 3 + 0];
+      int32_t dg = sg - dst[i * 3 + 1];
+      int32_t db = sb - dst[i * 3 + 2];
+      uint32_t d = (uint32_t)(dr * dr + dg * dg + db * db);
+      if (d < best_d) { best_d = d; best = i; }
+    }
+    pixels[p] = (uint8_t)best;
+  }
+}
+
+/* The windowed shell assets. MOD2 is the Game Select composition (background +
+ * selected-row bar), MOD1 the Team Select background/FIFA logo, VS the animated
+ * lower-left logo (13 frames), and SLICK64/SLICK18 the native title/menu fonts.
+ * A missing optional piece is simply not drawn. */
+static void menu_hires_load(struct fifa96_asset_table *assets) {
+  menu_art.hires_ready = 0;
+  if (!menu_hires_frame(assets, "MOD2.POG", 0, menu_art.game_bg, MENU_HIRES_W,
+                        MENU_HIRES_H, menu_art.hires_pal_game))
+    return;
+  if (!menu_hires_frame(assets, "MOD2.POG", 1, menu_art.bar_sel, MENU_BAR_W,
+                        MENU_BAR_H, NULL))
+    return;
+  if (!menu_hires_frame(assets, "MOD1.POG", 0, menu_art.team_bg, MENU_HIRES_W,
+                        MENU_HIRES_H, menu_art.hires_pal_team))
+    return;
+  {
+    /* MOD4A carries the flags/league art on its own palette; the Team Select
+     * screen uses the MOD1 palette, so remap the FIFA mark once at load. */
+    uint8_t flags_pal[768];
+    uint8_t logo_pal[768];
+    (void)menu_hires_frame(assets, "MOD4A.POG", 0, menu_art.hires_canvas,
+                           MENU_HIRES_W, MENU_HIRES_H, flags_pal);
+    memcpy(menu_art.hires_pal_flags, flags_pal, sizeof flags_pal);
+    if (menu_hires_frame(assets, "MOD4A.POG", 1, menu_art.fifa_logo, MENU_LOGO_W,
+                         MENU_LOGO_H, logo_pal))
+      menu_remap_indexed(menu_art.fifa_logo, MENU_LOGO_W * MENU_LOGO_H, logo_pal,
+                         menu_art.hires_pal_team, 255);
+  }
+  {
+    uint8_t vs_pal[768];
+    for (int i = 0; i < MENU_VS_FRAMES; i++) {
+      if (!menu_hires_frame(assets, "VS.POG", (uint32_t)i, menu_art.vs[i],
+                            MENU_VS_SIZE, MENU_VS_SIZE, i == 0 ? vs_pal : NULL))
+        break;
+      menu_remap_indexed(menu_art.vs[i], MENU_VS_SIZE * MENU_VS_SIZE, vs_pal,
+                         menu_art.hires_pal_game, 255);
+    }
+  }
+  if (!menu_hires_font(assets, "SLICK64.POG", &menu_art.title_font,
+                       &menu_art.title_font_data, &menu_art.title_font_len))
+    return;
+  if (!menu_hires_font(assets, "SLICK18.POG", &menu_art.menu_font,
+                       &menu_art.menu_font_data, &menu_art.menu_font_len))
+    return;
+  menu_art.hires_ready = 1;
 }
 
 /* Load one sprite-bank file as the menu background. Returns 1 on success. */
@@ -211,6 +417,7 @@ int fifa96_menu_art_init_native(struct fifa96_asset_table *assets_or_null) {
       assets_or_null->count == 0) {
     return 0;
   }
+  menu_hires_load(assets_or_null);
   if (menu_art_try_load(assets_or_null, "MOD2.POG")) return 0;
   (void)menu_art_try_load(assets_or_null, "OPTIONS.INV");
   return 0;
@@ -442,8 +649,292 @@ static void menu_draw_options(struct fifa96_surface *s, const struct fifa96_menu
   menu_text_shadow(s, st->font, st->footer, menu_sx(s, 8), menu_sy(s, 225), c->main);
 }
 
+/* ===== Native 640x480 shell ============================================ */
+
+/* Native Game Select geometry, measured from MOD2 frame 0 (640x480). The
+ * bars are part of the background; the text/selection bar are composed here. */
+#define HIRES_GS_LEFT_X 64
+#define HIRES_GS_RIGHT_X 344
+#define HIRES_GS_TOP 172
+#define HIRES_GS_PITCH 52
+#define HIRES_GS_ROW_H 34
+#define HIRES_GS_LEFT_W 222
+#define HIRES_GS_RIGHT_W 240
+#define HIRES_TEAM_LEFT_X 110
+#define HIRES_TEAM_RIGHT_X 370
+#define HIRES_TEAM_TOP 300
+#define HIRES_TEAM_PITCH 18
+#define HIRES_TEAM_W 180
+#define HIRES_TEAM_ROW_H 18
+
+static void hires_fill(int x, int y, int w, int h, uint8_t color) {
+  uint8_t *c = menu_art.hires_canvas;
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; y = 0; }
+  if (x + w > MENU_HIRES_W) w = MENU_HIRES_W - x;
+  if (y + h > MENU_HIRES_H) h = MENU_HIRES_H - y;
+  if (w <= 0 || h <= 0) return;
+  for (int r = 0; r < h; r++)
+    memset(c + (size_t)(y + r) * MENU_HIRES_W + (size_t)x, color, (size_t)w);
+}
+
+/* Nearest-neighbour blit with a transparent palette index, clipped to the
+ * 640x480 canvas. Used for the native bar/logo/VS sprites. */
+static void hires_blit(const uint8_t *src, int sw, int sh, int x, int y,
+                       int dw, int dh, uint8_t transparent) {
+  uint8_t *c = menu_art.hires_canvas;
+  if (src == NULL || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return;
+  for (int dy = 0; dy < dh; dy++) {
+    int sy = dy * sh / dh;
+    int ty = y + dy;
+    if (ty < 0 || ty >= MENU_HIRES_H) continue;
+    for (int dx = 0; dx < dw; dx++) {
+      int sx = dx * sw / dw;
+      int tx = x + dx;
+      if (tx < 0 || tx >= MENU_HIRES_W) continue;
+      uint8_t p = src[(size_t)sy * (size_t)sw + (size_t)sx];
+      if (p == transparent) continue;
+      c[(size_t)ty * MENU_HIRES_W + (size_t)tx] = p;
+    }
+  }
+}
+
+static void hires_text(const fifa96_font *font, const char *str, int x, int y,
+                       uint8_t color) {
+  if (font == NULL || str == NULL) return;
+  (void)fifa96_font_blit(menu_art.hires_canvas, MENU_HIRES_W, MENU_HIRES_H, font,
+                         str, x, y, color);
+}
+
+static void hires_text_shadow(const fifa96_font *font, const char *str, int x, int y,
+                              uint8_t color) {
+  hires_text(font, str, x + 2, y + 2, 0);
+  hires_text(font, str, x, y, color);
+}
+
+/* Scaled mask blit for the big title: the SLICK64 string is rendered into a
+ * sentinel-filled layer at native size, then sampled down to `dw`/`dh`. This
+ * keeps the native letterforms while letting "GAME SELECT" fit 640 px. */
+static void hires_mask_blit(const uint8_t *src, int stride, int sw, int sh, int x,
+                            int y, int dw, int dh, uint8_t sentinel, uint8_t color) {
+  if (src == NULL || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return;
+  for (int dy = 0; dy < dh; dy++) {
+    int sy = dy * sh / dh;
+    int ty = y + dy;
+    if (ty < 0 || ty >= MENU_HIRES_H) continue;
+    for (int dx = 0; dx < dw; dx++) {
+      int sx = dx * sw / dw;
+      int tx = x + dx;
+      if (tx < 0 || tx >= MENU_HIRES_W) continue;
+      if (src[(size_t)sy * (size_t)stride + (size_t)sx] == sentinel) continue;
+      menu_art.hires_canvas[(size_t)ty * MENU_HIRES_W + (size_t)tx] = color;
+    }
+  }
+}
+
+static void hires_title(const char *str, int x, int y, int max_w, uint8_t color) {
+  int w = fifa96_font_text_width(&menu_art.title_font, str);
+  if (w <= 0) return;
+  if (w > 1024) w = 1024;
+  memset(menu_art.title_layer, 0xFF, sizeof menu_art.title_layer);
+  (void)fifa96_font_blit(menu_art.title_layer, 1024, 80, &menu_art.title_font,
+                         str, 0, 0, 1);
+  int dw = w;
+  int dh = menu_art.title_font.default_height;
+  if (dw > max_w) {
+    dh = dh * max_w / dw;
+    dw = max_w;
+  }
+  hires_mask_blit(menu_art.title_layer, 1024, w,
+                  menu_art.title_font.default_height, x + 3, y + 3, dw, dh, 0xFF, 0);
+  hires_mask_blit(menu_art.title_layer, 1024, w,
+                  menu_art.title_font.default_height, x, y, dw, dh, 0xFF, color);
+}
+
+/* Downsample the 640x480 composition to the engine surface. Indexed pixels
+ * cannot be averaged directly; sample the block's centre. The windowed shell
+ * is composed at 640 and this path keeps the 320 tape surface correct. */
+static void hires_present(struct fifa96_surface *s, const uint8_t *palette) {
+  if (s == NULL || palette == NULL) return;
+  fifa96_surface_set_palette8(s, palette);
+  if (s->width == MENU_HIRES_W && s->height == MENU_HIRES_H) {
+    memcpy(s->indexed, menu_art.hires_canvas, MENU_HIRES_PIXELS);
+    return;
+  }
+  for (int y = 0; y < s->height; y++) {
+    int sy = (y * MENU_HIRES_H + MENU_HIRES_H / 2) / s->height;
+    if (sy >= MENU_HIRES_H) sy = MENU_HIRES_H - 1;
+    const uint8_t *src = menu_art.hires_canvas + (size_t)sy * MENU_HIRES_W;
+    for (int x = 0; x < s->width; x++) {
+      int sx = (x * MENU_HIRES_W + MENU_HIRES_W / 2) / s->width;
+      if (sx >= MENU_HIRES_W) sx = MENU_HIRES_W - 1;
+      s->indexed[(size_t)y * (size_t)s->width + (size_t)x] = src[sx];
+    }
+  }
+}
+
+static void hires_game_select(const struct fifa96_menu_state *st) {
+  memcpy(menu_art.hires_canvas, menu_art.game_bg, MENU_HIRES_PIXELS);
+  hires_title("GAME SELECT", 30, 26, 590, 6);
+  for (int i = 0; i < st->item_count && i < FIFA96_MENU_ITEM_COUNT; i++) {
+    const char *label = st->items[i].label;
+    if (label == NULL) continue;
+    int col = st->items[i].col;
+    int row = st->items[i].row;
+    int x = col ? HIRES_GS_RIGHT_X : HIRES_GS_LEFT_X;
+    int w = col ? HIRES_GS_RIGHT_W : HIRES_GS_LEFT_W;
+    int y = HIRES_GS_TOP + row * HIRES_GS_PITCH;
+    int ty = y + (HIRES_GS_ROW_H - menu_art.menu_font.default_height) / 2;
+    if (i == st->selected_item) {
+      /* The native selection bar (MOD2 frame 1) is wider than the row and
+       * carries its own yellow border; centre it on the row. */
+      hires_blit(menu_art.bar_sel, MENU_BAR_W, MENU_BAR_H, x - (MENU_BAR_W - w) / 2,
+                 y - (MENU_BAR_H - HIRES_GS_ROW_H) / 2, MENU_BAR_W, MENU_BAR_H, 255);
+      hires_text(&menu_art.menu_font, label, x + 18, ty, 25);
+    } else {
+      hires_text_shadow(&menu_art.menu_font, label, x + 18, ty, 1);
+    }
+  }
+  /* The animated VS mark at the lower-left (13 native frames). */
+  if (menu_art.vs_frame < UINT32_MAX) menu_art.vs_frame++;
+  {
+    uint32_t frame = (menu_art.vs_frame / 4u) % MENU_VS_FRAMES;
+    hires_blit(menu_art.vs[frame], MENU_VS_SIZE, MENU_VS_SIZE, 16, 386,
+               MENU_VS_SIZE, MENU_VS_SIZE, 255);
+  }
+}
+
+static void hires_team_select(const struct fifa96_menu_state *st) {
+  memcpy(menu_art.hires_canvas, menu_art.team_bg, MENU_HIRES_PIXELS);
+  hires_title("FRIENDLY", 30, 18, 400, 6);
+  /* Vertical LEAGUE SELECT strip (native 46x163 art is a text column; draw the
+   * letters stacked with the menu font). */
+  for (int i = 0; i < 13; i++) {
+    char ch[2] = { 0, 0 };
+    ch[0] = "LEAGUE SELECT"[i];
+    hires_text_shadow(&menu_art.menu_font, ch, 22, 150 + i * 18, 6);
+  }
+  /* FIFA globe mark above each team column. */
+  hires_blit(menu_art.fifa_logo, MENU_LOGO_W, MENU_LOGO_H, 150, 150, 120, 114, 255);
+  hires_blit(menu_art.fifa_logo, MENU_LOGO_W, MENU_LOGO_H, 410, 150, 120, 114, 255);
+  hires_text_shadow(&menu_art.menu_font, st->column_label[0] ? st->column_label[0] : "Home",
+                    170, 124, 1);
+  hires_text_shadow(&menu_art.menu_font, st->column_label[1] ? st->column_label[1] : "Visitor",
+                    430, 124, 1);
+  for (int side = 0; side < 2; side++) {
+    int x = side == 0 ? HIRES_TEAM_LEFT_X : HIRES_TEAM_RIGHT_X;
+    for (int r = 0; r < st->team_rows; r++) {
+      const char *name = st->teams[side][r];
+      if (name == NULL) continue;
+      int y = HIRES_TEAM_TOP + r * HIRES_TEAM_PITCH;
+      if (r == st->team_selected_row[side]) {
+        hires_fill(x - 8, y - 2, HIRES_TEAM_W, HIRES_TEAM_ROW_H, 0);
+        hires_fill(x - 8, y - 2, HIRES_TEAM_W, 1, 6);
+        hires_fill(x - 8, y + HIRES_TEAM_ROW_H - 3, HIRES_TEAM_W, 1, 6);
+        hires_text(&menu_art.menu_font, name, x + 4, y, 25);
+      } else {
+        hires_text_shadow(&menu_art.menu_font, name, x + 4, y, 1);
+      }
+    }
+  }
+  if (st->footer != NULL)
+    hires_text_shadow(&menu_art.menu_font, st->footer, 180, 452, 1);
+}
+
+/* Native Options/Controls composition over the MOD1 shell. Rows use the same
+ * 640x480 window as the native table (x 132, width 444, top 184, pitch 32). */
+static void hires_options(const struct fifa96_menu_state *st) {
+  memcpy(menu_art.hires_canvas, menu_art.team_bg, MENU_HIRES_PIXELS);
+  if (st->option_page != FIFA96_MENU_OPTION_PAGE_LIST) {
+    hires_title("CONTROLS", 30, 16, 400, 6);
+    int x = 132;
+    int y = 78;
+    int pitch = 25;
+    for (int i = 0; i < st->help_count && i < FIFA96_MENU_OPTION_HELP_MAX; i++) {
+      if (st->help[i] == NULL) continue;
+      if (i == 0)
+        hires_text(&menu_art.menu_font, st->help[i], x, y + i * pitch, 25);
+      else
+        hires_text_shadow(&menu_art.menu_font, st->help[i], x, y + i * pitch, 1);
+    }
+    if (st->footer != NULL)
+      hires_text_shadow(&menu_art.menu_font, st->footer, 170, 452, 1);
+    return;
+  }
+  hires_title("OPTIONS", 30, 16, 400, 6);
+  const int x = 132;
+  const int w = 444;
+  const int top = 184;
+  const int pitch = 32;
+  const int row_h = 28;
+  for (int k = 0; k < FIFA96_MENU_OPTION_VISIBLE; k++) {
+    int row = st->option_scroll + k;
+    if (row >= st->option_count) break;
+    int y = top + k * pitch;
+    int selected = row == st->option_selected;
+    if (selected) {
+      hires_fill(x, y, w, row_h, 0);
+      hires_fill(x, y, w, 2, 6);
+      hires_fill(x, y + row_h - 2, w, 2, 6);
+    }
+    if (st->options[k].label != NULL) {
+      if (selected)
+        hires_text(&menu_art.menu_font, st->options[k].label, x + 12, y + 5, 25);
+      else
+        hires_text_shadow(&menu_art.menu_font, st->options[k].label, x + 12, y + 5, 1);
+    }
+    if (st->options[k].value != NULL && st->options[k].value[0] != '\0') {
+      int vw = fifa96_font_text_width(&menu_art.menu_font, st->options[k].value);
+      int vx = x + w - 12 - vw;
+      if (vx < x + 12) vx = x + 12;
+      if (selected)
+        hires_text(&menu_art.menu_font, st->options[k].value, vx, y + 5, 25);
+      else
+        hires_text_shadow(&menu_art.menu_font, st->options[k].value, vx, y + 5, 1);
+    }
+  }
+  if (st->option_count > FIFA96_MENU_OPTION_VISIBLE) {
+    int track_x = x + w + 8;
+    int track_h = FIFA96_MENU_OPTION_VISIBLE * pitch - (pitch - row_h);
+    int thumb_h = track_h * FIFA96_MENU_OPTION_VISIBLE / st->option_count;
+    if (thumb_h < 16) thumb_h = 16;
+    int span = st->option_count - FIFA96_MENU_OPTION_VISIBLE;
+    int thumb_y = top;
+    if (span > 0) thumb_y += (track_h - thumb_h) * st->option_scroll / span;
+    hires_fill(track_x, top, 4, track_h, 9);
+    hires_fill(track_x, thumb_y, 4, thumb_h, 1);
+  }
+  if (st->footer != NULL)
+    hires_text_shadow(&menu_art.menu_font, st->footer, 170, 452, 1);
+}
+
+/* Returns 1 when the native hires shell drew the frame. The legacy library
+ * path keeps the old composition. */
+static int menu_art_draw_hires(struct fifa96_surface *s,
+                               const struct fifa96_menu_state *st) {
+  if (!menu_art.hires_ready || s == NULL || st == NULL) return 0;
+  if (st->screen == FIFA96_MENU_SCREEN_GAME_SELECT) {
+    hires_game_select(st);
+    hires_present(s, menu_art.hires_pal_game);
+    return 1;
+  }
+  if (st->screen == FIFA96_MENU_SCREEN_TEAM_SELECT) {
+    hires_team_select(st);
+    hires_present(s, menu_art.hires_pal_team);
+    return 1;
+  }
+  if (st->screen == FIFA96_MENU_SCREEN_OPTIONS) {
+    hires_options(st);
+    hires_present(s, menu_art.hires_pal_team);
+    return 1;
+  }
+  return 0;
+}
+
 void fifa96_menu_art_draw(struct fifa96_surface *s, const struct fifa96_menu_state *st) {
   if (s == NULL || st == NULL) return;
+
+  if (menu_art_draw_hires(s, st)) return;
 
   menu_draw_background(s);
   menu_install_palette(s);

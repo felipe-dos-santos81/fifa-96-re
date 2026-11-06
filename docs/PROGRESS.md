@@ -4371,3 +4371,18 @@ close-out below).
   rename, removed unused test out-param, merged live guard, no-staging
   keeper-save and match-level held-long-ball tests. `make check` 119/119; M1
   `09b726b7…`/M2 `7c3874f7…` exact; census unchanged (78/78, 58/80, 64/80).
+
+- **P10 graphics: native 640x480 shell and broadcast match view (2026-11-06).**
+  The windowed shell now composes the real 640x480 front-end art instead of
+  drawing HELV12 labels over a downscaled background: MOD2 frame 0 + its
+  native selection bar, SLICK64/SLICK18 fonts, the animated VS mark, the MOD1
+  Team Select background with the FIFA globe and the MOD1 Options/Controls
+  shell. The match camera was looking across the pitch (the goal mouth is on
+  the z axis); the live eye now sits behind the controlled goal
+  (`+30,+320,-2000`, yaw down the pitch) with a 3/4-width aspect-preserving
+  lens, 3x player sprites, ground shadows, mowing stripes, a stand roof and an
+  advertising wall, and the far floor reaches the stand. All match changes are
+  `live_start`-gated; the headless M1/M2 tapes and the census are untouched.
+  `test_engine_match_render` pins the new live eye. Open legs: 640 surface,
+  native 3dwpts stadium/goal nets, Team Select flags, native Options art, HUD
+  scaling, native camera director. `make check` 119/119; M1/M2 exact.

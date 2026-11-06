@@ -1369,11 +1369,12 @@ static void test_live_start_gate_and_eye(void) {
 
   mr.live_start = 1;
   fifa96_match_run_eye(&mr, &eye);
-  assert(eye.x == 480 - 1920 && eye.y == 160 && eye.z == -120 + 30);
-  /* The offset is the camera-0 object image (A1 §4/A2 §2). */
-  assert(mr.render.camera.pos_x - eye.x == 1920);
-  assert(eye.y - mr.render.camera.pos_y == 160);
-  assert(eye.z - mr.render.camera.pos_z == 30);
+  /* P10 graphics: the live broadcast rig sits behind the controlled goal and
+   * looks down the pitch (the goal mouth is on the z axis). */
+  assert(eye.x == 480 + 30 && eye.y == 320 && eye.z == -120 - 2000);
+  assert(eye.x - mr.render.camera.pos_x == 30);
+  assert(eye.y - mr.render.camera.pos_y == 320);
+  assert(eye.z - mr.render.camera.pos_z == -2000);
   fifa96_match_run_eye(NULL, &eye);
   fifa96_match_run_eye(&mr, NULL);
 }
@@ -1418,9 +1419,9 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   assert(fifa96_engine_step(f.engine) == 0);
   fifa96_render_pos eye;
   fifa96_match_run_eye(&f.mr, &eye);
-  assert(eye.x == r->camera.pos_x - 1920);
-  assert(eye.y == r->camera.pos_y + 160);
-  assert(eye.z == r->camera.pos_z + 30);
+  assert(eye.x == r->camera.pos_x + 30);
+  assert(eye.y == r->camera.pos_y + 320);
+  assert(eye.z == r->camera.pos_z - 2000);
 
   /* The rendered live frame is mostly pitch (the floor plus the crowd band),
    * not the cleared background. */

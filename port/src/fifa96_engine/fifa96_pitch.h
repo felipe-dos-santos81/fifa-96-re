@@ -55,6 +55,7 @@ struct fifa96_pitch {
   int staged;                  /* all three tiles present */
   uint8_t sky_index;           /* PALsys index of the sky rows */
   uint8_t line_index;          /* PALsys index of the white markings */
+  const uint8_t *shade;        /* live palette shade table (or NULL) */
 };
 
 /* Stage the two derived match-art containers through the engine asset table:

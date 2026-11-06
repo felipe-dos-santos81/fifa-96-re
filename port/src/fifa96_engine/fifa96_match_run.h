@@ -515,6 +515,7 @@ struct fifa96_match_run_render {
    * byte-identical. */
   uint8_t hud_ink;
   uint8_t hud_shade[256];
+  uint8_t pitch_shade[256];   /* 75% palette map for mowing stripes [D] */
   uint8_t hud_colors_ready;
   char hud_name[2][FIFA96_MATCH_HUD_NAME_MAX];
   /* FU-152 §4.1 (P4): the residual presenter rows. All zero at rest, so a

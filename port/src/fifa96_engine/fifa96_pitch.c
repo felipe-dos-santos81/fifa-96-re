@@ -252,7 +252,7 @@ static const uint8_t *pitch_tile_pick(const struct fifa96_pitch *pitch, int32_t 
 #define FIFA96_PITCH_HALF_LENGTH 0x7E0    /* goal line x = ±2016 */
 #define FIFA96_PITCH_HALF_WIDTH 0xC1Eu    /* touchline z = ±3102 */
 #define FIFA96_PITCH_CIRCLE_R 0x3C0       /* centre circle radius [D] */
-#define FIFA96_PITCH_MAX_DEPTH 0x1770     /* native floor depth cut, A1 §2 */
+#define FIFA96_PITCH_MAX_DEPTH 0x4000     /* native floor depth cut, A1 §2 (P10: extended for the wide live view) */
 
 static int pitch_marking(int32_t wx, int32_t wz) {
   int32_t ax = pitch_abs32(wx);
@@ -313,20 +313,41 @@ int fifa96_pitch_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s
     }
   }
 
-  /* Sky + the v1 crowd band [D] (A1 §4): 56 rows of STACcovr above the
-   * horizon, the rest of the upper screen is the sky index. */
-  int32_t band_top = horizon - FIFA96_PITCH_CROWD_BAND_ROWS;
+  /* Sky, roof and the crowd band [D] (A1 §4). The band scales with the
+   * surface height so the 640x480 shell and the 320x240 tape read the same. */
+  int32_t band_rows = FIFA96_PITCH_CROWD_BAND_ROWS * s->height / 240;
+  if (band_rows < 16) band_rows = 16;
+  int32_t band_top = horizon - band_rows;
+  int32_t ad_rows = 4 * s->height / 240;
+  if (ad_rows < 2) ad_rows = 2;
+  uint8_t roof_index = pitch->shade ? pitch->shade[pitch->sky_index]
+                                    : (uint8_t)(pitch->sky_index >> 1);
   uint32_t crowd_u_off = (uint32_t)((yaw & 0xFFFF) >> 9);
   for (int32_t sy = top; sy < horizon; sy++) {
     uint8_t *row = s->indexed + (size_t)sy * (size_t)s->width;
     if (sy < band_top) {
-      memset(row + left, pitch->sky_index, (size_t)(right - left));
+      /* The native broadcast view is inside the stadium: the top of the
+       * frame is the stand roof, not open sky. A lighter top edge keeps the
+       * structure readable. */
+      uint8_t roof = (sy < 2 * s->height / 240) ? pitch->line_index : roof_index;
+      memset(row + left, roof, (size_t)(right - left));
       continue;
     }
     int32_t band_row = sy - band_top;
-    uint32_t v = ((uint32_t)band_row * 64u) / FIFA96_PITCH_CROWD_BAND_ROWS;
+    uint32_t v = ((uint32_t)band_row * 64u) / (uint32_t)band_rows;
     if (v > 63u) v = 63u;
     const uint8_t *crowd_row = pitch->crowd + (size_t)v * FIFA96_PITCH_TILE_W;
+    if (sy >= horizon - ad_rows) {
+      /* Advertising hoardings along the near edge of the stand: a dark wall
+       * with a white panel every 64 source pixels. */
+      uint8_t wall = pitch->shade ? pitch->shade[pitch->sky_index]
+                                  : (uint8_t)(pitch->sky_index >> 1);
+      for (int32_t sx = left; sx < right; sx++) {
+        uint32_t panel = ((uint32_t)sx + crowd_u_off) & 63u;
+        row[sx] = panel < 28u ? pitch->line_index : wall;
+      }
+      continue;
+    }
     for (int32_t sx = left; sx < right; sx++) {
       uint32_t u = ((uint32_t)sx + crowd_u_off) & 63u;
       row[sx] = crowd_row[u];
@@ -356,7 +377,12 @@ int fifa96_pitch_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s
       } else {
         uint32_t u = (uint32_t)wx & 63u;
         uint32_t v = (uint32_t)wz & 63u;
-        row[sx] = tile[(size_t)v * FIFA96_PITCH_TILE_W + u];
+        uint8_t index = tile[(size_t)v * FIFA96_PITCH_TILE_W + u];
+        /* Mowing stripes (derived [D]): alternate the live shade table every
+         * 32 world-texel diagonal band. */
+        if (pitch->shade != NULL && (((wx + wz) >> 7) & 1))
+          index = pitch->shade[index];
+        row[sx] = index;
       }
     }
   }

@@ -103,7 +103,10 @@ native settings list: arrows change the value, **Enter** cycles it, and
 **X**/Backspace backs out. Half Length, Fouls, Injuries, Offside, SFX Volume
 and Sound Effects are live; the other rows are stored for later (the Controls
 page and Reset Defaults row are port additions). The other six native Game
-Select entries are shown dimmed (not ported yet).
+Select entries are shown dimmed (not ported yet). The shell composes the real
+640x480 MOD2/MOD1 art, the SLICK title/menu fonts and the animated VS mark;
+the match uses a behind-the-goal broadcast camera with the native stands,
+mowing stripes and player shadows.
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
 **C** passes, **V** plays a long ball; **Esc** pauses (**Enter** resumes,
