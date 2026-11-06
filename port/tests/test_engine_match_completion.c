@@ -60,8 +60,11 @@ static void drop_fixture(struct fixture f) {
 /* P8 (FU-346): the live Friendly regulation-end fixtures drive the shipped
  * windowed path (engine steps + the KICK cadence the half-time sit-1 kickoff
  * release needs). The tape is the same 10/90 KICK pulse the P6/P7 live tests
- * use; no score/phase is staged at the end — the score is the derived goal
- * writer and the two periods are produced by the real FU-62 clock. */
+ * use; no score/phase is staged at the end — the win fixture stages the 1-0 at
+ * the START through the derived goal writer, and the two periods are produced
+ * by the real FU-62 clock. The separate `test_live_kickoff_goal_to_full_time`
+ * below is the no-staging end-to-end path (real kickoff -> KICK -> native
+ * goal -> full time). */
 #define P8_TAPE_LEN 20000u
 static fifa96_platform_key p8_tape[P8_TAPE_LEN];
 static int p8_tape_ready;
@@ -102,6 +105,18 @@ static struct fixture make_p8_live_fixture(void) {
   assert(fifa96_match_run_set_live_start(&f.engine->match_run, 1) == 0);
   assert(fifa96_match_run_begin(&f.engine->match_run, f.engine, 0) == 0);
   return f;
+}
+
+/* One granted 30 Hz live frame body, driven directly (the live-control fixture
+ * helper): used only for the kick press/release and the shot flight, before
+ * the engine-step clock loop. */
+static void p8_granted_frame(struct fifa96_match_run *mr) {
+  for (int i = 0; i < 16; i++) {
+    int rc = fifa96_match_run_frame(mr);
+    assert(rc >= 0);
+    if (rc == 1) return;
+  }
+  assert(!"no granted frame within 16 ticks");
 }
 
 /* v22 (M2 phase-22 review, Fix 1): the extra-time terminal seed shared by the
@@ -903,8 +918,10 @@ static void test_live_post_dwell_and_skip(void) {
  * native phase-0x13 stats screen body is unported (P8-L1), so the live Friendly
  * winner uses the existing phase-0x0C result terminal (the same terminal a
  * Friendly draw uses). This test drives the real clock through half-time and
- * the second half: 1-0 in, phase 0x0C / act 0x0B / flag 0 out, end word 1,
- * OVER -> POST -> EXIT -> front-end, score intact. */
+ * the second half: 1-0 staged at the start through the derived `add_goal`
+ * writer, phase 0x0C / act 0x0B / flag 0 out, end word 1, OVER -> POST ->
+ * EXIT -> front-end, score intact. (The no-staging kick path is
+ * `test_live_kickoff_goal_to_full_time` below.) */
 static void test_live_friendly_regulation_win_full_time(void) {
   struct fixture f = make_p8_live_fixture();
   struct fifa96_match_run *mr = &f.engine->match_run;
@@ -1031,6 +1048,125 @@ static void test_live_friendly_regulation_draw_full_time(void) {
   drop_fixture(f);
 }
 
+/* P8 (FU-346) end to end, review minor 9: the real live kickoff (no ball,
+ * score or phase staging), a KICK through the live slot input, the native
+ * flight/armer/scan goal, then the real FU-62 clock through half-time and the
+ * second half to the P8 full-time branch (phase 0x0C, end word 1, OVER ->
+ * POST -> EXIT -> front-end). Only the period lengths are configured; the
+ * score and both period completions are produced by the shipped path. */
+static void test_live_kickoff_goal_to_full_time(void) {
+  struct fixture f = make_p8_live_fixture();
+  struct fifa96_match_run *mr = &f.engine->match_run;
+  int steps;
+  assert(mr->live_start == 1u);
+  assert(mr->state.phase == 2u);            /* the native live kickoff */
+  assert(mr->state.period == 0u);
+  assert(mr->entities.ball.x == 480 && mr->entities.ball.y == 0 &&
+         mr->entities.ball.z == 0);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  /* The clock lengths the match config applies; no ball/score staging. */
+  assert(fifa96_match_run_set_period(mr, 6, 6) == 0);
+
+  /* The shipped kickoff shot: KICK press/release through the live slot path. */
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(mr, &kick, 1) == 0);
+  }
+  p8_granted_frame(mr);
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  for (int i = 0; i < 8 && (mr->dispatched_ok & (1ull << 7u)) == 0ull; i++)
+    p8_granted_frame(mr);
+  assert((mr->dispatched_ok & (1ull << 7u)) != 0ull);
+  assert(mr->live_kick_active == 1u);
+  assert(mr->live_kick_shot == 1u);
+
+  /* The native flight -> armer -> scan. The score is only ever written by the
+   * native goal chain. */
+  {
+    int goal = 0;
+    int frames = 0;
+    for (; frames < 600 && goal == 0; frames++) {
+      p8_granted_frame(mr);
+      if (mr->score[0] == 1u) goal = 1;
+    }
+    assert(frames < 200);   /* comfortably inside the 6 s first half */
+    assert(goal == 1);
+  }
+  assert(mr->state.period == 0u);            /* the goal precedes half-time */
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  assert(mr->state.phase == 5u);             /* the native situation-6 phase */
+  assert(mr->live_save_record == FIFA96_MATCH_ENTITY_NONE);
+
+  /* The real clock to the first completion (half-time). */
+  steps = 0;
+  while (mr->state.period != 1u && steps < 12000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 12000);
+  assert(mr->state.phase == 0x0Cu);
+  assert(mr->global_157ac2 == 1u);
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+
+  /* The live sit-1 restart releases the second half (the tape's KICK pulse). */
+  steps = 0;
+  while (mr->state.phase != 2u && steps < 12000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 12000);
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  /* No phantom kick from the consumed launch pair: with no input the stale
+   * FU-73 word must stay suppressed by the retained signature. */
+  for (int i = 0; i < 30; i++) {
+    p8_granted_frame(mr);
+    assert(mr->live_kick_active == 0u);
+    assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  }
+
+  /* The real second-half clock: regulation end. */
+  steps = 0;
+  while (mr->state.period != 2u && steps < 12000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 12000);
+  assert(mr->state.phase == 0x0Cu);          /* not the ET phase 0x13/0x14 */
+  assert(mr->global_157ac0 == 0u);           /* no ET flag on the live Friendly arm */
+  assert(mr->act.id == 0x0Bu);
+  assert(mr->global_157ac2 == 2u);
+  /* The live tape's later kicks stay scoreless at this timing, so the kicked
+   * 1-0 is the final result; any extra goal would be a regression (e.g. a
+   * phantom re-latch of the consumed launch pair). */
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+
+  /* The phase-0x0C end machine stages the regulation-over word. */
+  steps = 0;
+  while (mr->end_word_158822 != 1u && steps < 6000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 6000);
+  assert(fifa96_match_run_should_mark_over(mr) == 1);
+
+  /* FULL TIME result panel, then the skip returns to Game Select. */
+  steps = 0;
+  while (mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE && steps < 6000) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 6000);
+  assert(mr->lc.screen == FIFA96_MATCH_SCREEN_POST);
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  assert(fifa96_match_run_result_continue(mr) == 0);
+  for (int i = 0; i < 8 && mr->running; i++)
+    assert(fifa96_engine_step(f.engine) == 0);
+  assert(mr->running == 0u);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(f.engine->match == NULL);
+  drop_fixture(f);
+}
+
 /* v22 (M2 phase-22 T4, FU-234 §4.2/§4.3): the run's return to the front-end.
  * `fifa96_match_run_end` maps the native leave/teardown
  * (`[0x105FFC]=4`/`[0x107304]=3`) to the mode switch
@@ -1105,6 +1241,7 @@ int main(void) {
   test_live_post_dwell_and_skip();
   test_live_friendly_regulation_win_full_time();
   test_live_friendly_regulation_draw_full_time();
+  test_live_kickoff_goal_to_full_time();
   test_run_end_lands_frontend();
   test_mark_over_only_past_half_time();
   test_score_plumbing();

@@ -2613,6 +2613,40 @@ static int match_run_live_control_nearest(const struct fifa96_match_run *mr,
 #define MATCH_RUN_LIVE_FLIGHT_SPEED_MIN 8
 #define MATCH_RUN_LIVE_FLIGHT_SPEED_MAX 16
 
+/* P8 (FU-346): drop the consumed-kick value signature. The duplicate guard is
+ * the consumed-pair marker below; both are quoted by the live tests/docs. On a
+ * block the pair is cleared too; on a flight end only the signature is
+ * dropped, while the consumed-pair marker keeps the still-staged FU-73 word
+ * from relaunching itself (a new dispatch clears the marker). */
+static void match_run_live_kick_sig_clear(struct fifa96_match_run *mr) {
+  mr->live_kick_sig_actor = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_sig_traj = 0;
+  mr->live_kick_sig_vx = 0;
+  mr->live_kick_sig_vh = 0;
+  mr->live_kick_sig_vz = 0;
+  mr->live_kick_sig_flags = 0;
+  mr->live_kick_sig_code = 0;
+}
+
+/* The pair consumed by the last latch is still the staged FU-73 word. Only the
+ * signature fields are compared: the native tail also updates receiver/angle/
+ * ack while the ball is live, and those must not re-arm the flight. */
+static int match_run_live_kick_pair_matches_consumed(const struct fifa96_match_run *mr) {
+  const struct fifa96_ball_pair_state *p = &mr->entities.ball.pair;
+  const struct fifa96_ball_pair_state *c = &mr->live_kick_consumed_pair;
+  return mr->live_kick_pair_consumed != 0u && p->actor == c->actor &&
+         p->traj == c->traj && p->vector.x == c->vector.x &&
+         p->vector.height == c->vector.height &&
+         p->vector.z == c->vector.z && p->flags == c->flags &&
+         p->code == c->code;
+}
+
+static void match_run_live_kick_consumed_clear(struct fifa96_match_run *mr) {
+  mr->live_kick_pair_consumed = 0u;
+  memset(&mr->live_kick_consumed_pair, 0,
+         sizeof mr->live_kick_consumed_pair);
+}
+
 static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   struct fifa96_ball_pair_state *pair;
   struct fifa96_match_entity *e;
@@ -2636,12 +2670,11 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   if (id != mr->slot.entity && id != mr->entities.controlled &&
       !(id == mr->live_control_taker && mr->live_kickoff_touch != 0u))
     return;
-  if (id == mr->live_kick_sig_actor && pair->traj == mr->live_kick_sig_traj &&
-      pair->vector.x == mr->live_kick_sig_vx &&
-      pair->vector.height == mr->live_kick_sig_vh &&
-      pair->vector.z == mr->live_kick_sig_vz &&
-      pair->flags == mr->live_kick_sig_flags && pair->code == mr->live_kick_sig_code)
-    return;   /* the same staged kick: already consumed */
+  /* P8 (FU-346): the same staged FU-73 pair cannot relaunch after its flight.
+   * The flag is cleared by a new kick dispatch (`match_kick_run`) and by the
+   * block; the signature values are still recorded/cleared for the live tests
+   * and docs. */
+  if (match_run_live_kick_pair_matches_consumed(mr)) return;
   team8 = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
   e = &mr->entities.team[team8].records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
   dir_x = pair->vector.height;
@@ -2687,6 +2720,8 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   mr->live_kick_sig_vz = pair->vector.z;
   mr->live_kick_sig_flags = pair->flags;
   mr->live_kick_sig_code = pair->code;
+  mr->live_kick_consumed_pair = *pair;
+  mr->live_kick_pair_consumed = 1u;
 }
 
 /* The ball-machine override: while a live kick is in flight, use the latched
@@ -2698,6 +2733,7 @@ static int match_run_live_kick_flight_step(struct fifa96_match_run *mr,
   if (mr->state.phase != 2u || mr->goal_armed) {
     mr->live_kick_active = 0;
     mr->live_kick_shot = 0;
+    match_run_live_kick_sig_clear(mr);
     return 0;
   }
   b->target_x = mr->live_kick_target_x;
@@ -2726,6 +2762,7 @@ static void match_run_live_kick_flight_end(struct fifa96_match_run *mr,
       (dx <= 0x20 && dx >= -0x20 && dz <= 0x20 && dz >= -0x20)) {
     mr->live_kick_active = 0;
     mr->live_kick_shot = 0;
+    match_run_live_kick_sig_clear(mr);
   }
 }
 
@@ -2995,8 +3032,13 @@ static void match_run_live_opponent_update(struct fifa96_match_run *mr) {
  * the nearest defending outfield record (1..10) within
  * `FIFA96_MATCH_LIVE_SAVE_RADIUS` of the ball. The keeper is excluded: its live
  * charge reaches ~0x1F from the shipped shot path: the 0x28 debug hit and a 0x18
- * windowed run both left the shipped centre shot unscored (P8-L3). On a hit it clears the flight,
- * clears the FU-73 pair so the launch pair cannot re-latch, pins the ball for
+ * windowed run both left the shipped centre shot unscored (P8-L3). The scan
+ * skips the native +0x98/+0x9A hidden/occupied records, and a ball already in
+ * the classifier's mouth is left to the native armer (a mouth block could
+ * record a save and still concede). On a hit it clears the flight,
+ * clears the FU-73 pair so the launch pair cannot re-latch, drops the consumed
+ * kick signature and pair marker so an identical repeat can latch again, pins
+ * the ball for
  * `FIFA96_MATCH_LIVE_SAVE_HOLD` frames through the ball-machine hold branch,
  * records the defending pool id and gives it the ball possession cell. It
  * writes no score/phase/goal cell; the native armer/scan keep that authority.
@@ -3015,6 +3057,13 @@ static int match_run_live_shot_block(struct fifa96_match_run *mr) {
   if (!mr || !mr->live_start) return 0;
   if (mr->state.phase != 2u || !mr->live_kick_active || mr->live_kick_shot == 0u ||
       mr->goal_armed)
+    return 0;
+  /* P8 (FU-346): the goal mouth belongs to the native armer/scan. A block on a
+   * ball already inside `FUN_00070074`'s classifier would record a save and
+   * then let the same frame's armer/scan score, so a blocked shot could still
+   * reach the goal cells. Leave the mouth to the native chain. */
+  if (fifa96_match_goal_zone(mr->entities.ball.x, mr->entities.ball.y,
+                             mr->entities.ball.z))
     return 0;
   magnitude = (uint32_t)mr->entities.ball.z;
   if (mr->entities.ball.z < 0) magnitude = 0u - magnitude;
@@ -3035,9 +3084,17 @@ static int match_run_live_shot_block(struct fifa96_match_run *mr) {
   for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     const struct fifa96_match_entity *e =
         &mr->entities.team[(uint32_t)team].records[i];
-    int32_t dx = mr->entities.ball.x - e->pos_x;
-    int32_t dz = mr->entities.ball.z - e->pos_z;
-    int32_t d = fifa96_entity_distance(dx, dz);
+    int32_t dx;
+    int32_t dz;
+    int32_t d;
+    /* The native nearest select (`FUN_0008DE8C`, the shared
+     * `fifa96_entity_find_nearest`) excludes hidden/occupied records through
+     * the +0x98/+0x9A bytes; an off-pitch record parked on the ball must not
+     * block. */
+    if (e->skip_98 != 0u || e->skip_9a != 0u) continue;
+    dx = mr->entities.ball.x - e->pos_x;
+    dz = mr->entities.ball.z - e->pos_z;
+    d = fifa96_entity_distance(dx, dz);
     if (best < 0 || d < (int32_t)best_distance) {
       best = (int32_t)i;
       best_distance = (int16_t)d;
@@ -3047,6 +3104,8 @@ static int match_run_live_shot_block(struct fifa96_match_run *mr) {
   mr->live_kick_active = 0u;
   mr->live_kick_frames = 0u;
   mr->live_kick_shot = 0u;
+  match_run_live_kick_sig_clear(mr);
+  match_run_live_kick_consumed_clear(mr);
   mr->live_save_hold = FIFA96_MATCH_LIVE_SAVE_HOLD;
   mr->live_save_record =
       (int32_t)((uint32_t)team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)best);
@@ -3285,13 +3344,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->live_kick_target_x = 0;
   mr->live_kick_target_z = 0;
   mr->live_kick_speed = 0;
-  mr->live_kick_sig_actor = FIFA96_MATCH_ENTITY_NONE;
-  mr->live_kick_sig_traj = 0;
-  mr->live_kick_sig_vx = 0;
-  mr->live_kick_sig_vh = 0;
-  mr->live_kick_sig_vz = 0;
-  mr->live_kick_sig_flags = 0;
-  mr->live_kick_sig_code = 0;
+  match_run_live_kick_sig_clear(mr);
+  match_run_live_kick_consumed_clear(mr);
   mr->live_kick_shot = 0;              /* P8: no live shot flight */
   mr->live_save_hold = 0;              /* P8: no live save hold */
   mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
@@ -3353,13 +3407,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->live_kick_target_x = 0;
   mr->live_kick_target_z = 0;
   mr->live_kick_speed = 0;
-  mr->live_kick_sig_actor = FIFA96_MATCH_ENTITY_NONE;
-  mr->live_kick_sig_traj = 0;
-  mr->live_kick_sig_vx = 0;
-  mr->live_kick_sig_vh = 0;
-  mr->live_kick_sig_vz = 0;
-  mr->live_kick_sig_flags = 0;
-  mr->live_kick_sig_code = 0;
+  match_run_live_kick_sig_clear(mr);
+  match_run_live_kick_consumed_clear(mr);
   mr->live_kick_shot = 0;              /* P8: fresh live shot marker */
   mr->live_save_hold = 0;              /* P8: fresh live save hold */
   mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;

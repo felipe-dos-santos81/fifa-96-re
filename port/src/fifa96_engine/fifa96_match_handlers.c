@@ -1221,6 +1221,11 @@ static int match_kick_run(struct fifa96_match_run *mr, const fifa96_action_kick 
   rc = fifa96_ball_kick_target(&mr->entities.ball.pair, &a, &slot, input, &ctx,
                                &mr->rng, mode, out);
   if (rc != FIFA96_OK) return rc;
+  /* P8 / FU-346: a real staged kick request is a new launch pair. Clear the
+   * consumed marker so an identical repeat (same actor/vector/flags) can latch
+   * again; the marker otherwise keeps the stale FU-73 word from relaunching
+   * after a goal/restart. Live-only. */
+  if (mr->live_start) mr->live_kick_pair_consumed = 0u;
   /* M2 phase-10 T1 (FU-148 §14 / FU-142 OL-88): the staged kick's receive arm
    * — the native FUN_0007A490 tail's 0x7A8C7/0x7A8EF `FUN_0007A084` call,
    * gated by the code-keyed receive flag the tail reports. Runs the camera

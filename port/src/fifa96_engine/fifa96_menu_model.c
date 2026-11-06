@@ -153,22 +153,26 @@ static const uint8_t option_order[FIFA96_MENU_OPTION_ORDER_COUNT] = {
 
 /* Port addition: the Controls page. These are the real current mappings
  * (platform_sdl3.c map_scancode/map_button, fifa96_match_run.c input bits).
- * P8: the pad's South/East buttons keep their front-end CONFIRM/BACK roles
- * and double as KICK/PASS in live play. */
+ * P8/FU-346: the pad's South/East buttons and the keyboard Enter/X/Backspace
+ * share the same engine CONFIRM/DECLINE codes, so the dual role is real in
+ * both directions. In menus they select/confirm and back/decline; in live play
+ * they kick and pass. Z/C/V keep their dedicated kick/pass/long-ball codes, and
+ * the half-time sit-1 kickoff only releases on a slot input (C/PASS is the
+ * documented start-second-half key). */
 static const char *const option_controls_text[] = {
     "CONTROLS",
-    "ARROWS       MOVE PLAYER / MENU",
-    "ENTER        SELECT / RESUME",
-    "X/BACKSPACE  BACK / QUIT TO MENU",
-    "ESC          MENU: QUIT TO DOS",
-    "             MATCH: PAUSE",
-    "Z            KICK",
-    "C            PASS",
-    "V            LONG BALL",
-    "PAD DPAD     MOVE",
-    "PAD A/SOUTH  KICK / CONFIRM",
-    "PAD B/EAST   PASS / BACK",
-    "PAD WEST     LONG BALL",
+    "A/SOUTH or ENTER",
+    "  MENU: SELECT / CONFIRM",
+    "  PLAY: KICK",
+    "B/EAST or X/BACKSPACE",
+    "  MENU: BACK / DECLINE",
+    "  PLAY: PASS",
+    "Z KICK   C PASS   V LONG BALL",
+    "HALF-TIME: C/PASS STARTS 2ND HALF",
+    "ARROWS / PAD DPAD  MOVE",
+    "ESC  MENU: QUIT TO DOS",
+    "     MATCH: PAUSE",
+    "PAD WEST  LONG BALL",
 };
 
 static void menu_model_settings_defaults(struct fifa96_menu_model *model) {
