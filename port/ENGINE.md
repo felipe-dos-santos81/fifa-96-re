@@ -9981,3 +9981,43 @@ aims at the goal-mouth centre; no held-direction intent, goal-side choice,
 keeper or defender blocking), native per-code target algebra/receive target
 (P7-L7), and the loft arc/receive hand-off (P7-L10). The restart/tackle is the
 P7-L2 stand-in; full possession/tackle AI remains unported.
+
+## P6 Task 4 / final playability acceptance (2026-11-06)
+
+**Measured shipped loop.** `./build/fifa96 data/game/FIFAPCCD96.iso`,
+DISPLAY=:1: Game Select -> Options (Half Length 4 min; settings survive
+Back -> Options) -> Friendly -> Brazil (home) / Italy (visitor) -> kickoff
+(BRA 0 ITA 0). One Z at the kickoff runs the live-control seed, row-07 kick,
+the derived live flight and the native goal scan: **BRA 1 ITA 0** (native
+score, phase 5/celebration, restart). The second Z releases the native
+phase-1 gate; arrows/contact tackle regain possession at the restart, and Z
+kicks again with the score preserved. Captures:
+`p6-options.png`, `p6-options-half.png`, `p6-controls.png`,
+`p6-teams-brazil-italy.png`, `p6-kits.png`, `p7-natural-goal.png`,
+`p7-natural-restart.png`, `p7-restart-possession.png`, `p7-restart-kick.png`,
+`p7-main-goal-2s.png`/`p7-main-goal-8s.png` (merged-main BRA 1-0, period 2).
+The one-Z goal is the shipped menu path (no harness, no staged score); the
+P7 tests stage only the preconditions they name.
+
+**Gate.** `make check` **119/119** (strict build + ASan/UBSan); M1
+`09b726b7…` and M2 v29 `7c3874f7…` byte-exact by `cmp`; census **78/78**
+bodies, **58/80** natural, **64/80** install-live, 6 blocked, action 38/45,
+phase 26/35.
+
+**Doc errata (append-only; earlier Task 3 text remains).** (1) The Task 3
+"Windowed evidence" sentence that `p6-options-half-return.png` proves the
+value survives Back -> Options is corrected: that capture is byte-identical
+to `p6-options-half.png`; the deterministic/front-end test is the proof, the
+screenshot is not. (2) **P6-L1** (`options.dat`) wording: the 104-byte block
+format is decoded in the recon, but no runtime options-file decoder exists in
+the tree; v1 intentionally keeps the settings in memory. (3) The Player
+Names `0xC8/0xC9` claim in the Task 3 legs is superseded by the P6 review-fix
+section above (correct dwords `0xD2/0x1C8/0x1C9` = Off/Names/Numbers).
+
+**Remaining playability legs.** Native aim/camera director (KICK always
+goal-centre; no held-direction intent, goal-side choice, keeper/defender
+blocking; P7-L12), per-code kick target algebra/receive (P7-L7), loft/receive
+hand-off (P7-L10), full possession/tackle/AI + native auto-switch (P7-L1/L2),
+regulation-end extra-time branch (P6-L4), replay/captions/half-time dwell,
+rosters/attributes/AI, commentary/music, gamepad kick/pass (P6-L6), and the
+six other Game Select screens. Each is numbered, not claimed.

@@ -4139,3 +4139,24 @@ close-out below).
   goal addendum. Remaining: native aim/camera director (KICK always
   goal-centre, no keeper/defender blocking), P7-L7 per-code target/receive,
   P7-L10 loft/receive hand-off, full possession/tackle AI.
+
+- **P6 Task 4 / final playability acceptance (2026-11-06).** Shipped
+  `DISPLAY=:1` loop measured end to end: Options (Half Length 4 min; settings
+  survive Back -> Options) -> Brazil/Italy -> kickoff -> one Z -> native
+  **BRA 1 ITA 0** (phase 5/celebration) -> restart -> Z gate -> arrows/contact
+  tackle -> Z again, score preserved. Screenshots under
+  `/tmp/opencode/play/`: `p6-options.png`, `p6-options-half.png`,
+  `p6-controls.png`, `p6-teams-brazil-italy.png`, `p6-kits.png`,
+  `p7-natural-goal.png`, `p7-natural-restart.png`,
+  `p7-restart-possession.png`, `p7-restart-kick.png`,
+  `p7-main-goal-2s.png`/`p7-main-goal-8s.png`. `make check` **119/119**; M1
+  `09b726b7…` and M2 v29 `7c3874f7…` exact by `cmp`; census unchanged
+  (78/78, 58/80, 64/80). Doc errata: `p6-options-half-return.png` is
+  byte-identical to `p6-options-half.png`, so the deterministic/front-end
+  test (not the shot) proves the settings survive; P6-L1 `options.dat` is
+  decoded in the recon but has no runtime decoder (v1 is in-memory); the
+  Player Names `0xC8/0xC9` claim is corrected above (`0xD2/0x1C8/0x1C9` =
+  Off/Names/Numbers). Remaining legs: native aim/camera director, per-code
+  kick target, loft/receive, full AI/possession, P6-L4 extra-time branch,
+  replay/captions, rosters, commentary/music, gamepad kick/pass, six menu
+  screens.

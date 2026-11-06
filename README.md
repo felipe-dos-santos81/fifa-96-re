@@ -114,6 +114,14 @@ five seconds, then returns to Game Select. Crowd ambience and the whistle play
 through SDL3 audio when the ISO is mounted; their gain follows the SFX Volume
 and Sound Effects options.
 
+At the kickoff, **Z** shoots at the opponent goal through the native
+live-control/kick/goal path; after the goal a second **Z** releases the
+kickoff gate, arrows take the nearest defender to the ball for a contact
+tackle/claim, and **Z** kicks again with the score preserved. The shot always
+aims at the goal centre and there is no keeper/defender blocking yet — both
+are labelled stand-ins for the unported aim/camera director and possession
+AI.
+
 ## Conventions
 
 * Address renders: the loader map quotes `11bd:`-segment addresses; gap rows
