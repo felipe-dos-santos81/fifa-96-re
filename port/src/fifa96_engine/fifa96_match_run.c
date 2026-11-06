@@ -3968,12 +3968,42 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
        * differs, the OL-85 flag [0x157AC0] is raised. W3's equal-score override
        * escape ([0x14C2EE], no engine cell) and the W6 front-end writer stay
        * unported legs (FU213-L1/L7); the equal-score else-arm is the
-       * [0x10F378] no-extra-time latch, likewise unported. */
-      if ((completed == 1u || completed == 3u) && differ)
+       * [0x10F378] no-extra-time latch (its producer is resolved below; the
+       * cell itself stays unmodelled).
+       *
+       * P8 (FU-346, fresh native re-read): the flag is NOT an "extra-time"
+       * switch in the football sense, and phase 0x13/0x14 are NOT clocked ET
+       * halves. Fresh `read_memory 0x1106AD` puts both phases in clock class 0
+       * (indices 19/20 = 0x00), while the live ET half is class-1 phase 2
+       * (index 2 = 0x01) on the period index 2/3. Phase 0x13 installs the
+       * row-0x25 stats sequence `0x880CC` when the score pair differs
+       * (`0x8D76C CMP AX,[0x157AC7]; 0x8D772` install code 0x25) and the
+       * end machine holds the decisive screen (`0x8BD95 CMP AX,[0x157AC7];
+       * 0x8BDA2 JNZ 0x8BDE7`). So the native decisive regulation end is the
+       * post-match stats/result presentation, and the 0x13 -> phase-2 re-arm
+       * (`match_run_period_over_rearm`) is the competition/tie ET route
+       * (`[0x14C2EE]` override, FRESH `FUN_0003749C 0x374D1/0x374E9`: the
+       * override is 1 unless the Game-Select mode is 0 or 3; Friendly is mode
+       * 0, `FUN_00024B00 0x24BEB XOR EAX,EAX` -> `FUN_0001B7B8`). Friendly also
+       * never plays extra time on a draw: W2's equal-score else-arm sets the
+       * `[0x10F378]` no-ET latch (0x8B2DA) and the phase-0x0C end machine
+       * takes `0x37F54` -> `[0x105FFC]=5` (0x8BC80..0x8BC97).
+       *
+       * P8-L1 (labelled live/port stand-in): the native phase-0x13 stats/
+       * result screen body is unported (row 0x25 is ported but the screen is
+       * not driven here), so the shipped windowed Friendly winner keeps the
+       * native flag clear and takes the existing phase-0x0C result terminal —
+       * the same terminal a Friendly draw uses. The competition path (the
+       * non-live tape and any future competition mode) keeps the native
+       * flag/phase-0x13 route byte-exactly. `live_start` is the windowed
+       * menu path, whose only shipped Game Select mode is Friendly. */
+      if ((completed == 1u || completed == 3u) && differ &&
+          !(mr->live_start && completed == 1u))
         mr->global_157ac0 = 1u;
       /* FU-213 §3: the chooser receives the LIVE extra_time flag (replacing the
-       * former hardwired 0u), so the extra-time arm (act 0xC / phase 0x13-0x14)
-       * is selected when the flag is set. */
+       * former hardwired 0u), so the chooser's flag-set arm (act 0xC / phase
+       * 0x13-0x14) is selected when the flag is set (the live Friendly gate
+       * above keeps a decisive regulation end on the flag-clear arm). */
       rc = fifa96_action_phase_period_end(completed, mr->global_157ac0,
                                           mr->score[side & 1u],
                                           mr->score[(side ^ 1u) & 1u], side, 0u, 0u, 0u,

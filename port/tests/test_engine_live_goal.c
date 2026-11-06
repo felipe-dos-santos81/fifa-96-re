@@ -12,11 +12,12 @@
  * written. The KICK tape advances the kickoff taker after the celebration
  * release, exactly like the native input route.
  *
- * The lifecycle case scores both sides (1-1) and shortens the periods: a
- * differing regulation end arms the engine's extra-time branch (FU-213), so a
- * tied regulation end is the path to the native flag-clear phase-0x0C
- * terminal and the FULL TIME lifecycle. That is a property of the existing
- * engine, not of this test.
+ * The lifecycle case scores both sides (1-1) and shortens the periods: the
+ * tied regulation end takes the native flag-clear phase-0x0C terminal and the
+ * FULL TIME lifecycle. P8 (FU-346) makes the live differing-score regulation
+ * end take that same result terminal (the native phase-0x13 stats screen is
+ * unported; the competition path keeps the ET route), pinned in
+ * test_engine_match_completion's live Friendly cases.
  */
 #include <assert.h>
 #include <stdint.h>
@@ -220,8 +221,8 @@ static void test_live_goal_both_sides(void) {
 /* Score once per side (1-1), shorten the halves, and walk the native
  * lifecycle: half-time (phase 0x0C / period index 1), the second-half kickoff,
  * then the flag-clear regulation terminal -> OVER/POST with the score intact.
- * A 1-0/0-1 regulation end arms the engine's extra-time branch, so the tie is
- * the reachable full-time path (see the file header). */
+ * P8 keeps the live differing-score regulation end on the same full-time
+ * terminal; this tie case remains the minimum-staging lifecycle proof. */
 static void test_live_goal_score_survives_periods(void) {
   struct live_fixture f = make_live_fixture();
   struct fifa96_match_run *mr = f.mr;

@@ -10021,3 +10021,99 @@ hand-off (P7-L10), full possession/tackle/AI + native auto-switch (P7-L1/L2),
 regulation-end extra-time branch (P6-L4), replay/captions/half-time dwell,
 rosters/attributes/AI, commentary/music, gamepad kick/pass (P6-L6), and the
 six other Game Select screens. Each is numbered, not claimed.
+
+## P8 — Friendly full-time branch (FU-346, 2026-11-06)
+
+**Outcome.** A finished live **Friendly** now reaches FULL TIME and the return to
+Game Select on both a **1-0 winner** and a **0-0 draw**; it no longer enters the
+engine's extra-time re-arm on a winner. The change is one live-gated term in
+`fifa96_match_run_phase_drive`'s W2 tie-break (the shipped windowed menu path is
+the only live Game Select mode, Friendly); the non-live/competition route (and
+therefore M1/M2) is byte-identical.
+
+**Resolved native reading (fresh Ghidra, `/FIFA96.EXE`, this slice).**
+
+* **`[0x157AC0]` is not an extra-time switch in the football sense.** W2
+  `0x8B2AC MOV byte[0x157AC0],1` fires on a **differing** regulation score
+  (`0x8B2A7 CMP AX,DX; 0x8B2AA JZ` -> W3/`[0x10F378]` else-arm); the chooser
+  `FUN_0008B9CC` `0x8B9CF CMP byte[0x157AC0],0 / 0x8B9D6 JZ 0x8BAA7` then writes
+  phase `0x13`/`0x14` and installs act `0xC` (`0x8BAC6..0x8BAE7`), while the
+  clear arm writes phase `0x0C` and act `0xB`.
+* **Phase `0x13`/`0x14` are class-0 post-match screens, not ET halves.** Fresh
+  `read_memory 0x1106AD`: indices `0x13`/`0x14` are `0x00`; the live ET half is
+  class-1 phase 2 on the period index 2/3 (`0x8BB65`). The phase-`0x13` producer
+  installs the row-`0x25` stats sequence (`0x880CC`) when the score pair differs
+  (`0x8D76C CMP AX,[0x157AC7]; 0x8D772` code `0x25` vs `3`), and the end machine
+  **holds** a decisive screen (`0x8BD95 CMP AX,[0x157AC7]; 0x8BDA2 JNZ 0x8BDE7`).
+  Act `0xC` is the three-stage end timer (`0x8B900`, act slot
+  `0x1107EC[0xC]`). So a native Friendly 1-0 reaches the post-match stats/result
+  presentation, not a clocked extra-time half.
+* **The ET configuration is the competition gate.** `FUN_0003749C` writes
+  `[0x14C2EE]=1` (`0x374D1`) and clears it (`0x374E7/0x374E9`) when
+  `[0x14C1D0]` is 0 or 3. `[0x14C1D0]` is the Game-Select mode byte
+  (`FUN_0001B7B8 0x1B7B9`); Friendly is mode 0 (`FUN_00024B00 0x24BEB
+  XOR EAX,EAX; CALL 0x1B7B8`), so Friendly's override is 0. W3 (equal score +
+  override, `0x8B2B8/0x8B2C1`) is the competition force-ET arm.
+* **A Friendly draw does not play extra time either.** W2's equal-score
+  else-arm, with `[0x14C1D0]==0`, sets the `[0x10F378]` no-ET latch
+  (`0x8B2CD CMP byte[0x14C1D0],0; 0x8B2DA MOV dword[0x10F378],1`); the
+  phase-`0x0C` end machine then takes `0x8BC80 CMP [0x10F378],0 /
+  0x8BC89 CALL 0x37F54` -> `[0x105FFC]=5` (the no-ET terminal, FU231-L2).
+  Earlier wording that left `[0x10F378]` "unported / no producer" is corrected
+  here: its producer and gate are the fresh W2 else-arm above.
+* **The port's mistake was the re-arm, not the flag polarity.** W2 was
+  faithful, but `match_run_period_over_rearm` treated every live `[0x157AC0]=1`
+  phase `0x13`/`0x14` as an ET entry and moved to phase 2. Native phase `0x13`
+  is decisive-score-held. P8 gates the flag producer on the live Friendly
+  regulation-end winner so the engine's existing phase-`0x0C` result terminal
+  (the same one the Friendly draw uses) runs; the native phase-`0x13` stats
+  screen body is unported.
+
+**Port shape (P8-L1, labelled stand-in).** In
+`port/src/fifa96_engine/fifa96_match_run.c` (`phase_drive`, W2):
+
+```
+if ((completed == 1u || completed == 3u) && differ &&
+    !(mr->live_start && completed == 1u))
+  mr->global_157ac0 = 1u;
+```
+
+`live_start` is the windowed/menu path whose only shipped Game Select mode is
+Friendly; the non-live M2/competition route keeps the native flag/phase-`0x13`
+route. The live terminal is phase `0x0C` / act `0xB` -> end word `1` ->
+OVER -> POST -> EXIT -> `FIFA96_ENGINE_MODE_FRONTEND`; the score is preserved.
+
+**Tests.** `port/tests/test_engine_match_completion.c` gains
+`test_live_friendly_regulation_win_full_time` (live start, a derived 1-0, real
+1 s halves through the live sit-1 restart; asserts phase `0x0C` (not `0x13`),
+`global_157ac0==0`, act `0x0B`, index 2, end word 1, POST, score 1-0, and
+`run_end` -> FRONTEND/`match==NULL`) and
+`test_live_friendly_regulation_draw_full_time` (0-0, the same terminal). The
+non-live `test_loopbacked_tiebreak_completion` still pins the competition
+flag/phase-`0x13` arm. `make check` green (see the gate line below), M1
+`09b726b7…` and M2 v29 `7c3874f7…` byte-exact by `cmp`; census unchanged
+(78/78 bodies, 58/80 natural, 64/80 install-live, action 38/45, phase 26/35).
+
+**Windowed evidence.** `./build/fifa96 data/game/FIFAPCCD96.iso`, DISPLAY=:1,
+default 2-minute halves, Friendly Brazil/Italy. Shipped input only: the first Z
+at kickoff seeds live control (still 0-0 at 00:02); the second Z runs the
+row-07 kick/flight/native scan -> **BRA 1-0** at 00:06. No further Z (the
+half-time sit-1 kickoff was released with C/PASS at 02:00; a bare wait stalls
+there, P8-L4), then the second half ran to the terminal:
+`/tmp/opencode/play/p8-fulltime.png` (FULL TIME, **BRA 1-0 ITALY, PERIOD 2**)
+and `/tmp/opencode/play/p8-return-menu.png` (Game Select). No harness and no
+staged score; the goal is the shipped input chain.
+
+**Residual legs.** **P8-L1** the native phase-`0x13`/`0x14` post-match stats/
+camera screen and its user-driven leave are unported; the live Friendly uses
+the phase-`0x0C` result terminal as the labelled stand-in. **P8-L2** the native
+competition extra time (`[0x14C2EE]` override; non-Friendly modes) and the penalty
+continuation stay non-live/separate; the phase-`0x13` -> phase-2 re-arm remains
+their tape-only route. **P8-L3** the `[0x105FFC]=5` no-ET terminal (a Friendly
+draw's native screen) is unported (FU231-L2); the engine's phase-`0x0C` result
+panel stands in for it. **P8-L4** the half-time sit-1 kickoff needs a real slot
+release: a bare `fifa96_match_run_frame` fixture stalls in phase 1 (no input),
+and the windowed run released it with C/PASS at 02:00 (the deterministic tests
+use the KICK/UP tape + engine steps). **P8-L5** `[0x14C1D0]`/`FUN_0001B7B8`
+and `[0x14C2EE]` remain unmodelled cells (the live gate is the explicit
+stand-in).
