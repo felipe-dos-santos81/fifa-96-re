@@ -98,15 +98,21 @@ make game                     # or: make run
 It boots the intro (any key skips it) into the native **Game Select** screen.
 Move with the arrows and press **Enter** to choose. **Friendly** opens the
 two-team selector: the arrows change the highlighted Home/Visitor entry,
-**Enter** starts the match, **X**/Backspace backs out. The other six native
-Game Select entries are shown dimmed (not ported yet).
+**Enter** starts the match, **X**/Backspace backs out. **Options** opens the
+native settings list: arrows change the value, **Enter** cycles it, and
+**X**/Backspace backs out. Half Length, Fouls, Injuries, Offside, SFX Volume
+and Sound Effects are live; the other rows are stored for later (the Controls
+page and Reset Defaults row are port additions). The other six native Game
+Select entries are shown dimmed (not ported yet).
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
 **C** passes, **V** plays a long ball; **Esc** pauses (**Enter** resumes,
-**X** quits to the menu). Halves are 120 seconds (about four minutes a match).
-The HUD shows the team codes, score, period and clock; at full time the
-result panel holds for five seconds, then returns to Game Select. Crowd
-ambience and the whistle play through SDL3 audio when the ISO is mounted.
+**X** quits to the menu). Halves are 2 minutes (120 seconds) by default and
+configurable in **Options** (2/4/6/8/10/20/45-minute halves). The HUD shows the
+team codes, score, period and clock; at full time the result panel holds for
+five seconds, then returns to Game Select. Crowd ambience and the whistle play
+through SDL3 audio when the ISO is mounted; their gain follows the SFX Volume
+and Sound Effects options.
 
 ## Conventions
 

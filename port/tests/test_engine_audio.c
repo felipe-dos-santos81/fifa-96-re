@@ -74,7 +74,8 @@ static void test_no_assets_is_silent(void) {
   plat.audio_submit = capture_submit;
   plat.self = &cap;
 
-  assert(fifa96_match_audio_start(&a, mr, NULL, 0, NULL, 0) == 0);
+  assert(fifa96_match_audio_start(&a, mr, NULL, 0, NULL, 0,
+                                  FIFA96_MATCH_AUDIO_PERCENT_UNITY) == 0);
   assert(a.active == 1);
   assert(a.have_sfx == 0 && a.have_crowd == 0);
   assert(a.crowd_voice == -1);
@@ -116,6 +117,43 @@ static void test_whistle_seq_counter(void) {
   assert(mr.whistle_seq == seq);       /* the clear is not an assertion */
 }
 
+/* P6: the Options SFX Volume scales the base gains. 100 is unity, the default
+ * 91 gives crowd 0x60*91/100 = 0x57, 50 gives 0x30 and 0 gives silence. */
+static void test_volume_scale(const uint8_t *sfx, size_t sfx_len,
+                              const uint8_t *crowd, size_t crowd_len) {
+  static const struct {
+    uint32_t percent;
+    uint8_t crowd_volume;
+  } cases[] = {{100u, 0x60u}, {91u, 0x57u}, {50u, 0x30u}, {0u, 0x00u}};
+  for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+    struct fifa96_match_run *mr = calloc(1, sizeof *mr);
+    assert(mr != NULL);
+    struct fifa96_match_audio a;
+    fifa96_platform plat;
+    memset(&plat, 0, sizeof plat);
+    assert(fifa96_match_audio_start(&a, mr, sfx, sfx_len, crowd, crowd_len,
+                                    cases[i].percent) == 0);
+    assert(a.active == 1 && a.have_sfx == 1 && a.have_crowd == 1);
+    assert(a.sfx_percent == cases[i].percent);
+    assert(a.crowd_voice >= 0 && a.crowd_voice < FIFA96_MIXER_VOICES);
+    assert(fifa96_mixer_voice_active(&a.mixer, a.crowd_voice) == 1);
+    assert(a.mixer.voices[a.crowd_voice].volume == cases[i].crowd_volume);
+
+    /* The whistle caller volume is 0x7F * percent / 100; its mixer gain is
+     * volume 0x7F x caller x master 0x7F / 0x3F01. */
+    mr->whistle_seq = 1;
+    mr->ref_whistle = FIFA96_MATCH_AUDIO_WHISTLE_ID;
+    assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+    assert(a.whistle_cues == 1u);
+    uint32_t caller = 0x7Fu * cases[i].percent / 100u;
+    uint8_t expected_gain = (uint8_t)(0x7Fu * caller * 0x7Fu / 0x3F01u);
+    assert(a.last_whistle_gain == expected_gain);
+
+    fifa96_match_audio_stop(&a);
+    free(mr);
+  }
+}
+
 static void test_retail_banks(void) {
   struct fifa96_asset_table *assets = NULL;
   assert(fifa96_asset_mount_file(AUDIO_ISO_PATH, &assets) == FIFA96_OK);
@@ -137,7 +175,8 @@ static void test_retail_banks(void) {
   plat.audio_submit = capture_submit;
   plat.self = &cap;
 
-  assert(fifa96_match_audio_start(&a, mr, sfx, sfx_len, crowd, crowd_len) == 0);
+  assert(fifa96_match_audio_start(&a, mr, sfx, sfx_len, crowd, crowd_len,
+                                  FIFA96_MATCH_AUDIO_PERCENT_UNITY) == 0);
   assert(a.active == 1 && a.have_sfx == 1 && a.have_crowd == 1);
   assert(a.ids.bank[FIFA96_MATCH_AUDIO_WHISTLE_ID] == &a.sfx);
   assert(a.ids.bank[FIFA96_MATCH_AUDIO_GOAL_ID] == &a.sfx);
@@ -209,6 +248,7 @@ static void test_retail_banks(void) {
   assert(a.goal_cues == 1u);
 
   fifa96_match_audio_stop(&a);
+  test_volume_scale(sfx, sfx_len, crowd, crowd_len);
   fifa96_cache_destroy(cache);
   fifa96_asset_unmount(assets);
   free(mr);

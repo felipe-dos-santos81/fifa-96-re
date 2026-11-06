@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 #include "fifa96_engine/fifa96_frontend_run.h"
 #include "fifa96_engine/fifa96_menu_art.h"
@@ -96,6 +97,41 @@ static int frontend_native_team_scroll(int index) {
   return scroll;
 }
 
+/* P6: an option row's value, preferring the native choice LANG string and
+ * falling back to the compiled-in table. Half length uses the native
+ * {2,4,6,8,10,20,45,0} minute table and the port-added "min" suffix. */
+static void frontend_native_option_value(const struct fifa96_frontend_run *fr, int row,
+                                         char *buf, size_t cap) {
+  if (buf == NULL || cap == 0) return;
+  buf[0] = '\0';
+  int setting = fifa96_menu_model_option_setting(row);
+  if (setting < 0) return;
+  const struct fifa96_menu_option_desc *desc = fifa96_menu_option_descriptor(setting);
+  if (desc == NULL) return;
+  int32_t value = fr->menu.settings.value[setting];
+  if (desc->is_slider) {
+    snprintf(buf, cap, "%d", (int)value);
+    return;
+  }
+  if (setting == 0x0E) {
+    if (value >= 0 && value < (int32_t)FIFA96_MATCH_CONFIG_HALF_LENGTH_COUNT)
+      snprintf(buf, cap, "%d min", (int)fifa96_match_config_half_lengths[value]);
+    else
+      snprintf(buf, cap, "?");
+    return;
+  }
+  uint32_t choice = fifa96_menu_option_choice_id(setting, value);
+  const char *text = choice != 0 ? fifa96_lang_string(&fr->lang, choice) : NULL;
+  if (text == NULL) text = fifa96_menu_option_choice_text(setting, value);
+  snprintf(buf, cap, "%s", text != NULL ? text : "?");
+}
+
+static const char *frontend_native_option_label(const struct fifa96_frontend_run *fr, int row) {
+  const char *fallback = fifa96_menu_model_option_label(row);
+  uint32_t id = fifa96_menu_model_option_label_id(row);
+  return id != 0 ? frontend_native_string(fr, id, fallback) : fallback;
+}
+
 static void frontend_native_menu_state(const struct fifa96_frontend_run *fr,
                                        struct fifa96_menu_state *st) {
   memset(st, 0, sizeof *st);
@@ -141,8 +177,37 @@ static void frontend_native_menu_state(const struct fifa96_frontend_run *fr,
       break;
     case FIFA96_MENU_SCREEN_OPTIONS:
       st->title = frontend_native_string(fr, 0xD8u, "Options");
-      st->message = "Not implemented in this port.";
-      st->footer = "X: back";
+      st->option_page = fr->menu.option_page;
+      if (fr->menu.option_page != FIFA96_MENU_OPTION_PAGE_LIST) {
+        size_t count = 0;
+        const char *const *help = fifa96_menu_model_controls_text(&count);
+        if (count > FIFA96_MENU_OPTION_HELP_MAX) count = FIFA96_MENU_OPTION_HELP_MAX;
+        st->help_count = (int)count;
+        for (size_t i = 0; i < count; i++) st->help[i] = help[i];
+        st->footer = "X: back";
+      } else {
+        st->option_count = fifa96_menu_model_option_rows();
+        st->option_selected = fr->menu.option_row;
+        st->option_scroll = fr->menu.option_scroll;
+        st->footer = "Arrows: change  Enter: select  X: back";
+        for (int k = 0; k < FIFA96_MENU_OPTION_VISIBLE; k++) {
+          int row = st->option_scroll + k;
+          if (row >= st->option_count) break;
+          st->options[k].label = frontend_native_option_label(fr, row);
+          frontend_native_option_value(fr, row, st->option_value_text[k],
+                                       sizeof st->option_value_text[k]);
+          st->options[k].value = st->option_value_text[k];
+          st->options[k].enabled =
+              fifa96_menu_model_option_live(row) ||
+              row == FIFA96_MENU_OPTION_ROW_CONTROLS ||
+              row == FIFA96_MENU_OPTION_ROW_RESET;
+          int setting = fifa96_menu_model_option_setting(row);
+          st->options[k].slider_pct =
+              (setting >= 0 && fifa96_menu_model_option_slider(row))
+                  ? (int)fr->menu.settings.value[setting]
+                  : -1;
+        }
+      }
       break;
     default:
       break;
@@ -203,7 +268,9 @@ int fifa96_frontend_run_init(struct fifa96_frontend_run *fr, struct fifa96_surfa
 int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surface *s) {
   if (!fr || !s) return -1;
   fifa96_frontend_init(&fr->frontend);
-  fifa96_menu_model_init(&fr->menu);
+  /* P6: keep the Options settings across the post-match return (the native
+   * driver keeps the 0x149278 block); only the screen is re-seeded. */
+  fifa96_menu_model_reset(&fr->menu);
   fr->surface = s;
   fr->phase = fr->frontend.phase;
   fr->queue_len = 0;

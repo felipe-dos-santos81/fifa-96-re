@@ -25,6 +25,17 @@
 #define MENU_GS_LEFT_W 112
 #define MENU_GS_RIGHT_W 120
 
+/* P6 Options geometry: the native 640x480 column (x 0x85, width 0x1BC, first
+ * row y 0xB8, pitch 0x21, row height 14) divided by two, in the engine's
+ * 320x240 canvas like MENU_GS_* above. */
+#define MENU_OPT_X 66
+#define MENU_OPT_W 222
+#define MENU_OPT_TOP 92
+#define MENU_OPT_PITCH 16
+#define MENU_OPT_ROW_H 14
+#define MENU_OPT_HELP_TOP 28
+#define MENU_OPT_HELP_PITCH 14
+
 enum {
   MENU_IDX_BG = 1,
   MENU_IDX_PANEL = 2,
@@ -363,11 +374,70 @@ static void menu_draw_team_select(struct fifa96_surface *s, const struct fifa96_
 
 static void menu_draw_options(struct fifa96_surface *s, const struct fifa96_menu_state *st,
                               const struct menu_colors *c) {
-  menu_fill(s, menu_sx(s, 40), menu_sy(s, 84), menu_sx(s, 240), menu_sy(s, 92), 0);
-  menu_fill(s, menu_sx(s, 40), menu_sy(s, 84), menu_sx(s, 240), 1, c->dim);
   menu_text_shadow(s, st->font, st->title, menu_sx(s, 12), menu_sy(s, 8), c->main);
-  menu_text_shadow(s, st->font, st->message, menu_sx(s, 56), menu_sy(s, 128), c->main);
-  menu_text_shadow(s, st->font, st->footer, menu_sx(s, 56), menu_sy(s, 152), c->main);
+
+  if (st->option_page != FIFA96_MENU_OPTION_PAGE_LIST) {
+    /* Port addition: the Controls text block, plain HELV12. */
+    int x = menu_sx(s, MENU_OPT_X);
+    int y = menu_sy(s, MENU_OPT_HELP_TOP);
+    int pitch = menu_sy(s, MENU_OPT_HELP_PITCH);
+    for (int i = 0; i < st->help_count && i < FIFA96_MENU_OPTION_HELP_MAX; i++) {
+      menu_text_shadow(s, st->font, st->help[i], x, y + i * pitch,
+                       i == 0 ? c->sel_fill : c->main);
+    }
+    menu_text_shadow(s, st->font, st->footer, menu_sx(s, 8), menu_sy(s, 225), c->main);
+    return;
+  }
+
+  const int x = menu_sx(s, MENU_OPT_X);
+  const int w = menu_sx(s, MENU_OPT_W);
+  const int top = menu_sy(s, MENU_OPT_TOP);
+  const int pitch = menu_sy(s, MENU_OPT_PITCH);
+  const int row_h = menu_sy(s, MENU_OPT_ROW_H);
+  const int label_x = x + menu_sx(s, 6);
+  const int value_right = x + w - menu_sx(s, 6);
+
+  for (int k = 0; k < FIFA96_MENU_OPTION_VISIBLE; k++) {
+    int row = st->option_scroll + k;
+    if (row >= st->option_count) break;
+    int y = top + k * pitch;
+    int text_y = y + (row_h - 13) / 2;
+    int selected = row == st->option_selected;
+    uint8_t color = selected ? c->sel_text
+                             : (st->options[k].enabled ? c->main : c->dim);
+    if (selected) menu_fill(s, x, y, w, row_h, c->sel_fill);
+    if (st->options[k].label != NULL) {
+      if (selected)
+        menu_text(s, st->font, st->options[k].label, label_x, text_y, color);
+      else
+        menu_text_shadow(s, st->font, st->options[k].label, label_x, text_y, color);
+    }
+    if (st->options[k].value != NULL && st->options[k].value[0] != '\0') {
+      int vw = fifa96_font_text_width(st->font, st->options[k].value);
+      if (vw > value_right - label_x) vw = value_right - label_x;
+      int vx = value_right - vw;
+      if (vx < label_x) vx = label_x;
+      if (selected)
+        menu_text(s, st->font, st->options[k].value, vx, text_y, color);
+      else
+        menu_text_shadow(s, st->font, st->options[k].value, vx, text_y, color);
+    }
+  }
+
+  /* Scroll indicator: only when the 21-row list overflows the 8-row window. */
+  if (st->option_count > FIFA96_MENU_OPTION_VISIBLE) {
+    const int track_x = x + w + menu_sx(s, 4);
+    const int track_h = FIFA96_MENU_OPTION_VISIBLE * pitch - (pitch - row_h);
+    int thumb_h = track_h * FIFA96_MENU_OPTION_VISIBLE / st->option_count;
+    if (thumb_h < menu_sy(s, 8)) thumb_h = menu_sy(s, 8);
+    int span = st->option_count - FIFA96_MENU_OPTION_VISIBLE;
+    int thumb_y = top;
+    if (span > 0) thumb_y += (track_h - thumb_h) * st->option_scroll / span;
+    menu_fill(s, track_x, top, menu_sx(s, 2), track_h, c->dim);
+    menu_fill(s, track_x, thumb_y, menu_sx(s, 2), thumb_h, c->main);
+  }
+
+  menu_text_shadow(s, st->font, st->footer, menu_sx(s, 8), menu_sy(s, 225), c->main);
 }
 
 void fifa96_menu_art_draw(struct fifa96_surface *s, const struct fifa96_menu_state *st) {

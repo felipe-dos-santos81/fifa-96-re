@@ -9603,3 +9603,95 @@ branch, so a natural 1-0 FULL TIME awaits the FU-213/OL-85 native reading (or
 a "no extra time" option producer); the deterministic lifecycle test uses a
 tied 1-1 regulation end. **P6-L5** the live camera lead is the derived
 velocity*8/±0x120 stand-in, not a native lead producer.
+
+**P6 Task 3 — Options and controls (FU-344, 2026-11-05).** The Options screen
+is the native table now, not the P2 stand-in. A fresh `read_memory
+0x105340` (234 B) decodes the 26 records `{u32 label LANG id; u32 choice-LANG
+array; u8 max}` at 9-byte stride (`max` at `0x105348+9*i`); the 20-byte order
+at `0x10542A` is `0,18,1,17,2,19,3,4,6,7,21,9,10,11,12,13,14,15,16,66`.
+Choice arrays read first-hand: Off/On `0xD2/0xD7` (`0x1052CC`), language
+`0x1052B4` = `0x6F/59/7D/72/135/A5`, Player Names `0x105328` =
+`0xD2/0xC8/0xC9` (the retail `0xC9` "Netherlands" bug is shown honestly,
+P6-L5), Auto Replay `0x105334`, Game Type `0x1052D4`, Fouls `0x1052DC`,
+Pitch `0x1052E8`, Clock `0x1052FC`, half `0x105304` = `0x248..0x24E`, Skill
+`0x105320`. Slot 19 is descriptor 66, which is dead data (`FUN_0001D948(66)`
+reads `0x1F`), so the model stops at the 19 native rows and never selects it.
+
+`fifa96_menu_model` owns the `fifa96_settings` block seeded by
+`fifa96_settings_defaults` plus the new
+`fifa96_settings_descriptor_max()` (retail bytes
+`2,2,2,6,2,2,2,3,3,2,3,2,5,2,7,2,2,100,100,100,0,2,0,0,0,0`).
+`fifa96_settings_defaults` still leaves `max[]` zero (FU-49's pinned test).
+`fifa96_menu_model_reset` re-enters Game Select while preserving `settings`;
+`fifa96_frontend_run_reset` uses it, so values survive a match return (the
+native driver keeps the `0x149278` block). Rows 0..18 are the native order;
+rows 19/20 are **port additions**: a Controls page and Reset Defaults (there
+is no native row for either).
+
+**Live rows (v1).** Only six native rows reach a consumer: Sound Effects
+`0x01` (0 ⇒ audio percent 0), Fouls `0x0A` (`[0x14C306]`), Injuries `0x0B`
+(`[0x14C30A]`), Half Length `0x0E` (`[0x14C1D1]` + `[0x15881A/1C]`), Offside
+`0x10` (`[0x14C2F2]`) and SFX Volume `0x11` (slider step 5). Everything else
+is visible but dim/stored. Left/right changes a live row; Enter cycles
+(gamepad convenience; sliders step +5). The eight-row window uses the native
+geometry divided by two: x 66, width 222, first row y 92, pitch 16, row height
+14 (native `0x85/0x1BC/0xB8/0x21` in 640×480). The title is LANG `0xD8`; the
+selection bar uses `c->sel_fill`, dim rows `c->dim`, values are right-aligned
+and half length carries the port-added `min` suffix; a scrollbar appears for
+the 21-row list. Half index 7 (the native 8th table value `0`, `0x37170`) is
+displayed honestly as `0 min` even though it has no LANG choice.
+
+**Apply at match start.** Inside the existing
+`eng->frontend.team_selected` bridge block, after `begin`, the bridge runs
+`fifa96_settings_handoff(&eng->frontend.menu.settings, 0u, &cfg)` →
+`fifa96_match_run_set_config(mr, &cfg)`. The setter checks `mr->running`,
+copies the whole `fifa96_match_config` (so `field_4c306/30a/2f2` and the other
+cells land where the engine reads them) and calls
+`fifa96_match_run_set_period(mr, cfg.period_length, cfg.extra_length)`,
+mirroring `FUN_0003749C`. The half mapping is minutes → `*0x3C` /
+`*0x14`; default index 0 is 120/40 and is a no-op against `begin`'s FU-68
+default handoff. The call is gated by `team_selected`, so M1/M2 and every
+direct-begin fixture keep `begin`'s defaults.
+
+**Audio gain.** `fifa96_match_audio_start` takes `sfx_percent` (0..100, 100 =
+unity). The engine passes `settings.value[1] ? settings.value[0x11] : 0`.
+Crowd/whistle/goal base gains are scaled by percent: 100 keeps 0x60/0x7F,
+the default 91 gives crowd `0x60*91/100 = 0x57`, 50 gives 0x30 and 0 gives 0.
+Headless still never starts match audio (M2 asserts no `audio_submit`);
+Music/Speech Volume have no consumer (P6-L2).
+
+**Controls page.** A plain HELV12 block (port addition) with the real current
+bindings: arrows (move/menu), Enter (select/resume), X/Backspace (back/quit to
+menu), Esc (menu quit, match pause), Z kick, C pass, V long ball, D-pad move,
+South=A confirm, East=B back, West long ball; match kick/pass are **not**
+mapped on the pad (P6-L6), and the text says so.
+
+**Tests.** Descriptor count/order/max/labels/defaults and the dead slot;
+live-row cycling and slider step; half index 0→120/40, 6→2700/900, 7→0;
+`fifa96_frontend_run_reset` keeps the settings block; model navigation,
+Controls, Back and Reset Defaults; the bridge copies the config cells and
+periods only with `team_selected` (direct begin stays 120/40); audio crowd
+gain at 100/91/50/0 plus the whistle gain; Options art geometry and the
+fallback menu hash. `make check` green; M1 `09b726b7…` and M2 v29
+`7c3874f7…` byte-exact by `cmp`; census unchanged (78/78 bodies, 58/80
+natural, 64/80 install-live).
+
+**Windowed evidence (verification-only).** `DISPLAY=:1`
+`/tmp/opencode/play/p6-options.png` (default list), `p6-options-half.png`
+(Half Length 4 min) and `p6-controls.png`; `p6-options-half-return.png`
+proves the value survives back → Game Select → Options. No windowed 4-minute
+half was waited out; the deterministic bridge case proves 4 min → 240/80.
+
+**Legs (P6 Options; the labels repeat the goal-path register's numbering by
+the Task 3 brief — an append-only identifier collision, not a rewrite of the
+earlier section).** **P6-L1** `options.dat` persistence: the 104-byte block is
+decoded but v1 keeps settings in memory (a CWD write would break hermetic
+tests). **P6-L2** Music/Speech Volume: no non-UI consumer (A6-L4/L5 first).
+**P6-L3** Skill Level: `[0x14C326]` gates `FUN_0007B57C`; no engine caller
+yet. **P6-L4** Clock: `[0x14C302]` is read at `0x8AF63`; the port still
+hardcodes `clock_halt = 0` in its live timing. **P6-L5** retail data: slot 19
+= descriptor 66 (dead) and Player Names' third choice `0xC9` "Netherlands"
+should be `0x1C9` "Numbers". **P6-L6** gamepad match buttons: South/East do
+not reach `match_run_map_key`; only West (long ball) works. **P6-L7**
+Time Display / Player Names / Auto Replay / Super VGA remain stored-only and
+dim until consumers land.

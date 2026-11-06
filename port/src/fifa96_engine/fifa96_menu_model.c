@@ -1,4 +1,6 @@
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_team_data.h"
 
@@ -79,6 +81,127 @@ static int menu_item_at(int col, int row) {
   return -1;
 }
 
+/* P6: the choice LANG-id arrays from the descriptor records at 0x105340
+ * (read_memory 0x1052B4..0x105320). Off/On is {0xD2,0xD7}; the language list
+ * is {0x6F,0x59,0x7D,0x72,0x135,0xA5}; half length is 0x248..0x24E. */
+static const uint32_t option_off_on[] = {0xD2u, 0xD7u};
+static const uint32_t option_language[] = {0x6Fu, 0x59u, 0x7Du, 0x72u, 0x135u, 0xA5u};
+static const uint32_t option_names[] = {0xD2u, 0xC8u, 0xC9u};
+static const uint32_t option_replay[] = {0xD2u, 0xD7u, 0xF5u};
+static const uint32_t option_game_type[] = {0x09u, 0x11Au};
+static const uint32_t option_fouls[] = {0xD2u, 0xCDu, 0xD7u};
+static const uint32_t option_pitch[] = {0x181u, 0x69u, 0x51u, 0x67u, 0xF5u};
+static const uint32_t option_clock[] = {0x42u, 0xD9u};
+static const uint32_t option_half[] = {0x248u, 0x249u, 0x24Au, 0x24Bu,
+                                       0x24Cu, 0x24Du, 0x24Eu};
+static const uint32_t option_skill[] = {0x110u, 0xECu};
+
+static const char *const text_off_on[] = {"Off", "On"};
+static const char *const text_language[] = {"English", "German", "French",
+                                            "Spanish", "Swedish", "Italian"};
+/* Retail bug (P6-L5): the third choice is LANG 0xC9 "Netherlands", intended
+ * 0x1C9 "Numbers" (E3 in /tmp/opencode/play/P6-options.md). Shown honestly;
+ * the row is stored-only in this port. */
+static const char *const text_names[] = {"Off", "Name", "Netherlands"};
+static const char *const text_replay[] = {"Off", "On", "Random"};
+static const char *const text_game_type[] = {"Action", "Simulation"};
+static const char *const text_fouls[] = {"Off", "No Bookings", "On"};
+static const char *const text_pitch[] = {"Hot", "Dry", "Damp", "Drenched", "Random"};
+static const char *const text_clock[] = {"Continuous", "Out of Play"};
+static const char *const text_half[] = {"2", "4", "6", "8", "10", "20", "45"};
+static const char *const text_skill[] = {"Semi Pro", "Pro"};
+
+/* 0x105340: 26 x {u32 label; u32 choices; u8 max}, decoded field by field.
+ * `live` is the P6 port-consumer flag, not a native byte: only Sound Effects
+ * (0x01), Fouls (0x0A), Injuries (0x0B), Half Length (0x0E), Offside (0x10)
+ * and SFX Volume (0x11) reach a consumer in this slice. Everything else is
+ * visible but dim (stored, no consumer). */
+static const struct fifa96_menu_option_desc option_descriptors
+    [FIFA96_MENU_OPTION_DESC_COUNT] = {
+    {0x00u,   2u, 0u, 0u, 0x0C7u, "Music",            option_off_on,    text_off_on},
+    {0x01u,   2u, 0u, 1u, 0x113u, "Sound Effects",    option_off_on,    text_off_on},
+    {0x02u,   2u, 0u, 0u, 0x0DFu, "Play by Play",     option_off_on,    text_off_on},
+    {0x03u,   6u, 0u, 0u, 0x0AFu, "Language",         option_language,  text_language},
+    {0x04u,   2u, 0u, 0u, 0x131u, "Super VGA",        option_off_on,    text_off_on},
+    {0x05u,   2u, 0u, 0u, 0x131u, "Super VGA",        option_off_on,    text_off_on},
+    {0x06u,   2u, 0u, 0u, 0x142u, "Time Display",     option_off_on,    text_off_on},
+    {0x07u,   3u, 0u, 0u, 0x18Bu, "Player Names",     option_names,     text_names},
+    {0x08u,   3u, 0u, 0u, 0x018u, "Auto Replay",      option_replay,    text_replay},
+    {0x09u,   2u, 0u, 0u, 0x087u, "Game Type",        option_game_type, text_game_type},
+    {0x0Au,   3u, 0u, 1u, 0x07Cu, "Fouls",            option_fouls,     text_fouls},
+    {0x0Bu,   2u, 0u, 1u, 0x09Fu, "Injuries",         option_off_on,    text_off_on},
+    {0x0Cu,   5u, 0u, 0u, 0x0DDu, "Pitch Condition",  option_pitch,     text_pitch},
+    {0x0Du,   2u, 0u, 0u, 0x036u, "Clock",            option_clock,     text_clock},
+    {0x0Eu,   7u, 0u, 1u, 0x093u, "Half Length",      option_half,      text_half},
+    {0x0Fu,   2u, 0u, 0u, 0x11Du, "Skill Level",      option_skill,     text_skill},
+    {0x10u,   2u, 0u, 1u, 0x0D5u, "Offside",          option_off_on,    text_off_on},
+    {0x11u, 100u, 1u, 1u, 0x191u, "SFX Volume",       NULL,             NULL},
+    {0x12u, 100u, 1u, 0u, 0x184u, "Music Volume",     NULL,             NULL},
+    {0x13u, 100u, 1u, 0u, 0x185u, "Speech Volume",    NULL,             NULL},
+    {0x14u,   0u, 0u, 0u, 0u,     NULL,               NULL,             NULL},
+    {0x15u,   2u, 0u, 0u, 0x21Bu, "4-Button Joypad",  option_off_on,    text_off_on},
+    {0x16u,   0u, 0u, 0u, 0u,     NULL,               NULL,             NULL},
+    {0x17u,   0u, 0u, 0u, 0u,     NULL,               NULL,             NULL},
+    {0x18u,   0u, 0u, 0u, 0u,     NULL,               NULL,             NULL},
+    {0x19u,   0u, 0u, 0u, 0u,     NULL,               NULL,             NULL},
+};
+
+/* 0x10542A, 20 bytes. Index 19 is descriptor 66 (dead); the model's native
+ * rows stop at index 18, matching the screen's last slot 0x13 clamp. */
+static const uint8_t option_order[FIFA96_MENU_OPTION_ORDER_COUNT] = {
+    0u, 18u, 1u, 17u, 2u, 19u, 3u, 4u, 6u, 7u,
+    21u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u, 66u};
+
+/* Port addition: the Controls page. These are the real current mappings
+ * (platform_sdl3.c map_scancode/map_button, fifa96_match_run.c input bits);
+ * match kick/pass are NOT mapped on the gamepad (P6-L6), so the last line
+ * says so instead of claiming a binding. */
+static const char *const option_controls_text[] = {
+    "CONTROLS",
+    "ARROWS       MOVE PLAYER / MENU",
+    "ENTER        SELECT / RESUME",
+    "X/BACKSPACE  BACK / QUIT TO MENU",
+    "ESC          MENU: QUIT TO DOS",
+    "             MATCH: PAUSE",
+    "Z            KICK",
+    "C            PASS",
+    "V            LONG BALL",
+    "PAD DPAD     MOVE",
+    "PAD A/SOUTH  CONFIRM",
+    "PAD B/EAST   BACK",
+    "PAD WEST     LONG BALL",
+    "PAD KICK/PASS NOT MAPPED",
+};
+
+static void menu_model_settings_defaults(struct fifa96_menu_model *model) {
+  fifa96_settings_defaults(&model->settings);
+  const int32_t *max = fifa96_settings_descriptor_max();
+  for (uint32_t i = 0; i < FIFA96_SETTINGS_COUNT; i++)
+    model->settings.max[i] = max[i];
+}
+
+static void menu_model_reset_screen(struct fifa96_menu_model *model) {
+  model->screen = FIFA96_MENU_SCREEN_GAME_SELECT;
+  model->item = 0;          /* Friendly, right column row 0 */
+  /* A3 §2.1: the native entry defaults are team cells 0 and 4. */
+  model->team[0] = 0;       /* Brazil */
+  model->team[1] = 4;       /* Germany */
+  model->team_col = 0;
+  model->option_row = 0;
+  model->option_scroll = 0;
+  model->option_page = FIFA96_MENU_OPTION_PAGE_LIST;
+}
+
+static void menu_model_option_scroll(struct fifa96_menu_model *model) {
+  if (model->option_row < model->option_scroll)
+    model->option_scroll = model->option_row;
+  if (model->option_row >= model->option_scroll + FIFA96_MENU_OPTION_VISIBLE)
+    model->option_scroll = model->option_row - FIFA96_MENU_OPTION_VISIBLE + 1;
+  const int max_scroll = FIFA96_MENU_OPTION_ROW_COUNT - FIFA96_MENU_OPTION_VISIBLE;
+  if (model->option_scroll > max_scroll) model->option_scroll = max_scroll;
+  if (model->option_scroll < 0) model->option_scroll = 0;
+}
+
 static int menu_col_rows(int col) {
   int rows = 0;
   for (int i = 0; i < FIFA96_MENU_ITEM_COUNT; i++) {
@@ -89,12 +212,15 @@ static int menu_col_rows(int col) {
 
 void fifa96_menu_model_init(struct fifa96_menu_model *model) {
   if (model == NULL) return;
-  model->screen = FIFA96_MENU_SCREEN_GAME_SELECT;
-  model->item = 0;          /* Friendly, right column row 0 */
-  /* A3 §2.1: the native entry defaults are team cells 0 and 4. */
-  model->team[0] = 0;       /* Brazil */
-  model->team[1] = 4;       /* Germany */
-  model->team_col = 0;
+  menu_model_settings_defaults(model);
+  menu_model_reset_screen(model);
+}
+
+void fifa96_menu_model_reset(struct fifa96_menu_model *model) {
+  if (model == NULL) return;
+  /* Keep `settings`: the native options block survives a match return (the
+   * front-end reset path); only an explicit cancel would restore a backup. */
+  menu_model_reset_screen(model);
 }
 
 int fifa96_menu_model_nav(struct fifa96_menu_model *model, int32_t code) {
@@ -125,8 +251,24 @@ int fifa96_menu_model_nav(struct fifa96_menu_model *model, int32_t code) {
         model->team_col ^= 1;
       }
       return 1;
-    case FIFA96_MENU_SCREEN_OPTIONS:
-      return 1;   /* no rows; the caller still redraws */
+    case FIFA96_MENU_SCREEN_OPTIONS: {
+      if (model->option_page != FIFA96_MENU_OPTION_PAGE_LIST)
+        return 1;   /* Controls: no selectable rows; the caller redraws */
+      if (code == 0) {
+        if (model->option_row > 0) model->option_row--;
+      } else if (code == 1) {
+        if (model->option_row < FIFA96_MENU_OPTION_ROW_COUNT - 1) model->option_row++;
+      } else {
+        int setting = fifa96_menu_model_option_setting(model->option_row);
+        if (setting >= 0 && option_descriptors[setting].live) {
+          /* FUN_0001DA58: horizontal -1 = decrement, -2 = step/increment. */
+          (void)fifa96_settings_set(&model->settings, (uint32_t)setting,
+                                    code == 2 ? -1 : -2);
+        }
+      }
+      menu_model_option_scroll(model);
+      return 1;
+    }
     default:
       return 0;
   }
@@ -144,15 +286,36 @@ enum fifa96_menu_action fifa96_menu_model_activate(struct fifa96_menu_model *mod
       }
       if (action == FIFA96_MENU_ACTION_OPTIONS) {
         model->screen = FIFA96_MENU_SCREEN_OPTIONS;
+        model->option_row = 0;
+        model->option_scroll = 0;
+        model->option_page = FIFA96_MENU_OPTION_PAGE_LIST;
         return FIFA96_MENU_ACTION_NONE;
       }
       return action;   /* QUIT is live; the six disabled items are NONE */
     }
     case FIFA96_MENU_SCREEN_TEAM_SELECT:
       return FIFA96_MENU_ACTION_START_MATCH;
-    case FIFA96_MENU_SCREEN_OPTIONS:
-      model->screen = FIFA96_MENU_SCREEN_GAME_SELECT;
+    case FIFA96_MENU_SCREEN_OPTIONS: {
+      if (model->option_page != FIFA96_MENU_OPTION_PAGE_LIST) {
+        model->option_page = FIFA96_MENU_OPTION_PAGE_LIST;
+        return FIFA96_MENU_ACTION_NONE;
+      }
+      if (model->option_row == FIFA96_MENU_OPTION_ROW_CONTROLS) {
+        model->option_page = FIFA96_MENU_OPTION_PAGE_CONTROLS;
+        return FIFA96_MENU_ACTION_NONE;
+      }
+      if (model->option_row == FIFA96_MENU_OPTION_ROW_RESET) {
+        /* Port action: re-seed the retail defaults + descriptor max. */
+        menu_model_settings_defaults(model);
+        return FIFA96_MENU_ACTION_NONE;
+      }
+      int setting = fifa96_menu_model_option_setting(model->option_row);
+      if (setting >= 0 && option_descriptors[setting].live) {
+        /* Gamepad convenience: Enter cycles the row (sliders step +5). */
+        (void)fifa96_settings_set(&model->settings, (uint32_t)setting, -2);
+      }
       return FIFA96_MENU_ACTION_NONE;
+    }
     default:
       return FIFA96_MENU_ACTION_NONE;
   }
@@ -160,6 +323,11 @@ enum fifa96_menu_action fifa96_menu_model_activate(struct fifa96_menu_model *mod
 
 int fifa96_menu_model_back(struct fifa96_menu_model *model) {
   if (model == NULL) return 0;
+  if (model->screen == FIFA96_MENU_SCREEN_OPTIONS &&
+      model->option_page != FIFA96_MENU_OPTION_PAGE_LIST) {
+    model->option_page = FIFA96_MENU_OPTION_PAGE_LIST;
+    return 1;
+  }
   if (model->screen == FIFA96_MENU_SCREEN_GAME_SELECT ||
       model->screen == FIFA96_MENU_SCREEN_LIBRARY)
     return 0;
@@ -197,4 +365,115 @@ const char *fifa96_menu_team_code(int index) {
 int fifa96_menu_team_pccd_index(int index) {
   if (index < 0 || index >= FIFA96_MENU_TEAM_COUNT) return -1;
   return fifa96_team_data_lang_index(menu_teams[index].lang_id);
+}
+
+/* ------------------------------------------------------------------------ *
+ * P6 Options metadata and row helpers.
+ * ------------------------------------------------------------------------ */
+
+const struct fifa96_menu_option_desc *fifa96_menu_option_descriptors(void) {
+  return option_descriptors;
+}
+
+int fifa96_menu_option_descriptor_count(void) {
+  return FIFA96_MENU_OPTION_DESC_COUNT;
+}
+
+const uint8_t *fifa96_menu_option_order(void) {
+  return option_order;
+}
+
+const struct fifa96_menu_option_desc *fifa96_menu_option_descriptor(int setting) {
+  if (setting < 0 || setting >= FIFA96_MENU_OPTION_DESC_COUNT) return NULL;
+  return &option_descriptors[setting];
+}
+
+uint32_t fifa96_menu_option_choice_id(int setting, int32_t value) {
+  const struct fifa96_menu_option_desc *d = fifa96_menu_option_descriptor(setting);
+  if (d == NULL || d->is_slider || d->choices == NULL) return 0;
+  /* Half length's descriptor max is 7, but the apply table 0x37170 has eight
+   * entries; index 7 (0 minutes) has no LANG choice string. */
+  if (setting == 0x0E) {
+    if (value < 0 || value >= 7) return 0;
+    return d->choices[value];
+  }
+  if (value < 0 || value >= d->max) return 0;
+  return d->choices[value];
+}
+
+const char *fifa96_menu_option_choice_text(int setting, int32_t value) {
+  const struct fifa96_menu_option_desc *d = fifa96_menu_option_descriptor(setting);
+  if (d == NULL || d->is_slider || d->choice_text == NULL) return NULL;
+  if (setting == 0x0E) {
+    if (value < 0 || value >= (int32_t)FIFA96_MATCH_CONFIG_HALF_LENGTH_COUNT) return NULL;
+    if (value == 7) return "0";   /* native 8th minute value, shown honestly */
+    return d->choice_text[value];
+  }
+  if (value < 0 || value >= d->max) return NULL;
+  return d->choice_text[value];
+}
+
+int fifa96_menu_model_option_rows(void) {
+  return FIFA96_MENU_OPTION_ROW_COUNT;
+}
+
+int fifa96_menu_model_option_setting(int row) {
+  if (row < 0 || row >= FIFA96_MENU_OPTION_NATIVE_ROWS) return -1;
+  return (int)option_order[row];
+}
+
+const char *fifa96_menu_model_option_label(int row) {
+  if (row == FIFA96_MENU_OPTION_ROW_CONTROLS) return "Controls";
+  if (row == FIFA96_MENU_OPTION_ROW_RESET) return "Reset Defaults";
+  int setting = fifa96_menu_model_option_setting(row);
+  if (setting < 0) return NULL;
+  return option_descriptors[setting].label;
+}
+
+uint32_t fifa96_menu_model_option_label_id(int row) {
+  int setting = fifa96_menu_model_option_setting(row);
+  if (setting < 0) return 0;
+  return option_descriptors[setting].label_id;
+}
+
+int fifa96_menu_model_option_live(int row) {
+  int setting = fifa96_menu_model_option_setting(row);
+  if (setting < 0) return 0;
+  return option_descriptors[setting].live != 0;
+}
+
+int fifa96_menu_model_option_slider(int row) {
+  int setting = fifa96_menu_model_option_setting(row);
+  if (setting < 0) return 0;
+  return option_descriptors[setting].is_slider != 0;
+}
+
+int fifa96_menu_model_option_value(const struct fifa96_menu_model *model,
+                                   int row, char *buf, size_t cap) {
+  if (model == NULL || buf == NULL || cap == 0) return 0;
+  buf[0] = '\0';
+  int setting = fifa96_menu_model_option_setting(row);
+  if (setting < 0) return 0;
+  const struct fifa96_menu_option_desc *d = &option_descriptors[setting];
+  int32_t value = model->settings.value[setting];
+  if (d->is_slider) {
+    snprintf(buf, cap, "%d", (int)value);
+    return 1;
+  }
+  if (setting == 0x0E) {
+    if (value >= 0 && value < (int32_t)FIFA96_MATCH_CONFIG_HALF_LENGTH_COUNT) {
+      snprintf(buf, cap, "%d min", (int)fifa96_match_config_half_lengths[value]);
+      return 1;
+    }
+    snprintf(buf, cap, "?");
+    return 1;
+  }
+  const char *text = fifa96_menu_option_choice_text(setting, value);
+  snprintf(buf, cap, "%s", text != NULL ? text : "?");
+  return 1;
+}
+
+const char *const *fifa96_menu_model_controls_text(size_t *count) {
+  if (count != NULL) *count = sizeof option_controls_text / sizeof option_controls_text[0];
+  return option_controls_text;
 }

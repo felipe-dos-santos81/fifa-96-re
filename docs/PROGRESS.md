@@ -3986,3 +3986,32 @@ close-out below).
   FU-310 camera place/focus + camera director, P6-L2 goal caption/replay
   (absent natively in an ordinary match), P6-L3 half-time caption, P6-L4 the
   1-0 extra-time detour, P6-L5 derived camera lead.
+
+- **P6 options and controls (FU-344, 2026-11-05).** The Options entry is a
+  real screen. The native 26-descriptor table (`0x105340`, max at
+  `0x105348+9*i`), the 20-slot order (`0x10542A`) and every choice LANG id
+  were read first-hand from `/FIFA96.EXE`; the model owns the `0x149278`
+  settings block seeded by `fifa96_settings_defaults` plus the retail max
+  bytes, and `fifa96_frontend_run_reset` now preserves it across a match
+  return. Six rows are live (Sound Effects, Fouls, Injuries, Half Length,
+  Offside, SFX Volume); the remaining native rows are visible but dim. The
+  screen uses the native 640×480 geometry divided by two (x 66, width 222,
+  first row 92, pitch 16, row height 14), right-aligned values, a scrollbar
+  and a footer; the Controls page and Reset Defaults row are labelled port
+  additions. The bridge applies `fifa96_settings_handoff` +
+  `fifa96_match_run_set_config` only inside the Team Select handoff, so the
+  configured half (minutes → `*0x3C`/`*0x14`) and the Fouls/Injuries/Offside
+  cells reach the live run while M1/M2 and direct-begin fixtures stay on
+  begin's 120/40 defaults. Match audio now scales the crowd/whistle/goal base
+  gains by SFX Volume gated by Sound Effects (default 91 → crowd 0x57;
+  headless stays silent). Tests cover descriptors/order/defaults, live-row
+  cycling and slider steps, the half mappings (0/6/7), settings surviving
+  reset, navigation/Controls/Back, the bridge apply path and audio gains at
+  100/91/50/0. `make check` 118/118; M1 `09b726b7…` and M2 v29 `7c3874f7…`
+  exact by `cmp`; census unchanged (78/78 bodies, 58/80 natural, 64/80
+  install-live). Windowed `DISPLAY=:1`:
+  `/tmp/opencode/play/p6-options.png`, `p6-options-half.png` (4 min),
+  `p6-controls.png`, `p6-options-half-return.png` (value survives back).
+  Legs: P6-L1 `options.dat`, P6-L2 music/speech volume, P6-L3 skill, P6-L4
+  clock, P6-L5 retail dead row/Player Names data, P6-L6 gamepad match
+  buttons, P6-L7 other stored-only rows (details in `port/ENGINE.md`).

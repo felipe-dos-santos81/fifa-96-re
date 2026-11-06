@@ -1426,6 +1426,14 @@ void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *
 int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_seconds,
                                 uint16_t extra_seconds);
 
+/* P6: apply a fully formed settings block (FUN_0003749C's shape) to a live
+ * run: copy every `fifa96_match_config` cell and install the configured
+ * period lengths. The bridge calls it after begin inside the Team Select
+ * handoff, so direct-begin fixtures keep begin's default 120/40 handoff.
+ * Returns 0, -FIFA96_ERR_INVALID (NULL) or -FIFA96_ERR_STATE (not running). */
+int fifa96_match_run_set_config(struct fifa96_match_run *mr,
+                                const struct fifa96_match_config *config);
+
 /* FU-343 (P4): the live pause toggle. Saving through the native pace hold
  * (A5 §3.2: no granted frames -> the frame body and clock stop); the panel is
  * the engine stand-in for the unported mode-7 screen (leg P4-L1). Live-only:

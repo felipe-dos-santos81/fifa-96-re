@@ -293,6 +293,60 @@ static void test_native_art_uses_mod2(void) {
   fifa96_asset_unmount(t);
 }
 
+/* P6: the Options screen uses the native 8-row window geometry (x 66, width
+ * 222, first row 92, pitch 16, row height 14 in 320x240) and draws a distinct
+ * frame per selected row/value and for the Controls page. The library hash
+ * above stays untouched. */
+static void test_options_screen_draw(void) {
+  struct fifa96_surface *s = fifa96_surface_create(320, 240);
+  assert(s != NULL);
+  assert(fifa96_menu_art_init(NULL) == 0);
+
+  struct fifa96_menu_state st = {0};
+  st.screen = FIFA96_MENU_SCREEN_OPTIONS;
+  st.title = "Options";
+  st.footer = "Arrows: change  Enter: select  X: back";
+  st.option_count = 21;
+  st.option_selected = 0;
+  st.option_scroll = 0;
+  st.option_page = FIFA96_MENU_OPTION_PAGE_LIST;
+  for (int k = 0; k < FIFA96_MENU_OPTION_VISIBLE; k++) {
+    st.options[k].label = "Row";
+    st.options[k].value = "On";
+    st.options[k].enabled = k == 1;
+    st.options[k].slider_pct = -1;
+  }
+
+  fifa96_surface_clear(s, 0);
+  fifa96_menu_art_draw(s, &st);
+  uint64_t row0 = fifa96_surface_hash(s);
+  /* Fallback palette: sel_fill index 6. The bar covers the full row width and
+   * the 14-pixel row height at the measured top. */
+  assert(s->indexed[92 * 320 + 66] == 6);
+  assert(s->indexed[92 * 320 + 66 + 222 - 1] == 6);
+  assert(s->indexed[(92 + 13) * 320 + 66] == 6);
+
+  st.option_selected = 1;
+  fifa96_surface_clear(s, 0);
+  fifa96_menu_art_draw(s, &st);
+  uint64_t row1 = fifa96_surface_hash(s);
+  assert(row1 != row0);
+  assert(s->indexed[92 * 320 + 66] != 6);
+
+  /* The Controls page is a separate frame from the list (the selection bar is
+   * gone). Text rendering itself is font-dependent and covered by the front-end
+   * state test; this art case pins the geometry/layout branches. */
+  st.option_page = FIFA96_MENU_OPTION_PAGE_CONTROLS;
+  st.help_count = 2;
+  st.help[0] = "CONTROLS";
+  st.help[1] = "Z KICK";
+  fifa96_surface_clear(s, 0);
+  fifa96_menu_art_draw(s, &st);
+  assert(fifa96_surface_hash(s) != row1);
+
+  fifa96_surface_destroy(s);
+}
+
 int main(void) {
   test_fallback_hash();
   test_fallback_deterministic();
@@ -303,6 +357,7 @@ int main(void) {
   test_zero_length_options_inv();
   test_engine_boot_uses_asset_table();
   test_native_art_uses_mod2();
+  test_options_screen_draw();
   puts("test_engine_menu_art OK");
   return 0;
 }

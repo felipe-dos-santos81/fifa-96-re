@@ -33,7 +33,22 @@ struct fifa96_menu_state {
   int team_rows;
   int team_selected_row[2];     /* visible row, -1 when off-window */
   int team_col;
-  const char *message;          /* Options stand-in body */
+  /* P6 Options (P6-options §3): the draw-ready snapshot of the native 8-row
+   * window, the Controls page text block, and the value storage the front-end
+   * formats into. `slider_pct` is -1 for non-sliders. */
+  struct {
+    const char *label;
+    const char *value;
+    int enabled;
+    int slider_pct;
+  } options[FIFA96_MENU_OPTION_VISIBLE];
+  char option_value_text[FIFA96_MENU_OPTION_VISIBLE][40];
+  int option_count;             /* total model rows (21) */
+  int option_selected;          /* absolute row index */
+  int option_scroll;            /* first visible row */
+  int option_page;              /* 0 list, 1 Controls */
+  const char *help[FIFA96_MENU_OPTION_HELP_MAX];
+  int help_count;
 };
 
 /* Legacy loader: tries OPTIONS.INV only (the FU-135 placeholder path; the

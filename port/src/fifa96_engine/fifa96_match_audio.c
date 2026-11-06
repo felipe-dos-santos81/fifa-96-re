@@ -34,17 +34,27 @@ static int match_audio_parse_crowd(struct fifa96_match_audio *a,
   return 1;
 }
 
+/* P6: the Options SFX Volume scales the native component base gains; 100 is
+ * unity and the engine's default 91 yields crowd 0x60*91/100 = 0x57. */
+static uint8_t match_audio_scale_volume(uint8_t base, uint32_t percent) {
+  if (percent > FIFA96_MATCH_AUDIO_PERCENT_UNITY)
+    percent = FIFA96_MATCH_AUDIO_PERCENT_UNITY;
+  return (uint8_t)((uint32_t)base * percent / FIFA96_MATCH_AUDIO_PERCENT_UNITY);
+}
+
 /* Arm the CHN loop. A6-L3 records both choices: CHN_GEN1 is the generic bank
  * because the engine has no team identity (the native FUN_000652f0 selector
  * is unresolved, FU-43 §6 leg 1), and 0x60 is the plan's fixed crowd gain
- * (A6-L6 replaces it with the [0x55D00..] channel model). The CHN EACS +0x14
- * loop length makes fifa96_mixer_start arm the loop (FU-43 §2). */
+ * scaled by the Options SFX volume (A6-L6's channel model stays a leg). The
+ * CHN EACS +0x14 loop length makes fifa96_mixer_start arm the loop (FU-43
+ * §2). */
 static void match_audio_arm_crowd(struct fifa96_match_audio *a) {
   struct fifa96_sfx_opts opts;
   struct fifa96_sfx_voice out[2];
   memset(&opts, 0, sizeof opts);
   opts.pan = -1;
-  opts.volume = FIFA96_MATCH_AUDIO_CROWD_VOLUME;
+  opts.volume = match_audio_scale_volume(FIFA96_MATCH_AUDIO_CROWD_VOLUME,
+                                         a->sfx_percent);
   opts.master = FIFA96_MATCH_AUDIO_MASTER;
   memset(out, 0, sizeof out);
   int rc = fifa96_sfx_arm_alloc(&a->mixer, &a->crowd,
@@ -55,13 +65,17 @@ static void match_audio_arm_crowd(struct fifa96_match_audio *a) {
 int fifa96_match_audio_start(struct fifa96_match_audio *a,
                              struct fifa96_match_run *mr,
                              const uint8_t *sfx, size_t sfx_len,
-                             const uint8_t *crowd, size_t crowd_len) {
+                             const uint8_t *crowd, size_t crowd_len,
+                             uint32_t sfx_percent) {
   if (!a) return -(int)FIFA96_ERR_INVALID;
   memset(a, 0, sizeof *a);
   fifa96_mixer_init(&a->mixer);
   a->crowd_voice = -1;
   a->last_whistle_voice = -1;
   a->active = 1;
+  a->sfx_percent = sfx_percent > FIFA96_MATCH_AUDIO_PERCENT_UNITY
+                       ? FIFA96_MATCH_AUDIO_PERCENT_UNITY
+                       : sfx_percent;
   /* Seed the observation edges from the live run so a value left over from a
    * previous match cannot fire a spurious cue at kickoff. */
   a->last_whistle = mr ? mr->ref_whistle : 0u;
@@ -77,7 +91,8 @@ static void match_audio_play_whistle(struct fifa96_match_audio *a) {
   struct fifa96_sfx_voice out[2];
   memset(&opts, 0, sizeof opts);
   opts.pan = -1;
-  opts.volume = FIFA96_MATCH_AUDIO_CUE_VOLUME;
+  opts.volume = match_audio_scale_volume(FIFA96_MATCH_AUDIO_CUE_VOLUME,
+                                         a->sfx_percent);
   opts.master = FIFA96_MATCH_AUDIO_MASTER;
   memset(out, 0, sizeof out);
   if (fifa96_sfx_play_id(&a->mixer, &a->ids, FIFA96_MATCH_AUDIO_WHISTLE_ID,
@@ -95,7 +110,8 @@ static void match_audio_play_goal(struct fifa96_match_audio *a) {
   struct fifa96_sfx_opts opts;
   memset(&opts, 0, sizeof opts);
   opts.pan = -1;
-  opts.volume = FIFA96_MATCH_AUDIO_CROWD_VOLUME;
+  opts.volume = match_audio_scale_volume(FIFA96_MATCH_AUDIO_CROWD_VOLUME,
+                                         a->sfx_percent);
   opts.master = FIFA96_MATCH_AUDIO_MASTER;
   if (fifa96_sfx_play_id(&a->mixer, &a->ids, FIFA96_MATCH_AUDIO_GOAL_ID,
                          &opts, NULL) >= 0)

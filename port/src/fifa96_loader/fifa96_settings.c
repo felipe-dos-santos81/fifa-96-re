@@ -29,6 +29,17 @@ void fifa96_settings_defaults(struct fifa96_settings *settings) {
   settings->value[0x13] = 0x62;
 }
 
+/* P6: the 26 descriptor max bytes at 0x105348+9*i (read_memory 0x105340,
+ * 234 B: every ninth byte). The menu model copies this over `settings.max`;
+ * `fifa96_settings_defaults` stays max-free for FU-49 compatibility. */
+static const int32_t settings_descriptor_max[FIFA96_SETTINGS_COUNT] = {
+    2, 2, 2, 6, 2, 2, 2, 3, 3, 2, 3, 2, 5,
+    2, 7, 2, 2, 100, 100, 100, 0, 2, 0, 0, 0, 0};
+
+const int32_t *fifa96_settings_descriptor_max(void) {
+  return settings_descriptor_max;
+}
+
 int fifa96_settings_set(struct fifa96_settings *settings, uint32_t setting,
                         int32_t value) {
   if (!settings_valid(settings, setting)) return -(int)FIFA96_ERR_TRUNCATED;

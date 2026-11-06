@@ -195,6 +195,12 @@ static void test_run_reset_after_match(void) {
   fr.frames = 42;
   fr.key_down[FIFA96_ENGINE_KEY_CONFIRM] = 1;
   fr.input_armed = 1;
+  /* P6: the Options block must survive the post-match re-entry. */
+  fr.menu.settings.value[0x0E] = 4;
+  fr.menu.settings.value[0x0A] = 0;
+  fr.menu.settings.value[0x11] = 55;
+  fr.menu.option_row = 16;
+  fr.menu.option_scroll = 9;
   const struct fifa96_lang lang_before = fr.lang;
 
   assert(fifa96_frontend_run_reset(&fr, s) == 0);
@@ -209,6 +215,12 @@ static void test_run_reset_after_match(void) {
   for (size_t i = 0; i < sizeof fr.key_down; i++) assert(fr.key_down[i] == 0);
   assert(fr.phase == FIFA96_FRONTEND_PHASE_FRONTEND);
   assert(fr.entry_state == 17);
+  assert(fr.menu.settings.value[0x0E] == 4);
+  assert(fr.menu.settings.value[0x0A] == 0);
+  assert(fr.menu.settings.value[0x11] == 55);
+  assert(fr.menu.settings.max[0x0E] == 7);
+  assert(fr.menu.option_row == 0 && fr.menu.option_scroll == 0);
+  assert(fr.menu.option_page == FIFA96_MENU_OPTION_PAGE_LIST);
   assert(fr.lang.lang_owner == lang_before.lang_owner &&
          fr.lang.font_owner == lang_before.font_owner);
   assert(fifa96_frontend_run_reset(NULL, s) == -1);

@@ -41,6 +41,13 @@ void fifa96_settings_init(struct fifa96_settings *settings);
 
 void fifa96_settings_defaults(struct fifa96_settings *settings);
 
+/* P6: the retail descriptor max bytes at 0x105348+9*i (i = 0..25):
+ * 2,2,2,6,2,2,2,3,3,2,3,2,5,2,7,2,2,100,100,100,0,2,0,0,0,0.
+ * `fifa96_settings_defaults` deliberately leaves max[] zero (FU-49's pinned
+ * behaviour); callers that drive `fifa96_settings_set` copy this table into
+ * `settings.max` themselves. The pointer is static and never NULL. */
+const int32_t *fifa96_settings_descriptor_max(void);
+
 int fifa96_settings_set(struct fifa96_settings *settings, uint32_t setting,
                         int32_t value);
 

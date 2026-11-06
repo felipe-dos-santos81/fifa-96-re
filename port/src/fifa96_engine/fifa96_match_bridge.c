@@ -55,6 +55,17 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
    * team-block name triple (FUN_00011BEC, P2-L4: the roster id is carried but
    * has no consumer yet). Both run after begin, when the run is live. */
   if (eng->frontend.team_selected) {
+    /* P6: apply the Options block at match start (FUN_0003749C's shape).
+     * begin installed the FU-68 default handoff above, so this replaces it
+     * with the user's cells and the configured half length. Gated on
+     * `team_selected`; the M1/M2 tapes and every direct-begin fixture never
+     * run it and keep begin's 120/40 defaults. With defaults the copy and
+     * set_period are a no-op (same cells, same lengths). */
+    struct fifa96_match_config config;
+    int config_rc = fifa96_settings_handoff(&eng->frontend.menu.settings, 0u, &config);
+    if (config_rc != 0) return config_rc;
+    rc = fifa96_match_run_set_config(mr, &config);
+    if (rc != 0) return rc;
     for (uint32_t side = 0; side < 2; side++) {
       (void)fifa96_match_run_set_formation(mr, side, eng->frontend.formation[side]);
       memset(mr->render.hud_name[side], 0, sizeof mr->render.hud_name[side]);

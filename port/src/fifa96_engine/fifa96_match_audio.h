@@ -41,7 +41,9 @@
  *  - A6-L4: CRD music (raw 8-bit mono, no mixer format).
  *  - A6-L5: commentary (PHR_* phrase banks, ref_speech unimplemented).
  *  - A6-L6: channel/master volume model ([0x55D00..], [0x15FD6], settings
- *    0x11/0x12/0x13); v1 uses the fixed gains below.
+ *    0x11/0x12/0x13); P6 scales the two component base gains by the Options
+ *    SFX Volume (0x11) gated by Sound Effects (0x01). Music/Speech Volume
+ *    still have no consumer (P6-L2).
  *  - A6-L8: intro video companion audio (`fifa96_intro.c` discards the
  *    `1SNh`/`1SNd` chunks, FU-35 §1); this match slice does not touch the
  *    intro, so it is out of scope here.
@@ -57,6 +59,7 @@
 #define FIFA96_MATCH_AUDIO_CROWD_VOLUME 0x60u
 #define FIFA96_MATCH_AUDIO_CUE_VOLUME 0x7Fu
 #define FIFA96_MATCH_AUDIO_MASTER 0x7Fu
+#define FIFA96_MATCH_AUDIO_PERCENT_UNITY 100u
 /* Bound on the whistle writes consumed per audio step. A frame body stages at
  * most a couple of 0x1E writes; the cap keeps a re-based/garbage counter from
  * turning one step into an unbounded cue burst. */
@@ -78,6 +81,7 @@ struct fifa96_match_audio {
   int have_sfx;              /* SFX_GAME parsed */
   int have_crowd;            /* CHN_GEN1 parsed */
   int active;                /* start ran; step may still be asset-disabled */
+  uint32_t sfx_percent;      /* P6 SFX volume x Sound Effects, 0..100 */
   int last_whistle_voice;    /* voice of the most recent whistle, -1 if none */
   uint8_t last_whistle_gain; /* mixer gain byte of that whistle (0..0x7F) */
   uint32_t whistle_cues;
@@ -88,11 +92,14 @@ struct fifa96_match_audio {
 /* Parse both banks, fill the id table, arm the CHN 55 crowd loop and seed the
  * cue edges from the run. A NULL/short/unparsable bank disables that half; the
  * call still succeeds with `active = 1` (the engine's soft-failure policy, the
- * same one used for match art staging). */
+ * same one used for match art staging). `sfx_percent` is the Options SFX
+ * Volume (0..100, 100 = unity) gated by Sound Effects; every base gain below
+ * is scaled by it, so 91 gives the default crowd gain 0x57 (not 0x60). */
 int fifa96_match_audio_start(struct fifa96_match_audio *a,
                              struct fifa96_match_run *mr,
                              const uint8_t *sfx, size_t sfx_len,
-                             const uint8_t *crowd, size_t crowd_len);
+                             const uint8_t *crowd, size_t crowd_len,
+                             uint32_t sfx_percent);
 
 /* One engine step. `ticks` is the PIT ticks the clock advanced (0 is legal:
  * cue edges are still consumed, no PCM is submitted). Plays one whistle cue

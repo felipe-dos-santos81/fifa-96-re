@@ -3074,6 +3074,19 @@ int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_sec
   return 0;
 }
 
+/* P6: the FUN_0003749C apply shape for a live run. The caller has already
+ * built the block with fifa96_settings_handoff (field cells + the half-index
+ * minute/0x3C/0x14 mapping), so this copies it wholesale and installs the
+ * period lengths the clock reads ([0x5881A]/[0x5881C]). */
+int fifa96_match_run_set_config(struct fifa96_match_run *mr,
+                                const struct fifa96_match_config *config) {
+  if (!mr || !config) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  mr->config = *config;
+  return fifa96_match_run_set_period(mr, (uint16_t)config->period_length,
+                                     (uint16_t)config->extra_length);
+}
+
 /* FU-148 §3 (S4): the formation-id writer `FUN_0008EA70(side, id)`:
  * `(&0x14C1E4)[side] = id; FUN_0007412C();`. The consumer (FUN_0007412C ->
  * FUN_0008CE78/FUN_0006D9C4) installs the 0x11033A layout into the team block

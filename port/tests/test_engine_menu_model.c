@@ -18,6 +18,7 @@
 #include "fifa96_engine/fifa96_match_bridge.h"
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_platform_null.h"
+#include "fifa96_loader/fifa96_err.h"
 
 #define MODEL_TEST_COUNT 0x150u
 #define MENU_ISO_PATH "data/game/FIFAPCCD96.iso"
@@ -132,7 +133,9 @@ static void test_game_select_navigation(void) {
   assert(m.item == 6);   /* Options */
   assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
   assert(m.screen == FIFA96_MENU_SCREEN_OPTIONS);
-  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.option_row == 0 && m.option_scroll == 0);
+  assert(m.option_page == FIFA96_MENU_OPTION_PAGE_LIST);
+  assert(fifa96_menu_model_back(&m) == 1);
   assert(m.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
   assert(fifa96_menu_model_nav(&m, 1) == 1);
   assert(m.item == 7);   /* Modem Setup */
@@ -194,6 +197,297 @@ static void test_team_table(void) {
   assert(fifa96_menu_team_pccd_index(43) == 27);
   assert(fifa96_menu_team_pccd_index(-1) == -1);
   assert(fifa96_menu_team_pccd_index(FIFA96_MENU_TEAM_COUNT) == -1);
+}
+
+static void test_option_descriptors(void) {
+  static const int32_t expected_max[FIFA96_MENU_OPTION_DESC_COUNT] = {
+      2, 2, 2, 6, 2, 2, 2, 3, 3, 2, 3, 2, 5,
+      2, 7, 2, 2, 100, 100, 100, 0, 2, 0, 0, 0, 0};
+  static const uint8_t expected_order[FIFA96_MENU_OPTION_ORDER_COUNT] = {
+      0, 18, 1, 17, 2, 19, 3, 4, 6, 7, 21, 9, 10, 11, 12, 13, 14, 15, 16, 66};
+  const struct fifa96_menu_option_desc *d = fifa96_menu_option_descriptors();
+  assert(d != NULL);
+  assert(fifa96_menu_option_descriptor_count() == FIFA96_MENU_OPTION_DESC_COUNT);
+  assert(fifa96_menu_option_descriptor_count() == 26);
+  for (int i = 0; i < FIFA96_MENU_OPTION_DESC_COUNT; i++) {
+    assert(d[i].setting == (uint8_t)i);
+    assert(d[i].max == expected_max[i]);
+    assert(d[i].label != NULL || i == 20 || i >= 22);
+    /* The P6 live set: Sound Effects, Fouls, Injuries, Half Length, Offside,
+     * SFX Volume. Everything else is visible but dim. */
+    int live = (i == 0x01 || i == 0x0A || i == 0x0B ||
+                i == 0x0E || i == 0x10 || i == 0x11);
+    assert(d[i].live == live);
+    assert(d[i].is_slider == (i >= 0x11 && i <= 0x13));
+  }
+  assert(d[0].label_id == 0xC7u && strcmp(d[0].label, "Music") == 0);
+  assert(d[0].choices[0] == 0xD2u && d[0].choices[1] == 0xD7u);
+  assert(d[1].label_id == 0x113u && strcmp(d[1].label, "Sound Effects") == 0);
+  assert(d[3].label_id == 0xAFu && d[3].max == 6);
+  assert(d[3].choices[0] == 0x6Fu && d[3].choices[4] == 0x135u);
+  assert(d[7].choices[1] == 0xC8u && d[7].choices[2] == 0xC9u);
+  assert(d[10].label_id == 0x7Cu && d[10].choices[1] == 0xCDu);
+  assert(d[14].label_id == 0x93u && d[14].max == 7);
+  assert(d[14].choices[0] == 0x248u && d[14].choices[6] == 0x24Eu);
+  assert(d[17].label_id == 0x191u && d[17].max == 100u);
+  assert(d[17].choices == NULL && d[17].choice_text == NULL);
+  assert(d[20].max == 0 && d[20].label == NULL && d[20].label_id == 0);
+  assert(d[21].label_id == 0x21Bu && d[21].max == 2u);
+  for (int i = 22; i < FIFA96_MENU_OPTION_DESC_COUNT; i++)
+    assert(d[i].max == 0 && d[i].label == NULL);
+
+  const uint8_t *order = fifa96_menu_option_order();
+  assert(order != NULL);
+  assert(memcmp(order, expected_order, sizeof expected_order) == 0);
+  assert(order[19] == 66u);   /* dead descriptor, never selectable */
+
+  assert(fifa96_menu_model_option_setting(0) == 0);
+  assert(fifa96_menu_model_option_setting(1) == 18);
+  assert(fifa96_menu_model_option_setting(18) == 16);
+  assert(fifa96_menu_model_option_setting(19) == -1);
+  assert(fifa96_menu_model_option_setting(-1) == -1);
+  assert(strcmp(fifa96_menu_model_option_label(16), "Half Length") == 0);
+  assert(fifa96_menu_model_option_label_id(16) == 0x93u);
+  assert(strcmp(fifa96_menu_model_option_label(FIFA96_MENU_OPTION_ROW_CONTROLS),
+                "Controls") == 0);
+  assert(strcmp(fifa96_menu_model_option_label(FIFA96_MENU_OPTION_ROW_RESET),
+                "Reset Defaults") == 0);
+  assert(fifa96_menu_model_option_rows() == 21);
+  size_t help_count = 0;
+  const char *const *help = fifa96_menu_model_controls_text(&help_count);
+  assert(help != NULL && help_count >= 10);
+  assert(strcmp(help[0], "CONTROLS") == 0);
+  assert(strstr(help[help_count - 1], "NOT MAPPED") != NULL);
+}
+
+static void test_option_defaults_and_values(void) {
+  struct fifa96_menu_model m;
+  fifa96_menu_model_init(&m);
+  assert(m.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+  assert(m.option_row == 0 && m.option_scroll == 0);
+  assert(m.option_page == FIFA96_MENU_OPTION_PAGE_LIST);
+  assert(m.settings.value[0x00] == 1);
+  assert(m.settings.value[0x01] == 1);
+  assert(m.settings.value[0x0A] == 2);
+  assert(m.settings.value[0x0B] == 1);
+  assert(m.settings.value[0x0E] == 0);
+  assert(m.settings.value[0x10] == 0);
+  assert(m.settings.value[0x11] == 0x5B);
+  assert(m.settings.value[0x12] == 0x5D);
+  assert(m.settings.value[0x13] == 0x62);
+  const int32_t *max = fifa96_settings_descriptor_max();
+  for (uint32_t i = 0; i < FIFA96_SETTINGS_COUNT; i++)
+    assert(m.settings.max[i] == max[i]);
+  assert(m.settings.max[0x0E] == 7);
+
+  char buf[40];
+  assert(fifa96_menu_model_option_value(&m, 16, buf, sizeof buf) == 1);
+  assert(strcmp(buf, "2 min") == 0);
+  m.settings.value[0x0E] = 6;
+  assert(fifa96_menu_model_option_value(&m, 16, buf, sizeof buf) == 1);
+  assert(strcmp(buf, "45 min") == 0);
+  /* Native apply table index 7 is the honest 0-minute entry (no LANG choice). */
+  m.settings.value[0x0E] = 7;
+  assert(fifa96_menu_option_choice_id(0x0E, 7) == 0);
+  assert(strcmp(fifa96_menu_option_choice_text(0x0E, 7), "0") == 0);
+  assert(fifa96_menu_model_option_value(&m, 16, buf, sizeof buf) == 1);
+  assert(strcmp(buf, "0 min") == 0);
+
+  m.settings.value[0x0A] = 1;
+  assert(fifa96_menu_model_option_value(&m, 12, buf, sizeof buf) == 1);
+  assert(strcmp(buf, "No Bookings") == 0);
+  m.settings.value[0x0A] = 2;
+  assert(fifa96_menu_model_option_value(&m, 12, buf, sizeof buf) == 1);
+  assert(strcmp(buf, "On") == 0);
+  assert(fifa96_menu_model_option_value(&m, 3, buf, sizeof buf) == 1);
+  assert(strcmp(buf, "91") == 0);
+  assert(fifa96_menu_model_option_value(&m, 0, buf, sizeof buf) == 1);
+  assert(strcmp(buf, "On") == 0);
+  /* Port rows carry no value. */
+  assert(fifa96_menu_model_option_value(&m, FIFA96_MENU_OPTION_ROW_CONTROLS,
+                                        buf, sizeof buf) == 0);
+  assert(fifa96_menu_model_option_value(NULL, 0, buf, sizeof buf) == 0);
+  assert(fifa96_menu_model_option_value(&m, 0, NULL, sizeof buf) == 0);
+}
+
+static void test_option_navigation(void) {
+  struct fifa96_menu_model m;
+  fifa96_menu_model_init(&m);
+  /* Game Select: right to the left column, down to Options, Enter. */
+  assert(fifa96_menu_model_nav(&m, 3) == 1);
+  assert(m.item == 5);
+  assert(fifa96_menu_model_nav(&m, 1) == 1);
+  assert(m.item == 6);
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.screen == FIFA96_MENU_SCREEN_OPTIONS);
+
+  /* Up at the top clamps (no wrap). */
+  assert(fifa96_menu_model_nav(&m, 0) == 1);
+  assert(m.option_row == 0 && m.option_scroll == 0);
+  /* Row 0 Music is stored-only: left/right and Enter do nothing. */
+  int32_t music = m.settings.value[0x00];
+  assert(fifa96_menu_model_nav(&m, 2) == 1);
+  assert(fifa96_menu_model_nav(&m, 3) == 1);
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.settings.value[0x00] == music);
+
+  for (int i = 0; i < 16; i++) assert(fifa96_menu_model_nav(&m, 1) == 1);
+  assert(m.option_row == 16);            /* Half Length */
+  assert(m.option_scroll == 9);
+  assert(m.settings.value[0x0E] == 0);
+  assert(fifa96_menu_model_nav(&m, 3) == 1);
+  assert(m.settings.value[0x0E] == 1);   /* 4 min */
+  assert(fifa96_menu_model_nav(&m, 2) == 1);
+  assert(m.settings.value[0x0E] == 0);
+  /* Enter cycles (gamepad convenience): 0 -> 1. */
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.settings.value[0x0E] == 1);
+
+  /* Down to the last native row, then the two port rows; scroll follows. */
+  for (int i = 0; i < 2; i++) assert(fifa96_menu_model_nav(&m, 1) == 1);
+  assert(m.option_row == 18 && m.option_scroll == 11);
+  assert(fifa96_menu_model_nav(&m, 1) == 1);
+  assert(m.option_row == FIFA96_MENU_OPTION_ROW_CONTROLS && m.option_scroll == 12);
+  assert(fifa96_menu_model_nav(&m, 1) == 1);
+  assert(m.option_row == FIFA96_MENU_OPTION_ROW_RESET && m.option_scroll == 13);
+  assert(fifa96_menu_model_nav(&m, 1) == 1);
+  assert(m.option_row == FIFA96_MENU_OPTION_ROW_RESET);   /* clamped */
+  assert(m.option_scroll == 13);
+
+  /* Reset Defaults re-seeds the retail defaults + max. */
+  m.settings.value[0x0E] = 4;
+  m.settings.value[0x0A] = 0;
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.settings.value[0x0E] == 0);
+  assert(m.settings.value[0x0A] == 2);
+  assert(m.settings.max[0x0E] == 7);
+
+  /* Controls page: port addition; back returns to the list, then Game Select. */
+  m.option_row = FIFA96_MENU_OPTION_ROW_CONTROLS;
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.screen == FIFA96_MENU_SCREEN_OPTIONS);
+  assert(m.option_page == FIFA96_MENU_OPTION_PAGE_CONTROLS);
+  assert(fifa96_menu_model_nav(&m, 1) == 1);   /* no selectable rows */
+  assert(m.option_page == FIFA96_MENU_OPTION_PAGE_CONTROLS);
+  assert(fifa96_menu_model_back(&m) == 1);
+  assert(m.screen == FIFA96_MENU_SCREEN_OPTIONS);
+  assert(m.option_page == FIFA96_MENU_OPTION_PAGE_LIST);
+  assert(fifa96_menu_model_back(&m) == 1);
+  assert(m.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+
+  /* Sliders step by 5 and stop at 99 (descriptor max 100). Re-enter Options
+   * (the Game Select item is still Options) and walk to SFX Volume row 3. */
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.option_row == 0 && m.option_scroll == 0);
+  for (int i = 0; i < 3; i++) assert(fifa96_menu_model_nav(&m, 1) == 1);
+  assert(m.option_row == 3);
+  assert(m.settings.value[0x11] == 0x5B);
+  assert(fifa96_menu_model_nav(&m, 3) == 1);
+  assert(m.settings.value[0x11] == 0x60);   /* 91 + 5 = 96 */
+  assert(fifa96_menu_model_nav(&m, 2) == 1);
+  assert(m.settings.value[0x11] == 0x5B);
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.settings.value[0x11] == 0x60);
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.settings.value[0x11] == 0x63);   /* 96 + 5 clamps to max-1 */
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.settings.value[0x11] == 0x63);
+
+  /* Sound Effects row 2: Off/On cycles as a two-choice row. */
+  m.option_row = 2;
+  m.settings.value[0x01] = 1;
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.settings.value[0x01] == 0);
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);
+  assert(m.settings.value[0x01] == 1);
+}
+
+/* P6: the bridge applies the Options block only inside the Team Select
+ * handoff. The direct-begin path (team_selected = 0) keeps begin's default
+ * 120/40 handoff even when the menu settings were edited. */
+static struct fifa96_engine *option_engine_make(fifa96_platform **plat) {
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.step_ns = 10000000ull;
+  *plat = fifa96_platform_null_create(&pcfg);
+  assert(*plat != NULL);
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  struct fifa96_engine *e = fifa96_engine_create(&ecfg, *plat);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+  return e;
+}
+
+static void test_bridge_applies_options(void) {
+  fifa96_platform *plat = NULL;
+  struct fifa96_engine *e = option_engine_make(&plat);
+  e->frontend.menu.settings.value[0x0E] = 1;   /* 4 minutes */
+  e->frontend.menu.settings.value[0x0A] = 1;   /* No Bookings */
+  e->frontend.menu.settings.value[0x0B] = 0;   /* Injuries off */
+  e->frontend.menu.settings.value[0x10] = 1;   /* Offside on */
+  e->frontend.menu.settings.value[0x09] = 1;   /* Simulation */
+  e->frontend.menu.settings.value[0x03] = 1;   /* German */
+  e->frontend.menu.settings.value[0x06] = 0;   /* Time display off */
+  e->frontend.menu.settings.value[0x0D] = 1;   /* Clock out of play */
+  e->frontend.menu.settings.value[0x11] = 50;  /* audio-only setting */
+  e->frontend.team_selected = 1;
+  e->frontend.match_start = 1;
+
+  assert(fifa96_match_bridge_from_frontend(&e->match_run, e) == 0);
+  assert(e->match_run.running == 1);
+  assert(e->match_run.config.field_4c2f6 == 1);
+  assert(e->match_run.config.field_4c2e6 == 1);
+  assert(e->match_run.config.field_4c30a == 0);
+  assert(e->match_run.config.field_4c306 == 1);
+  assert(e->match_run.config.field_4c2f2 == 1);
+  assert(e->match_run.config.field_4c312 == 1);   /* Play by Play default On */
+  assert(e->match_run.config.field_4c316 == 0);
+  assert(e->match_run.config.clock_halt == 1);
+  assert(e->match_run.config.half_length_minutes == 4);
+  assert(e->match_run.config.period_length == 4 * 60);
+  assert(e->match_run.config.extra_length == 4 * 20);
+  assert(e->match_run.state.period_length == 4 * 60);
+  assert(e->match_run.state.extra_length == 4 * 20);
+  assert(fifa96_match_run_set_config(NULL, &e->match_run.config) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_set_config(&e->match_run, NULL) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_end(&e->match_run) == 0);
+  struct fifa96_match_config cfg;
+  memset(&cfg, 0, sizeof cfg);
+  assert(fifa96_match_run_set_config(&e->match_run, &cfg) == -FIFA96_ERR_STATE);
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(plat);
+}
+
+static void test_bridge_direct_begin_keeps_defaults(void) {
+  fifa96_platform *plat = NULL;
+  struct fifa96_engine *e = option_engine_make(&plat);
+  /* Edit the options to prove the gate, then start without Team Select. */
+  e->frontend.menu.settings.value[0x0E] = 6;
+  e->frontend.menu.settings.value[0x0A] = 0;
+  e->frontend.menu.settings.value[0x0B] = 0;
+  e->frontend.menu.settings.value[0x10] = 1;
+  e->frontend.team_selected = 0;
+  e->frontend.match_start = 1;
+
+  assert(fifa96_match_bridge_from_frontend(&e->match_run, e) == 0);
+  assert(e->match_run.running == 1);
+  assert(e->match_run.config.field_4c306 == 2);
+  assert(e->match_run.config.field_4c30a == 1);
+  assert(e->match_run.config.field_4c2f2 == 0);
+  assert(e->match_run.config.half_length_minutes == 2);
+  assert(e->match_run.config.period_length == 120);
+  assert(e->match_run.config.extra_length == 40);
+  assert(e->match_run.state.period_length == 120);
+  assert(e->match_run.state.extra_length == 40);
+  assert(fifa96_match_run_end(&e->match_run) == 0);
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(plat);
 }
 
 static void key_event(struct fifa96_frontend_run *fr, int32_t code, int state) {
@@ -288,6 +582,16 @@ static void test_native_fixture_reaches_handoff(void) {
   assert(strcmp(e->match_run.render.hud_name[0], "BRA") == 0);
   assert(strcmp(e->match_run.render.hud_name[1], "ITA") == 0);
   assert(e->match_run.formation[0] == 0 && e->match_run.formation[1] == 0);
+  /* P6: the Options apply is a no-op with the default block — begin already
+   * installed the same cells and the same 120/40 period lengths. */
+  assert(e->match_run.config.field_4c306 == 2);
+  assert(e->match_run.config.field_4c30a == 1);
+  assert(e->match_run.config.field_4c2f2 == 0);
+  assert(e->match_run.config.half_length_minutes == 2);
+  assert(e->match_run.config.period_length == 120);
+  assert(e->match_run.config.extra_length == 40);
+  assert(e->match_run.state.period_length == 120);
+  assert(e->match_run.state.extra_length == 40);
 
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
@@ -458,10 +762,15 @@ int main(void) {
   test_game_select_navigation();
   test_team_select();
   test_team_table();
+  test_option_descriptors();
+  test_option_defaults_and_values();
+  test_option_navigation();
   test_native_held_confirm_latch();
   test_native_held_input_after_reset();
   test_native_fixture_reaches_handoff();
   test_native_pccd_handoff();
+  test_bridge_applies_options();
+  test_bridge_direct_begin_keeps_defaults();
   puts("test_engine_menu_model OK");
   return 0;
 }

@@ -143,6 +143,20 @@ static void test_sliders(void) {
   assert(fifa96_settings_set(&z, 0x12, -1) == FIFA96_OK && z.value[0x12] == 0);
 }
 
+static void test_descriptor_max(void) {
+  static const int32_t expected[FIFA96_SETTINGS_COUNT] = {
+      2, 2, 2, 6, 2, 2, 2, 3, 3, 2, 3, 2, 5,
+      2, 7, 2, 2, 100, 100, 100, 0, 2, 0, 0, 0, 0};
+  const int32_t *max = fifa96_settings_descriptor_max();
+  assert(max != NULL);
+  for (uint32_t i = 0; i < FIFA96_SETTINGS_COUNT; i++)
+    assert(max[i] == expected[i]);
+  /* The defaults remain max-free (FU-49's pinned contract). */
+  struct fifa96_settings s;
+  fifa96_settings_defaults(&s);
+  for (uint32_t i = 0; i < FIFA96_SETTINGS_COUNT; i++) assert(s.max[i] == 0);
+}
+
 int main(void) {
   test_init();
   test_defaults();
@@ -151,6 +165,7 @@ int main(void) {
   test_decrement();
   test_cycle();
   test_sliders();
+  test_descriptor_max();
   printf("test_settings OK\n");
   return 0;
 }

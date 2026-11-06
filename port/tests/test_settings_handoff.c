@@ -94,6 +94,17 @@ static void test_half_lengths(void) {
     assert(c.period_length == fifa96_match_config_half_lengths[i] * 60);
     assert(c.extra_length == fifa96_match_config_half_lengths[i] * 20);
   }
+  /* P6 pins: the default 2-minute choice is the engine's 120/40, the 45-minute
+   * choice is 2700/900, and the native 8th table entry is 0/0. */
+  s.value[0x0E] = 0;
+  assert(fifa96_settings_handoff(&s, 0, &c) == FIFA96_OK);
+  assert(c.period_length == 120 && c.extra_length == 40);
+  s.value[0x0E] = 6;
+  assert(fifa96_settings_handoff(&s, 0, &c) == FIFA96_OK);
+  assert(c.period_length == 2700 && c.extra_length == 900);
+  s.value[0x0E] = 7;
+  assert(fifa96_settings_handoff(&s, 0, &c) == FIFA96_OK);
+  assert(c.half_length_minutes == 0 && c.period_length == 0 && c.extra_length == 0);
 }
 
 static void test_raw_values(void) {
