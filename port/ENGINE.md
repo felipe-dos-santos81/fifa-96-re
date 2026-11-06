@@ -10320,3 +10320,116 @@ aim/camera director, replay/captions, rosters/attributes, commentary/music,
 competition ET/penalties, `options.dat` persistence, gamepad held-edge
 polish, and the six other Game Select screens. Each is numbered; none is
 claimed as complete.
+
+## P9 — aimed human shots and a beatable live keeper save (FU-347, 2026-11-06)
+
+**Answer in one line.** The human KICK now aims the goal-mouth flight with the
+held lateral input (left `-0x80`, right `+0x80`, none/both centre), and a
+labelled P9 keeper stand-in saves the centre shot while an aimed shot or a
+displaced keeper still reaches the native goal chain. The match is contestable
+and still winnable; no score/phase/goal cell is written by either stand-in.
+
+**Aim (live-only, derived [D]).** `match_run_live_kick_latch` already replaced
+the staged kicker-relative target with the opponent goal-mouth centre for the
+KICK row. P9 consumes a new `live_aim_x` cell there. The native FU-70 slot only
+publishes its released button word after every held key drops
+(`fifa96_control_slot_update`'s `held`/`held_prev` logic), so at the launch
+frame the lateral bit is already gone; `match_run_live_aim_update` samples the
+held lateral input each frame into `live_aim_x` (left mapped `0x08` ->
+`-FIFA96_MATCH_LIVE_SHOT_AIM_X` 0x80, right `0x04` -> `+0x80`, neither/both ->
+0). A fresh KICK/PASS/LONG_BALL press with no lateral clears a stale aim, and
+the cell is cleared by init/begin, a phase change and the restart rebind. The
+goal-side `z` stays `±0xB30` and `target_y=0`; the ±0x80 target is inside the
+`|x| < 0xD0` mouth. The native per-code target/loft and the aim/camera director
+remain legs (P9-L1); this is still the P7/P9 labelled aim stand-in.
+
+**Keeper save (live-only, derived [D]; P8-L3/P8-A3 stand-in).** No native
+open-play save exists (`0x88940`/`0x70074` are record-free; the only dive
+producer is the phase-6 penalty arm `0x8D558`). `match_run_live_keeper_save`
+runs immediately **after** the P8 outfield shot block and before
+`match_run_live_goal_arm`, so a defender on the ball keeps the block authority
+and the keeper stops the centre shot the outfielders miss. It requires a live
+phase-2 KICK flight that is not armed and not already inside the native mouth
+classifier, a goal-mouth target (`|target_x| < 0xD0`, `|target_z| >= 0xB10`),
+the defending side's record 0 visible (the native +0x98/+0x9A convention), the
+keeper's x within `FIFA96_MATCH_LIVE_KEEPER_SAVE_REACH` (0x40) of the target x,
+and `distance(ball, keeper) <= FIFA96_MATCH_LIVE_KEEPER_SAVE_NEAR` (0x180)
+while `|ball.z| >= FIFA96_MATCH_LIVE_KEEPER_SAVE_ZONE` (0x9C0). The near-ball
+gate is the honesty guard for the no-ISO headless fixture (record 0 starts at
+the origin there); the shipped ISO keeper stands at `(0, ±0x9EA)` and the
+centre path passes within ~0x30. On a hit the shared `match_run_live_save_apply`
+clears `live_kick_active`/`live_kick_shot`, clears the FU-73 pair and the
+consumed signature/pair marker (so an identical repeat can latch), pins the
+ball for `FIFA96_MATCH_LIVE_SAVE_HOLD` (30) frames through the existing
+ball-machine hold branch, records the keeper id in `live_save_record` and
+gives it `ball.carrier`. It writes no score, phase or goal cell. The reach /
+zone / near values are derived tuning, not native thresholds (P9-L3).
+
+**Order and P8 compatibility.** `test_live_defender_blocks_both_sides` still
+records the staged outfield defender (the P8 block runs first);
+`test_live_shot_block_mouth_edge` still leaves a ball inside `FUN_00070074` to
+the native armer; `test_live_shot_block_skips_hidden_defender` still ignores a
+hidden outfield record (and the keeper's near gate is not met in that fixture);
+`test_live_flight_end_stale_pair_guard` and
+`test_live_shot_block_ignores_pass` are unchanged and green.
+
+**Tests.** `port/tests/test_engine_live_control.c`:
+`test_live_aim_both_cancel_to_centre` (KICK+Left+Right in one poll -> target
+x=0), `test_live_keeper_saves_centre_side` (both sides; real kickoff, one
+centre KICK, keeper pinned at the shipped goal spot -> `live_save_record` is
+the defender's record 0, 0-0, phase 2, no `goal_armed`, ball pinned for the
+hold), `test_live_keeper_beaten_by_aim_side` (side 0 Left `-0x80`, side 1
+Right `+0x80` against the pinned keeper -> native goal, no save),
+`test_live_keeper_displaced_centre_goal` (keeper held at x=0x400 -> centre
+shot scores). Updated to aim: `test_live_kick_flight_scores` (+0x80),
+`test_live_kickoff_shot_scores_side` (side 0 Right `+0x80`, side 1 Left
+`-0x80`; keeper pinned at the goal spot), `test_live_goal_after_kick` (wide
+aim before the staged mouth ball) and `test_live_shot_still_scores_wide` (aim
++ keeper pin; the P8 outfield final-zone minimum still exceeds 0x28). The
+end-to-end `test_engine_match_completion` case is now
+`test_live_aimed_kickoff_goal_to_full_time`: one KICK+Right at the real
+kickoff -> native goal -> half-time -> second half -> FULL TIME 1-0. The
+control page (`fifa96_menu_model.c`) and README state "L/R + Z AIM; CENTRE =
+KEEPER"; `test_engine_menu_model` pins the new line.
+
+**Gate.** `make check` **119/119** (strict build + ASan/UBSan); M1
+`09b726b7…` and M2 v29 `7c3874f7…` byte-exact by `cmp`; census unchanged
+(**78/78** bodies, **58/80** natural, **64/80** install-live, 6 blocked,
+action 38/45, phase 26/35). No new port body or dispatch slot; the census
+denominator is unchanged.
+
+**Windowed evidence (shipped `DISPLAY=:1`, Friendly Brazil/Italy, default
+2-minute halves, no score/ball staging).** A centre **Z** at the kickoff gives
+the P9 save: `/tmp/opencode/play/p9-save.png` (0-0 at 00:06, the ball at the
+defending keeper's feet in the goal area; the same run was observed 0-0 at
+00:05-00:27, whereas the pre-P9 centre path scored at 00:05). A fresh launch
+with **Z + Right** gives the native goal: `/tmp/opencode/play/p9-aim-goal.png`
+(**BRA 1-0 ITALY** at 00:05). That aimed run then went through the native
+half-time gate (released with repeated KICK/C pulses - the P8-L4 sit-1 gate)
+and the second half to `/tmp/opencode/play/p9-fulltime.png` (**FULL TIME, BRA
+1-0 ITALY, PERIOD 2**). The save and goal screenshots are from separate
+launches: after a save the ball is with the defending keeper and a live tackle
+requires a chase, so the aimed proof is the fresh kickoff path. Both runs use
+the shipped input path only; no score or ball is staged.
+
+**Doc errata (append-only; earlier P7/P8 text remains historical).** (1) The
+P8 report's "first Z clears the opening latch, the second fires the row-07
+kick" is superseded by measurement: the kickoff KICK press/release **is** the
+shot and also releases the opening latch (`live_kickoff_touch`); a second Z
+during the live flight is ignored, so the windowed proof uses one aimed Z.
+(2) P8-L3 / P8-A3 ("no keeper save; keeper excluded") is addressed by the P9
+labelled keeper stand-in; the **native** open-play save remains unported.
+(3) The P8 `test_live_kickoff_goal_to_full_time` name is now
+`test_live_aimed_kickoff_goal_to_full_time`; the old name referred to the
+centre-shot case, which a centre shot no longer is.
+
+**Residual legs.** **P9-L1** the native per-code target/loft algebra and the
+aim/camera director (the real shot-side choice); **P9-L2** the native
+open-play keeper save/dive body (P8-L3/P8-A3); **P9-L3** the keeper reach
+0x40, save zone 0x9C0 and near gate 0x180 are derived tuning, not native
+thresholds; **P9-L4** the `live_aim_x` sampling is a derived bridge for the
+FU-70 release-word timing; **P9-L5** the half-time sit-1 gate still needs the
+KICK/C pulses in the windowed path (P8-L4); **P9-L6** the live tackle/claim
+after a save still needs a chase (the P7/P8 contact rules are unchanged).
+Row-05 `FUN_0007F7E0`, row 03 and the full 10-player AI remain P9 open legs;
+none is claimed complete.

@@ -4258,3 +4258,42 @@ close-out below).
   (P9), full AI/row 03, native aim/camera director, replay/captions, rosters,
   commentary/music, competition ET/penalties, `options.dat`, held-edge
   polish, six Game Select screens.
+
+- **P9 aimed shots and live keeper save (FU-347, 2026-11-06).** The human KICK
+  now aims the goal-mouth flight with the held lateral input: left `0x08` ->
+  `x=-0x80`, right `0x04` -> `x=+0x80`, none/both -> centre, with the native
+  goal-side `z=±0xB30` and `target_y=0`. The sampled cell is `live_aim_x`
+  because the FU-70 slot only publishes its released word after every held key
+  drops; the KICK latch consumes it and a fresh unaimed KICK clears a stale
+  aim. A labelled P9 keeper stand-in
+  (`match_run_live_keeper_save`) runs after the P8 outfield block and before
+  the live goal armer: the defending record 0 saves a centre shot when its x is
+  within 0x40 of the target x, the ball is in the `|z| >= 0x9C0` keeper zone,
+  and the ball is within 0x180 of the keeper. It clears the flight/pair, pins
+  the ball for the 30-frame hold, records `live_save_record`, and writes no
+  score/phase/goal cell. A ±0x80 aim is outside the reach and scores through
+  the native chain; a keeper held at x=0x400 also lets the centre shot score.
+  Tests: `test_live_aim_both_cancel_to_centre`,
+  `test_live_keeper_saves_centre` (both sides), `test_live_keeper_beaten_by_aim`
+  (all four side/direction combos across the two kickoff tests),
+  `test_live_keeper_displaced_centre_goal`, plus the updated aim paths in
+  `test_live_kick_flight_scores`, `test_live_kickoff_shot_scores`,
+  `test_live_goal_after_kick`, `test_live_shot_still_scores_wide` and the
+  renamed aimed end-to-end `test_live_aimed_kickoff_goal_to_full_time`. The P8
+  block/mouth-edge/hidden/signature/PASS tests still pass (defender block
+  first, keeper second, armer third). Controls page/README: `L/R + Z AIM;
+  CENTRE = KEEPER`. `make check` **119/119**; M1 `09b726b7…` / M2 v29
+  `7c3874f7…` exact by `cmp`; census unchanged (78/78, 58/80, 64/80, action
+  38/45, phase 26/35). Shipped `DISPLAY=:1`, Brazil/Italy, default halves:
+  centre Z -> P9 save (`p9-save.png`, 0-0 at 00:06, ball at the keeper); fresh
+  Z+Right -> **BRA 1-0 ITALY** at 00:05 (`p9-aim-goal.png`); that run reached
+  **FULL TIME, BRA 1-0 ITALY, PERIOD 2** (`p9-fulltime.png`). The save and goal
+  screenshots are separate launches (the save leaves the ball with the
+  keeper); no score/ball staging. Errata: the kickoff Z is the shot (it also
+  releases the opening latch); a second Z during the flight is ignored. P8-L3/
+  P8-A3 is addressed by the labelled stand-in, but the native open-play keeper
+  save and the native aim/camera director remain unported. Remaining legs:
+  P9-L1 native per-code target/loft + aim director, P9-L2 native keeper save,
+  P9-L3 derived keeper reach/zone tuning, P9-L4 aim sampling bridge, P9-L5
+  half-time sit-1 pulse gate, P9-L6 post-save chase/tackle; row-05
+  `FUN_0007F7E0`, row 03 and full 10-player AI remain open.

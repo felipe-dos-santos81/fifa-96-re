@@ -62,9 +62,10 @@ static void drop_fixture(struct fixture f) {
  * release needs). The tape is the same 10/90 KICK pulse the P6/P7 live tests
  * use; no score/phase is staged at the end — the win fixture stages the 1-0 at
  * the START through the derived goal writer, and the two periods are produced
- * by the real FU-62 clock. The separate `test_live_kickoff_goal_to_full_time`
- * below is the no-staging end-to-end path (real kickoff -> KICK -> native
- * goal -> full time). */
+ * by the real FU-62 clock. The separate `test_live_aimed_kickoff_goal_to_full_time`
+ * below is the no-staging end-to-end path (real kickoff -> KICK + aim ->
+ * native goal -> full time); P9 renamed the P8 centre-shot case because a
+ * centre shot is now the keeper's. */
 #define P8_TAPE_LEN 20000u
 static fifa96_platform_key p8_tape[P8_TAPE_LEN];
 static int p8_tape_ready;
@@ -921,7 +922,7 @@ static void test_live_post_dwell_and_skip(void) {
  * the second half: 1-0 staged at the start through the derived `add_goal`
  * writer, phase 0x0C / act 0x0B / flag 0 out, end word 1, OVER -> POST ->
  * EXIT -> front-end, score intact. (The no-staging kick path is
- * `test_live_kickoff_goal_to_full_time` below.) */
+ * `test_live_aimed_kickoff_goal_to_full_time` below.) */
 static void test_live_friendly_regulation_win_full_time(void) {
   struct fixture f = make_p8_live_fixture();
   struct fifa96_match_run *mr = &f.engine->match_run;
@@ -1048,13 +1049,14 @@ static void test_live_friendly_regulation_draw_full_time(void) {
   drop_fixture(f);
 }
 
-/* P8 (FU-346) end to end, review minor 9: the real live kickoff (no ball,
- * score or phase staging), a KICK through the live slot input, the native
- * flight/armer/scan goal, then the real FU-62 clock through half-time and the
- * second half to the P8 full-time branch (phase 0x0C, end word 1, OVER ->
- * POST -> EXIT -> front-end). Only the period lengths are configured; the
- * score and both period completions are produced by the shipped path. */
-static void test_live_kickoff_goal_to_full_time(void) {
+/* P8 (FU-346) end to end, review minor 9; P9 (FU-347) aimed shot: the real
+ * live kickoff (no ball, score or phase staging), a KICK + Right press/release
+ * through the live slot input (the +0x80 aim beats the P9 keeper save), the
+ * native flight/armer/scan goal, then the real FU-62 clock through half-time
+ * and the second half to the P8 full-time branch (phase 0x0C, end word 1,
+ * OVER -> POST -> EXIT -> front-end). Only the period lengths are configured;
+ * the score and both period completions are produced by the shipped path. */
+static void test_live_aimed_kickoff_goal_to_full_time(void) {
   struct fixture f = make_p8_live_fixture();
   struct fifa96_match_run *mr = &f.engine->match_run;
   int steps;
@@ -1067,10 +1069,12 @@ static void test_live_kickoff_goal_to_full_time(void) {
   /* The clock lengths the match config applies; no ball/score staging. */
   assert(fifa96_match_run_set_period(mr, 6, 6) == 0);
 
-  /* The shipped kickoff shot: KICK press/release through the live slot path. */
+  /* The shipped kickoff shot: KICK + Right through the live slot path. */
   {
-    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
-    assert(fifa96_match_run_input(mr, &kick, 1) == 0);
+    fifa96_platform_key kick[2] = {
+      {FIFA96_ENGINE_KEY_KICK, 1}, {FIFA96_ENGINE_KEY_RIGHT, 1}
+    };
+    assert(fifa96_match_run_input(mr, kick, 2) == 0);
   }
   p8_granted_frame(mr);
   assert(fifa96_match_run_input(mr, NULL, 0) == 0);
@@ -1079,6 +1083,7 @@ static void test_live_kickoff_goal_to_full_time(void) {
   assert((mr->dispatched_ok & (1ull << 7u)) != 0ull);
   assert(mr->live_kick_active == 1u);
   assert(mr->live_kick_shot == 1u);
+  assert(mr->live_kick_target_x == FIFA96_MATCH_LIVE_SHOT_AIM_X);
 
   /* The native flight -> armer -> scan. The score is only ever written by the
    * native goal chain. */
@@ -1241,7 +1246,7 @@ int main(void) {
   test_live_post_dwell_and_skip();
   test_live_friendly_regulation_win_full_time();
   test_live_friendly_regulation_draw_full_time();
-  test_live_kickoff_goal_to_full_time();
+  test_live_aimed_kickoff_goal_to_full_time();
   test_run_end_lands_frontend();
   test_mark_over_only_past_half_time();
   test_score_plumbing();
