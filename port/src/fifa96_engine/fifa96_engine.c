@@ -84,6 +84,20 @@ static int engine_keys_down(const fifa96_platform_key *keys, int count,
   return 0;
 }
 
+/* P8: the raw held state of the two dual-role pad keys, sampled on every
+ * poll. The MATCH dispatch compares it with `match_pad_down` to arm only a
+ * key whose press began in live play, so a held menu/pause key cannot double
+ * as a kick/pass while a fresh hold still reaches `fifa96_match_run_input`. */
+static uint8_t engine_pad_down_bits(const fifa96_platform_key *keys, int count) {
+  uint8_t bits = 0;
+  for (int i = 0; i < count; i++) {
+    if (keys[i].state != 1) continue;
+    if (keys[i].raw_code == FIFA96_ENGINE_KEY_CONFIRM) bits |= 1u;
+    else if (keys[i].raw_code == FIFA96_ENGINE_KEY_DECLINE) bits |= 2u;
+  }
+  return bits;
+}
+
 /* P6: the live audio gain is the Options SFX Volume (0x11, 0..100) gated by
  * Sound Effects (0x01): settings.value[1] ? value[0x11] : 0. The default
  * 91 scales the crowd base 0x60 to 0x57; Music/Speech Volume have no
@@ -235,6 +249,7 @@ int fifa96_engine_step(struct fifa96_engine *e) {
     fifa96_platform_key keys[32];
     int n = 0;
     if (e->plat->poll(e->plat->self, keys, 32, &n) != 0) return -1;
+    e->match_pad_down = engine_pad_down_bits(keys, n);
     for (int i = 0; i < n; i++) {
       if (keys[i].state != 1) continue;   /* press events only */
       if (keys[i].raw_code == FIFA96_ENGINE_KEY_QUIT) {
@@ -274,6 +289,7 @@ int fifa96_engine_step(struct fifa96_engine *e) {
     fifa96_platform_key keys[32];
     int n = 0;
     if (e->plat->poll(e->plat->self, keys, 32, &n) != 0) return -1;
+    e->match_pad_down = engine_pad_down_bits(keys, n);
     fifa96_frontend_run_input(&e->frontend, keys, (size_t)n);
     int quit = 0;
     if (fifa96_frontend_run_step(&e->frontend, e->surface, &quit) != 0) return -1;
@@ -302,7 +318,31 @@ int fifa96_engine_step(struct fifa96_engine *e) {
     const int esc_down = engine_keys_down(keys, n, FIFA96_ENGINE_KEY_QUIT);
     const int esc_edge = esc_down && !e->match_esc_held;
     e->match_esc_held = (uint8_t)(esc_down != 0);
-    if (e->match) (void)fifa96_match_run_input(e->match, keys, (size_t)n);
+    const uint8_t pad_down = engine_pad_down_bits(keys, n);
+    const int pad_live = e->match && !e->match->paused &&
+                         e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE;
+    if (!pad_live) {
+      e->match_pad_allowed = 0;   /* pause/result/menu handoff: disarm */
+    } else {
+      const uint8_t pad_rise =
+          (uint8_t)(pad_down & (uint8_t)~e->match_pad_down);
+      e->match_pad_allowed =
+          (uint8_t)((e->match_pad_allowed | pad_rise) & pad_down);
+    }
+    e->match_pad_down = pad_down;
+    fifa96_platform_key match_keys[32];
+    size_t match_count = 0;
+    for (int i = 0; i < n; i++) {
+      if (keys[i].raw_code == FIFA96_ENGINE_KEY_CONFIRM &&
+          (e->match_pad_allowed & 1u) == 0)
+        continue;
+      if (keys[i].raw_code == FIFA96_ENGINE_KEY_DECLINE &&
+          (e->match_pad_allowed & 2u) == 0)
+        continue;
+      match_keys[match_count++] = keys[i];
+    }
+    if (e->match)
+      (void)fifa96_match_run_input(e->match, match_keys, match_count);
     if (e->match && e->match->live_start) {
       if (esc_edge) {
         if (e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE) {

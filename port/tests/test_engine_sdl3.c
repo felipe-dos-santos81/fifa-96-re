@@ -26,8 +26,10 @@
 #include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_engine/fifa96_platform.h"
 
-/* Pure scancode mapping from the backend source (no SDL video/audio needed). */
+/* Pure scancode/button mappings from the backend source (no SDL video/audio
+ * or physical pad needed). */
 extern int fifa96_platform_sdl3_map_scancode(int scancode);
+extern int fifa96_platform_sdl3_map_button(int button);
 
 static void test_scancode_map(void) {
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_UP) == FIFA96_ENGINE_KEY_UP);
@@ -42,6 +44,28 @@ static void test_scancode_map(void) {
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_ESCAPE) == FIFA96_ENGINE_KEY_QUIT);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_A) == 0);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_UNKNOWN) == 0);
+}
+
+/* P8: the pad's South/East codes are shared with the front-end (CONFIRM/
+ * DECLINE) and the match input maps those same codes to KICK/PASS. */
+static void test_button_map(void) {
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_DPAD_UP) ==
+         FIFA96_ENGINE_KEY_UP);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_DPAD_DOWN) ==
+         FIFA96_ENGINE_KEY_DOWN);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_DPAD_LEFT) ==
+         FIFA96_ENGINE_KEY_LEFT);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT) ==
+         FIFA96_ENGINE_KEY_RIGHT);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_SOUTH) ==
+         FIFA96_ENGINE_KEY_CONFIRM);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_EAST) ==
+         FIFA96_ENGINE_KEY_DECLINE);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_WEST) ==
+         FIFA96_ENGINE_KEY_LONG_BALL);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_START) ==
+         FIFA96_ENGINE_KEY_QUIT);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_NORTH) == 0);
 }
 
 static void push_key_down(SDL_Scancode sc) {
@@ -131,6 +155,7 @@ static void test_held_key_is_a_state_sample(void) {
        * grants and runs the mover. */
       SDL_DelayNS(12000000);
       assert(fifa96_engine_step(e) == 0);
+      /* The still-held menu RETURN/BACKSPACE do not become KICK/PASS (P8). */
       assert(mr->input_state[0] == 0x04);   /* held across every poll */
     }
     assert(mr->input.held == 0x04);
@@ -166,6 +191,7 @@ int main(void) {
   setenv("SDL_AUDIODRIVER", "dummy", 1);
 
   test_scancode_map();
+  test_button_map();
   test_keyboard_reaches_match();
   test_held_key_is_a_state_sample();
 

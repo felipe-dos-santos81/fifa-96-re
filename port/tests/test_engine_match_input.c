@@ -13,6 +13,9 @@
  *   button 0x10 = kick (Ctrl/A flags 0x112BC1/0x112BC2, OR at 0x468DE)
  *   button 0x20 = pass (Alt/S flags 0x112BDC/0x112BC3, OR at 0x468F4)
  *   buttons 0x40 (Space/D/Enter) and 0x80 (W) have no engine key in this task.
+ *   P8: the pad's South/East engine codes (CONFIRM/DECLINE) also map to the
+ *   kick/pass words in an unpaused ACTIVE match; the front-end keeps its own
+ *   mapping.
  *
  * FU-70 §1.1/§1.2 slot tables (flat): direction map 0x11064E, animation chain
  * T1 0x10E1DC -> T2 0x10E1EC / T3 0x10E1F5. The slot machine runs from the
@@ -25,6 +28,7 @@
 #include <string.h>
 
 #include "fifa96_engine/fifa96_engine.h"
+#include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_frontend_run.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
@@ -188,6 +192,67 @@ static void test_button_and_diagonal_codes(void) {
   assert(mr.slot.anim_a == fu70_t1[0x5]);   /* 2 */
   assert(mr.slot.anim_b == fu70_t2[2]);     /* 1 */
   assert(mr.slot.anim_c == fu70_t3[2]);     /* 255 */
+}
+
+/* P8: the pad's South/East buttons arrive as CONFIRM/DECLINE and double as
+ * KICK/PASS in active play. The press/release path runs the same FU-70 slot
+ * edges as keyboard Z/C; the menu/pause states gate the mapping off. */
+static void test_gamepad_confirm_decline_map(void) {
+  struct fifa96_match_run mr;
+
+  fifa96_match_run_init(&mr);
+  press_key(&mr, FIFA96_ENGINE_KEY_CONFIRM);     /* pad A -> KICK 0x10 */
+  assert(mr.input.prev[0] == 0x10);
+  assert(mr.input.edge[0] == 0x10);
+  assert(mr.input_state[0] == 0x10);
+  grant_frame(&mr);
+  assert(mr.slot.pressed == 0x10);
+  no_input(&mr);
+  grant_frame(&mr);
+  assert(mr.slot.released == 0x10);              /* release path, no new press */
+  assert(mr.slot.pressed == 0);
+  no_input(&mr);
+  grant_frame(&mr);
+  assert(mr.slot.released == 0 && mr.slot.counter == 0);
+
+  fifa96_match_run_init(&mr);
+  press_key(&mr, FIFA96_ENGINE_KEY_DECLINE);     /* pad B -> PASS 0x20 */
+  assert(mr.input.prev[0] == 0x20);
+  assert(mr.input.edge[0] == 0x20);
+  assert(mr.input_state[0] == 0x20);
+  grant_frame(&mr);
+  assert(mr.slot.pressed == 0x20);
+
+  fifa96_match_run_init(&mr);
+  {
+    fifa96_platform_key keys[2] = {
+      {.raw_code = FIFA96_ENGINE_KEY_CONFIRM, .state = 1},
+      {.raw_code = FIFA96_ENGINE_KEY_UP, .state = 1},
+    };
+    assert(fifa96_match_run_input(&mr, keys, 2) == 0);
+  }
+  assert(mr.input.prev[0] == 0x11);   /* the handler ORs KICK with UP */
+
+  /* Pause / result screens keep A/B for their own actions: the resumed or
+   * skipped match must not also stage a kick/pass sample. */
+  fifa96_match_run_init(&mr);
+  mr.paused = 1;
+  press_key(&mr, FIFA96_ENGINE_KEY_CONFIRM);
+  press_key(&mr, FIFA96_ENGINE_KEY_DECLINE);
+  assert(mr.input.prev[0] == 0 && mr.input.edge[0] == 0);
+  assert(mr.input_state[0] == 0);
+  mr.paused = 0;
+  press_key(&mr, FIFA96_ENGINE_KEY_CONFIRM);
+  assert(mr.input.prev[0] == 0x10);   /* accepting only resumes the mapping */
+
+  fifa96_match_run_init(&mr);
+  mr.lc.screen = FIFA96_MATCH_SCREEN_OVER;
+  press_key(&mr, FIFA96_ENGINE_KEY_CONFIRM);
+  press_key(&mr, FIFA96_ENGINE_KEY_DECLINE);
+  assert(mr.input.prev[0] == 0 && mr.input_state[0] == 0);
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  press_key(&mr, FIFA96_ENGINE_KEY_DECLINE);
+  assert(mr.input.prev[0] == 0x20);
 }
 
 /* The FU-61 edge model: an edge fires once per press, nonzero->nonzero is
@@ -470,6 +535,65 @@ static void test_engine_step_polls_match_input(void) {
   drop_fixture(f);
 }
 
+/* P8: pad A/B reach the match through the engine's MATCH dispatch. In active
+ * play they sample KICK/PASS; the pause panel's A (resume) and B (exit) do
+ * not leak into the match input. */
+static void test_engine_step_pad_confirm_decline(void) {
+  const fifa96_platform_key tape[3] = {
+    {FIFA96_ENGINE_KEY_CONFIRM, 1},
+    {FIFA96_ENGINE_KEY_CONFIRM, 1},   /* held: still a KICK state sample */
+    {FIFA96_ENGINE_KEY_DECLINE, 1},
+  };
+  struct fixture f = make_fixture(tape, 3);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+
+  assert(fifa96_engine_step(f.engine) == 0);
+  assert(mr.input.prev[0] == 0x10);
+  assert(fifa96_engine_step(f.engine) == 0);
+  assert(mr.input.prev[0] == 0x10);
+  assert(fifa96_engine_step(f.engine) == 0);
+  assert(mr.input.prev[0] == 0x20);
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+static void test_engine_step_pad_pause_resume_no_kick(void) {
+  const fifa96_platform_key resume[1] = {{FIFA96_ENGINE_KEY_CONFIRM, 1}};
+  struct fixture f = make_fixture(resume, 1);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_live_start(&mr, 1) == 0);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_set_paused(&mr, 1) == 0);
+
+  assert(fifa96_engine_step(f.engine) == 0);   /* A resumes ... */
+  assert(mr.paused == 0);
+  assert(mr.input.prev[0] == 0);               /* ... without a KICK sample */
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+static void test_engine_step_pad_pause_decline_no_pass(void) {
+  const fifa96_platform_key back[1] = {{FIFA96_ENGINE_KEY_DECLINE, 1}};
+  struct fixture f = make_fixture(back, 1);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_live_start(&mr, 1) == 0);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_set_paused(&mr, 1) == 0);
+
+  assert(fifa96_engine_step(f.engine) == 0);   /* B exits to the front-end ... */
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(f.engine->match == NULL);
+  assert(mr.input.prev[0] == 0);               /* ... without a PASS sample */
+
+  drop_fixture(f);
+}
+
 /* QUIT is an engine key: MATCH mode quits the engine without feeding it to the
  * match input model. */
 static void test_engine_step_quit_in_match(void) {
@@ -650,6 +774,7 @@ int main(void) {
   test_null_guards();
   test_direction_codes_and_animation();
   test_button_and_diagonal_codes();
+  test_gamepad_confirm_decline_map();
   test_edges_fire_once_per_press();
   test_slot_hold_machine_and_counter();
   test_direction_release_reports_no_button();
@@ -657,6 +782,9 @@ int main(void) {
   test_slot_updates_once_per_granted_frame();
   test_300_grants_advance_slot_by_frame_delta();
   test_engine_step_polls_match_input();
+  test_engine_step_pad_confirm_decline();
+  test_engine_step_pad_pause_resume_no_kick();
+  test_engine_step_pad_pause_decline_no_pass();
   test_engine_step_quit_in_match();
   test_control_switch_moves_slot();
   test_control_switch_self_returns_zero();

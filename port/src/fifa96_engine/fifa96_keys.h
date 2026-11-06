@@ -12,6 +12,10 @@
 #define FIFA96_ENGINE_KEY_DECLINE 6
 #define FIFA96_ENGINE_KEY_QUIT    7
 
+/* P8: CONFIRM/DECLINE keep their front-end meaning and, in an unpaused ACTIVE
+ * match, also carry the pad's South/East buttons as KICK/PASS
+ * (fifa96_match_run.c). */
+
 /* Match action keys (no front-end meaning). */
 #define FIFA96_ENGINE_KEY_KICK 8
 #define FIFA96_ENGINE_KEY_PASS 9

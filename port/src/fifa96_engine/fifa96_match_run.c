@@ -419,18 +419,34 @@ static const uint8_t match_run_input_row[FIFA96_INPUT_MAP_ROW] = {
  * 0x4D keypad 6/right); the diagonal flags at 0x4695F..0x4698F (keypad
  * 7/9/1/3) OR 0x9/0x5/0xA/0x6, cross-checking those axis assignments.
  * Buttons: KICK 0x10, PASS 0x20, LONG_BALL 0x40 (the FU-75 §1.4 `0x7CD60`
- * request word, M2 phase-11 T1; the 0x80 keeper arm has no engine key). */
+ * request word, M2 phase-11 T1; the 0x80 keeper arm has no engine key).
+ * P8: the pad's South/East buttons arrive as CONFIRM/DECLINE (platform_sdl3.c)
+ * and double as KICK/PASS in live play; the front-end keeps its own
+ * CONFIRM/DECLINE mapping (fifa96_frontend_run.c). Those two codes are only
+ * accepted while the match is ACTIVE and unpaused, so the pause menu's A
+ * resume / B exit never also stages a match kick or pass. */
 static int match_run_map_key(int32_t raw_code, uint8_t *code) {
   switch (raw_code) {
-    case FIFA96_ENGINE_KEY_UP:    *code = 0x01u; return 1;
-    case FIFA96_ENGINE_KEY_DOWN:  *code = 0x02u; return 1;
-    case FIFA96_ENGINE_KEY_LEFT:  *code = 0x08u; return 1;
-    case FIFA96_ENGINE_KEY_RIGHT: *code = 0x04u; return 1;
-    case FIFA96_ENGINE_KEY_KICK:  *code = 0x10u; return 1;
-    case FIFA96_ENGINE_KEY_PASS:  *code = 0x20u; return 1;
+    case FIFA96_ENGINE_KEY_UP:       *code = 0x01u; return 1;
+    case FIFA96_ENGINE_KEY_DOWN:     *code = 0x02u; return 1;
+    case FIFA96_ENGINE_KEY_LEFT:     *code = 0x08u; return 1;
+    case FIFA96_ENGINE_KEY_RIGHT:    *code = 0x04u; return 1;
+    case FIFA96_ENGINE_KEY_KICK:     *code = 0x10u; return 1;
+    case FIFA96_ENGINE_KEY_PASS:     *code = 0x20u; return 1;
     case FIFA96_ENGINE_KEY_LONG_BALL: *code = 0x40u; return 1;
-    default:                      return 0;
+    case FIFA96_ENGINE_KEY_CONFIRM:  *code = 0x10u; return 1;   /* pad A */
+    case FIFA96_ENGINE_KEY_DECLINE:  *code = 0x20u; return 1;   /* pad B */
+    default:                         return 0;
   }
+}
+
+/* P8: CONFIRM/DECLINE are menu keys first. They reach the match only while
+ * play is ACTIVE and the pause panel is closed; keyboard KICK/PASS (Z/C) are
+ * not gated here, preserving their existing match bindings. */
+static int match_run_key_gated(const struct fifa96_match_run *mr, int32_t raw_code) {
+  if (raw_code != FIFA96_ENGINE_KEY_CONFIRM && raw_code != FIFA96_ENGINE_KEY_DECLINE)
+    return 0;
+  return mr->paused || mr->lc.screen != FIFA96_MATCH_SCREEN_ACTIVE;
 }
 
 int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_key *keys,
@@ -443,6 +459,7 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
     for (size_t i = 0; i < count; i++) {
       uint8_t code = 0;
       if (keys[i].state != 1) continue;   /* press events only */
+      if (match_run_key_gated(mr, keys[i].raw_code)) continue;
       if (!match_run_map_key(keys[i].raw_code, &code)) continue;
       raw |= code;
     }

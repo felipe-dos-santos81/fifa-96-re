@@ -33,8 +33,10 @@ static void test_wrapper_contract(void) {
   assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
   press(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
   assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  assert(fr.frontend.confirm == 1);   /* P8: pad A keeps MENU confirm */
   press(&fr, FIFA96_ENGINE_KEY_DECLINE, 1);
   assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  assert(fr.frontend.confirm == 0);   /* P8: pad B keeps MENU back/decline */
   assert(quit == 0);
 
   /* Every step rendered a frame. */

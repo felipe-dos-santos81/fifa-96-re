@@ -156,7 +156,12 @@ int fifa96_platform_sdl3_map_scancode(int scancode) {
   }
 }
 
-static int32_t sdl3_map_button(Uint8 b) {
+/* Pure gamepad-button -> engine key mapping, shared by the poll path below and
+ * port/tests/test_engine_sdl3.c (the test can assert the map without a
+ * physical pad). South/East stay CONFIRM/DECLINE for the front-end; the match
+ * input additionally maps those two codes to KICK/PASS (fifa96_match_run.c).
+ * 0 = unmapped. */
+int fifa96_platform_sdl3_map_button(int b) {
   switch (b) {
     case SDL_GAMEPAD_BUTTON_DPAD_UP:    return FIFA96_ENGINE_KEY_UP;
     case SDL_GAMEPAD_BUTTON_DPAD_DOWN:  return FIFA96_ENGINE_KEY_DOWN;
@@ -237,14 +242,14 @@ static int sdl3_poll(void *self, fifa96_platform_key *out, size_t cap, int *coun
         sdl3_pad_removed(s, ev.gdevice.which);
         break;
       case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
-        int32_t code = sdl3_map_button(ev.gbutton.button);
+        int32_t code = fifa96_platform_sdl3_map_button(ev.gbutton.button);
         sdl3_key_hold(s, code, 1);
         sdl3_push_key(out, cap, count, code, 1);
         if (code > 0 && code < SDL3_HELD_CODES) sent[code] = 1u;
         break;
       }
       case SDL_EVENT_GAMEPAD_BUTTON_UP: {
-        int32_t code = sdl3_map_button(ev.gbutton.button);
+        int32_t code = fifa96_platform_sdl3_map_button(ev.gbutton.button);
         sdl3_key_hold(s, code, 0);
         sdl3_push_key(out, cap, count, code, 0);
         break;

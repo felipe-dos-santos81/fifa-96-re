@@ -4185,3 +4185,20 @@ close-out below).
   screen unported; P8-L2 competition ET/penalties separate; P8-L3 screen-5
   no-ET terminal unported; P8-L4 half-time release needs the KICK path;
   P8-L5 `[0x14C1D0]`/`[0x14C2EE]` cells unmodelled.
+
+- **P8 gamepad kick and pass (FU-346, 2026-11-06).** The SDL3 pad map
+  (South=A CONFIRM, East=B DECLINE, West=LONG BALL) is unchanged, but the
+  live match input now also maps CONFIRM to the FU-61 KICK word `0x10` and
+  DECLINE to PASS `0x20`; keyboard Z/C/V and the front-end confirm/back paths
+  are untouched. The mapping is gated to an unpaused ACTIVE run, and the
+  engine tracks CONFIRM/DECLINE held state across INTRO/FRONTEND/MATCH so a
+  key held over the menu -> match handoff or through a pause must be released
+  before it becomes a match button; a fresh press then holds like Z/C. The
+  Controls page now reads `PAD A/SOUTH KICK / CONFIRM`, `PAD B/EAST PASS /
+  BACK`, `PAD WEST LONG BALL`. Tests: match-input CONFIRM/DECLINE codes and
+  the KICK press/release slot path, the paused/result gate, engine-step hold
+  and pause A-resume/B-exit routes, the pure SDL3 button map (no physical
+  pad), the new Controls text, and the front-end confirm/back latch. `make
+  check` **119/119**; M1 `09b726b7…` and M2 v29 `7c3874f7…` exact by `cmp`;
+  census unchanged (78/78, 58/80, 64/80, action 38/45, phase 26/35). Closes
+  P6-L6 and P7-L5.
