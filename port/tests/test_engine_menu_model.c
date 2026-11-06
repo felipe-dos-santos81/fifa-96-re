@@ -285,7 +285,7 @@ static void test_option_descriptors(void) {
   assert(fifa96_menu_model_option_rows() == 21);
   size_t help_count = 0;
   const char *const *help = fifa96_menu_model_controls_text(&help_count);
-  assert(help != NULL && help_count == 14);
+  assert(help != NULL && help_count == 15);
   assert(strcmp(help[0], "CONTROLS") == 0);
   /* The real dual roles: the shared CONFIRM/DECLINE codes are pad A/South and
    * keyboard Enter, and pad B/East and keyboard X/Backspace. */
@@ -296,8 +296,9 @@ static void test_option_descriptors(void) {
   assert(strcmp(help[5], "  MENU: BACK / DECLINE") == 0);
   assert(strcmp(help[6], "  PLAY: PASS") == 0);
   assert(strcmp(help[7], "Z KICK   C PASS   V LONG BALL") == 0);
-  assert(strcmp(help[8], "L/R + Z  AIM   CENTRE = KEEPER") == 0);
-  assert(strcmp(help[9], "HALF-TIME: C/PASS STARTS 2ND HALF") == 0);
+  assert(strcmp(help[8], "UP/DOWN + Z  AIM SHOT") == 0);
+  assert(strcmp(help[9], "CENTRE SHOT = KEEPER'S") == 0);
+  assert(strcmp(help[10], "HALF-TIME: C/PASS STARTS 2ND HALF") == 0);
   assert(strcmp(help[help_count - 1], "PAD WEST  LONG BALL") == 0);
 }
 

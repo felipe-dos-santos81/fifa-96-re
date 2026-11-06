@@ -10461,3 +10461,97 @@ poll carried two codes, so the test fails.
 `09b726b7…` and M2 v29 `7c3874f7…` byte-exact by `cmp`; census unchanged
 (**78/78** bodies, **58/80** natural, **64/80** install-live, action 38/45,
 phase 26/35).
+
+## P9-fix2 — aim axis and keeper goal-side gate (FU-347, 2026-11-06)
+
+**Answer in one line.** The P9 aim used Left/Right (the goal-side z movement
+axis) for the goal-mouth width (world x); the live view/native movement maps
+**Up -> +x / Down -> -x**, so P9-fix2 moves the aim to Up/Down. The keeper save
+also gained a goal-side gate (no save once the ball is past the keeper), and
+the aim now samples a real action/depth rising edge so a new unaimed kick
+cannot inherit a stale ±0x80.
+
+**Major 1 — aim axis (P9-L7 errata).** Fresh review evidence (render axis probe
+at yaw `0xBF9C`, live eye `camera.x-1920`: world `+z` projects **screen-left**,
+`-z` screen-right, world `+x` is farther/higher; live movement: `Up -> pos_x
++0x60`, `Down -> -0x60`, `Left -> pos_z +0x60`, `Right -> -0x60`). The P9
+Left/Right -> world-x mapping was therefore the camera depth axis, not the
+mouth-width axis. `match_run_live_aim_update` now reads the depth bits
+(`held & 0x03`): Up `0x01` -> `x=+0x80`, Down `0x02` -> `x=-0x80`, none/both
+-> `x=0`; Left/Right remain the goal-side z movement keys and are not aim
+inputs. The goal-side target stays `z=side==0 ? +0xB30 : -0xB30`,
+`target_y=0`, and ±0x80 stays inside `|x| < 0xD0`. The controls page now reads
+`UP/DOWN + Z  AIM SHOT` / `CENTRE SHOT = KEEPER'S`; the README states the same
+native axis.
+
+**Major 2 — keeper goal-side gate.** Before the lateral/near tests, a keeper
+whose z is already past the ball cannot save: for a +z goal require
+`keeper.pos_z >= ball.z`; for -z require `keeper.pos_z <= ball.z` (inclusive
+equality allows a smother at the feet). This stops the P9 save from pinning a
+close-range shot after the ball has passed the keeper. The P8 outfield block is
+unchanged (its shape predates P9; not copied into the keeper path).
+
+**Minor 3 — stale aim.** The old `input.fresh` clear was dead whenever another
+key was held (`fifa96_input_update` zeroes `fresh` when the previous poll was
+non-empty). The aim now latches on a real action-button rising edge
+(`live_aim_prev_input = held & 0x73`) or a depth-key edge while an action is
+held, and is consumed by the KICK latch and cleared on save/flight-end. A new
+KICK pressed with no depth bits recomputes the centre even while another
+direction is held. A two-kick fixture aims the first shot Up, stops the flight,
+then presses KICK+Left; the second target is 0, not the stale +0x80.
+
+**Minor 4 — evidence.** The P9 `p9-save.png` claim was replaced by a fresh
+windowed capture, `p9-save2.png`: shipped `DISPLAY=:1`, Friendly Brazil/Italy,
+one centre Z at the kickoff, 0-0 at 00:06, the ball at the defending
+green/white keeper in the penalty area (the deterministic
+`test_live_keeper_saves_centre` remains the primary proof). The old screenshot
+is superseded; the old P9 sentence that described it as "at the defending
+keeper's feet" was not a reliable frame. The one-Z wording is now the actual
+capture script: one centre Z is the shot (and releases the opening latch); no
+second Z is needed. The aim run uses one Z+Up.
+
+**Minor 5 — coverage.** New/updated live tests:
+`test_live_aim_depth_axis` (Up +0x80, Down -0x80, both 0, Left/Right 0,
+both-held-before-KICK 0), `test_live_keeper_goal_side` (+z keeper 1 and -z
+keeper 0: ball 0x9C0 saves, 0x9F0/0xA40 do not save and the native mouth chain
+converts), `test_live_keeper_mouth_edge` (natural near keeper and a keeper
+staged goal-side of the mouth ball; the mouth gate is the isolated early-out),
+`test_live_stale_aim_two_kicks` (aimed then KICK+Left -> centre), and the
+existing centre-save test now asserts `ball.carrier == keeper_id`. The kickoff
+test covers side 0 Up/+0x80 and side 1 Down/-0x80; the keeper-beaten test
+covers side 0 Down and side 1 Up, so all four side/direction combinations run.
+`test_engine_match_completion`'s end-to-end case uses KICK+Up.
+
+**Gate.** `make check` **119/119** (strict build + ASan/UBSan); M1
+`09b726b7…` and M2 v29 `7c3874f7…` byte-exact by `cmp`; census unchanged
+(**78/78** bodies, **58/80** natural, **64/80** install-live, 6 blocked,
+action 38/45, phase 26/35). No new body or dispatch slot.
+
+**Windowed evidence (shipped `DISPLAY=:1`, Brazil/Italy, default halves, no
+score/ball staging).** `p9-save2.png`: one centre Z, 0-0 at 00:06 with the ball
+at the defending keeper in the penalty area (the shot did not score). A fresh
+launch with **Z + Up** gives `p9-aim-goal2.png` (**BRA 1-0 ITALY**, the score
+updates by 00:06; the frame at 00:05 is still 0-0 as the goal chain completes).
+That aim run then released the post-goal kickoff (Z) and the half-time sit-1
+gate (long C+Z pulses; the sit-1 gate still needed repeated pulses) and
+reached `p9-fulltime2.png` (**FULL TIME, BRA 1-0 ITALY, PERIOD 2**). The save
+and aim screenshots are separate launches: after a save the ball is with the
+defending keeper and a live chase is needed; the aimed proof is the fresh
+kickoff. The old `p9-save.png`/`p9-aim-goal.png`/`p9-fulltime.png` are
+superseded by the `…2.png` set.
+
+**Doc errata (append-only; the P9 section remains historical).** (1) The P9
+"mapped Left/Right -> world x" aim is superseded by Up/Down: world x is the
+mouth-width axis and Left/Right are the goal-side z axis. (2) The P9
+`p9-save.png` evidence sentence is superseded by `p9-save2.png` and the
+deterministic save test. (3) The P9 one-Z wording is confirmed by the new
+capture (one Z is the shot); the P8 "first Z clears, second fires" remains an
+older narrative, not the shipped path.
+
+**Residual legs.** P9-L7 the aim is still a world-x target band, not the
+native per-code target/loft or aim/camera director; P9-L8 the native
+open-play keeper save/dive remains unported (this is the labelled stand-in);
+P9-L9 the goal-side gate is a plain current-z test, not a native dive reach;
+P9-L10 the half-time sit-1 gate still needs repeated KICK/C pulses in the
+windowed path; row-05 `FUN_0007F7E0`, row 03 and the full 10-player AI remain
+open.

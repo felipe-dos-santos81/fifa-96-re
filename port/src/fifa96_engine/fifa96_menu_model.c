@@ -158,8 +158,9 @@ static const uint8_t option_order[FIFA96_MENU_OPTION_ORDER_COUNT] = {
  * both directions. In menus they select/confirm and back/decline; in live play
  * they kick and pass. Z/C/V keep their dedicated kick/pass/long-ball codes, and
  * the half-time sit-1 kickoff only releases on a slot input (C/PASS is the
- * documented start-second-half key). P9/FU-347: holding Left/Right with Z aims
- * the shot to ±0x80; an unaimed (centre) shot is the keeper's. */
+ * documented start-second-half key). P9/FU-347 (P9-fix2 axis): holding Up or
+ * Down with Z aims the shot to ±0x80 along the goal-mouth width (world x);
+ * an unaimed (centre) shot is the keeper's. */
 static const char *const option_controls_text[] = {
     "CONTROLS",
     "A/SOUTH or ENTER",
@@ -169,7 +170,8 @@ static const char *const option_controls_text[] = {
     "  MENU: BACK / DECLINE",
     "  PLAY: PASS",
     "Z KICK   C PASS   V LONG BALL",
-    "L/R + Z  AIM   CENTRE = KEEPER",
+    "UP/DOWN + Z  AIM SHOT",
+    "CENTRE SHOT = KEEPER'S",
     "HALF-TIME: C/PASS STARTS 2ND HALF",
     "ARROWS / PAD DPAD  MOVE",
     "ESC  MENU: QUIT TO DOS",

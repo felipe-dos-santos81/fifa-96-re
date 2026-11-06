@@ -178,7 +178,9 @@ struct fifa96_match_matchup {
  * `(0, ±0x9EA)`, so the centre shot passes within ~0x30 and is saved. The
  * lateral reach is deliberately the target-x band, not the instantaneous
  * ball distance: a ±0x80 aim is 0x80 from the keeper's x at the goal line and
- * beats it. This is the P9 stand-in for the unported native open-play keeper
+ * beats it. The keeper must also be goal-side of the ball (`pos_z >= ball.z`
+ * for a +z goal, `<=` for -z), so a shot already past the keeper is not
+ * pinned. This is the P9 stand-in for the unported native open-play keeper
  * save (P8-L3/P8-A3); the native per-code target/loft and aim/camera director
  * remain legs. */
 #define FIFA96_MATCH_LIVE_OPPONENT_CLAIM_RANGE 0x40
@@ -1264,14 +1266,21 @@ struct fifa96_match_run {
   uint16_t live_kick_frames;
   int32_t live_kick_target_x, live_kick_target_z;
   int16_t live_kick_speed;
-  /* P9 / FU-347 (aim): the latched lateral shot aim (-0x80 / 0 / +0x80).
-   * The native FU-70 slot only publishes its released button word when every
-   * held key drops (`fifa96_control_slot_update`'s held/held_prev logic), so
-   * at the launch frame the held lateral bit is already gone. The live update
-   * samples the held lateral input each frame into this cell and the KICK
-   * latch consumes it; a fresh KICK/PASS/LONG_BALL press with no lateral clears
-   * it to the centre. Live-only; init/begin/phase change clear it. */
+  /* P9 / FU-347 (aim): the latched goal-mouth width aim (-0x80 / 0 / +0x80).
+   * The live view maps world x to the near/far (mouth-width) axis: native
+   * movement maps Up (0x01) -> +x and Down (0x02) -> -x, so Up -> +0x80 and
+   * Down -> -0x80; Left/Right are the goal-side z axis and are not aim
+   * inputs. The native FU-70 slot only publishes its released action word when
+   * every held key drops (`fifa96_control_slot_update`'s held/held_prev
+   * logic), so the live update captures the aim on a real action-button rising
+   * edge (or a depth-key edge while the action is held) into this cell and the
+   * KICK latch consumes it. `live_aim_prev_input` is the action+depth sample
+   * used for that edge; a new action press with no depth bits clears the aim
+   * to the centre, so an unaimed KICK pressed while another direction is held
+   * cannot inherit a stale ±0x80. Live-only; init/begin/phase change/latch/
+   * save/flight-end clear it. */
   int32_t live_aim_x;
+  uint8_t live_aim_prev_input;   /* previous action (0x70) + depth (0x03) */
   int32_t live_kick_sig_actor;
   int16_t live_kick_sig_traj;
   int16_t live_kick_sig_vx, live_kick_sig_vh, live_kick_sig_vz;
