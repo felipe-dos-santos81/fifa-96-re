@@ -686,6 +686,14 @@ int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
                                          const fifa96_scene_formation *formation,
                                          uint8_t controlled_side);
 
+/* P6: the per-team form of the same seed. Used by the begin matchup when the
+ * two selected formations differ: both teams first take the home `.fmt`, then
+ * team 1 is reseeded from its own `.fmt`. Returns FIFA96_OK, -FIFA96_ERR_INVALID
+ * (NULL/team >= 2), or FIFA96_ERR_NOT_FOUND (not loaded). */
+int fifa96_match_entities_seed_formation_team(struct fifa96_match_entities *pool,
+                                              const fifa96_scene_formation *formation,
+                                              uint32_t team, uint8_t controlled_side);
+
 /* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the per-record OL-13 metadata bind
  * — the engine mirror of the native `FUN_0006D920` (entered at match begin by
  * `FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4 -> FUN_0006D920`). For every

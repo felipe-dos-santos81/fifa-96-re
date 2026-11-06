@@ -2291,6 +2291,27 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
  * render's ball slot sources it at the player-container offset. */
 #define MATCH_RUN_BALL_BANK "ball.fsh"
 
+static int match_run_formation_seed_team(struct fifa96_match_run *mr, uint32_t team,
+                                         uint8_t id) {
+  struct fifa96_scene_formation formation;
+  const char *name;
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  int seeded = 0;
+  if (!mr->engine || !mr->engine->assets) return 0;
+  name = fifa96_match_formation_fmt_name(id);
+  if (!name) return 0;
+  if (fifa96_asset_read(mr->engine->assets, MATCH_RUN_FORMATION_BANK, &bytes, &len) !=
+      FIFA96_OK)
+    return 0;
+  if (fifa96_scene_formation_load(bytes, len, name, &formation) == FIFA96_OK)
+    seeded = fifa96_match_entities_seed_formation_team(
+                 &mr->entities, &formation, team,
+                 mr->phase_machine.side_controlled) == FIFA96_OK;
+  fifa96_asset_free(bytes);
+  return seeded;
+}
+
 static int match_run_formation_seed(struct fifa96_match_run *mr) {
   struct fifa96_scene_formation formation;
   const char *name;
@@ -2298,8 +2319,12 @@ static int match_run_formation_seed(struct fifa96_match_run *mr) {
   size_t len = 0;
   int seeded = 0;
   if (!mr->engine || !mr->engine->assets) return 0;
-  name = fifa96_match_formation_fmt_name(
-      mr->formation[mr->phase_machine.side_controlled & 1u]);
+  /* P6: a Team Select handout seeds both teams from the home `.fmt` (the
+   * native per-side record bind follows in record_meta_bind); without a
+   * handout the pre-P6 controlled-side choice is unchanged. */
+  uint8_t id = mr->matchup_active ? mr->formation[0]
+                                  : mr->formation[mr->phase_machine.side_controlled & 1u];
+  name = fifa96_match_formation_fmt_name(id);
   if (!name) return 0;
   if (fifa96_asset_read(mr->engine->assets, MATCH_RUN_FORMATION_BANK, &bytes, &len) !=
       FIFA96_OK)
@@ -2564,6 +2589,10 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   /* FU-148 S4: the native [0x14C1E4]/[0x14C1E5] BSS default is 0. */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
+  /* P6: no Team Select handout is staged until set_matchup. */
+  memset(&mr->matchup, 0, sizeof mr->matchup);
+  mr->matchup_pending = 0;
+  mr->matchup_active = 0;
   /* FU-150 P2: fresh referee state, machine dispatch and request slots; the
    * settings config is zero until begin installs the derived default handoff
    * (fouls disabled, offside disabled). */
@@ -2768,9 +2797,21 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->act8_record = 0;
   mr->act8_selected = NULL;
   /* FU-148 S4: a fresh match restarts at the BSS formation default 0 (the
-   * native FUN_00011620 team-record producer is leg). */
+   * native FUN_00011620 team-record producer is leg). P6: a pending Team Select
+   * handout applies here, after the reset and before the kickoff formation
+   * seed/meta bind below, so the whole match sees the real per-side ids (the
+   * old post-begin set_formation changed only the observable cell). A begin
+   * with no pending handout explicitly clears the active flag, so a reused run
+   * cannot inherit a previous match's handout. */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
+  mr->matchup_active = 0;
+  if (mr->matchup_pending) {
+    mr->formation[0] = mr->matchup.formation[0];
+    mr->formation[1] = mr->matchup.formation[1];
+    mr->matchup_active = 1;
+    mr->matchup_pending = 0;
+  }
   /* FU-150 P2: a fresh referee machine and the derived FU-68 settings handoff
    * (the menu defaults: foul level 2, offside disabled; the front-end's live
    * settings state is unported). */
@@ -2810,6 +2851,11 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
   int formation_seeded = match_run_formation_seed(mr);
+  /* P6: when the two Team Select formations differ, team 1 keeps its own
+   * `.fmt` placement (the home seed above laid out both teams). Equal ids skip
+   * the reseed, so every direct-begin/M2 path is byte-identical. */
+  if (mr->matchup_active && mr->formation[0] != mr->formation[1])
+    (void)match_run_formation_seed_team(mr, 1u, mr->formation[1]);
   /* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1; re-placed native-order by the
    * two-axis review): the OL-13 metadata bind — the native
    * `FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4 -> FUN_0006D920` producer.
@@ -3025,6 +3071,19 @@ int fifa96_match_run_set_formation(struct fifa96_match_run *mr, uint32_t side,
   if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
   mr->formation[side] = id;
+  return 0;
+}
+
+/* P6: stage the Team Select handout for the next begin. The bridge has already
+ * run the menu's team handoff, but begin's formation reset happens first, so
+ * the real ids must be pre-begin data — see struct fifa96_match_matchup. The
+ * handout is copied and marked pending; begin consumes it after the reset. */
+int fifa96_match_run_set_matchup(struct fifa96_match_run *mr,
+                                 const struct fifa96_match_matchup *matchup) {
+  if (!mr || !matchup) return -FIFA96_ERR_INVALID;
+  if (mr->running) return -FIFA96_ERR_STATE;
+  mr->matchup = *matchup;
+  mr->matchup_pending = 1;
   return 0;
 }
 
@@ -7023,14 +7082,35 @@ static int match_run_palette_frame(const uint8_t *bank, size_t bank_len, uint32_
   return 1;
 }
 
+/* P6: fill one sprite kit band from a PALteam kit colour index. The native
+ * FUN_0004808C mapping is frame 2*(idx/16), ramp idx%16, 16 6-bit RGB entries
+ * at `ramp*0x30`; the first 11 entries are the real shade ramp (the tail is
+ * the shared padding). `dst` is the palette band start, `len` its measured
+ * bank-0 size (shirt 7, shorts 9, socks 6). A missing frame leaves the band
+ * untouched and returns 0. */
+static int match_run_kit_band(uint8_t *palette, int dst, int len, uint8_t index,
+                              const uint8_t frames[3][768], const uint8_t ok[3]) {
+  uint32_t group = (uint32_t)index / 16u;
+  uint32_t ramp = (uint32_t)index % 16u;
+  if (group > 2u || !ok[group] || len <= 0) return 0;
+  if (len > 11) len = 11;
+  const uint8_t *rgb = frames[group] + ramp * 0x30u;
+  for (int i = 0; i < len; i++) {
+    palette[(dst + i) * 3] = (uint8_t)(rgb[i * 3] << 2);
+    palette[(dst + i) * 3 + 1] = (uint8_t)(rgb[i * 3 + 1] << 2);
+    palette[(dst + i) * 3 + 2] = (uint8_t)(rgb[i * 3 + 2] << 2);
+  }
+  return 1;
+}
+
 static int match_run_stage_live_kit(struct fifa96_match_run *mr,
                                     struct fifa96_engine *eng) {
   uint8_t *bytes = NULL;
   size_t len = 0;
   uint8_t *container = NULL;
   size_t container_len = 0;
-  uint8_t kit0[768];
-  uint8_t kit2[768];
+  uint8_t kit_frames[3][768];
+  uint8_t kit_ok[3] = {0, 0, 0};
   uint8_t sys0[768];
   uint8_t sys2[768];
   /* FU-343 P3 fix: build the live palette and per-team remap into locals and
@@ -7072,9 +7152,12 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
                                 &bank_len, &bank_count);
     if (got != 1) continue;
     if (is_team) {
-      if (match_run_palette_frame(bank, bank_len, 0u, kit0) &&
-          match_run_palette_frame(bank, bank_len, 2u, kit2))
-        have_team = 1;
+      /* P6: the kit indices select frames 0/2/4 (2*(idx/16)); frame 4 is the
+       * third group (grayscale) and is optional for the legacy fallback. */
+      for (uint32_t g = 0; g < 3; g++)
+        kit_ok[g] = (uint8_t)match_run_palette_frame(bank, bank_len, 2u * g,
+                                                     kit_frames[g]);
+      if (kit_ok[0] && kit_ok[1]) have_team = 1;
     } else {
       if (match_run_palette_frame(bank, bank_len, 0u, sys0) &&
           match_run_palette_frame(bank, bank_len, 2u, sys2))
@@ -7113,29 +7196,52 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
     remap_team[1][i] = (uint8_t)(i == 0 ? 0xFF : i);
   }
   for (int i = 30; i <= 229; i++) {
-    if (kit0[i * 3] == MATCH_RUN_KIT_MAGENTA_R &&
-        kit0[i * 3 + 1] == MATCH_RUN_KIT_MAGENTA_G &&
-        kit0[i * 3 + 2] == MATCH_RUN_KIT_MAGENTA_B)
+    if (kit_frames[0][i * 3] == MATCH_RUN_KIT_MAGENTA_R &&
+        kit_frames[0][i * 3 + 1] == MATCH_RUN_KIT_MAGENTA_G &&
+        kit_frames[0][i * 3 + 2] == MATCH_RUN_KIT_MAGENTA_B)
       continue;
-    palette[i * 3] = (uint8_t)(kit0[i * 3] << 2);
-    palette[i * 3 + 1] = (uint8_t)(kit0[i * 3 + 1] << 2);
-    palette[i * 3 + 2] = (uint8_t)(kit0[i * 3 + 2] << 2);
+    palette[i * 3] = (uint8_t)(kit_frames[0][i * 3] << 2);
+    palette[i * 3 + 1] = (uint8_t)(kit_frames[0][i * 3 + 1] << 2);
+    palette[i * 3 + 2] = (uint8_t)(kit_frames[0][i * 3 + 2] << 2);
   }
-  /* Team 1: shirt 208..214 -> 239..245, shorts 195..203 -> 230..238 (A7 §4);
-   * the translation redirects those bands, the palette slots take frame 2. */
-  for (int i = 195; i <= 203; i++) {
-    int dst = 230 + (i - 195);
-    remap_team[1][i] = (uint8_t)dst;
-    palette[dst * 3] = (uint8_t)(kit2[i * 3] << 2);
-    palette[dst * 3 + 1] = (uint8_t)(kit2[i * 3 + 1] << 2);
-    palette[dst * 3 + 2] = (uint8_t)(kit2[i * 3 + 2] << 2);
-  }
-  for (int i = 208; i <= 214; i++) {
-    int dst = 239 + (i - 208);
-    remap_team[1][i] = (uint8_t)dst;
-    palette[dst * 3] = (uint8_t)(kit2[i * 3] << 2);
-    palette[dst * 3 + 1] = (uint8_t)(kit2[i * 3 + 1] << 2);
-    palette[dst * 3 + 2] = (uint8_t)(kit2[i * 3 + 2] << 2);
+  if (mr->matchup_active && mr->matchup.kit_ready) {
+    /* P6: the selected kit-0 triples drive the measured bank-0 sprite bands
+     * (A7 §4): home shirt 208..214, shorts 195..203, socks 224..229; away
+     * shirt/shorts use the free 239..245/230..238 slots and the per-team
+     * translation; socks stay shared. Each colour index selects PALteam frame
+     * 2*(idx/16) and ramp idx%16 (the native FUN_0004808C mapping). Brazil
+     * kit 0 (26,4,7) = yellow/blue/green; Italy (3,30,3) = blue/white/blue. */
+    const uint8_t *home = mr->matchup.kit[0][0];
+    const uint8_t *away = mr->matchup.kit[1][0];
+    (void)match_run_kit_band(palette, 208, 7, home[0], kit_frames, kit_ok);
+    (void)match_run_kit_band(palette, 195, 9, home[1], kit_frames, kit_ok);
+    (void)match_run_kit_band(palette, 224, 6, home[2], kit_frames, kit_ok);
+    int shirt_ok = match_run_kit_band(palette, 239, 7, away[0], kit_frames, kit_ok);
+    int shorts_ok = match_run_kit_band(palette, 230, 9, away[1], kit_frames, kit_ok);
+    if (shirt_ok && shorts_ok) {
+      for (int i = 195; i <= 203; i++)
+        remap_team[1][i] = (uint8_t)(230 + (i - 195));
+      for (int i = 208; i <= 214; i++)
+        remap_team[1][i] = (uint8_t)(239 + (i - 208));
+    }
+  } else {
+    /* No PCCD identity (synthetic/no-ISO fixtures): keep the pre-P6 derived
+     * fallback — team 1's shirt/shorts bands copy PALteam frame 2 into the
+     * free slots and the translation redirects them (A7 §4). */
+    for (int i = 195; i <= 203; i++) {
+      int dst = 230 + (i - 195);
+      remap_team[1][i] = (uint8_t)dst;
+      palette[dst * 3] = (uint8_t)(kit_frames[2][i * 3] << 2);
+      palette[dst * 3 + 1] = (uint8_t)(kit_frames[2][i * 3 + 1] << 2);
+      palette[dst * 3 + 2] = (uint8_t)(kit_frames[2][i * 3 + 2] << 2);
+    }
+    for (int i = 208; i <= 214; i++) {
+      int dst = 239 + (i - 208);
+      remap_team[1][i] = (uint8_t)dst;
+      palette[dst * 3] = (uint8_t)(kit_frames[2][i * 3] << 2);
+      palette[dst * 3 + 1] = (uint8_t)(kit_frames[2][i * 3 + 1] << 2);
+      palette[dst * 3 + 2] = (uint8_t)(kit_frames[2][i * 3 + 2] << 2);
+    }
   }
   /* The v1 marking index: no PALsys/PALteam entry is white, so dedicate the
    * unused 0xFE slot (no PLAYART frame uses > 229, A7 §4). */

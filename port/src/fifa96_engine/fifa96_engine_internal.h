@@ -8,6 +8,7 @@
 #include "fifa96_engine/fifa96_match_audio.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_surface.h"
+#include "fifa96_engine/fifa96_team_data.h"
 
 enum fifa96_engine_mode {
   FIFA96_ENGINE_MODE_INTRO = 0,
@@ -29,6 +30,7 @@ struct fifa96_engine {
   int intro_active;             /* intro stream loaded and still stepping */
   uint32_t intro_frames;        /* video frames advanced at 15 fps */
   struct fifa96_frontend_run frontend;
+  struct fifa96_team_data team_data; /* P6: decoded PCCD team identities */
   struct fifa96_match_run match_run; /* engine-owned run the bridge begins */
   struct fifa96_match_run *match; /* active match driver, NULL when none */
   struct fifa96_match_audio audio; /* P3 match audio (crowd + whistle) */

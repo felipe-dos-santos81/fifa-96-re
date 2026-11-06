@@ -11,8 +11,10 @@
  * live in P2; the other six are drawn disabled (A3-L1/A3-L2 legs).
  *
  * Team Select uses the 44 national names A3 verified as plain LANG000 entries.
- * The ids are language-stable; the three-letter codes are derived stand-ins
- * (the native PCCD/PCDB name triple is not decoded, P2-L4). */
+ * The ids are language-stable; the three-letter codes are fallbacks. P6 maps
+ * each row to its PCDB mode-4 slot and replaces the code with the record +0x08
+ * short name when `fifa96_team_data` is available (Brazil -> BRA, Italy ->
+ * ITALY; `fifa96_menu_team_pccd_index`). */
 
 #define FIFA96_MENU_ITEM_COUNT 9
 #define FIFA96_MENU_TEAM_COUNT 44
@@ -72,3 +74,8 @@ const char *fifa96_menu_model_item_fallback(int index);
 uint32_t fifa96_menu_team_id(int index);
 const char *fifa96_menu_team_fallback(int index);
 const char *fifa96_menu_team_code(int index);
+
+/* P6: the row's PCDB mode-4 ("World") slot index (0..61), or -1 when `index`
+ * is outside the 44-row table. The mapping is the single table in
+ * fifa96_team_data.c keyed by the same LANG id. */
+int fifa96_menu_team_pccd_index(int index);

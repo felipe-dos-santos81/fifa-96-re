@@ -497,19 +497,31 @@ int fifa96_match_entities_place(struct fifa96_match_entity *entity) {
  * records. The formation file is indexed by the record block position (the
  * native `byte[rec+0x8D]` that `FUN_0008C2E0` initializes to the record
  * index), so the loop passes the pool `index` directly. */
+int fifa96_match_entities_seed_formation_team(struct fifa96_match_entities *pool,
+                                              const fifa96_scene_formation *formation,
+                                              uint32_t team, uint8_t controlled_side) {
+  if (!pool || !formation || team >= FIFA96_MATCH_ENTITY_TEAMS)
+    return -FIFA96_ERR_INVALID;
+  if (!formation->loaded) return FIFA96_ERR_NOT_FOUND;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &pool->team[team].records[i];
+    fifa96_err_t err = fifa96_scene_formation_place(
+        formation, i, (uint8_t)team, controlled_side, &e->target_x, &e->target_y,
+        &e->target_z);
+    if (err != FIFA96_OK) return (int)err;
+  }
+  return FIFA96_OK;
+}
+
 int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
                                          const fifa96_scene_formation *formation,
                                          uint8_t controlled_side) {
   if (!pool || !formation) return -FIFA96_ERR_INVALID;
   if (!formation->loaded) return FIFA96_ERR_NOT_FOUND;
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
-    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
-      struct fifa96_match_entity *e = &pool->team[t].records[i];
-      fifa96_err_t err = fifa96_scene_formation_place(
-          formation, i, (uint8_t)t, controlled_side, &e->target_x, &e->target_y,
-          &e->target_z);
-      if (err != FIFA96_OK) return (int)err;
-    }
+    int rc = fifa96_match_entities_seed_formation_team(pool, formation, t,
+                                                       controlled_side);
+    if (rc != FIFA96_OK) return rc;
   }
   return FIFA96_OK;
 }

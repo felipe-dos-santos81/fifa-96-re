@@ -20,6 +20,14 @@
 #include "fifa96_engine/fifa96_platform_null.h"
 
 #define MODEL_TEST_COUNT 0x150u
+#define MENU_ISO_PATH "data/game/FIFAPCCD96.iso"
+
+static int menu_file_exists(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return 0;
+  fclose(f);
+  return 1;
+}
 
 static void put32le(uint8_t *p, uint32_t v) {
   p[0] = (uint8_t)v;
@@ -180,6 +188,12 @@ static void test_team_table(void) {
   assert(fifa96_menu_team_id(-1) == 0);
   assert(fifa96_menu_team_fallback(FIFA96_MENU_TEAM_COUNT) == NULL);
   assert(fifa96_menu_team_code(99) == NULL);
+  /* P6: every row has a mode-4 slot; Brazil 6, Italy 28, Israel 27. */
+  assert(fifa96_menu_team_pccd_index(0) == 6);
+  assert(fifa96_menu_team_pccd_index(1) == 28);
+  assert(fifa96_menu_team_pccd_index(43) == 27);
+  assert(fifa96_menu_team_pccd_index(-1) == -1);
+  assert(fifa96_menu_team_pccd_index(FIFA96_MENU_TEAM_COUNT) == -1);
 }
 
 static void key_event(struct fifa96_frontend_run *fr, int32_t code, int state) {
@@ -261,6 +275,12 @@ static void test_native_fixture_reaches_handoff(void) {
   assert(strcmp(e->frontend.team_code[0], "BRA") == 0);
   assert(strcmp(e->frontend.team_code[1], "ITA") == 0);
   assert(e->frontend.formation[0] == 0 && e->frontend.formation[1] == 0);
+  /* P6 no-ISO fallback: the static mode-4 slots are known, but the record
+   * identity stays zero and the 3-letter menu code is unchanged. */
+  assert(e->frontend.pccd_index[0] == 6 && e->frontend.pccd_index[1] == 28);
+  assert(e->frontend.pccd_record[0] == 0 && e->frontend.pccd_record[1] == 0);
+  assert(e->frontend.pccd_id[0] == 0 && e->frontend.pccd_id[1] == 0);
+  assert(e->frontend.pccd_ready[0] == 0 && e->frontend.pccd_ready[1] == 0);
 
   assert(fifa96_match_bridge_from_frontend(&e->match_run, e) == 0);
   assert(e->mode == FIFA96_ENGINE_MODE_MATCH);
@@ -268,6 +288,80 @@ static void test_native_fixture_reaches_handoff(void) {
   assert(strcmp(e->match_run.render.hud_name[0], "BRA") == 0);
   assert(strcmp(e->match_run.render.hud_name[1], "ITA") == 0);
   assert(e->match_run.formation[0] == 0 && e->match_run.formation[1] == 0);
+
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(plat);
+}
+
+/* P6 ISO-gated: the same keyboard path now resolves Brazil/Italy through the
+ * decoded PCCD mode-4 table, so the handoff carries the record +0x08 codes
+ * (BRA/ITALY), ids, formations and kit-0 triples into the match begin. */
+static void test_native_pccd_handoff(void) {
+  if (!menu_file_exists(MENU_ISO_PATH)) {
+    fprintf(stderr, "SKIP PCCD handoff case (no %s)\n", MENU_ISO_PATH);
+    return;
+  }
+  uint8_t lang[8192];
+  uint8_t font[2048];
+  size_t lang_len = build_lango(lang, sizeof lang);
+  size_t font_len = build_font(font, sizeof font);
+
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.step_ns = 10000000ull;
+  fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+  assert(plat != NULL);
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = MENU_ISO_PATH;
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+  assert(e->team_data.ready == 1);
+  assert(fifa96_lang_init_memory(&e->frontend.lang, lang, lang_len, font, font_len) == 0);
+  fifa96_frontend_run_enable_native(&e->frontend, 1);
+  idle(&e->frontend);
+  step(&e->frontend, e->surface);
+  assert(e->frontend.menu.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+
+  press(&e->frontend, FIFA96_ENGINE_KEY_CONFIRM);
+  step(&e->frontend, e->surface);
+  assert(e->frontend.menu.screen == FIFA96_MENU_SCREEN_TEAM_SELECT);
+  press(&e->frontend, FIFA96_ENGINE_KEY_RIGHT);
+  step(&e->frontend, e->surface);
+  for (int i = 0; i < 3; i++) {
+    press(&e->frontend, FIFA96_ENGINE_KEY_UP);
+    step(&e->frontend, e->surface);
+  }
+  assert(e->frontend.menu.team[1] == 1);   /* Italy */
+
+  press(&e->frontend, FIFA96_ENGINE_KEY_CONFIRM);
+  step(&e->frontend, e->surface);
+  assert(e->frontend.match_start == 1);
+  assert(e->frontend.team_selected == 1);
+  assert(strcmp(e->frontend.team_code[0], "BRA") == 0);
+  assert(strcmp(e->frontend.team_code[1], "ITALY") == 0);
+  assert(e->frontend.pccd_index[0] == 6 && e->frontend.pccd_index[1] == 28);
+  assert(e->frontend.pccd_record[0] == 0x2B && e->frontend.pccd_record[1] == 0x20);
+  assert(e->frontend.pccd_id[0] == 59u && e->frontend.pccd_id[1] == 47u);
+  assert(e->frontend.formation[0] == 1 && e->frontend.formation[1] == 2);
+  assert(e->frontend.pccd_ready[0] == 1 && e->frontend.pccd_ready[1] == 1);
+  assert(e->frontend.kit[0][0][0] == 26 && e->frontend.kit[0][0][1] == 4 &&
+         e->frontend.kit[0][0][2] == 7);
+  assert(e->frontend.kit[1][0][0] == 3 && e->frontend.kit[1][0][1] == 30 &&
+         e->frontend.kit[1][0][2] == 3);
+  assert(e->frontend.roster[0][0] == 2047u && e->frontend.roster[1][0] == 806u);
+
+  assert(fifa96_match_bridge_from_frontend(&e->match_run, e) == 0);
+  assert(e->match_run.formation[0] == 1 && e->match_run.formation[1] == 2);
+  assert(strcmp(e->match_run.render.hud_name[0], "BRA") == 0);
+  assert(strcmp(e->match_run.render.hud_name[1], "ITALY") == 0);
+  assert(e->match_run.matchup_active == 1);
+  assert(e->match_run.matchup.kit_ready == 1);
+  assert(fifa96_match_run_end(&e->match_run) == 0);
 
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
@@ -367,6 +461,7 @@ int main(void) {
   test_native_held_confirm_latch();
   test_native_held_input_after_reset();
   test_native_fixture_reaches_handoff();
+  test_native_pccd_handoff();
   puts("test_engine_menu_model OK");
   return 0;
 }

@@ -3937,3 +3937,28 @@ close-out below).
   header claims (GAMEFLD1 first, GAMEFLD3 FHstrip fallback), the duplicate
   Phase-57 heading, the front-end init contract and the team-sync naming are
   corrected; spec §6 records the errata. `make check` 115/115; M1/M2 exact.
+
+- **P6 Task 1 — real team identity from PCCD (2026-11-05).** New
+  `fifa96_pccd.{c,h}` parses/validates the RefPack-decoded `PCDB` image
+  (`/FEDATA/PCCD.POG`, 199,265 B): team block 0x4B4 (0x49 fixed + 0x40 roster,
+  242 offsets), player block 0x8A06 (0x24-stride, 3615), string pool 0x2866A,
+  mode table (13 modes; mode 4 "World" 0x1BC..0x2B3 = 62 slots). New
+  `fifa96_team_data.{c,h}` reads the asset through the engine table, owns the
+  decoded arena, maps the 44 LANG ids to mode-4 slots (Brazil 0x023→6, Italy
+  0x0A6→28), and resolves the record id/names/code/formation/kit/print/roster;
+  it soft-fails without the ISO. The front-end handoff now carries the PCCD
+  index/record/id, `formation[2]`, kit triples, print colours, roster and the
+  record `+8` code (`team_code[2][10]`; Italy `ITALY`), with the 3-letter menu
+  fallback for synthetic tests. The bridge stages a pre-begin
+  `fifa96_match_run_set_matchup`; begin applies the per-side formations after
+  its reset, seeds both teams from the home `.fmt`, and reseeds team 1 from its
+  own `.fmt` only when the ids differ. The live-only kit stage fills the
+  measured bank-0 bands from the selected kit-0 triples through PALteam frame
+  `2*(idx/16)` / ramp `idx%16` (Brazil yellow/blue, Italy blue/white); the
+  ball/HUD paths are unchanged. `make check` 117/117; M1 `09b726b7…` and M2
+  v29 `7c3874f7…` exact by `cmp`; census unchanged (78/78 bodies, 58/80
+  natural, 64/80 install-live, 6 blocked). Windowed `DISPLAY=:1` Brazil vs
+  Italy: `/tmp/opencode/play/p6-teams-brazil-italy.png`,
+  `p6-kits.png` (HUD BRA/ITALY). Legs: roster/AI staging, auto away/keeper
+  kits, per-entity translation pool, stadium/field producers, CTEAM, the
+  mid-match rebind and the P6-L1..L11 items in `port/ENGINE.md`.

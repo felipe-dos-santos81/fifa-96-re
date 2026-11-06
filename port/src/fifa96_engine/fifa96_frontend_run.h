@@ -6,6 +6,7 @@
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_engine/fifa96_surface.h"
+#include "fifa96_engine/fifa96_team_data.h"
 #include "fifa96_loader/fifa96_frontend.h"
 
 #define FIFA96_FRONTEND_TEAM_NAME_MAX 16
@@ -35,11 +36,22 @@ struct fifa96_frontend_run {
   struct fifa96_lang lang;          /* decoded LANG000 + HELV12 */
   struct fifa96_menu_model menu;
   int      native_menu;             /* 1 = route input/draw through `menu` */
-  uint32_t team_id[2];              /* LANG000 id of the chosen team (A3, no
-                                     * roster consumer yet: P2-L4) */
+  uint32_t team_id[2];              /* LANG000 id of the chosen team (A3) */
   char     team_name[2][FIFA96_FRONTEND_TEAM_NAME_MAX];  /* full selected name */
-  char     team_code[2][4];         /* derived 3-letter HUD code (P2-L4) */
-  uint8_t  formation[2];            /* native [0x14C1E4]/[0x14C1E5] ids */
+  /* P6: the PCCD identity handoff. `team_data` is a borrowed engine pointer;
+   * when it is ready the fields below come from the selected mode-4 record,
+   * otherwise the menu's 3-letter fallback code and zeroed identity are used so
+   * synthetic (no-ISO) tests keep their old payload. */
+  struct fifa96_team_data *team_data;
+  char     team_code[2][FIFA96_TEAM_CODE_MAX];  /* record +0x08, uppercased */
+  uint8_t  pccd_index[2];           /* mode-4 slot 0..61 */
+  uint8_t  pccd_record[2];          /* team record index 0..241 */
+  uint32_t pccd_id[2];              /* record +0x00 (CTEAM/TC key) */
+  uint8_t  formation[2];            /* record +0x12 (native [0x14C1E4+side]) */
+  uint8_t  kit[2][4][3];            /* record +0x25..+0x30 */
+  uint8_t  kit_print[2][4];         /* record +0x31..+0x34 */
+  uint32_t roster[2][FIFA96_PCCD_ROSTER_COUNT];  /* record +0x49.. */
+  uint8_t  pccd_ready[2];           /* 1 = the fields above are PCCD-backed */
   int      team_selected;           /* 1 = the native menu supplies the current
                                      * team payload (the bridge stages it) */
   uint8_t  key_down[16];            /* F1: raw engine key codes currently held

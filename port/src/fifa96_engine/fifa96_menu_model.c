@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include "fifa96_engine/fifa96_menu_model.h"
+#include "fifa96_engine/fifa96_team_data.h"
 
 /* A3 §1.1: FUN_0001FC50's nine FUN_00015960 widgets, in the native creation
  * order. `code` is the packed widget id's low byte (the screen return value),
@@ -17,8 +18,9 @@ static const struct fifa96_menu_item_desc menu_items[FIFA96_MENU_ITEM_COUNT] = {
 };
 
 /* A3 §2.3: the 44 national-team names as plain LANG000 entries (language-
- * stable ids). The codes are the derived three-letter HUD stand-ins (the
- * native PCCD/PCDB short name is not decoded, P2-L4). */
+ * stable ids). The codes are the fallback three-letter HUD stand-ins; P6
+ * replaces them with the PCCD record +0x08 short name when team data is
+ * available (`fifa96_menu_team_pccd_index` gives the mode-4 slot). */
 static const struct {
   uint32_t lang_id;
   const char *name;
@@ -187,4 +189,12 @@ const char *fifa96_menu_team_fallback(int index) {
 const char *fifa96_menu_team_code(int index) {
   if (index < 0 || index >= FIFA96_MENU_TEAM_COUNT) return NULL;
   return menu_teams[index].code;
+}
+
+/* P6: the menu row's mode-4 ("World") index. The single 44-entry mapping lives
+ * in fifa96_team_data.c; the menu table's LANG ids are the keys, so the two
+ * tables cannot drift. Returns -1 for an invalid row. */
+int fifa96_menu_team_pccd_index(int index) {
+  if (index < 0 || index >= FIFA96_MENU_TEAM_COUNT) return -1;
+  return fifa96_team_data_lang_index(menu_teams[index].lang_id);
 }

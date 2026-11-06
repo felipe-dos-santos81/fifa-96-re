@@ -48,6 +48,21 @@
 struct fifa96_engine;
 struct fifa96_surface;
 
+/* P6: the pre-begin team handout. The bridge stages the native Team Select
+ * payload here before `fifa96_match_run_begin`, because begin resets
+ * `formation[]` and seeds the kickoff placement before the post-begin setters
+ * run. `formation[side]` is the PCCD record +0x12 id; `kit[side][0]` is the
+ * selected kit-0 triple (shirt, shorts, socks) from record +0x25..+0x27.
+ * `kit_ready` gates the live kit-band stage (no PCCD/identity = 0 keeps the
+ * derived PALteam fallback). A direct begin without a staged matchup is a
+ * no-op (`matchup_active` stays 0), so the M2 tape and direct-begin fixtures
+ * are byte-identical. */
+struct fifa96_match_matchup {
+  uint8_t formation[2];
+  uint8_t kit[2][4][3];
+  uint8_t kit_ready;
+};
+
 /* Match presentation slots: FU-85 §4 stages 23 entities (11 + 11 + ball) into
  * the render arrays; the engine keeps the same staging size. */
 #define FIFA96_MATCH_RUN_RENDER_SLOTS 23
@@ -1234,6 +1249,14 @@ struct fifa96_match_run {
    * writer) is the derived producer. The kickoff formation seed reads
    * `formation[controlled_side]` for the 0x14BFC0 `6*id` placement name. */
   uint8_t formation[2];
+  /* P6: the pre-begin Team Select handout (see struct fifa96_match_matchup).
+   * `set_matchup` only stages; begin consumes the next pending handout into
+   * `matchup_active` after its formation reset, and the kickoff seed uses the
+   * home formation for both teams then reseeds team 1 from its own `.fmt` when
+   * the ids differ. A begin with no pending handout clears `matchup_active`. */
+  struct fifa96_match_matchup matchup;
+  uint8_t matchup_pending;
+  uint8_t matchup_active;
   /* FU-146 S3 (goal consumers) run state, native cells:
    *  - `screen_leg` = [0x15B680] the installed `0x110F78` handler index
    *    (0..5; -1 = no handler, the image's [0x15B6D4]==0);
@@ -2545,6 +2568,17 @@ int fifa96_match_run_translation_install(struct fifa96_match_run *mr, uint32_t e
  * 1), or -FIFA96_ERR_STATE (run not live). */
 int fifa96_match_run_set_formation(struct fifa96_match_run *mr, uint32_t side,
                                    uint8_t id);
+
+/* P6: stage the Team Select handout for the next begin (call before begin; the
+ * bridge fills it from the front-end's PCCD identity). Copies the formation
+ * pair and kit triples into the run and marks the handout pending; begin
+ * applies `formation[]` after its reset, seeds both teams from the home `.fmt`
+ * and reseeds team 1 from its own `.fmt` only when the ids differ. The
+ * post-begin `set_formation` remains the live id setter. Returns 0,
+ * -FIFA96_ERR_INVALID (NULL), or -FIFA96_ERR_STATE when the run is already
+ * live (the native handout is match setup, not a mid-match setter). */
+int fifa96_match_run_set_matchup(struct fifa96_match_run *mr,
+                                 const struct fifa96_match_matchup *matchup);
 
 /* FU-199 §7.2 / FU-200 §1/§2 (M2 phase-18 T1; native placement + per-field
  * corrected by the two-axis review): the match-begin OL-13 metadata producer —

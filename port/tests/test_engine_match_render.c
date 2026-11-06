@@ -1305,8 +1305,10 @@ struct live_fixture {
 };
 
 /* The run must be begun at its final address (the engine keeps mr->engine and
- * engine->match pointers), so the fixture owns the struct. */
-static void live_fixture_make(struct live_fixture *f) {
+ * engine->match pointers), so the fixture owns the struct. `matchup` is staged
+ * before begin for the P6 identity cases; NULL keeps the direct-begin path. */
+static void live_fixture_make_matchup(struct live_fixture *f,
+                                      const struct fifa96_match_matchup *matchup) {
   memset(f, 0, sizeof *f);
   struct fifa96_platform_null_config pcfg;
   memset(&pcfg, 0, sizeof pcfg);
@@ -1326,6 +1328,7 @@ static void live_fixture_make(struct live_fixture *f) {
   fifa96_match_run_init(&f->mr);
   assert(fifa96_match_run_set_live_start(&f->mr, 1) == 0);
   assert(f->mr.live_start == 1);
+  if (matchup != NULL) assert(fifa96_match_run_set_matchup(&f->mr, matchup) == 0);
   assert(fifa96_match_run_begin(&f->mr, f->engine, 0) == 0);
   assert(f->mr.running == 1);
   assert(f->mr.state.phase == 2);   /* the live open-play phase */
@@ -1336,6 +1339,10 @@ static void live_fixture_make(struct live_fixture *f) {
   assert(f->mr.render.enabled == 1);
   assert(f->mr.render.palette_ready == 1);
   assert(fifa96_match_run_stage_pitch(&f->mr, f->engine) == 0);
+}
+
+static void live_fixture_make(struct live_fixture *f) {
+  live_fixture_make_matchup(f, NULL);
 }
 
 static void live_fixture_drop(struct live_fixture *f) {
@@ -1455,6 +1462,117 @@ static void test_live_begin_formation_pitch_and_kit(void) {
    * the near-white scan selects the pure-white 0xFE marking slot (the live
    * text is white); 30 is only the pre-stage fallback. */
   assert(r->hud_colors_ready == 1);
+  assert(r->hud_ink == FIFA96_PITCH_LINE_INDEX);
+
+  live_fixture_drop(&f);
+}
+
+/* P6: the pre-begin Team Select handout drives the per-side formation. Team 0
+ * always takes the home `.fmt`; team 1 is reseeded from its own `.fmt` only
+ * when the ids differ (Brazil 1 vs Italy 2 here). */
+static void snapshot_targets(const struct fifa96_match_run *mr, uint32_t team,
+                             int32_t x[FIFA96_MATCH_ENTITY_RECORDS],
+                             int32_t z[FIFA96_MATCH_ENTITY_RECORDS]) {
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    x[i] = mr->entities.team[team].records[i].target_x;
+    z[i] = mr->entities.team[team].records[i].target_z;
+  }
+}
+
+static void test_live_matchup_formations(void) {
+  struct fifa96_match_matchup same;
+  memset(&same, 0, sizeof same);
+  same.formation[0] = 1;
+  same.formation[1] = 1;
+  struct live_fixture fa;
+  live_fixture_make_matchup(&fa, &same);
+  assert(fa.mr.matchup_active == 1);
+  assert(fa.mr.formation[0] == 1 && fa.mr.formation[1] == 1);
+  int32_t a0x[FIFA96_MATCH_ENTITY_RECORDS], a0z[FIFA96_MATCH_ENTITY_RECORDS];
+  int32_t a1x[FIFA96_MATCH_ENTITY_RECORDS], a1z[FIFA96_MATCH_ENTITY_RECORDS];
+  snapshot_targets(&fa.mr, 0, a0x, a0z);
+  snapshot_targets(&fa.mr, 1, a1x, a1z);
+  live_fixture_drop(&fa);
+
+  struct fifa96_match_matchup diff;
+  memset(&diff, 0, sizeof diff);
+  diff.formation[0] = 1;
+  diff.formation[1] = 2;
+  struct live_fixture fb;
+  live_fixture_make_matchup(&fb, &diff);
+  assert(fb.mr.matchup_active == 1);
+  assert(fb.mr.formation[0] == 1 && fb.mr.formation[1] == 2);
+  int32_t b0x[FIFA96_MATCH_ENTITY_RECORDS], b0z[FIFA96_MATCH_ENTITY_RECORDS];
+  int32_t b1x[FIFA96_MATCH_ENTITY_RECORDS], b1z[FIFA96_MATCH_ENTITY_RECORDS];
+  snapshot_targets(&fb.mr, 0, b0x, b0z);
+  snapshot_targets(&fb.mr, 1, b1x, b1z);
+
+  /* Home is the same seed in both runs; team 1 moved to its own formation. */
+  assert(memcmp(a0x, b0x, sizeof a0x) == 0);
+  assert(memcmp(a0z, b0z, sizeof a0z) == 0);
+  int moved = 0;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    if (a1x[i] != b1x[i] || a1z[i] != b1z[i]) moved++;
+  assert(moved > 0);
+
+  live_fixture_drop(&fb);
+}
+
+/* P6: the live kit bands come from the selected kit-0 triples through the
+ * PALteam frame/ramp mapping. Brazil (26,4,7) = frame-2 ramp10 yellow shirt,
+ * frame-0 ramp4 blue shorts; Italy (3,30,3) = frame-0 ramp3 blue shirt,
+ * frame-2 ramp14 white shorts. */
+static void test_live_real_team_kits(void) {
+  struct fifa96_match_matchup matchup;
+  memset(&matchup, 0, sizeof matchup);
+  matchup.formation[0] = 1;
+  matchup.formation[1] = 2;
+  const uint8_t brazil[3] = {26, 4, 7};
+  const uint8_t italy[3] = {3, 30, 3};
+  memcpy(matchup.kit[0][0], brazil, sizeof brazil);
+  memcpy(matchup.kit[1][0], italy, sizeof italy);
+  matchup.kit_ready = 1;
+
+  struct live_fixture f;
+  live_fixture_make_matchup(&f, &matchup);
+  struct fifa96_match_run_render *r = &f.mr.render;
+  assert(f.mr.formation[0] == 1 && f.mr.formation[1] == 2);
+  assert(f.mr.matchup_active == 1 && f.mr.matchup.kit_ready == 1);
+  assert(f.mr.render.team_remap_ready == 1);
+
+  /* Team 0 keeps the identity translation; team 1 redirects its shirt/shorts
+   * bands into the free slots (A7 §4). */
+  assert(r->remap_team[0][195] == 195 && r->remap_team[0][208] == 208);
+  assert(r->remap_team[1][195] == 230 && r->remap_team[1][203] == 238);
+  assert(r->remap_team[1][208] == 239 && r->remap_team[1][214] == 245);
+
+  /* Brazil shirt ramp entry 0 = 6-bit (63,56,5) -> 8-bit (252,224,20). */
+  assert(r->palette[208 * 3] >= 240 && r->palette[208 * 3 + 1] >= 200 &&
+         r->palette[208 * 3 + 2] <= 40);
+  /* Italy shirt ramp entry 0 = (4,13,61) -> (16,52,244). */
+  assert(r->palette[239 * 3] <= 40 && r->palette[239 * 3 + 2] >= 200);
+  /* Brazil shorts ramp entry 0 = (17,4,39) -> (68,16,156). */
+  assert(r->palette[195 * 3] <= 100 && r->palette[195 * 3 + 2] >= 120);
+  /* Italy shorts ramp entry 0 = (61,59,63) -> (244,236,252). */
+  assert(r->palette[230 * 3] >= 220 && r->palette[230 * 3 + 1] >= 220 &&
+         r->palette[230 * 3 + 2] >= 220);
+  /* Team 0 socks use the green ramp (0,48,4) -> (0,192,16). */
+  assert(r->palette[224 * 3] <= 40 && r->palette[224 * 3 + 1] >= 150);
+
+  int shirt_diff = 0, shorts_diff = 0;
+  for (int i = 0; i < 7; i++)
+    for (int c = 0; c < 3; c++)
+      shirt_diff += abs((int)r->palette[(208 + i) * 3 + c] -
+                        (int)r->palette[(239 + i) * 3 + c]);
+  for (int i = 0; i < 9; i++)
+    for (int c = 0; c < 3; c++)
+      shorts_diff += abs((int)r->palette[(195 + i) * 3 + c] -
+                         (int)r->palette[(230 + i) * 3 + c]);
+  assert(shirt_diff > 0 && shorts_diff > 0);
+  /* The marking slot stays pure white and the HUD scan selects it. */
+  assert(r->palette[FIFA96_PITCH_LINE_INDEX * 3] == 0xFF &&
+         r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] == 0xFF &&
+         r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 2] == 0xFF);
   assert(r->hud_ink == FIFA96_PITCH_LINE_INDEX);
 
   live_fixture_drop(&f);
@@ -2253,10 +2371,13 @@ int main(void) {
   test_ball_row_dormant();
   test_engine_match_step_renders();
   test_live_start_gate_and_eye();
-  if (live_file_exists(LIVE_ISO_PATH))
+  if (live_file_exists(LIVE_ISO_PATH)) {
     test_live_begin_formation_pitch_and_kit();
-  else
+    test_live_matchup_formations();
+    test_live_real_team_kits();
+  } else {
     puts("test_engine_match_render: no ISO, live pitch case skipped");
+  }
   puts("test_engine_match_render OK");
   return 0;
 }

@@ -162,6 +162,11 @@ int fifa96_engine_boot(struct fifa96_engine *e) {
     return -1;
   }
   fifa96_menu_art_init(e->assets);
+  /* P6: decode the PCCD team database into an engine-owned arena. Soft-fails
+   * without the ISO (the native menu then keeps the 3-letter fallback codes and
+   * zero formations); decoding is asset-only and cannot reorder boot draws. */
+  (void)fifa96_team_data_init(&e->team_data, e->assets);
+  e->frontend.team_data = &e->team_data;
   /* P2: the native Game Select/Team Select screen is the interactive front-end.
    * The deterministic headless M1/M2 tapes (which run with the ISO mounted)
    * keep the legacy FU-135 frames and the hash-pinned fallback, so the native
@@ -387,6 +392,7 @@ void fifa96_engine_destroy(struct fifa96_engine *e) {
    * audio first: its bank descriptors borrow the cache bytes. */
   fifa96_match_audio_stop(&e->audio);
   if (e->match) fifa96_match_run_end(e->match);
+  fifa96_team_data_shutdown(&e->team_data);
   if (e->booted) e->plat->shutdown(e->plat->self);
   fifa96_lang_shutdown(&e->frontend.lang);
   fifa96_surface_destroy(e->surface);

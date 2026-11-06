@@ -34,8 +34,25 @@ static void frontend_copy_name(char dst[FIFA96_FRONTEND_TEAM_NAME_MAX], const ch
   dst[len] = '\0';
 }
 
+/* Uppercase ASCII and truncate to FIFA96_TEAM_CODE_MAX-1 (the native
+ * FUN_00017748 filter writes a 10-byte local). */
+static void frontend_copy_code(char dst[FIFA96_TEAM_CODE_MAX], const char *src) {
+  memset(dst, 0, FIFA96_TEAM_CODE_MAX);
+  if (src == NULL) return;
+  size_t len = strlen(src);
+  if (len > FIFA96_TEAM_CODE_MAX - 1u) len = FIFA96_TEAM_CODE_MAX - 1u;
+  for (size_t i = 0; i < len; i++) {
+    char c = src[i];
+    if (c >= 'a' && c <= 'z') c = (char)(c - ('a' - 'A'));
+    dst[i] = c;
+  }
+}
+
 /* Snapshot the model's current teams into the bridge payload. The full name is
- * kept for display; the HUD takes the derived 3-letter code (A3 §2.3/P2-L4). */
+ * kept for display. P6: when the engine's team data is ready the handoff is the
+ * selected PCCD mode-4 record — id/record/index, short-name code (+0x08),
+ * formation (+0x12), kit triples (+0x25..+0x30), print colours and roster; the
+ * menu's 3-letter code and zeroed identity stay the no-ISO fallback. */
 static void frontend_native_sync_teams(struct fifa96_frontend_run *fr) {
   for (int side = 0; side < 2; side++) {
     int index = fr->menu.team[side];
@@ -43,12 +60,29 @@ static void frontend_native_sync_teams(struct fifa96_frontend_run *fr) {
     frontend_copy_name(fr->team_name[side],
                        frontend_native_string(fr, fr->team_id[side],
                                               fifa96_menu_team_fallback(index)));
-    const char *code = fifa96_menu_team_code(index);
-    memset(fr->team_code[side], 0, sizeof fr->team_code[side]);
-    if (code != NULL) {
-      size_t len = strlen(code);
-      if (len > 3) len = 3;
-      memcpy(fr->team_code[side], code, len);
+    int pccd_index = fifa96_menu_team_pccd_index(index);
+    fr->pccd_index[side] = pccd_index >= 0 ? (uint8_t)pccd_index : 0;
+    fr->pccd_record[side] = 0;
+    fr->pccd_id[side] = 0;
+    fr->formation[side] = 0;
+    memset(fr->kit[side], 0, sizeof fr->kit[side]);
+    memset(fr->kit_print[side], 0, sizeof fr->kit_print[side]);
+    memset(fr->roster[side], 0, sizeof fr->roster[side]);
+    fr->pccd_ready[side] = 0;
+    frontend_copy_code(fr->team_code[side], fifa96_menu_team_code(index));
+
+    struct fifa96_team_identity identity;
+    if (fr->team_data != NULL &&
+        fifa96_team_data_lookup(fr->team_data, fr->team_id[side], &identity) == 0) {
+      fr->pccd_index[side] = identity.pccd_index;
+      fr->pccd_record[side] = identity.pccd_record;
+      fr->pccd_id[side] = identity.pccd_id;
+      fr->formation[side] = identity.formation;
+      memcpy(fr->kit[side], identity.kit, sizeof fr->kit[side]);
+      memcpy(fr->kit_print[side], identity.print, sizeof fr->kit_print[side]);
+      memcpy(fr->roster[side], identity.roster, sizeof fr->roster[side]);
+      frontend_copy_code(fr->team_code[side], identity.code);
+      fr->pccd_ready[side] = 1;
     }
   }
   fr->team_selected = 1;
@@ -185,7 +219,14 @@ int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surf
   fr->team_id[1] = 0;
   memset(fr->team_name, 0, sizeof fr->team_name);
   memset(fr->team_code, 0, sizeof fr->team_code);
+  memset(fr->pccd_index, 0, sizeof fr->pccd_index);
+  memset(fr->pccd_record, 0, sizeof fr->pccd_record);
+  memset(fr->pccd_id, 0, sizeof fr->pccd_id);
   memset(fr->formation, 0, sizeof fr->formation);
+  memset(fr->kit, 0, sizeof fr->kit);
+  memset(fr->kit_print, 0, sizeof fr->kit_print);
+  memset(fr->roster, 0, sizeof fr->roster);
+  memset(fr->pccd_ready, 0, sizeof fr->pccd_ready);
   fr->team_selected = 0;
   fr->selected_row = 0;
   fr->entry_state = 0;

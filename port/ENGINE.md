@@ -9399,3 +9399,112 @@ decode/name-finder copies are a module-leaf choice; the three key latches
 model's native-code/fallback seam is test/evidence-bearing; the
 `engine_step`/`stage_live_kit` breadth is architectural and not worth a
 late-wave refactor. `make check` 115/115; M1/M2 exact.
+
+## Phase 60 — P6 Task 1: real team identity from PCCD (FU-344, 2026-11-05)
+
+**Measured (retail ISO, read-only).** `/FEDATA/PCCD.POG` is the only ISO path.
+The file is a RefPack record (`10 FB 03 0A 61 E4`); the declared output is
+`0x030A61` = 199,265 B and the decoded image starts with `PCDB`. First-hand
+decode + byte parse this slice:
+
+- Header: `+0x04` 0x14, team block `+0x08` = 0x4B4, player block `+0x0C` =
+  0x8A06, string pool `+0x10` = 0x2866A, mode base `+0x14` = 0x0C, mode count
+  `+0x18` = 13, mode offsets at `+0x1C`.
+- Team block: `+0x4B4` fixed/dword-prefix size **0x49**, `+0x4B8` count **242**,
+  offsets at `+0x4BC`. Each record is **0x89 B** = 0x49 fixed fields + 16
+  roster dwords; `0x884 + 0xF2*0x89 = 0x8A06` closes the block.
+- Team record: `+0x00` PCCD id (Brazil 59, Italy 47), `+0x04/+0x08/+0x0C` pool
+  offsets (long/short/medium; Brazil "Brazil"/"Bra", Italy "Italy"/"Italy"),
+  `+0x12` formation (Brazil 1, Italy 2), `+0x25/+0x28/+0x2B/+0x2E` four
+  shirt/shorts/socks triples, `+0x31` four print colours, `+0x45` player count,
+  `+0x49` sixteen roster record indices (Brazil `2047,3531,2751,1034,...`).
+- Player block: `+0x8A06` stride **0x24**, `+0x8A0A` count **0xE1F** = 3615;
+  records at `+0x8A0E`, ending exactly at the pool. Record `+0x00` player id,
+  `+0x05` 24-bit pool offset, `+0x08` byte, `+0x09` position ASCII,
+  `+0x0A..+0x1A` 17 skill bytes, `+0x1B` overall (Bebeto 95, Dunga 90).
+- Mode 4 is `"World"`: `mode_base+0x1B0` = 0x1BC, 62 slots through 0x2B3
+  (59 distinct teams + the Netherlands/Netherlands/Rep. Ireland tails). Brazil
+  is slot 6 (record 0x2B), Italy slot 28 (record 0x20).
+- Kit colours are PALteam.fsh indices, not RGB: index `idx` selects frame
+  `2*(idx/16)` and ramp `idx%16` (`FUN_0004808C`); the ramp is 16 6-bit RGB
+  triples at `ramp*0x30`, first 11 real. Measured: Brazil kit 0 `(26,4,7)` =
+  frame-2 ramp10 yellow (255,226,20), frame-0 ramp4 blue (68,16,157), frame-0
+  ramp7 green (0,194,16); Italy `(3,30,3)` = frame-0 ramp3 blue (16,52,246),
+  frame-2 ramp14 white (246,238,255), blue. Brazil/Italy kit 0 does not clash.
+
+**Derived (port construct).** The 44-name Team Select list has no static
+44-id table in the image; each LANG000 id is mapped once to its mode-4 slot
+(`fifa96_team_data.c`). Measured key rows: Brazil `0x023`→6, Italy `0x0A6`→28,
+Argentina `0x013`→1, England `0x06E`→18, Germany `0x088`→21, France `0x07E`→20,
+Spain `0x126`→50, Netherlands `0x0C9`→35, Portugal `0x0E7`→41, USA `0x149`→56,
+Israel `0x0A4`→27. LANG `0xA2 "Ireland"` maps to Rep. Ireland slot 42
+(P6-L2). The 15 unexposed mode-4 teams are listed under the legs. The HUD code
+is the record `+0x08` short name uppercased and truncated to 9 (the native
+10-byte local; Brazil `BRA`, Italy `ITALY`, England `ENG`); the no-ISO fallback
+keeps the menu's 3-letter codes. The team-id→record resolver does not exist
+natively; the mode table is the authority (P6-team-identity §1/§4).
+
+**Landing.** New `fifa96_pccd.{c,h}` (pure bytes, no I/O, all offsets/counts
+bounds-checked; team/player/mode accessors) and `fifa96_team_data.{c,h}`
+(reads `/FEDATA/PCCD.POG` through the asset table, RefPack-decodes into an
+owned arena, keeps the 44-entry LANG→mode-4 map, soft-fails without the ISO).
+`fifa96_frontend_run` carries `pccd_index[2]`, `pccd_record[2]`, `pccd_id[2]`,
+`formation[2]` (+0x12), `kit[2][4][3]`, `kit_print[2][4]`, `roster[2][16]` and
+`team_code[2][10]`, populated from the decoded record; `team_id`/`team_name`
+stay the LANG display identity. The engine boot owns the decoded arena and
+sets the front-end's borrowed pointer.
+
+The bridge now stages a **pre-begin** `fifa96_match_run_set_matchup` (formation
+pair + kit-0 triples). `begin` applies the ids immediately after its formation
+reset, seeds both teams from the home `.fmt` (the existing both-team placement)
+and reseeds team 1 from its own `.fmt` only when the ids differ; the post-begin
+`set_formation` remains the live id setter. No matchup (M2/direct begin) leaves
+`matchup_active` 0 and every path byte-identical. The live-only kit stage fills
+the measured bank-0 bands — home shirt 208..214, shorts 195..203, socks
+224..229; away shirt 239..245, shorts 230..238 through the existing per-team
+remap; socks stay shared — from the selected kit-0 triples through the
+PALteam frame/ramp mapping. Without a decoded identity the pre-P6 derived
+frame-0/2 fallback stays for synthetic fixtures. The ball/HUD paths are
+untouched; the HUD name stage now takes the PCCD `+8` code.
+
+**Errata vs the P6-team-identity recon (append-only).** The report's §2 table
+labels the kit triples with size 6 but the measured fields are 3 bytes at
+`+0x25/+0x28/+0x2B/+0x2E`; §3 places the player overall at `+0x1C`, but the
+measured Bebeto 95/Dunga 90 values are at `+0x1B` (the byte at `+0x1C` is 50).
+The report's measured values are unchanged; only the two offsets/sizes are
+corrected here. The record size is 0x89 (0x49 fixed + 0x40 roster), not a
+0x49-byte record.
+
+**Verification (2026-11-05).** `make check` 117/117 (new `test_engine_pccd`,
+`test_engine_team_data`; extended `test_engine_menu_model` and
+`test_engine_match_render`). M1
+`./build/test_engine_m1 | cmp - port/tests/golden/engine/m1-frames.txt` exact
+(`09b726b7…`); M2 v29 exact (`7c3874f7…`). Census unchanged (78/78 bodies,
+58/80 natural, 64/80 install-live, 6 blocked). Windowed `DISPLAY=:1` retail
+run: Brazil (home) vs Italy (visitor) selected in Team Select
+(`/tmp/opencode/play/p6-teams-brazil-italy.png`); the live frame
+(`p6-kits.png`) shows the HUD `BRA` / `ITALY`, score 0-0 and distinct
+yellow/blue Brazil vs blue/white Italy sprites. Formation ids 1/2 are pinned by
+the matchup test (home targets identical, team 1 moved to its own `.fmt`).
+
+**Identity legs.** P6-L1 the 62-slot mode-4 table has three duplicate tails and
+15 teams not exposed by the port (Algeria, Costa Rica, Croatia, Ghana, Hong
+Kong, Iceland, Ivory Coast, Luxembourg, N. Ireland, New Zealand, Peru,
+Singapore, South Korea, Ukraine, Zambia). P6-L2 LANG `0xA2 "Ireland"` is mapped
+to Rep. Ireland; N. Ireland is not exposed. P6-L3 `set_formation` only stores
+the id; the native `FUN_0008EA70` layout/`.fmt` rebind (`FUN_0007412C`) is not
+mirrored for mid-match changes. P6-L4 native kit auto-selection
+(`FUN_000481EC`/`FUN_0004C154`/`FUN_00047DA0`) and the away/keeper kits
+(`+0x28/+0x2B/+0x2E`) are not modelled; only kit 0 is live. P6-L5 the
+per-entity 256-byte translation pool (`FUN_00046F80`, `0x14BF60`, FU-144 leg 2)
+and non-bank-0 body bands; the band ranges are A7's bank-0 measurement. P6-L6
+player fields beyond id/name/position/rating (`+0x0B..+0x1A`, `+0x1C..`) and
+the `FUN_00012010` roster/GK sort; only the roster ids are carried. P6-L7 the
+team AI block `+0x10/+0x14..+0x21` (`FUN_0008C418` bounds) and the phase-2
+clamp fidelity (FU-177). P6-L8 stadium/field cells `0x1492D0/D4` (settings
+0x16/0x17) have no absolute writer; the stage keeps GAMEFLD1-first /
+GAMEFLD3-FHstrip fallback and GAMESTD1 (FU343-L4). P6-L9 CTEAM/TC override
+(`FUN_000110B8`/`FUN_00025E9C`) is dead on the CD; only the DB path is
+modelled. P6-L10 kit-2/3 blue-byte quirk (`FUN_0004C154` reads `+0x27/+0x2A`).
+P6-L11 `FUN_00011620`'s `count<0x10` second-decode branch is unexercised (all
+mode-4 records have 16 players).

@@ -30,6 +30,22 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
   int rc = fifa96_match_run_set_live_start(mr, live);
   if (rc != 0) return rc;
   eng->match_esc_held = 0;   /* FU-343 P4: fresh pause edge latch */
+  /* P6: stage the Team Select handout before begin. begin explicitly resets
+   * formation[] and seeds the kickoff placement, so the real per-side ids must
+   * already be in the run; the post-begin set_formation below stays the live
+   * id setter. Kit triples ride the same handout for the live-only kit stage. */
+  if (eng->frontend.team_selected) {
+    struct fifa96_match_matchup matchup;
+    memset(&matchup, 0, sizeof matchup);
+    for (uint32_t side = 0; side < 2; side++) {
+      matchup.formation[side] = eng->frontend.formation[side];
+      memcpy(matchup.kit[side], eng->frontend.kit[side], sizeof matchup.kit[side]);
+    }
+    matchup.kit_ready = (uint8_t)(eng->frontend.pccd_ready[0] &&
+                                  eng->frontend.pccd_ready[1]);
+    rc = fifa96_match_run_set_matchup(mr, &matchup);
+    if (rc != 0) return rc;
+  }
   rc = fifa96_match_run_begin(mr, eng, selector);
   if (rc != 0) return rc;
   eng->frontend.match_start = 0;   /* consumed: no instant re-entry */
