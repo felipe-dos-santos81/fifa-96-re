@@ -92,6 +92,36 @@ static void one_granted_frame(struct fifa96_match_run *mr) {
   assert(!"no granted frame within 16 ticks");
 }
 
+/* P7 restart resumability: after a goal/restart the opponent keeps the
+ * kickoff ball and the human controls its nearest own outfield record. Place
+ * that record inside the contact range (0x20 < the opponent's distance 0) and
+ * step one frame: the P7-L2 contact tackle must hand the human the carrier
+ * state. This is test-only position staging; no ball or score is written. */
+static void restart_assert_possession(struct fifa96_match_run *mr, uint32_t side) {
+  int32_t human = mr->entities.controlled;
+  int32_t carrier = mr->entities.ball.carrier;
+  struct fifa96_match_entity *e;
+  assert(human >= (int32_t)(side * FIFA96_MATCH_ENTITY_RECORDS));
+  assert(human < (int32_t)((side + 1u) * FIFA96_MATCH_ENTITY_RECORDS));
+  e = &mr->entities.team[side].records[(uint32_t)human % FIFA96_MATCH_ENTITY_RECORDS];
+  if (carrier >= (int32_t)(side * FIFA96_MATCH_ENTITY_RECORDS) &&
+      carrier < (int32_t)((side + 1u) * FIFA96_MATCH_ENTITY_RECORDS)) {
+    /* The fixture-side-switch case already owns the carrier; assert the
+     * resumable state and skip the opponent tackle. */
+    assert(e->code == 5u);
+    return;
+  }
+  assert(carrier >= (int32_t)((side ^ 1u) * FIFA96_MATCH_ENTITY_RECORDS));
+  assert(carrier < (int32_t)((side ^ 1u) + 1u) * (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+  e->pos_x = mr->entities.ball.x + 0x20;
+  e->pos_z = mr->entities.ball.z;
+  e->target_x = e->pos_x;
+  e->target_z = e->pos_z;
+  one_granted_frame(mr);
+  assert(mr->entities.ball.carrier == human);
+  assert(e->code == 5u);
+}
+
 static void stage_ball(struct fifa96_match_run *mr, int32_t x, int32_t y, int32_t z) {
   mr->entities.ball.x = x;
   mr->entities.ball.y = y;
@@ -176,19 +206,12 @@ static void test_live_kick_release_runs_row07(void) {
 static void test_live_auto_switch_carrier_and_nearest(void) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
-  /* Run the opening kick so the kickoff latch is released. */
-  {
-    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
-    assert(fifa96_match_run_input(mr, &kick, 1) == 0);
-    one_granted_frame(mr);
-    assert(fifa96_match_run_input(mr, NULL, 0) == 0);
-    for (int i = 0; i < 8 && (mr->dispatched_ok & (1ull << 7u)) == 0ull; i++)
-      one_granted_frame(mr);
-  }
-  assert(mr->live_kickoff_touch == 0u);
-  /* Let the post-kick possession hold expire so the loose-ball claim is live. */
-  for (int i = 0; i < 40; i++) one_granted_frame(mr);
-  assert(mr->live_kick_hold == 0u);
+  /* Clear the opening-kick latch directly (fixture state, not a kick): this
+   * test isolates the selection/claim rules from the shot/flight path. */
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_active = 0u;
+  mr->live_kick_hold = 0u;
 
   /* Carrier priority: record 3 owns the possession cell and sits on the ball. */
   for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
@@ -380,6 +403,16 @@ static void test_live_kickoff_shot_scores_side(uint32_t side) {
   assert(taker != (int32_t)(side * FIFA96_MATCH_ENTITY_RECORDS));   /* no keeper */
   assert(mr->slot.entity == taker);
   assert(mr->entities.team[side].target == taker);
+  if (side != 0u) {
+    /* Fixture-only controlled-side switch: hand the switched side the kickoff
+     * possession cell and the carrier state so the optional 0-1 case exercises
+     * the same KICK/flight path. The real side-0 case above is the no-staging
+     * shipped-kickoff test; no ball position or score is written. */
+    struct fifa96_match_entity *e =
+        &mr->entities.team[side].records[(uint32_t)taker % 11u];
+    mr->entities.ball.carrier = taker;
+    (void)fifa96_match_entities_install(e, (uint8_t)mr->state.phase, 5u, 0);
+  }
   assert(mr->entities.team[side].records[taker % 11u].code == 5u);
 
   {
@@ -441,10 +474,22 @@ static void test_live_kickoff_shot_scores_side(uint32_t side) {
     }
     assert(resumed == 1);
   }
-  for (int i = 0; i < 100; i++) {
+  restart_assert_possession(mr, side);
+  {
+    int32_t bx = mr->entities.ball.x;
+    int32_t bz = mr->entities.ball.z;
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(mr, &kick, 1) == 0);
     one_granted_frame(mr);
+    assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+    for (int i = 0; i < 8; i++) one_granted_frame(mr);
+    assert(mr->live_kick_active == 1u);
+    assert(mr->entities.ball.x != bx || mr->entities.ball.z != bz);
     assert(mr->score[side] == 1u && mr->score[side ^ 1u] == 0u);
   }
+  /* The restart is resumable and the human can kick again. A further flight is
+   * allowed to score a second native goal; this test only pins the restart
+   * possession + new kick, so it stops before that flight resolves. */
   drop_lc_fixture(&f);
 }
 
@@ -512,9 +557,97 @@ static void test_live_goal_after_kick(void) {
     }
     assert(resumed == 1);
   }
+  restart_assert_possession(mr, 0u);
   for (int i = 0; i < 200; i++) {
     one_granted_frame(mr);
     assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  }
+  drop_lc_fixture(&f);
+}
+
+/* P7 taker guard + vector re-latch: after the opening kick the old taker is an
+ * AI record and must not arm a human flight; the current human slot still
+ * latches, and a new direction with the same actor/traj/flags/code re-latches
+ * (the signature includes the staged vector). */
+static void test_live_taker_guard_and_relatch(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t old_taker = mr->live_control_taker;
+  int32_t human;
+  assert(old_taker >= 0);
+
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(mr, &kick, 1) == 0);
+  }
+  one_granted_frame(mr);
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  for (int i = 0; i < 8 && (mr->dispatched_ok & (1ull << 7u)) == 0ull; i++)
+    one_granted_frame(mr);
+  assert(mr->live_kickoff_touch == 0u);
+  assert(mr->live_control_taker == FIFA96_MATCH_ENTITY_NONE);
+
+  /* AI pair from the old taker: no human flight, target untouched. */
+  mr->live_kick_active = 0;
+  mr->live_kick_target_x = 0x1234;
+  mr->live_kick_target_z = -0x1234;
+  mr->entities.ball.pair.actor = old_taker;
+  mr->entities.ball.pair.flags = 0x10u;
+  mr->entities.ball.pair.code = 6u;
+  mr->entities.ball.pair.traj = 999;
+  mr->entities.ball.pair.vector.x = 720;
+  mr->entities.ball.pair.vector.height = 0;
+  mr->entities.ball.pair.vector.z = -720;
+  one_granted_frame(mr);
+  assert(mr->live_kick_active == 0u);
+  assert(mr->live_kick_target_x == 0x1234);
+  assert(mr->live_kick_target_z == -0x1234);
+
+  /* A pair from the current human slot still latches (PASS mode keeps the
+   * derived kicker-relative target). */
+  human = mr->slot.entity;
+  if (human < 0 ||
+      human >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    human = mr->entities.controlled;
+  assert(human >= 0 &&
+         human < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS));
+  /* Isolate the human record from the AI pair staging so the staged pair
+   * survives to the frame-tail latch (fixture staging only). */
+  for (uint32_t tt = 0; tt < FIFA96_MATCH_ENTITY_TEAMS; tt++)
+    for (uint32_t ii = 1; ii < FIFA96_MATCH_ENTITY_RECORDS; ii++) {
+      if (tt == 0u && (int32_t)ii == human % (int32_t)FIFA96_MATCH_ENTITY_RECORDS)
+        continue;
+      mr->entities.team[tt].records[ii].skip_9a = 1;
+    }
+  mr->slot.entity = human;
+  mr->entities.controlled = human;
+  mr->entities.team[0].target = human;
+  mr->entities.ball.pair.actor = human;
+  mr->entities.ball.pair.flags = 0x20u;
+  mr->entities.ball.pair.code = 6u;
+  mr->entities.ball.pair.traj = 777;
+  mr->entities.ball.pair.vector.x = 720;
+  mr->entities.ball.pair.vector.height = 100;
+  mr->entities.ball.pair.vector.z = 100;
+  one_granted_frame(mr);
+  assert(mr->live_kick_active == 1u);
+  {
+    int32_t first_x = mr->live_kick_target_x;
+    int32_t first_z = mr->live_kick_target_z;
+    /* Same actor/traj/flags/code, new direction: the vector is part of the
+     * signature, so this is a new kick and re-latches. */
+    mr->live_kick_active = 0;
+    mr->entities.ball.pair.actor = human;
+    mr->entities.ball.pair.flags = 0x20u;
+    mr->entities.ball.pair.code = 6u;
+    mr->entities.ball.pair.traj = 777;
+    mr->entities.ball.pair.vector.x = 720;
+    mr->entities.ball.pair.vector.height = 50;
+    mr->entities.ball.pair.vector.z = 150;
+    one_granted_frame(mr);
+    assert(mr->live_kick_active == 1u);
+    assert(mr->live_kick_target_x != first_x ||
+           mr->live_kick_target_z != first_z);
   }
   drop_lc_fixture(&f);
 }
@@ -524,6 +657,7 @@ int main(void) {
   test_live_kick_release_runs_row07();
   test_live_kick_flight_scores();
   test_live_kickoff_shot_scores();
+  test_live_taker_guard_and_relatch();
   test_live_auto_switch_carrier_and_nearest();
   test_live_goal_after_kick();
   printf("test_engine_live_control: ok\n");

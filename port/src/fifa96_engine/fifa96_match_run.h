@@ -1217,7 +1217,13 @@ struct fifa96_match_run {
   int16_t live_kick_speed;
   int32_t live_kick_sig_actor;
   int16_t live_kick_sig_traj;
+  int16_t live_kick_sig_vx, live_kick_sig_vh, live_kick_sig_vz;
   uint8_t live_kick_sig_flags, live_kick_sig_code;
+  /* P7 / FU-345 (restart): set while a live phase-1 restart is pending, then
+   * consumed on the phase-1 -> phase-2 transition to bind the human control to
+   * its nearest outfield record without awarding the ball (the opponent keeps
+   * the kickoff possession). Live-only; init/begin clear it. */
+  uint8_t live_restart_pending;
   /* FU-197 §2/§5 (M2 phase-17 T2): the act-4 sit-2..4 formation-order arm's
    * state. `formation_order[side][i]` mirrors the desired line-up matrix
    * `0x14C360 + side*0x7B + i*4`; `formation_current[side][i]` mirrors the

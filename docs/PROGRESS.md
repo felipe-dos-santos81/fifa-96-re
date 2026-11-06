@@ -4098,3 +4098,29 @@ close-out below).
   P7-L12 native aim/camera director (held-direction intent, goal-side
   choice, keeper/defender blocking), P7-L7 per-code target algebra/receive
   target, P7-L10 loft arc/receive hand-off.
+
+- **P7 playable restart possession and taker guard (FU-345, 2026-11-06).** A
+  live-only `live_restart_pending`/`match_run_live_restart_bind` re-seeds the
+  human control to its nearest outfield record on every phase-1 -> phase-2
+  restart, without awarding the opponent's kickoff ball; the restart also
+  clears the stale kick hold/flight. `match_run_live_control_tackle` is the
+  P7-L2 contact stand-in: within 0x40 of a loose/stationary opponent-carried
+  ball (speed <= 4, no live flight, hold clear) it hands the human the carrier
+  state 5. The nearest claim now requires a strict distance win (no tie steal)
+  and is guarded by `!live_kick_active`. The flight taker fallback accepts
+  `live_control_taker` only while `live_kickoff_touch != 0` and clears it on
+  the opening touch, so an AI pair from the old taker cannot arm a human
+  flight. The flight signature includes the staged vector, so a new direction
+  with the same actor/traj/flags/code re-latches. `test_engine_live_control`
+  now has seven top-level cases/eight functions including the side helper:
+  restart contact possession, restart kick/new flight, both kickoff-shot
+  sides, taker guard and vector re-latch are covered. `make check` 119/119;
+  M1 `09b726b7…` and M2 v29 `7c3874f7…` exact by `cmp`; census unchanged
+  (78/78, 58/80, 64/80, action 38/45, phase 26/35). Shipped `DISPLAY=:1`
+  Brazil/Italy: Z at kickoff -> 1-0, Z restart, arrows/contact tackle, Z kick;
+  `/tmp/opencode/play/p7-restart-possession.png` and
+  `p7-restart-kick.png` (score stays native 1-0). Closure note: P7-L3 is
+  closed by the flight addendum; P7-L6/P7-L11 are superseded by the natural
+  goal addendum. Remaining: native aim/camera director (KICK always
+  goal-centre, no keeper/defender blocking), P7-L7 per-code target/receive,
+  P7-L10 loft/receive hand-off, full possession/tackle AI.

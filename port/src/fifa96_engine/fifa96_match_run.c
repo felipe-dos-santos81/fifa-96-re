@@ -2604,12 +2604,16 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
       id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
     return;
   /* Only the human's slot/actor starts a flight; an opponent/AI pair is left
-   * to the native ball machine. `live_control_taker` covers the release frame,
-   * where the same-frame AI merge may already have moved the slot/control. */
+   * to the native ball machine. `live_control_taker` is accepted only on the
+   * opening-kick release frame (`live_kickoff_touch` still set); afterwards the
+   * old taker is an AI record and must not arm a human flight. */
   if (id != mr->slot.entity && id != mr->entities.controlled &&
-      id != mr->live_control_taker)
+      !(id == mr->live_control_taker && mr->live_kickoff_touch != 0u))
     return;
   if (id == mr->live_kick_sig_actor && pair->traj == mr->live_kick_sig_traj &&
+      pair->vector.x == mr->live_kick_sig_vx &&
+      pair->vector.height == mr->live_kick_sig_vh &&
+      pair->vector.z == mr->live_kick_sig_vz &&
       pair->flags == mr->live_kick_sig_flags && pair->code == mr->live_kick_sig_code)
     return;   /* the same staged kick: already consumed */
   team8 = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
@@ -2651,6 +2655,9 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   mr->live_kick_active = 1u;
   mr->live_kick_sig_actor = id;
   mr->live_kick_sig_traj = pair->traj;
+  mr->live_kick_sig_vx = pair->vector.x;
+  mr->live_kick_sig_vh = pair->vector.height;
+  mr->live_kick_sig_vz = pair->vector.z;
   mr->live_kick_sig_flags = pair->flags;
   mr->live_kick_sig_code = pair->code;
 }
@@ -2692,15 +2699,80 @@ static void match_run_live_kick_flight_end(struct fifa96_match_run *mr,
     mr->live_kick_active = 0;
 }
 
+/* P7 / FU-345 (restart): bind the human control to its nearest outfield record
+ * at a phase-1 -> phase-2 restart, without awarding possession (the opponent
+ * keeps the kickoff ball). The native restart's own control producer is the
+ * unported FU-295 caller chain; this only rebinds the FU-70 slot / actor /
+ * team target / camera through the same native helpers as the live seed. */
+static void match_run_live_restart_bind(struct fifa96_match_run *mr) {
+  int32_t t;
+  int32_t id = FIFA96_MATCH_ENTITY_NONE;
+  if (!mr || !mr->live_start || mr->state.phase != 2u) return;
+  t = match_run_live_control_team(mr);
+  if (t < 0) return;
+  {
+    int index = fifa96_match_entities_team_select(&mr->entities, (uint32_t)t,
+                                                  (int16_t)mr->entities.ball.x,
+                                                  (int16_t)mr->entities.ball.z);
+    if (index >= 0)
+      id = (int32_t)((uint32_t)t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+  }
+  if (id != FIFA96_MATCH_ENTITY_NONE)
+    (void)match_run_live_control_bind(mr, id, 0);
+}
+
+/* P7-L2 (tackle/possession stand-in): the static AI restart can park an
+ * opponent carrier on the ball, and the nearest-only claim can never beat
+ * distance 0. When the human's selected record is within the contact range of
+ * a loose/stationary opponent-carried ball (and no live kick is in flight),
+ * clear the opponent possession cell and hand the carrier state to the human.
+ * This is a derived contact tackle, not a native row-05 steal; it writes only
+ * the ball possession cell and the human record's carrier code, never the
+ * score/phase/goal cells. */
+static int match_run_live_control_tackle(struct fifa96_match_run *mr, uint32_t t,
+                                         int32_t human_id,
+                                         struct fifa96_match_entity *human) {
+  int32_t carrier;
+  int32_t dx;
+  int32_t dz;
+  if (!mr || !mr->live_start || mr->state.phase != 2u) return 0;
+  if (mr->live_kick_active != 0u) return 0;      /* no claim while in flight */
+  if (mr->live_kick_hold != 0u) return 0;        /* post-kick release hold */
+  carrier = mr->entities.ball.carrier;
+  if (carrier < 0 ||
+      carrier >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  if ((uint32_t)(carrier / (int32_t)FIFA96_MATCH_ENTITY_RECORDS) == t) return 0;
+  if (mr->entities.ball.speed > 4) return 0;     /* only a loose/stationary ball */
+  dx = mr->entities.ball.x - human->pos_x;
+  dz = mr->entities.ball.z - human->pos_z;
+  if (fifa96_entity_distance(dx, dz) > 0x40) return 0;
+  mr->entities.ball.carrier = human_id;
+  if (human->code != 5u)
+    (void)fifa96_match_entities_install(human, (uint8_t)mr->state.phase, 5u, 0);
+  return 1;
+}
+
 static void match_run_live_control_update(struct fifa96_match_run *mr) {
   int32_t t;
   int32_t id = FIFA96_MATCH_ENTITY_NONE;
   if (!mr || !mr->live_start) return;
   if (mr->state.phase != 2u) {
-    /* A staged phase (goal/celebration/restart) ends the opening latch; the
-     * post-restart control resumes through the normal select below. */
+    /* A staged phase (goal/celebration/restart) ends the opening latch and the
+     * old taker's human authority; a phase-1 restart arms the re-bind below. */
+    if (mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE)
+      mr->live_restart_pending = 1u;
     mr->live_kickoff_touch = 0u;
+    mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
     return;
+  }
+  if (mr->live_restart_pending != 0u) {
+    mr->live_restart_pending = 0u;
+    /* A restart is a fresh possession phase: drop the opening/post-kick hold
+     * and any stale flight so the contact tackle/claim is live again. */
+    mr->live_kick_hold = 0u;
+    mr->live_kick_active = 0u;
+    match_run_live_restart_bind(mr);
   }
   match_run_live_kick_latch(mr);
   t = match_run_live_control_team(mr);
@@ -2721,6 +2793,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
          * live signal; the pair can be cleared by the row's tail). Release the
          * opening possession and fall into the normal per-frame follow. */
         mr->live_kickoff_touch = 0u;
+        mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
         mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
         mr->live_kick_hold = MATCH_RUN_LIVE_CONTROL_HOLD_FRAMES;
       } else {
@@ -2734,6 +2807,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
       }
     } else {
       mr->live_kickoff_touch = 0u;
+      mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
     }
   }
   {
@@ -2775,7 +2849,8 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
      * to the ball as the opponent's nearest, the human takes possession. The
      * native row-05 claim is the unported producer; the opponent block is only
      * read (its records are never written). */
-    if (mr->live_kick_hold == 0u && mr->entities.ball.carrier != id) {
+    if (mr->live_kick_hold == 0u && mr->live_kick_active == 0u &&
+        mr->entities.ball.carrier != id) {
       int16_t own_distance = 0;
       int16_t opp_distance = 0;
       int own_index = match_run_live_control_nearest(mr, (uint32_t)t, &own_distance);
@@ -2783,11 +2858,14 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
                                                      &opp_distance);
       (void)opp_index;
       if (own_index >= 0 && own_distance <= MATCH_RUN_LIVE_CONTROL_RANGE &&
-          (opp_index < 0 || own_distance <= opp_distance) &&
+          (opp_index < 0 || own_distance < opp_distance) &&
           (int32_t)((uint32_t)t * FIFA96_MATCH_ENTITY_RECORDS +
                     (uint32_t)own_index) == id)
         mr->entities.ball.carrier = id;
     }
+    /* P7-L2:: the contact tackle/claim for a static opponent restart carrier. */
+    if (mr->entities.ball.carrier != id)
+      (void)match_run_live_control_tackle(mr, (uint32_t)t, id, e);
     int bind_rc = match_run_live_control_bind(mr, id, 0);
     if (bind_rc == 1 &&
         mr->entities.ball.carrier == id && e->code != 5u && e->code != 7u)
@@ -3021,8 +3099,12 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->live_kick_speed = 0;
   mr->live_kick_sig_actor = FIFA96_MATCH_ENTITY_NONE;
   mr->live_kick_sig_traj = 0;
+  mr->live_kick_sig_vx = 0;
+  mr->live_kick_sig_vh = 0;
+  mr->live_kick_sig_vz = 0;
   mr->live_kick_sig_flags = 0;
   mr->live_kick_sig_code = 0;
+  mr->live_restart_pending = 0;
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
   memset(mr->formation_current, 0, sizeof mr->formation_current);
@@ -3082,8 +3164,12 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->live_kick_speed = 0;
   mr->live_kick_sig_actor = FIFA96_MATCH_ENTITY_NONE;
   mr->live_kick_sig_traj = 0;
+  mr->live_kick_sig_vx = 0;
+  mr->live_kick_sig_vh = 0;
+  mr->live_kick_sig_vz = 0;
   mr->live_kick_sig_flags = 0;
   mr->live_kick_sig_code = 0;
+  mr->live_restart_pending = 0;
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;

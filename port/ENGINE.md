@@ -9895,3 +9895,73 @@ intent, goal-side selection, keeper/defender blocking) is unported; the KICK
 row always aims at the mouth centre, so a keeper or off-centre save cannot
 happen. P7-L7 (native per-code target algebra/receive target) and P7-L10 (loft
 arc/receive hand-off) still stand.
+
+## P7 addendum 3 — playable restart possession and taker guard (FU-345, 2026-11-06)
+
+**Restart re-seed.** The live seed ran only at begin, so after a goal the
+opponent kickoff carrier could stand on the ball forever: the nearest-only
+claim requires a strict distance win and can never beat distance 0. A live-only
+`live_restart_pending` is armed on every phase-1 frame and consumed on the
+phase-1 -> phase-2 transition: `match_run_live_restart_bind` selects the
+controlled side's nearest outfield record to the ball and rebinds the FU-70
+slot / `entities.controlled` / team target / camera through the existing
+`match_run_live_control_bind`, without awarding possession (the opponent keeps
+the kickoff ball). The same transition clears any stale `live_kick_hold` and
+`live_kick_active`.
+
+**Contact tackle/claim (P7-L2 stand-in).** `match_run_live_control_tackle` is
+the derived contact steal for the static AI restart: when the selected human
+record is within 0x40 of a loose/stationary opponent-carried ball
+(`ball.speed <= 4`), no live kick is in flight and the post-kick hold is clear,
+it sets `ball.carrier` to the human and installs carrier state 5 through the
+real installer. The normal nearest claim now uses a **strict** distance win
+(`own < opp`), so a tie at distance 0 no longer steals the opponent's restart
+ball; the tackle is the explicit contact path. Neither path writes score,
+phase or a goal cell. The possession claim is also guarded by
+`!live_kick_active` (no re-possessing a ball already in flight).
+
+**Taker guard.** `live_control_taker` is accepted by the flight latch only
+while `live_kickoff_touch != 0` (the opening-kick release frame); the touch
+clear also sets `live_control_taker = NONE`. A later AI pair staged by the old
+taker cannot arm a human flight; only the current human slot/`controlled`
+actor can.
+
+**Vector re-latch.** The flight signature now includes the staged
+`vector.x/height/z` in addition to actor/traj/flags/code, so a new direction
+with the same actor/power/trajectory/event code re-latches. P7-L9's earlier
+"a new vector/code re-latches" wording is now true.
+
+**Tests.** `test_engine_live_control` now has **seven top-level cases / eight
+functions including `test_live_kickoff_shot_scores_side`** (the earlier
+four/five/six counts are historical): the new/strengthened coverage is
+`restart_assert_possession` (after the native goal -> phase-5 -> restart ->
+phase-2 chain, place the human defender at contact, assert own possession/code
+5), a restart KICK press/release that asserts a new live flight and ball
+movement with the score still 1-0, the side-0 and side-1 kickoff-shot cases,
+and `test_live_taker_guard_and_relatch` (AI pair from the old taker leaves
+`live_kick_active` 0 and the target unchanged; a current human pair latches;
+a same-actor/traj/flags/code pair with a new vector re-latches). The
+goal-after-kick restart also asserts own possession before its no-rescore
+window. `make check` 119/119; M1 `09b726b7…` and M2 v29 `7c3874f7…` exact by
+`cmp`; census unchanged (78/78 bodies, 58/80 natural, 64/80 install-live,
+action 38/45, phase 26/35).
+
+**Windowed evidence (shipped menu path, no harness).** `./build/fifa96
+data/game/FIFAPCCD96.iso`, Friendly -> Brazil vs Italy, Z at kickoff -> native
+1-0, Z to release the phase-1 kickoff gate, arrows to the ball/contact tackle,
+Z to kick. Captures: `/tmp/opencode/play/p7-restart-possession.png` (1-0,
+restart centre, human at the ball) and `p7-restart-kick.png` (1-0, ball moving
+after the human kick). The score remains the native 1-0; no score/ball staging.
+The capture script moved with Left/Right and the kick was taken after the
+restart re-seed/contact tackle.
+
+**Closure note (append-only; earlier P7 text remains historical).**
+**P7-L3** ("ball machine does not consume the kick vector") is CLOSED by the
+flight addendum above. **P7-L6** ("natural windowed scoring blocked") and
+**P7-L11** ("natural menu-input scoring still depends on AI/aim") are
+SUPERSEDED by addendum 2: the shipped menu path scores from the kickoff with
+one Z. The remaining open legs are the native aim/camera director (KICK always
+aims at the goal-mouth centre; no held-direction intent, goal-side choice,
+keeper or defender blocking), native per-code target algebra/receive target
+(P7-L7), and the loft arc/receive hand-off (P7-L10). The restart/tackle is the
+P7-L2 stand-in; full possession/tackle AI remains unported.
