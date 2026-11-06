@@ -1002,6 +1002,17 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
   s->pos_y_word = (int16_t)r->pos_y;
   s->pos_z = r->pos_z;
   s->lane_word = (int16_t)r->lane_x;   /* 0x81519 dword[+0x69]>>16 = +0x6B */
+  /* P7 / FU-345: the live row-07 kick gate `0x81519` reads the record's `+0x6B`
+   * lane word, produced natively by the live formation/placement caller chain
+   * (the unported FU-310/FU-311 lane source). The live placement's lane is a
+   * few hundred units, so the native `lane_word <= 0x40` gate would sit in its
+   * wait arm and reset the kick before stage 1. The kickoff fixture passes only
+   * because its zero place produces lane 0 (the FU311-L5a legacy view). For the
+   * human slot owner only, feed the gate its ready value; the rest of the row
+   * (the target resolve, the FU-70 release word and the FU-73 pairing) runs
+   * unchanged. Labelled [D] stand-in for the unported live lane producer. */
+  if (mr->live_start && row == 0x07u && mr->slot.entity == r->entity_id)
+    s->lane_word = 0;
   /* M2 phase-11 T1 (FU-148 §14.5 / L14.7): the native event's ball height is
    * `word[0x157750]` (FUN_0007AE70 0x7AEFD `MOV DX,[0x157750]; CX=[rec+0x5D];
    * SUB EDX,ECX`). The camera Y is that word's producer (the T1 port stores
@@ -1162,6 +1173,32 @@ static int match_kick_run(struct fifa96_match_run *mr, const fifa96_action_kick 
   slot.word6 = s->slot_word6;
   slot.dir_x = mr->record.dir_x;
   slot.dir_z = mr->record.dir_z;
+  /* P7 / FU-345: the live slot direction is recomputed from the current input
+   * every frame (FU-70 `FUN_00078950`), so a stationary KICK release has
+   * `dir = (0,0)` and the row's grounded L2 arm passes the zero pair to
+   * `kick_dir_vector`, staging a zero vector. The native type-dir arm
+   * (`0x7BBB9`) is the facing fallback for the other modes; apply the same
+   * table for the live human slot owner when the slot pair is zero. This is a
+   * derived aim fallback for the unported live facing producer, not auto-aim:
+   * the direction comes from the record's own `+0x8E` type/facing byte and the
+   * team side. M1/M2 never set live_start. */
+  if (mr->live_start && slot_present != 0u && slot.dir_x == 0 &&
+      slot.dir_z == 0) {
+    uint8_t type8 = mr->record.type;
+    if (type8 < 8u) {
+      uint32_t team8 = (uint32_t)mr->record.entity_id /
+                       FIFA96_MATCH_ENTITY_RECORDS;
+      int8_t fx = match_kick_dir_x[type8];
+      int8_t fz = match_kick_dir_z[type8];
+      if (team8 < FIFA96_MATCH_ENTITY_TEAMS &&
+          mr->entities.team[team8].side == 1u) {
+        fx = (int8_t)-fx;
+        fz = (int8_t)-fz;
+      }
+      slot.dir_x = fx;
+      slot.dir_z = fz;
+    }
+  }
   memset(&ctx, 0, sizeof ctx);
   ctx.camera_x = s->camera_x;
   ctx.camera_y = s->camera_y;

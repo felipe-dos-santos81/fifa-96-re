@@ -9695,3 +9695,157 @@ should be `0x1C9` "Numbers". **P6-L6** gamepad match buttons: South/East do
 not reach `match_run_map_key`; only West (long ball) works. **P6-L7**
 Time Display / Player Names / Auto Replay / Super VGA remain stored-only and
 dim until consumers land.
+
+## P7 — live kickoff control and possession (FU-345, 2026-11-06)
+
+**Diagnosis.** The live windowed bootstrap (`fifa96_match_run_begin`'s
+`live_start` block) writes phase 2 after the kickoff placement and binds only
+`render.camera.tracked`. It skips the phase-1 wait that drives the natural
+kickoff producers: row 01 stage 0 publishes `[0x157A83]`
+(`entities.controlled`), row 02's `0x7E041` request merges the FU-70 slot to
+the second kickoff pick, and row 04's coda installs carrier code 5 (`0x7F133`).
+The begun live run therefore left `entities.controlled` = NONE and the human
+slot on the setup-bind donor, with no carrier state for the released code-1
+input row; KICK did nothing. Two live-only secondary blockers were measured:
+the row-07 `0x81519` lane gate reads the record `+0x6B` lane word (~0x2E0 with
+the real `.fmt` formation, vs the fixture's 0), so the native `lane_word <=
+0x40` arm waits out and resets before stage 1; and an AI `FUN_0007876C` merge
+can move `+0x20` earlier in the same record walk, hiding the human's input
+edges from the authoritative slot record. The zero-placement fixtures pass
+both gates by construction, which is why the natural kickoff test was green
+while the windowed match was not.
+
+**Live-control producer.** New `match_run_live_control_seed` at the end of the
+live begin selects the controlled side's nearest outfield record to the ball
+with the native `FUN_0008D8EC` shape (`fifa96_match_entities_team_select`,
+which skips record 0), moves the FU-70 slot through
+`fifa96_match_entities_merge_slot`/`take_slot_merge`, publishes the target with
+`fifa96_match_entities_actor_lift`, installs carrier state 5 through
+`fifa96_match_entities_install`, sets `ball.carrier`, clears the FU-73 pair to
+its kickoff posture, and binds `camera.tracked`. New
+`match_run_live_control_update` runs after the entity drain: while the opening
+kick is pending it holds the seeded taker as the carrier (`live_kickoff_touch`,
+cleared by the first row-07 dispatch); afterwards it prefers the controlled
+team's `ball.carrier` when it is an outfield record within
+`MATCH_RUN_LIVE_CONTROL_RANGE` (0x400) of the ball, else the nearest own
+outfield record. It never selects the keeper or an opponent record, leaves the
+opponent block unwritten, and rebinds the slot/target/`entities.controlled`/
+camera through the same helpers every frame. A kick release clears
+`ball.carrier` and holds off re-claiming for 30 frames; the live possession
+claim itself (own nearest at least as close as the opponent's nearest) is a
+distance stand-in for the unported row-05 possession caller. Two live-only
+dispatch seams report the authoritative slot owner (`s.has_slot`/`r->has_slot`)
+against a same-frame AI merge, and the row-07 lane gate is fed the ready value
+for the human slot owner (the live `+0x6B` producer is unported). Every branch
+is `live_start`-gated; M1/M2 are headless and byte-exact. This is the labelled
+[D] stand-in for the unported FU-295 live caller chain, not a fabricated score
+or goal path.
+
+**Tests.** New `port/tests/test_engine_live_control.c` (4 cases): the live
+begin seed (nearest taker, slot/controlled/team target/camera, `has_slot`,
+carrier bit, code 5, `ball.carrier`); KICK press then release through
+`fifa96_match_run_input` dispatches row 07, latches the FU-73 pair
+(`pair.actor`/`pair.flags` 0x10), moves the ball and leaves the score 0-0;
+the per-frame follow picks a staged carrier, ignores an opponent possession
+cell for the own nearest record, and never selects the keeper; and a staged
+goal-mouth ball after the kick still runs the native P6 goal -> phase 5 ->
+phase-1 restart -> phase 2 chain with the score intact. `make check`
+119/119 green; M1 `09b726b7…` and M2 v29 `7c3874f7…` exact by `cmp`; census
+unchanged (78/78 bodies, 58/80 natural, 64/80 install-live, action
+38/45, phase 26/35).
+
+**Windowed evidence.** `DISPLAY=:1`, retail ISO, Friendly -> Brazil vs Italy:
+`/tmp/opencode/play/p7-kickoff.png` (kickoff, 00:01) and
+`/tmp/opencode/play/p7-kick.png` (after the Z press, 00:03); the
+`p7-kick-1..10.png` burst and `p7-attack-*.png` frames record the ball moving
+off the kickoff spot. Natural scoring was not reached: the FU-73 pair latches,
+but the port's live ball machine moves the ball on its camera-relative target
+and does not consume the staged kick vector, so there is no live shot/dribble
+producer to carry the ball into the goal mouth. No `p7-goal.png`/
+`p7-restart.png` is claimed; the staged goal path is green in the test and in
+the P6 windowed evidence.
+
+**Legs (P7).** **P7-L1** native auto-switch/AI: the FU-295 live caller chain
+(including the player-switch and camera director) is unported; the selector
+above is the derived stand-in. **P7-L2** full possession/tackle AI: the row-05
+claim/steal chain is unported; the live claim is a nearest-distance stand-in
+and the opponent block's own possession cells are ignored, not cleared.
+**P7-L3** live kick launch: the FU-73 pair stages the actor/flags but the ball
+machine does not consume the kick vector; the native ball-flight/launch
+producer (and the paired receive hand-off) is unported, so a windowed shot
+does not travel to the goal mouth. **P7-L4** the live row-07 lane gate `+0x6B`
+producer (the FU-310/FU-311 live formation lane): the live slot owner is fed
+the gate's ready value. **P7-L5** gamepad kick/pass: P6-L6 still stands (only
+West/long ball reaches `match_run_map_key`). **P7-L6** natural windowed
+scoring: blocked by P7-L1/L2/L3; the native goal/restart itself is green.
+
+## P7 addendum — live ball flight and natural goal (FU-345, 2026-11-06)
+
+**Flight consumer.** The row-07 kick stages the FU-73 block (speed
+`vector.x`, direction `vector.height/z`, loft `traj`) but the native per-code
+target algebra (`0x7AA3C..0x7AE2F`, OL-62) and the ball-vector consumer are
+unported; the phase-2 ball machine kept steering the ball at its camera-relative
+target, so the staged kick was only a nudge. New live-only latch
+`match_run_live_kick_latch` (called from `match_run_live_control_update`): when
+the pair carries the human slot/actor (`slot.entity`, `entities.controlled` or
+the seeded `live_control_taker`) and `flags & 0x70`, it records
+`live_kick_target = kicker_pos + 2*(vector.height, vector.z)`,
+`live_kick_speed = clamp(|vector.x| >> 6, 8, 16)`, `live_kick_frames = 300`
+and a pair signature (actor/traj/flags/code) so the same staged pair is
+consumed once. `match_run_ball_machine` uses that target/max-speed while
+`live_kick_active` (bypassing only the camera-relative target block; the native
+metric/heading/velocity/ramp/integration code is untouched) and clears on
+arrival, `goal_armed`, phase change, out-of-play (`|x| > 0x6C0`, `|z| >
+0xC00`) or the 300-frame window. The mapping is a labelled [D] derived
+consumer for the unported per-code algebra: it uses the staged speed/direction
+semantics but does not claim the native loft arc, receive hand-off or
+per-code target arms. No score/phase/goal cell is written.
+
+**Stationary-kick aim fallback.** The live slot direction is recomputed from
+the current input every frame, so a stationary KICK release passes `dir =
+(0,0)` into the row's grounded L2 arm and `kick_dir_vector` stages a zero
+vector (the fixture's old pair was actor/flags only). `match_kick_run` now
+substitutes the record's own `+0x8E` type-dir octant (the same
+`0x10F334/0x10F33C` table the native type-dir arm uses; side-flipped for team
+1) for the live slot owner when the slot pair is zero. This is a derived
+facing fallback, not auto-aim: the direction is the record's facing byte.
+Live-only; M1/M2 are byte-exact.
+
+**Tests.** `test_engine_live_control` now has five cases; the new
+`test_live_kick_flight_scores` stages the taker/ball at the authentic attack
+position `(0,0,0x900)` (just outside the +z goal area, not inside the goal),
+stages the record facing type 0 (+z), presses/releases KICK through
+`fifa96_match_run_input`, asserts the latched target is beyond the goal line
+and the speed >= 8, then drives the native goal scan: score 1-0, phase 5,
+`goal_record_side 0`, a ball travel > 0x100, then the native phase-1 restart
+and phase-2 resume with the score preserved. The test writes no score/phase.
+The earlier four cases remain green. `make check` 119/119; M1 `09b726b7…` and
+M2 v29 `7c3874f7…` exact by `cmp`; census unchanged (78/78 bodies, 58/80
+natural, 64/80 install-live, action 38/45, phase 26/35).
+
+**Windowed evidence.** A verification-only harness (`/tmp/opencode/play/
+p7_flight_harness.c`, not shipped) boots the retail ISO, starts a live match,
+stages BRA/ITA HUD names, stages the taker/ball at `(0,0,0x900)` with the
+record facing type 0 (+z), and places the camera focus in the attack area on
+the pre-kick frames (the live follow may override it); it presses/releases KICK
+through SDL events. The
+goal is produced only by the native row-07 kick + derived flight + live goal
+armer + native goal scan (log: `KICK row07`, `MILESTONE FLIGHT step=158`,
+`MILESTONE GOAL step=198 score=1-0 phase=5`, `MILESTONE RESTART step=948 phase=1 ball=480,0,0`). Captures: `/tmp/opencode/play/p7-flight.png`
+(attack area, 0-0, ball leaving the taker), `p7-goal.png` (BRA 1 ITA 0) and
+`p7-restart.png` (BRA 1 ITA 0, kickoff circle). The earlier real-menu
+`p7-kickoff.png`/`p7-kick.png` remain the natural-input kick evidence. The
+harness stages the attack position and facing byte; no score or phase is
+staged.
+
+**Additional legs (P7 flight).** **P7-L7** native per-code target algebra
+(`0x7AA3C..0x7AE2F`, OL-62) and the `FUN_0007A084` receive target: the derived
+target uses `kicker + 2*direction` and ignores `traj`/loft, camera offsets and
+the per-code arms. **P7-L8** the live facing/aim producer: the stationary
+fallback uses the `+0x8E` octant; the native input-driven facing and the
+dribble/aim AI remain unported. **P7-L9** pair re-latch: a second kick with the
+identical actor/traj/flags/code signature is treated as already consumed; a
+new vector/code re-latches. **P7-L10** the native loft arc/ball height and
+receive/bounce hand-off are not modelled (target_y is 0, the goal armer sees
+y=0). **P7-L11** natural menu-input scoring (arrows+Z without harness staging)
+still depends on the live AI/aim legs; the native chain itself is green.
