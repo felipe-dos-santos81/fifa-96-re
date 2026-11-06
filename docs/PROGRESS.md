@@ -4015,3 +4015,37 @@ close-out below).
   Legs: P6-L1 `options.dat`, P6-L2 music/speech volume, P6-L3 skill, P6-L4
   clock, P6-L5 retail dead row/Player Names data, P6-L6 gamepad match
   buttons, P6-L7 other stored-only rows (details in `port/ENGINE.md`).
+
+- **P7 live kickoff control and possession (FU-345, 2026-11-06).** The
+  windowed match was visually complete but the human could not kick: the live
+  `begin` bootstrap writes phase 2 and binds only `camera.tracked`, skipping
+  the phase-1 producers (row 01's `[0x157A83]` actor publish, row 02's slot
+  merge and row 04's carrier code-5 install). `entities.controlled` stayed
+  NONE and the FU-70 slot stayed on the setup-bind donor, so the released
+  code-1 input row had no carrier. Two secondary live blockers were measured:
+  the row-07 `0x81519` lane gate fails with the real `.fmt` lane (~0x2E0 vs
+  `<= 0x40`), and a same-frame AI slot merge can hide the human input edges.
+  New live-only producer: `match_run_live_control_seed` selects the controlled
+  side's nearest outfield taker to the ball through the native select shape,
+  merges the FU-70 slot, publishes the actor/team target/camera and installs
+  carrier state 5 through the real installer (plus `ball.carrier` and a cleared
+  FU-73 pair). `match_run_live_control_update` then holds the opening taker
+  until the first row-07 dispatch, prefers the controlled team's near carrier,
+  else the nearest own outfield record, and rebinds slot/control/camera every
+  frame; the keeper and opponent records are never selected. Live-only dispatch
+  seams report the authoritative slot owner and feed the row-07 lane gate for
+  the human slot. New `test_engine_live_control` (4 cases) pins the seed,
+  row-07/pair/ball movement with score 0-0, carrier/nearest/keeper/opponent
+  selection, and the native goal -> phase 5 -> restart -> phase 2 chain after
+  the kick. `make check` 119/119; M1 `09b726b7…` and M2 v29 `7c3874f7…` exact
+  by `cmp`; census unchanged (78/78 bodies, 58/80 natural, 64/80
+  install-live). Windowed `DISPLAY=:1` Brazil vs Italy:
+  `/tmp/opencode/play/p7-kickoff.png` and `p7-kick.png` (ball moves after Z),
+  plus the `p7-kick-1..10.png`/`p7-attack-*.png` burst. Natural scoring was not
+  reached: the FU-73 pair latches but the ball machine does not consume the
+  kick vector (no live shot/dribble producer), so no `p7-goal.png`/
+  `p7-restart.png` is claimed; the staged goal path is green. Legs: P7-L1
+  native auto-switch/AI (FU-295 caller chain), P7-L2 full possession/tackle AI,
+  P7-L3 live kick launch/ball-flight, P7-L4 live `+0x6B` lane producer, P7-L5
+  gamepad kick/pass (P6-L6), P7-L6 natural windowed scoring (blocked by
+  P7-L1/L2/L3).

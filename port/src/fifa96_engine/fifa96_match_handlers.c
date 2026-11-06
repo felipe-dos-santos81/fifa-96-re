@@ -1002,6 +1002,17 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
   s->pos_y_word = (int16_t)r->pos_y;
   s->pos_z = r->pos_z;
   s->lane_word = (int16_t)r->lane_x;   /* 0x81519 dword[+0x69]>>16 = +0x6B */
+  /* P7 / FU-345: the live row-07 kick gate `0x81519` reads the record's `+0x6B`
+   * lane word, produced natively by the live formation/placement caller chain
+   * (the unported FU-310/FU-311 lane source). The live placement's lane is a
+   * few hundred units, so the native `lane_word <= 0x40` gate would sit in its
+   * wait arm and reset the kick before stage 1. The kickoff fixture passes only
+   * because its zero place produces lane 0 (the FU311-L5a legacy view). For the
+   * human slot owner only, feed the gate its ready value; the rest of the row
+   * (the target resolve, the FU-70 release word and the FU-73 pairing) runs
+   * unchanged. Labelled [D] stand-in for the unported live lane producer. */
+  if (mr->live_start && row == 0x07u && mr->slot.entity == r->entity_id)
+    s->lane_word = 0;
   /* M2 phase-11 T1 (FU-148 §14.5 / L14.7): the native event's ball height is
    * `word[0x157750]` (FUN_0007AE70 0x7AEFD `MOV DX,[0x157750]; CX=[rec+0x5D];
    * SUB EDX,ECX`). The camera Y is that word's producer (the T1 port stores

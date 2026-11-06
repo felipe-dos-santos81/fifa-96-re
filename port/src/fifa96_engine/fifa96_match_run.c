@@ -1012,6 +1012,14 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
   int32_t controlled = mr->entities.controlled;
   memset(&s, 0, sizeof s);
   s.has_slot = e->has_slot;
+  /* P7 / FU-345: the live control follow owns the human slot. An AI record's
+   * native `FUN_0007876C` merge can move `+0x20` earlier in the same frame's
+   * record walk (lower team index), which would hide the human's input edges
+   * from the authoritative slot record. The control follow restores the slot at
+   * the frame tail; treat the run's current slot owner as bound for this
+   * dispatch so the kick/release row still sees the human input. Live-only; the
+   * M1/M2 tapes never set live_start. */
+  if (mr->live_start && mr->slot.entity == id) s.has_slot = 1;
   s.phase = (uint8_t)mr->state.phase;
   if (mr->slot.entity == id) {
     s.pressed = mr->slot.pressed;
@@ -1512,6 +1520,11 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->delta = (uint16_t)mr->state.frame_delta;
   r->active = e->active;
   r->has_slot = e->has_slot;
+  /* P7 / FU-345: the live control follow owns the FU-70 slot while the human
+   * record is the run's slot owner; a same-frame native merge request may have
+   * moved the pool byte already. Keep the authoritative owner bound for this
+   * record's dispatch (live-only; M1/M2 never set live_start). */
+  if (mr->live_start && mr->slot.entity == id) r->has_slot = 1;
   r->has_ball = e->has_ball;
   r->stage = e->stage;
   r->stage92 = e->stage92;
@@ -2374,6 +2387,289 @@ static void match_run_slot_bind(struct fifa96_match_run *mr) {
   mr->slot.active = (int8_t)team->side;   /* native +0x22 */
 }
 
+/* P7 / FU-345: the derived live-control producer.
+ *
+ * The natural kickoff reaches the controllable state through the phase-1 wait:
+ * row 01 stage 0 publishes `[0x157A83]` (`entities.controlled`), row 02's
+ * `0x7E041` merge request moves the FU-70 slot to the second kickoff pick, and
+ * row 04's coda installs the carrier state 5 (`0x7F133`) through the real
+ * `FUN_0007D9A4` installer. The live bootstrap (`fifa96_match_run_begin`'s
+ * `live_start` block) deliberately skips that wait and writes phase 2, so the
+ * human slot is left on the setup-bind donor while `controlled` stays NONE and
+ * the taker never reaches code 5; the kick row (released code-1 input row ->
+ * row 07) then has no carrier to fire. This helper seeds the exact state the
+ * natural route reaches with the native helpers: the team-target select
+ * (`FUN_0008D8EC`), the `FUN_0007876C` slot merge, the `FUN_0008C3BE` actor
+ * lift and the `FUN_0007D9A4` code-5 install.
+ *
+ * This is a labelled [D] stand-in for the unported FU-295 live caller chain
+ * (the native setup bind/merge and the row-04/05 possession claim caller
+ * order); it is live-only and never writes the score or the goal cells. Returns
+ * 1 when the record is a valid controlled-side outfield slot holder, 0 when it
+ * is not (keeper, opponent, skipped or no slot available). */
+static int match_run_live_control_bind(struct fifa96_match_run *mr, int32_t id,
+                                       int seed_carrier) {
+  uint8_t side;
+  uint32_t t;
+  uint32_t idx;
+  struct fifa96_match_team *team;
+  struct fifa96_match_entity *rec;
+  int switched = 0;
+  if (!mr || !mr->live_start) return 0;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
+  t = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  idx = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  team = &mr->entities.team[t];
+  if (team->side != side) return 0;            /* never take an opponent record */
+  if (idx == 0u) return 0;                     /* the keeper is never selected */
+  rec = &team->records[idx];
+  if (rec->skip_98 != 0 || rec->skip_9a != 0) return 0;
+  if (rec->has_slot == 0) {
+    if (team->slot_pool == 0) {
+      /* No slot exists for the side: the setup bind's `FUN_000785E0` is the
+       * native producer. Bind a free record, then merge the slot onto the
+       * wanted one through the same native helper. */
+      if (fifa96_match_entities_bind_slot(&mr->entities, t,
+                                          (int16_t)rec->pos_x,
+                                          (int16_t)rec->pos_z) ==
+          FIFA96_MATCH_ENTITY_NONE)
+        return 0;
+      mr->slot.ordinal = (uint8_t)(team->slot_pool - 1u);
+    }
+    if (rec->has_slot == 0 &&
+        fifa96_match_entities_merge_slot(&mr->entities, t, idx) == 1) {
+      int32_t merged = fifa96_match_entities_take_slot_merge(&mr->entities);
+      if (merged >= 0) mr->slot.entity = merged;
+      switched = 1;
+    }
+  }
+  if (rec->has_slot == 0) return 0;
+  /* `FUN_0008C3BE`: publish the team target as the controlled actor. */
+  team->target = id;
+  if (fifa96_match_entities_actor_lift(&mr->entities, t, side) != FIFA96_OK ||
+      mr->entities.controlled != id)
+    return 0;
+  if (mr->slot.entity != id || switched) {
+    mr->slot.entity = id;
+    mr->slot.player = 0;
+    mr->slot.map_select = 1;                  /* 0x4C1DC default (FU-70 §1.4) */
+    mr->slot.ordinal = (uint8_t)(team->slot_pool - 1u);
+    mr->slot.active = (int8_t)team->side;
+    if (switched) (void)fifa96_control_slot_merge_reset(&mr->slot); /* 0x786A0 */
+  }
+  (void)fifa96_camera_set_tracked(&mr->render.camera, id);
+  if (seed_carrier != 0) {
+    /* The row-04 coda reachable state: `FUN_0007D9A4(rec, 5)` sets the carrier
+     * bit in the installer. The ball block is reset to its kickoff posture
+     * (`FUN_0007A490` clear) and the possession identity is the taker. */
+    (void)fifa96_match_entities_install(rec, (uint8_t)mr->state.phase, 5u, 0);
+    mr->entities.ball.carrier = id;
+    (void)fifa96_ball_pair_clear(&mr->entities.ball.pair);
+  }
+  return 1;
+}
+
+/* P7 / FU-345: the controlled team index (the side byte the phase machine
+ * carries), or -1 when neither team block matches. */
+static int32_t match_run_live_control_team(const struct fifa96_match_run *mr) {
+  uint8_t side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    if (mr->entities.team[t].side == side) return (int32_t)t;
+  return -1;
+}
+
+/* P7 / FU-345: the live kickoff seed. Called once at the end of the live
+ * begin, after the kickoff placement committed the formation: select the
+ * controlled side's nearest outfield record to the ball (the native
+ * `FUN_0008D8EC` select skips record 0 / the keeper), merge the FU-70 slot onto
+ * it, publish it as the actor and install the carrier state. */
+static void match_run_live_control_seed(struct fifa96_match_run *mr) {
+  int32_t t;
+  int32_t taker = FIFA96_MATCH_ENTITY_NONE;
+  if (!mr || !mr->live_start) return;
+  t = match_run_live_control_team(mr);
+  if (t < 0) return;
+  {
+    int index = fifa96_match_entities_team_select(&mr->entities, (uint32_t)t,
+                                                  (int16_t)mr->entities.ball.x,
+                                                  (int16_t)mr->entities.ball.z);
+    if (index >= 0)
+      taker = (int32_t)((uint32_t)t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+  }
+  if (taker != FIFA96_MATCH_ENTITY_NONE &&
+      match_run_live_control_bind(mr, taker, 1) == 1) {
+    mr->live_kickoff_touch = 1u;
+    mr->live_control_taker = taker;
+  }
+}
+
+/* P7 / FU-345: the per-frame live control follow. The native control cell is
+ * re-published by the possession machinery; while that caller chain is
+ * unported the engine keeps the human on the controlled team's ball carrier
+ * when the pool has one, else on the native nearest-outfield select shape. The
+ * opponent block and the keeper are never selected; a staged phase (goal,
+ * celebration, restart) is left alone. Live-only.
+ *
+ * Derived possession rules (labelled [D], part of the FU-295 stand-in):
+ *  - the live kickoff seed holds the seeded taker as the carrier until the
+ *    first FU-73 release (`live_kickoff_touch`), so the opening kick does not
+ *    depend on the human reacting before the camera-relative ball drift.
+ *  - a carrier is only "the controlled team's ball" while it is within
+ *    `MATCH_RUN_LIVE_CONTROL_RANGE` of the ball. The row-05 claim cell is
+ *    republished by the unported possession AI and otherwise latches a team
+ *    target hundreds of units away; the native claim is a local contact, so the
+ *    far latch is treated as loose. The range is a stand-in constant, not a
+ *    native threshold.
+ *  - when the ball is loose and the controlled side's nearest outfield record
+ *    is at least as close to the ball as the opponent's nearest, the human
+ *    takes the possession cell ([D] for the unported row-05 claim). The
+ *    opponent records are only read; none is written.
+ *  - when the FU-73 pair records the selected record's release (KICK/PASS/
+ *    LONG_BALL) while the record has already left the carrier state 5, the
+ *    kick released possession: clear `ball.carrier` so the next frame selects
+ *    the nearest chaser instead of instantly re-attaching the kicker.
+ *  - while the pool carrier is the selected record, the real installer keeps
+ *    it in the carrier state 5 (a [D] repair for the unported possession
+ *    caller; the transient kick code 7 is never overwritten).
+ */
+#define MATCH_RUN_LIVE_CONTROL_RANGE 0x400
+#define MATCH_RUN_LIVE_CONTROL_HOLD_FRAMES 30u
+
+static int match_run_live_control_near(const struct fifa96_match_run *mr,
+                                       const struct fifa96_match_entity *e) {
+  int32_t dx = mr->entities.ball.x - e->pos_x;
+  int32_t dz = mr->entities.ball.z - e->pos_z;
+  return fifa96_entity_distance(dx, dz) <= MATCH_RUN_LIVE_CONTROL_RANGE;
+}
+
+/* The native `FUN_0008D8EC` nearest search without the team-target write (the
+ * control follow only needs the opponent distance to decide possession). */
+static int match_run_live_control_nearest(const struct fifa96_match_run *mr,
+                                          uint32_t t, int16_t *best_distance) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  int16_t best = 0;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &mr->entities.team[t].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  /* skip_index 0: record 0 is the keeper, never the outfield selection. */
+  {
+    int index = fifa96_entity_find_nearest(candidates, FIFA96_MATCH_ENTITY_RECORDS, 0,
+                                           (int16_t)mr->entities.ball.x,
+                                           (int16_t)mr->entities.ball.z, &best);
+    if (best_distance) *best_distance = best;
+    return index;
+  }
+}
+
+static void match_run_live_control_update(struct fifa96_match_run *mr) {
+  int32_t t;
+  int32_t id = FIFA96_MATCH_ENTITY_NONE;
+  if (!mr || !mr->live_start) return;
+  if (mr->state.phase != 2u) {
+    /* A staged phase (goal/celebration/restart) ends the opening latch; the
+     * post-restart control resumes through the normal select below. */
+    mr->live_kickoff_touch = 0u;
+    return;
+  }
+  t = match_run_live_control_team(mr);
+  if (t < 0) return;
+  if (mr->live_kickoff_touch != 0u) {
+    int32_t taker = mr->live_control_taker;
+    if (taker >= 0 &&
+        taker < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) &&
+        (uint32_t)(taker / (int32_t)FIFA96_MATCH_ENTITY_RECORDS) == (uint32_t)t &&
+        (taker % (int32_t)FIFA96_MATCH_ENTITY_RECORDS) != 0) {
+      struct fifa96_match_entity *e =
+          &mr->entities.team[(uint32_t)t]
+               .records[(uint32_t)taker % FIFA96_MATCH_ENTITY_RECORDS];
+      if ((mr->dispatched_ok & (1ull << 7u)) != 0ull ||
+          (mr->entities.ball.pair.actor == taker &&
+           (mr->entities.ball.pair.flags & 0x70u) != 0u && e->code != 5u)) {
+        /* The first kick fired (the FU-137 row-07 dispatch is the persistent
+         * live signal; the pair can be cleared by the row's tail). Release the
+         * opening possession and fall into the normal per-frame follow. */
+        mr->live_kickoff_touch = 0u;
+        mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+        mr->live_kick_hold = MATCH_RUN_LIVE_CONTROL_HOLD_FRAMES;
+      } else {
+        /* Keep the seeded taker as the carrier while the opening kick is
+         * pending (the ball machine's camera-relative drift is not possession). */
+        mr->entities.ball.carrier = taker;
+        if (match_run_live_control_bind(mr, taker, 0) == 1 && e->code != 5u &&
+            e->code != 7u)
+          (void)fifa96_match_entities_install(e, (uint8_t)mr->state.phase, 5u, 0);
+        return;
+      }
+    } else {
+      mr->live_kickoff_touch = 0u;
+    }
+  }
+  {
+    int32_t carrier = mr->entities.ball.carrier;
+    if (carrier >= 0 &&
+        carrier < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) &&
+        (uint32_t)(carrier / (int32_t)FIFA96_MATCH_ENTITY_RECORDS) == (uint32_t)t &&
+        (carrier % (int32_t)FIFA96_MATCH_ENTITY_RECORDS) != 0) {
+      struct fifa96_match_entity *e =
+          &mr->entities.team[(uint32_t)t]
+               .records[(uint32_t)carrier % FIFA96_MATCH_ENTITY_RECORDS];
+      if (e->skip_98 == 0 && e->skip_9a == 0) {
+        if (mr->entities.ball.pair.actor == carrier &&
+            (mr->entities.ball.pair.flags & 0x70u) != 0u && e->code != 5u) {
+          /* The kick pair is live and the record left the carrier state: the
+           * ball is in flight, not held. */
+          mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+          mr->live_kick_hold = MATCH_RUN_LIVE_CONTROL_HOLD_FRAMES;
+        } else if (match_run_live_control_near(mr, e)) {
+          id = carrier;
+        }
+      }
+    }
+  }
+  if (mr->live_kick_hold != 0u) mr->live_kick_hold--;
+  if (id == FIFA96_MATCH_ENTITY_NONE) {
+    int index = fifa96_match_entities_team_select(&mr->entities, (uint32_t)t,
+                                                  (int16_t)mr->entities.ball.x,
+                                                  (int16_t)mr->entities.ball.z);
+    if (index >= 0)
+      id = (int32_t)((uint32_t)t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+  }
+  if (id != FIFA96_MATCH_ENTITY_NONE) {
+    struct fifa96_match_entity *e =
+        &mr->entities.team[(uint32_t)t]
+             .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+    /* The live possession claim (the FU-295 stand-in): when the ball is loose
+     * and the controlled side's nearest outfield record is at least as close
+     * to the ball as the opponent's nearest, the human takes possession. The
+     * native row-05 claim is the unported producer; the opponent block is only
+     * read (its records are never written). */
+    if (mr->live_kick_hold == 0u && mr->entities.ball.carrier != id) {
+      int16_t own_distance = 0;
+      int16_t opp_distance = 0;
+      int own_index = match_run_live_control_nearest(mr, (uint32_t)t, &own_distance);
+      int opp_index = match_run_live_control_nearest(mr, (uint32_t)(1u - (uint32_t)t),
+                                                     &opp_distance);
+      (void)opp_index;
+      if (own_index >= 0 && own_distance <= MATCH_RUN_LIVE_CONTROL_RANGE &&
+          (opp_index < 0 || own_distance <= opp_distance) &&
+          (int32_t)((uint32_t)t * FIFA96_MATCH_ENTITY_RECORDS +
+                    (uint32_t)own_index) == id)
+        mr->entities.ball.carrier = id;
+    }
+    int bind_rc = match_run_live_control_bind(mr, id, 0);
+    if (bind_rc == 1 &&
+        mr->entities.ball.carrier == id && e->code != 5u && e->code != 7u)
+      (void)fifa96_match_entities_install(e, (uint8_t)mr->state.phase, 5u, 0);
+  }
+}
+
 /* Release the Task 2 staging arena. Runs only on initialized runs: init must
  * accept uninitialized memory (tests memset 0xAA and re-init), so the owner
  * slot is assigned NULL there and never freed; begin/end/stage call this only
@@ -2590,6 +2886,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
    * arm's trigger is a runtime non-permutation, FU201-L1). */
   mr->period_setup_live = 0;
   mr->live_start = 0;                  /* FU-343 P1: native begin order default */
+  mr->live_kickoff_touch = 0;          /* P7: no live kickoff possession latch */
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_hold = 0;              /* P7: no live possession hold */
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
   memset(mr->formation_current, 0, sizeof mr->formation_current);
@@ -2639,6 +2938,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->paused = 0;                      /* FU-343 P4: fresh pause/POST state */
   mr->post_timer = 0;
   mr->post_skip = 0;
+  mr->live_kickoff_touch = 0;          /* P7: fresh live kickoff latch */
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_hold = 0;              /* P7: fresh live possession hold */
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;
@@ -3036,6 +3338,13 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
     if (tracked == FIFA96_MATCH_ENTITY_NONE) tracked = mr->slot.entity;
     if (tracked != FIFA96_MATCH_ENTITY_NONE)
       (void)fifa96_camera_set_tracked(&mr->render.camera, tracked);
+    /* P7 / FU-345: the live phase-2 entry skips the phase-1 kickoff wait that
+     * drives row 01's `[0x157A83]` publish, the row-02 slot merge and row 04's
+     * code-5 install. Seed that reachable state from the committed kickoff
+     * placement (nearest controlled-side outfield record to the ball) so the
+     * human's FU-70 slot has a carrier the kick row can fire. Labelled [D]
+     * stand-in for the unported FU-295 live caller chain. */
+    match_run_live_control_seed(mr);
   }
   match_run_camera_trace_open(mr);   /* FU313 §4.1: immediately before return 0 */
   return 0;
@@ -5126,6 +5435,12 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
                                       mr);
     if (rc != FIFA96_OK) return rc;
     match_run_entity_drain(mr);
+    /* P7 / FU-345: the live control follow, after the entity drain so a
+     * possession/merge request issued this frame is consumed first. It keeps
+     * `entities.controlled`, the FU-70 slot, the team target and the tracked
+     * camera on the controlled side's carrier (else its nearest outfield
+     * record). Live-only; the M1/M2 headless tapes never set live_start. */
+    if (mr->live_start) match_run_live_control_update(mr);
     /* FU-343 (P1): the live focus follow, after the entity drain and before
      * the referee/phase tail (the frame draws this camera). Non-live runs keep
      * the event/pan-only camera (M2 byte-identical). */
