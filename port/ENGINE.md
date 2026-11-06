@@ -10433,3 +10433,31 @@ KICK/C pulses in the windowed path (P8-L4); **P9-L6** the live tackle/claim
 after a save still needs a chase (the P7/P8 contact rules are unchanged).
 Row-05 `FUN_0007F7E0`, row 03 and the full 10-player AI remain P9 open legs;
 none is claimed complete.
+
+## P9 — held long-ball edge (FU-347, 2026-11-06)
+
+**Answer in one line.** `SDL3_HELD_CODES` stopped the backend's per-poll
+held-state sample at `FIFA96_ENGINE_KEY_PASS + 1` (10), so
+`FIFA96_ENGINE_KEY_LONG_BALL` (10, keyboard V / pad West) was never tracked by
+`sdl3_key_hold` nor re-presented by the held loop. A long-ball press reached
+`fifa96_match_run_input` only on its KEY_DOWN poll; the next poll carried no
+0x40, `fifa96_input_update` derived a release, and the FU-75 long-ball request
+behaved as a one-shot pulse instead of holding like KICK/PASS.
+
+**Fix.** The bound is now `FIFA96_ENGINE_KEY_LONG_BALL + 1`, so the existing
+state-sample path covers the whole match action block (KICK 0x10, PASS 0x20,
+LONG_BALL 0x40). A held V/West is re-presented with state 1 on every poll,
+KEY_UP still yields exactly one state-0 release edge, and menus/front-end
+routing are untouched: LONG_BALL has no front-end mapping (the front-end
+consumes CONFIRM/DECLINE only).
+
+**Test.** `test_engine_sdl3::test_held_long_ball_is_a_state_sample` pushes
+Z/C/V KEY_DOWNs into the dummy-driver queue (no physical pad), asserts all
+three codes are re-presented on every poll, then asserts V's KEY_UP produces a
+single state-0 edge and later polls carry only KICK/PASS. At BASE the second
+poll carried two codes, so the test fails.
+
+**Gate.** `make check` **119/119** (strict build + ASan/UBSan); M1
+`09b726b7…` and M2 v29 `7c3874f7…` byte-exact by `cmp`; census unchanged
+(**78/78** bodies, **58/80** natural, **64/80** install-live, action 38/45,
+phase 26/35).

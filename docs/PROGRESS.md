@@ -4297,3 +4297,16 @@ close-out below).
   P9-L3 derived keeper reach/zone tuning, P9-L4 aim sampling bridge, P9-L5
   half-time sit-1 pulse gate, P9-L6 post-save chase/tackle; row-05
   `FUN_0007F7E0`, row 03 and full 10-player AI remain open.
+
+- **P9 held long-ball edge (FU-347, 2026-11-06).** `SDL3_HELD_CODES` was
+  `PASS + 1`, so the backend's per-poll held-state sample stopped at PASS and
+  never re-presented LONG_BALL (10, keyboard V / pad West). A held long ball
+  therefore reached the match only on its press poll, and
+  `fifa96_input_update` derived a release on the next poll — a one-shot pulse
+  where KICK/PASS stay held. The bound is now `LONG_BALL + 1`; KEY_UP keeps
+  the single release edge and menus are unchanged (LONG_BALL has no
+  front-end mapping). `test_engine_sdl3` adds a queue-only case (dummy SDL
+  driver, no pad): Z/C/V held -> three presses on every poll, V lifted -> one
+  state-0 edge, then only KICK/PASS. `make check` **119/119**; M1
+  `09b726b7…`/M2 `7c3874f7…` exact; census unchanged (78/78, 58/80, 64/80,
+  action 38/45, phase 26/35).

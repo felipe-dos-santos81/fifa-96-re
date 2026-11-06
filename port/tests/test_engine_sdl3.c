@@ -15,6 +15,9 @@
  * (the engine's `input_state` model), so a single KEY_DOWN with no repeats
  * keeps the held code latched and moves the controlled record across frames;
  * the KEY_UP ends the sample.
+ *
+ * P9: the held-state set includes LONG_BALL (10), so V / pad West holds like
+ * KICK/PASS instead of pulsing once and deriving a release on the next poll.
  */
 #include <assert.h>
 #include <stdio.h>
@@ -183,6 +186,68 @@ static void test_held_key_is_a_state_sample(void) {
   fifa96_platform_destroy(p);
 }
 
+/* True when `code` appears in the poll batch with exactly `state`. */
+static int key_batch_has(const fifa96_platform_key *keys, int count,
+                         int32_t code, int32_t state) {
+  for (int i = 0; i < count; i++)
+    if (keys[i].raw_code == code && keys[i].state == state) return 1;
+  return 0;
+}
+
+/* P9: the held-state sample covers the whole match action block, LONG_BALL
+ * (10) included. BASE stopped the scan at `PASS + 1`, so a held V / pad West
+ * was pushed only on its press poll; `fifa96_input_update` then saw an empty
+ * batch and derived a release, i.e. the long ball behaved as a one-shot pulse
+ * unlike KICK/PASS. The poll path needs no physical pad: SDL events are
+ * pushed directly and the pure backend sample is inspected. */
+static void test_held_long_ball_is_a_state_sample(void) {
+  fifa96_platform *p = fifa96_platform_sdl3_create();
+  assert(p != NULL);
+  assert(p->init(p->self, 320, 240, "test") == 0);
+
+  fifa96_platform_key keys[32];
+  int count = 0;
+
+  push_key_down(SDL_SCANCODE_Z);
+  push_key_down(SDL_SCANCODE_C);
+  push_key_down(SDL_SCANCODE_V);
+
+  assert(p->poll(p->self, keys, 32, &count) == 0);
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_KICK, 1));
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_PASS, 1));
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_LONG_BALL, 1));
+
+  /* Still held: every poll re-presents all three, exactly like KICK/PASS. */
+  for (int i = 0; i < 4; i++) {
+    assert(p->poll(p->self, keys, 32, &count) == 0);
+    assert(count == 3);
+    assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_KICK, 1));
+    assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_PASS, 1));
+    assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_LONG_BALL, 1));
+  }
+
+  /* The lifted long ball rides its KEY_UP release edge, then disappears
+   * while KICK/PASS continue to be held. */
+  push_key_up(SDL_SCANCODE_V);
+  assert(p->poll(p->self, keys, 32, &count) == 0);
+  assert(count == 3);
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_KICK, 1));
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_PASS, 1));
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_LONG_BALL, 0));
+
+  assert(p->poll(p->self, keys, 32, &count) == 0);
+  assert(count == 2);
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_KICK, 1));
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_PASS, 1));
+  assert(!key_batch_has(keys, count, FIFA96_ENGINE_KEY_LONG_BALL, 0));
+  assert(!key_batch_has(keys, count, FIFA96_ENGINE_KEY_LONG_BALL, 1));
+
+  push_key_up(SDL_SCANCODE_Z);
+  push_key_up(SDL_SCANCODE_C);
+  p->shutdown(p->self);
+  fifa96_platform_destroy(p);
+}
+
 int main(void) {
   /* SDL2 and SDL3 spellings; the backend honours SDL3's hint name too. */
   setenv("SDL_VIDEO_DRIVER", "dummy", 1);
@@ -194,6 +259,7 @@ int main(void) {
   test_button_map();
   test_keyboard_reaches_match();
   test_held_key_is_a_state_sample();
+  test_held_long_ball_is_a_state_sample();
 
   fifa96_platform *p = fifa96_platform_sdl3_create();
   assert(p != NULL);
