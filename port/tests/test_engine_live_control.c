@@ -17,7 +17,10 @@
  *    ball after the kick path ran;
  *  - the live flight consumer turns the staged FU-73 vector into a real ball
  *    target, and an authentic attack-position kick scores through the native
- *    goal scan (1-0, phase 5, restart, score preserved).
+ *    goal scan (1-0, phase 5, restart, score preserved);
+ *  - the human KICK row aims at the opponent goal-mouth centre, so the real
+ *    live kickoff (no ball/taker/camera staging) scores 1-0 and 0-1 through
+ *    the same native goal/restart chain.
  *
  * Everything here is live-only (the M1/M2 headless tapes never set live_start).
  */
@@ -70,6 +73,7 @@ static struct lc_fixture make_lc_fixture(void) {
   assert(f.mr->session_gate_14c32a == 0u);
   return f;
 }
+
 
 static void drop_lc_fixture(struct lc_fixture *f) {
   if (f->mr->running) assert(fifa96_match_run_end(f->mr) == 0);
@@ -348,6 +352,107 @@ static void test_live_kick_flight_scores(void) {
   drop_lc_fixture(&f);
 }
 
+/* The real live kickoff, no ball/taker/camera staging: the live seed puts the
+ * controlled side's taker at the kickoff; a KICK press/release aims the flight
+ * at that side's opponent goal-mouth centre (side 0 +0xB30, side 1 -0xB30) and
+ * the native armer/scan scores. This is the shipped menu-input path, not the
+ * staged attack fixture above. */
+static void test_live_kickoff_shot_scores_side(uint32_t side) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t taker;
+  /* No staging: the ball is the real kickoff placement immediately after
+   * begin (the side-1 fixture switch below may advance a couple of frames). */
+  assert(mr->entities.ball.x == 480 && mr->entities.ball.y == 0 &&
+         mr->entities.ball.z == 0);
+  if (side != 0u) {
+    /* The phase machine is freshly initialised to side 0 by begin; flip the
+     * controlled side through the same cell the native FUN_000740A0 writes and
+     * let the live control follow rebind. This is a fixture switch, not ball or
+     * taker staging. */
+    mr->phase_machine.side_controlled = (uint8_t)side;
+    one_granted_frame(mr);
+    one_granted_frame(mr);
+  }
+  taker = mr->entities.controlled;
+  assert(taker >= (int32_t)(side * FIFA96_MATCH_ENTITY_RECORDS));
+  assert(taker < (int32_t)((side + 1u) * FIFA96_MATCH_ENTITY_RECORDS));
+  assert(taker != (int32_t)(side * FIFA96_MATCH_ENTITY_RECORDS));   /* no keeper */
+  assert(mr->slot.entity == taker);
+  assert(mr->entities.team[side].target == taker);
+  assert(mr->entities.team[side].records[taker % 11u].code == 5u);
+
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(mr, &kick, 1) == 0);
+  }
+  one_granted_frame(mr);
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  for (int i = 0; i < 8 && (mr->dispatched_ok & (1ull << 7u)) == 0ull; i++)
+    one_granted_frame(mr);
+  assert((mr->dispatched_ok & (1ull << 7u)) != 0ull);
+  assert(mr->live_kick_active == 1u);
+  assert(mr->live_kick_target_x == 0);
+  assert(mr->live_kick_target_z == (side == 0u ? 0xB30 : -0xB30));
+  assert(mr->live_kick_speed >= 8);
+  assert(mr->live_kick_frames >= 500u);
+
+  {
+    int goal = 0;
+    for (int i = 0; i < 500 && goal == 0; i++) {
+      one_granted_frame(mr);
+      if (mr->score[side] == 1u) goal = 1;
+    }
+    assert(goal == 1);
+  }
+  assert(mr->score[side] == 1u);
+  assert(mr->score[side ^ 1u] == 0u);
+  assert(mr->state.phase == 5u);
+  assert(mr->goal_record_side == (uint8_t)side);
+  assert(mr->goal_armed == 1u && mr->goal_zone == 1u);
+  assert(mr->live_kick_active == 0u);   /* cleared by the goal */
+
+  {
+    int released = 0;
+    for (int i = 0; i < LC_RESTART_CAP; i++) {
+      one_granted_frame(mr);
+      if (mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE) {
+        released = 1;
+        break;
+      }
+    }
+    assert(released == 1);
+  }
+  assert(mr->score[side] == 1u && mr->score[side ^ 1u] == 0u);
+  {
+    int resumed = 0;
+    for (int i = 0; i < LC_RESTART_CAP; i++) {
+      if (i % 30 == 0) {
+        fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+        assert(fifa96_match_run_input(mr, &kick, 1) == 0);
+      } else if (i % 30 == 2) {
+        assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+      }
+      one_granted_frame(mr);
+      if (mr->state.phase == 2u) {
+        resumed = 1;
+        break;
+      }
+    }
+    assert(resumed == 1);
+  }
+  for (int i = 0; i < 100; i++) {
+    one_granted_frame(mr);
+    assert(mr->score[side] == 1u && mr->score[side ^ 1u] == 0u);
+  }
+  drop_lc_fixture(&f);
+}
+
+static void test_live_kickoff_shot_scores(void) {
+  test_live_kickoff_shot_scores_side(0u);
+  test_live_kickoff_shot_scores_side(1u);
+}
+
 /* After the live kick test, a legally staged goal-mouth ball still runs the
  * native P6 goal/restart chain; the score is written only by that chain. */
 static void test_live_goal_after_kick(void) {
@@ -418,6 +523,7 @@ int main(void) {
   test_live_begin_seeds_kickoff_carrier();
   test_live_kick_release_runs_row07();
   test_live_kick_flight_scores();
+  test_live_kickoff_shot_scores();
   test_live_auto_switch_carrier_and_nearest();
   test_live_goal_after_kick();
   printf("test_engine_live_control: ok\n");

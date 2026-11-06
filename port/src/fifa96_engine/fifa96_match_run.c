@@ -2582,6 +2582,7 @@ static int match_run_live_control_nearest(const struct fifa96_match_run *mr,
  * loft arc, receive hand-off or out-of-play rule is claimed as native; the
  * flight consumer only steers the existing ball machine. */
 #define MATCH_RUN_LIVE_FLIGHT_FRAMES 300u
+#define MATCH_RUN_LIVE_FLIGHT_GOAL_FRAMES 600u
 #define MATCH_RUN_LIVE_FLIGHT_SCALE 2
 #define MATCH_RUN_LIVE_FLIGHT_SPEED_MIN 8
 #define MATCH_RUN_LIVE_FLIGHT_SPEED_MAX 16
@@ -2593,6 +2594,8 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   int32_t dir_x;
   int32_t dir_z;
   int32_t speed;
+  int kick_row;
+  uint32_t team8;
   if (!mr || !mr->live_start) return;
   pair = &mr->entities.ball.pair;
   if ((pair->flags & 0x70u) == 0u) return;
@@ -2609,8 +2612,8 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   if (id == mr->live_kick_sig_actor && pair->traj == mr->live_kick_sig_traj &&
       pair->flags == mr->live_kick_sig_flags && pair->code == mr->live_kick_sig_code)
     return;   /* the same staged kick: already consumed */
-  e = &mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
-           .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  team8 = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  e = &mr->entities.team[team8].records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
   dir_x = pair->vector.height;
   dir_z = pair->vector.z;
   if (dir_x == 0 && dir_z == 0) {
@@ -2618,20 +2621,33 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
     dir_z = e->dir_z;
   }
   if (dir_x == 0 && dir_z == 0)
-    dir_z = mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS].side == 0u
-                ? 1
-                : -1;
+    dir_z = mr->entities.team[team8].side == 0u ? 1 : -1;
   speed = pair->vector.x;
   if (speed < 0) speed = -speed;
   speed >>= 6;
   if (speed < MATCH_RUN_LIVE_FLIGHT_SPEED_MIN) speed = MATCH_RUN_LIVE_FLIGHT_SPEED_MIN;
   if (speed > MATCH_RUN_LIVE_FLIGHT_SPEED_MAX) speed = MATCH_RUN_LIVE_FLIGHT_SPEED_MAX;
-  mr->live_kick_target_x =
-      e->pos_x + dir_x * MATCH_RUN_LIVE_FLIGHT_SCALE;
-  mr->live_kick_target_z =
-      e->pos_z + dir_z * MATCH_RUN_LIVE_FLIGHT_SCALE;
+  /* P7 / FU-345 (shot aim): the KICK row (mode 0x10) is the human shot; the
+   * staged direction is the record's static facing and a normal kickoff shot
+   * then misses the mouth. For the KICK row only, aim the flight at the
+   * opponent goal-mouth centre (x=0, z=±0xB30) instead of the derived
+   * kicker-relative target. PASS/LONG_BALL (0x20/0x40) keep the staged
+   * direction. This is a labelled [D] shot-aim stand-in for the unported
+   * aim/camera director; it never writes score, phase or the goal cells. */
+  kick_row = ((pair->flags & 0x10u) != 0u && (pair->flags & 0x60u) == 0u);
+  if (kick_row) {
+    mr->live_kick_target_x = 0;
+    mr->live_kick_target_z =
+        mr->entities.team[team8].side == 0u ? 0xB30 : -0xB30;
+  } else {
+    mr->live_kick_target_x =
+        e->pos_x + dir_x * MATCH_RUN_LIVE_FLIGHT_SCALE;
+    mr->live_kick_target_z =
+        e->pos_z + dir_z * MATCH_RUN_LIVE_FLIGHT_SCALE;
+  }
   mr->live_kick_speed = (int16_t)speed;
-  mr->live_kick_frames = MATCH_RUN_LIVE_FLIGHT_FRAMES;
+  mr->live_kick_frames =
+      kick_row ? MATCH_RUN_LIVE_FLIGHT_GOAL_FRAMES : MATCH_RUN_LIVE_FLIGHT_FRAMES;
   mr->live_kick_active = 1u;
   mr->live_kick_sig_actor = id;
   mr->live_kick_sig_traj = pair->traj;

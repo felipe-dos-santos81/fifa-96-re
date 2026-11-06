@@ -4091,3 +4091,25 @@ close-out below).
   percent 0 -> crowd/whistle/goal silent). `make check` 118/118; M1
   `09b726b7…` and M2 v29 `7c3874f7…` exact by `cmp`; census unchanged
   (78/78 bodies, 58/80 natural, 64/80 install-live).
+
+- **P7 live shot aim and kickoff goal (FU-345, 2026-11-06).** The human KICK
+  row (pair flags mode 0x10; pass/long keep their staged direction) now aims
+  the derived flight at the opponent goal-mouth centre: `x=0`,
+  `z=side==0 ? +0xB30 : -0xB30`, `target_y=0`, with the bounded 600-frame
+  kickoff-to-mouth window. The speed clamp 8..16, native ball-machine
+  integration/heading, goal armer and native goal scan are unchanged; this is
+  a labelled [D] shot-aim stand-in for the unported aim/camera director and
+  writes no score/phase. New no-staging `test_live_kickoff_shot_scores` for
+  both sides starts from the real live kickoff (ball 480,0,0), presses/releases
+  KICK, asserts the `(0, ±0xB30)` target and drives the native chain to 1-0
+  (side 0) / 0-1 (side 1), phase 5, restart and score preserved; no ball or
+  score is staged. `make check` 119/119; M1 `09b726b7…` and M2 v29
+  `7c3874f7…` exact by `cmp`; census unchanged (78/78, 58/80, 64/80, action
+  38/45, phase 26/35). Shipped menu path `DISPLAY=:1` Brazil vs Italy: one Z
+  at the kickoff scored BRA 1 ITA 0; `/tmp/opencode/play/p7-natural-goal.png`
+  (1-0, ball on the goal line) and `p7-natural-restart.png` (1-0, kickoff
+  circle); the first Z produced the goal, a second Z released the native
+  phase-1 kickoff gate for the restart capture. No staging/harness. Legs:
+  P7-L12 native aim/camera director (held-direction intent, goal-side
+  choice, keeper/defender blocking), P7-L7 per-code target algebra/receive
+  target, P7-L10 loft arc/receive hand-off.
