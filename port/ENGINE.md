@@ -10580,3 +10580,36 @@ help block now clears the footer via `MENU_OPT_HELP_PITCH 13`.
 half-time sit-1 pulses (P9-L10), row-05 `FUN_0007F7E0`/row 03/full AI,
 Practice/Leagues/Tournaments/Playoffs/Load Game/Modem Setup, replay/captions,
 rosters, commentary/music. Each is numbered; none is claimed native.
+
+## P9 code-review fixes and errata (2026-11-06)
+
+**Process record.** The P9 implementation ran before its SDD spec/plan; the
+`2026-11-06-fifa96-p9-shot-contest-{design,plan}.md` files were added after
+the P9 code review found the missing process record. The implementation order
+is recorded there.
+
+**Doc errata (append-only).**
+- The P9 prose citing `test_live_aim_both_cancel_to_centre` and
+  KICK+Left+Right is corrected: the test is `test_live_aim_depth_axis`; the
+  aim axis is Up/Down (Left/Right are goal-side movement).
+- The 1-0 capture is at 00:06; the 00:05 frame is 0-0 before the shot; the
+  goal/full-time result is unchanged.
+- The keeper goal spot `(0,±0x9EA)` is the P8 AI recon/windowed probe
+  (keeper `(0,2706)` -> `(0,2538)`, shot distance `0x2F`), now cited in
+  `fifa96_match_run.h`, not a static formation constant.
+- `p9-save2.png` shows 0-0 from midfield, not the ball at the keeper; the
+  save proof is the deterministic `test_live_keeper_saves_centre` /
+  `test_live_keeper_saves_centre_no_staging`; the screenshot only
+  corroborates the 0-0.
+- The save pins the ball for 30 frames and does not install keeper
+  possession; the post-save possession install is P9-L11. The half-time
+  sit-1 gate remains pulse-gated (P9-L10).
+
+**Review fixes applied.** `match_run_live_team_for_side` replaces the
+duplicated side scans; `match_run_live_aim_reset` unifies the latch/save/
+flight-end resets; input masks and goal-mouth bounds are named; the unused
+test out-param is removed; `live_aim_x` is renamed `live_aim_goal_x`; the
+adjacent live guard is merged; a no-staging keeper-save test and a
+match-level held-long-ball test were added. `make check` **119/119**; M1
+`09b726b7…`/M2 v29 `7c3874f7…` exact; census unchanged (78/78, 58/80,
+64/80).

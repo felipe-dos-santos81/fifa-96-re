@@ -4356,3 +4356,18 @@ close-out below).
   per-code target/loft, native open-play keeper save/dive/reach, repeated
   half-time pulses, row-05/FUN_0007F7E0, row 03/full AI, the six other Game
   Select modes, replay/captions, rosters, commentary/music.
+
+- **P9 code-review fixes and errata (2026-11-06).** The missing P9 SDD
+  process record is added under `docs/superpowers/{specs,plans}/2026-11-06-
+  fifa96-p9-shot-contest*`. Code-review errata: the aim test is
+  `test_live_aim_depth_axis` (not `..._both_cancel_to_centre`; Up/Down axis,
+  not KICK+Left+Right); the 1-0 capture is 00:06 (00:05 is 0-0); the
+  `(0,±0x9EA)` keeper spot is the P8 recon/windowed probe now cited in
+  `match_run.h`; `p9-save2.png` only corroborates 0-0 (the no-staging
+  `test_live_keeper_saves_centre` is the save proof); the save pins 30 frames
+  without keeper possession (P9-L11) and half-time remains pulse-gated
+  (P9-L10). Cleanups: `match_run_live_team_for_side`,
+  `match_run_live_aim_reset`, named masks/mouth bounds, `live_aim_goal_x`
+  rename, removed unused test out-param, merged live guard, no-staging
+  keeper-save and match-level held-long-ball tests. `make check` 119/119; M1
+  `09b726b7…`/M2 `7c3874f7…` exact; census unchanged (78/78, 58/80, 64/80).
