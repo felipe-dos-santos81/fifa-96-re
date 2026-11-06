@@ -10287,3 +10287,36 @@ event that otherwise froze the live focus and lost the native goal
 (the unported aim/camera director remains the real fix). **P8-L8** native
 aim/camera director (shot-side choice, keeper/defender beatability) remains the
 eventual replacement for the KICK goal-centre aim and this block.
+
+## P8 final playability acceptance (2026-11-06)
+
+**Measured full loop.** Shipped `DISPLAY=:1`, Friendly Brazil/Italy, default
+2-minute halves: one Z at the kickoff -> native **BRA 1-0** at 00:05; the live
+opponent moves/contests and a defender can block (defender-only stand-in);
+half-time is released with C/PASS (the native sit-1 gate); **FULL TIME BRA
+1-0 ITALY, PERIOD 2**; Enter or the five-second hold returns to Game Select.
+Captures: `/tmp/opencode/play/p8-ai-goal.png` (1-0, 00:05),
+`p8-opponent-move.png`, `p8-ai-fulltime.png`, `p8-ai-return-menu.png`, plus
+`p8-fulltime.png`/`p8-return-menu.png`; the shipped proof stages no score or
+ball. `make check` **119/119**; M1 `09b726b7…`/M2 v29 `7c3874f7…` exact by
+`cmp`; census unchanged (78/78, 58/80, 64/80, action 38/45, phase 26/35).
+Gamepad A/South kick + B/East pass are live (menus keep confirm/back; the
+keyboard Enter/Backspace dual role is documented and tested); the Controls
+page states the dual roles and the half-time C/PASS gate.
+
+**Doc errata (append-only).** (1) The two P8 registers above both use
+`P8-L1..L5`: this note disambiguates the full-time branch as **P8-F1..F5**
+and the opponent/block work as **P8-A1..A5**; earlier text remains
+historical. (2) The Friendly full-time gate is keyed to `live_start`, not a
+Game-Select match-mode cell; a future live competition mode must thread that
+mode before relying on the native ET/penalties route (the earlier "any future
+competition mode" wording is narrowed). (3) The block is defender-only and
+the open-play keeper save remains P8-A3/P8-L3; the shipped windowed run did
+not observe a natural save, only the staged-defender test proof.
+
+**Remaining playable legs.** Open-play keeper save and native row-05 fallback
+`FUN_0007F7E0` (P9), full 10-player AI/row 03 + possession hysteresis, native
+aim/camera director, replay/captions, rosters/attributes, commentary/music,
+competition ET/penalties, `options.dat` persistence, gamepad held-edge
+polish, and the six other Game Select screens. Each is numbered; none is
+claimed as complete.

@@ -4238,3 +4238,23 @@ close-out below).
   possession-range root cause, P8-L3 open-play keeper save, P8-L4 native ball
   hold, P8-L5 target hysteresis/demotion, P8-L6 full 10-player AI/row 03,
   P8-L7 live shot camera follow, P8-L8 native aim/camera director.
+
+- **P8 final playability acceptance (2026-11-06).** Shipped `DISPLAY=:1`,
+  Friendly Brazil/Italy, default 2-minute halves: one Z at the kickoff ->
+  native **BRA 1-0** at 00:05; the live opponent moves/contests, a
+  defender-only block is live; half-time starts with C/PASS; **FULL TIME BRA
+  1-0 ITALY, PERIOD 2**; Enter/5 s returns to Game Select. Screenshots:
+  `p8-ai-goal.png`, `p8-opponent-move.png`, `p8-ai-fulltime.png`,
+  `p8-ai-return-menu.png`, `p8-fulltime.png`, `p8-return-menu.png`. No score
+  or ball is staged in the shipped proof. `make check` **119/119**; M1
+  `09b726b7…`/M2 `7c3874f7…` exact; census unchanged (78/78, 58/80, 64/80).
+  Gamepad A/South kick + B/East pass; keyboard Enter/Backspace dual roles
+  documented/tested; Controls page updated. Doc errata: the two P8 registers
+  both used L1..L5, disambiguated as **P8-F1..F5** (full-time) and
+  **P8-A1..A5** (opponent/block); the Friendly full-time gate is
+  `live_start`-keyed, not match-mode-keyed, so a future competition mode must
+  thread the mode cell; the block is defender-only and the open-play keeper
+  save remains P8-A3/P8-L3. Remaining legs: keeper save/row-05 `FUN_0007F7E0`
+  (P9), full AI/row 03, native aim/camera director, replay/captions, rosters,
+  commentary/music, competition ET/penalties, `options.dat`, held-edge
+  polish, six Game Select screens.

@@ -75,7 +75,7 @@ with the six producer-blocked rows named in the phase-36/38 registers
 ## Build and run
 
 ```bash
-make check                     # configure + strict build + full CTest suite (112 tests)
+make check                     # configure + strict build + full CTest suite (119 tests)
 make run                       # windowed native engine on data/game/FIFAPCCD96.iso (no extra args)
 make game                      # explicit alias for the same windowed native engine
 make run FILE=data/game/FIFAPCCD96.iso    # host runner: sniff the ISO, bounded decode pass under build/run/
@@ -107,20 +107,26 @@ Select entries are shown dimmed (not ported yet).
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
 **C** passes, **V** plays a long ball; **Esc** pauses (**Enter** resumes,
-**X** quits to the menu). Halves are 2 minutes (120 seconds) by default and
-configurable in **Options** (2/4/6/8/10/20/45-minute halves). The HUD shows the
-team codes, score, period and clock; at full time the result panel holds for
-five seconds, then returns to Game Select. Crowd ambience and the whistle play
-through SDL3 audio when the ISO is mounted; their gain follows the SFX Volume
-and Sound Effects options.
+**X** quits to the menu). At half-time press **C**/pass to start the second
+half (the native kickoff gate). Halves are 2 minutes (120 seconds) by default
+and configurable in **Options** (2/4/6/8/10/20/45-minute halves). The HUD
+shows the team codes, score, period and clock; at full time the result panel
+holds for five seconds, then returns to Game Select (or press **Enter**).
+Crowd ambience and the whistle play through SDL3 audio when the ISO is
+mounted; their gain follows the SFX Volume and Sound Effects options.
+
+Gamepad: D-pad moves; **A/South** kicks in play and selects in menus;
+**B/East** passes in play and backs out in menus; **West** plays the long
+ball. Keyboard **Enter**/**Backspace** share those confirm/back roles and
+therefore also kick/pass in active play.
 
 At the kickoff, **Z** shoots at the opponent goal through the native
 live-control/kick/goal path; after the goal a second **Z** releases the
 kickoff gate, arrows take the nearest defender to the ball for a contact
-tackle/claim, and **Z** kicks again with the score preserved. The shot always
-aims at the goal centre and there is no keeper/defender blocking yet — both
-are labelled stand-ins for the unported aim/camera director and possession
-AI.
+tackle/claim, and **Z** kicks again with the score preserved. A live defender
+can block a shot; the open-play keeper save is still unported. The shot always
+aims at the goal centre (the native aim/camera director is a leg), so the
+goal-centre aim and the block are labelled stand-ins, not native AI.
 
 ## Conventions
 
