@@ -1201,6 +1201,23 @@ struct fifa96_match_run {
    * so a kick is not immediately undone by the nearest-player claim. Live-only;
    * init/begin zero it and the non-live path never reads it. */
   uint16_t live_kick_hold;
+  /* P7 / FU-345 (flight): the derived live ball-flight consumer. The kick path
+   * stages the FU-73 pair (speed = vector.x, direction = vector.height/z, loft =
+   * traj) but the native per-code target algebra (0x7AA3C..0x7AE2F, OL-62) and
+   * the ball-vector consumer are unported, so the phase-2 ball machine would
+   * keep steering the ball at its camera-relative target. While
+   * `live_kick_active`, the ball machine uses this latched target/speed instead;
+   * it clears on arrival, goal, out-of-play or the bounded window. Derived [D]
+   * mapping: target = kicker position + 2*(vector.height, vector.z) and speed =
+   * clamp(|vector.x| >> 6, 8, 16). Live-only; init/begin clear it and the M1/M2
+   * tapes never read it. */
+  uint8_t live_kick_active;
+  uint16_t live_kick_frames;
+  int32_t live_kick_target_x, live_kick_target_z;
+  int16_t live_kick_speed;
+  int32_t live_kick_sig_actor;
+  int16_t live_kick_sig_traj;
+  uint8_t live_kick_sig_flags, live_kick_sig_code;
   /* FU-197 §2/§5 (M2 phase-17 T2): the act-4 sit-2..4 formation-order arm's
    * state. `formation_order[side][i]` mirrors the desired line-up matrix
    * `0x14C360 + side*0x7B + i*4`; `formation_current[side][i]` mirrors the

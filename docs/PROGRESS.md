@@ -4049,3 +4049,30 @@ close-out below).
   P7-L3 live kick launch/ball-flight, P7-L4 live `+0x6B` lane producer, P7-L5
   gamepad kick/pass (P6-L6), P7-L6 natural windowed scoring (blocked by
   P7-L1/L2/L3).
+
+- **P7 live ball flight and natural goal (FU-345, 2026-11-06).** The staged
+  FU-73 kick now flies: a live-only latch (`match_run_live_kick_latch`) takes
+  the pair's staged speed (`vector.x`), direction (`vector.height/z`) and loft
+  (`traj`) at the human slot/actor and records a derived target
+  `kicker + 2*direction`, speed `clamp(|vector.x| >> 6, 8, 16)` and a 300-frame
+  window. `match_run_ball_machine` uses that target/max-speed while
+  `live_kick_active` instead of the camera-relative target (native
+  metric/heading/velocity/ramp/integration unchanged) and clears on arrival,
+  goal, phase change, out-of-play or timeout. A live-only stationary-kick aim
+  fallback in `match_kick_run` substitutes the record's own `+0x8E` type-dir
+  octant when the slot direction is `(0,0)`, so a plain KICK stages a real
+  vector. New `test_live_kick_flight_scores` stages the taker/ball at
+  `(0,0,0x900)` (authentic attack position), faces type 0 (+z), presses/releases
+  KICK, asserts a target beyond the goal line and speed >= 8, then drives the
+  native goal scan: score 1-0, phase 5, a >0x100 ball travel, phase-1 restart
+  and phase-2 resume with the score preserved; no score/phase is staged.
+  `make check` 119/119; M1 `09b726b7…` and M2 v29 `7c3874f7…` exact by `cmp`;
+  census unchanged (78/78, 58/80, 64/80, action 38/45, phase 26/35). Windowed
+  verification harness (direct live begin, stages BRA/ITA HUD, taker/ball at
+  `(0,0,0x900)`, facing type 0, attack-area camera focus, KICK through SDL): `/tmp/opencode/play/p7-flight.png` (attack area,
+  0-0), `p7-goal.png` (BRA 1 ITA 0), `p7-restart.png` (BRA 1 ITA 0, kickoff);
+  log FLIGHT step=158, GOAL step=198 score=1-0 phase=5, RESTART step=948. The harness stages
+  the attack position/facing and camera focus only; the goal is native row-07 + flight + armer +
+  scan. Legs: P7-L7 native per-code target algebra/receive target (OL-62),
+  P7-L8 live facing/aim AI, P7-L9 identical-pair re-latch, P7-L10 loft
+  arc/receive hand-off, P7-L11 natural menu-input scoring (AI/aim).

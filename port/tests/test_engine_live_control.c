@@ -14,7 +14,10 @@
  *  - the per-frame follow selects the carrier, else the nearest own outfield
  *    record, never the keeper and never an opponent record;
  *  - the existing native goal/restart chain still consumes a staged goal-mouth
- *    ball after the kick path ran.
+ *    ball after the kick path ran;
+ *  - the live flight consumer turns the staged FU-73 vector into a real ball
+ *    target, and an authentic attack-position kick scores through the native
+ *    goal scan (1-0, phase 5, restart, score preserved).
  *
  * Everything here is live-only (the M1/M2 headless tapes never set live_start).
  */
@@ -247,6 +250,104 @@ static void test_live_auto_switch_carrier_and_nearest(void) {
   drop_lc_fixture(&f);
 }
 
+/* The full natural loop: live begin, the taker staged in an authentic attack
+ * position in front of the +z goal, a plain KICK press/release whose native
+ * row-07 staging points at the goal (the record's own +0x8E facing type 0 =
+ * +z), the derived live flight mapping, the live goal armer and the native
+ * goal scan. The score is only ever written by the native goal chain. */
+static void test_live_kick_flight_scores(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  const int32_t taker = mr->entities.controlled;
+  struct fifa96_match_entity *e;
+  int32_t start_z;
+  assert(taker >= 0 && taker != 0);
+  e = &mr->entities.team[0].records[taker];
+
+  /* Authentic attack position (not inside the goal): just outside the +z
+   * penalty area, facing the +z goal. This is record staging, not a score or
+   * phase write. */
+  e->pos_x = 0;
+  e->pos_z = 0x900;
+  e->target_x = 0;
+  e->target_z = 0x900;
+  stage_ball(mr, 0, 0, 0x900);
+  mr->entities.ball.carrier = taker;
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == taker);
+  assert(mr->entities.team[0].records[taker].code == 5u);
+
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(mr, &kick, 1) == 0);
+  }
+  one_granted_frame(mr);
+  /* The AI/record walk can touch the facing byte in the press frame; stage the
+   * record's own facing/dir for the release (the same legal record staging the
+   * task allows). Type 0 is the +z octant in the kick type-dir table. */
+  e->type = 0;
+  e->dir_x = 0;
+  e->dir_z = 1;
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  for (int i = 0; i < 8 && (mr->dispatched_ok & (1ull << 7u)) == 0ull; i++)
+    one_granted_frame(mr);
+  assert((mr->dispatched_ok & (1ull << 7u)) != 0ull);
+  assert(mr->live_kick_active == 1u);
+  assert(mr->live_kick_target_z > 0xB10);   /* beyond the +z goal line */
+  assert(mr->live_kick_speed >= 8);
+  start_z = mr->entities.ball.z;
+
+  {
+    int goal = 0;
+    for (int i = 0; i < 200 && goal == 0; i++) {
+      one_granted_frame(mr);
+      if (mr->score[0] == 1u) goal = 1;
+    }
+    assert(goal == 1);
+  }
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  assert(mr->state.phase == 5u);            /* the native situation-6 phase */
+  assert(mr->goal_record_side == 0u);
+  assert(mr->goal_armed == 1u);
+  assert(mr->entities.ball.z > start_z + 0x100);   /* a real flight, not a nudge */
+  assert(mr->live_kick_active == 0u);       /* cleared by the goal */
+
+  {
+    int released = 0;
+    for (int i = 0; i < LC_RESTART_CAP; i++) {
+      one_granted_frame(mr);
+      if (mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE) {
+        released = 1;
+        break;
+      }
+    }
+    assert(released == 1);
+  }
+  assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  {
+    int resumed = 0;
+    for (int i = 0; i < LC_RESTART_CAP; i++) {
+      if (i % 30 == 0) {
+        fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+        assert(fifa96_match_run_input(mr, &kick, 1) == 0);
+      } else if (i % 30 == 2) {
+        assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+      }
+      one_granted_frame(mr);
+      if (mr->state.phase == 2u) {
+        resumed = 1;
+        break;
+      }
+    }
+    assert(resumed == 1);
+  }
+  for (int i = 0; i < 100; i++) {
+    one_granted_frame(mr);
+    assert(mr->score[0] == 1u && mr->score[1] == 0u);
+  }
+  drop_lc_fixture(&f);
+}
+
 /* After the live kick test, a legally staged goal-mouth ball still runs the
  * native P6 goal/restart chain; the score is written only by that chain. */
 static void test_live_goal_after_kick(void) {
@@ -316,6 +417,7 @@ static void test_live_goal_after_kick(void) {
 int main(void) {
   test_live_begin_seeds_kickoff_carrier();
   test_live_kick_release_runs_row07();
+  test_live_kick_flight_scores();
   test_live_auto_switch_carrier_and_nearest();
   test_live_goal_after_kick();
   printf("test_engine_live_control: ok\n");

@@ -2568,6 +2568,114 @@ static int match_run_live_control_nearest(const struct fifa96_match_run *mr,
   }
 }
 
+/* P7 / FU-345 (flight): latch the human kick's staged FU-73 block into a
+ * derived ball-flight target. The native per-code target algebra
+ * (`0x7AA3C..0x7AE2F`, OL-62) is unported, so the mapping below is explicitly
+ * derived from the staged semantics already ported:
+ *   - `pair.vector.x` is the kick speed (the row's 0x390..0x5A0 family);
+ *   - `pair.vector.height`/`pair.vector.z` are the speed-scaled direction
+ *     components (`FUN_000795A4` sine folds), used natively as local target
+ *     offsets from the camera (`0x7AA68..`);
+ *   - `pair.traj` is the loft word (capped at 0x460).
+ * Derived mapping [D]: `target = kicker_pos + 2*(dir_x, dir_z)`, speed
+ * `clamp(|vector.x| >> 6, 8, 16)`, bounded to 300 frames. No per-code arm,
+ * loft arc, receive hand-off or out-of-play rule is claimed as native; the
+ * flight consumer only steers the existing ball machine. */
+#define MATCH_RUN_LIVE_FLIGHT_FRAMES 300u
+#define MATCH_RUN_LIVE_FLIGHT_SCALE 2
+#define MATCH_RUN_LIVE_FLIGHT_SPEED_MIN 8
+#define MATCH_RUN_LIVE_FLIGHT_SPEED_MAX 16
+
+static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
+  struct fifa96_ball_pair_state *pair;
+  struct fifa96_match_entity *e;
+  int32_t id;
+  int32_t dir_x;
+  int32_t dir_z;
+  int32_t speed;
+  if (!mr || !mr->live_start) return;
+  pair = &mr->entities.ball.pair;
+  if ((pair->flags & 0x70u) == 0u) return;
+  id = pair->actor;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return;
+  /* Only the human's slot/actor starts a flight; an opponent/AI pair is left
+   * to the native ball machine. `live_control_taker` covers the release frame,
+   * where the same-frame AI merge may already have moved the slot/control. */
+  if (id != mr->slot.entity && id != mr->entities.controlled &&
+      id != mr->live_control_taker)
+    return;
+  if (id == mr->live_kick_sig_actor && pair->traj == mr->live_kick_sig_traj &&
+      pair->flags == mr->live_kick_sig_flags && pair->code == mr->live_kick_sig_code)
+    return;   /* the same staged kick: already consumed */
+  e = &mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
+           .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  dir_x = pair->vector.height;
+  dir_z = pair->vector.z;
+  if (dir_x == 0 && dir_z == 0) {
+    dir_x = e->dir_x;
+    dir_z = e->dir_z;
+  }
+  if (dir_x == 0 && dir_z == 0)
+    dir_z = mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS].side == 0u
+                ? 1
+                : -1;
+  speed = pair->vector.x;
+  if (speed < 0) speed = -speed;
+  speed >>= 6;
+  if (speed < MATCH_RUN_LIVE_FLIGHT_SPEED_MIN) speed = MATCH_RUN_LIVE_FLIGHT_SPEED_MIN;
+  if (speed > MATCH_RUN_LIVE_FLIGHT_SPEED_MAX) speed = MATCH_RUN_LIVE_FLIGHT_SPEED_MAX;
+  mr->live_kick_target_x =
+      e->pos_x + dir_x * MATCH_RUN_LIVE_FLIGHT_SCALE;
+  mr->live_kick_target_z =
+      e->pos_z + dir_z * MATCH_RUN_LIVE_FLIGHT_SCALE;
+  mr->live_kick_speed = (int16_t)speed;
+  mr->live_kick_frames = MATCH_RUN_LIVE_FLIGHT_FRAMES;
+  mr->live_kick_active = 1u;
+  mr->live_kick_sig_actor = id;
+  mr->live_kick_sig_traj = pair->traj;
+  mr->live_kick_sig_flags = pair->flags;
+  mr->live_kick_sig_code = pair->code;
+}
+
+/* The ball-machine override: while a live kick is in flight, use the latched
+ * target/speed instead of the camera-relative phase-2 target. Returns 1 when
+ * the override was applied. */
+static int match_run_live_kick_flight_step(struct fifa96_match_run *mr,
+                                           struct fifa96_match_ball *b) {
+  if (!mr || !mr->live_start || !mr->live_kick_active) return 0;
+  if (mr->state.phase != 2u || mr->goal_armed) {
+    mr->live_kick_active = 0;
+    return 0;
+  }
+  b->target_x = mr->live_kick_target_x;
+  b->target_y = 0;
+  b->target_z = mr->live_kick_target_z;
+  b->max_speed = mr->live_kick_speed;
+  return 1;
+}
+
+/* Clear the flight after the frame's integration: arrival, out-of-play,
+ * goal/phase transition or the bounded window. */
+static void match_run_live_kick_flight_end(struct fifa96_match_run *mr,
+                                           const struct fifa96_match_ball *b) {
+  int32_t ax;
+  int32_t az;
+  int32_t dx;
+  int32_t dz;
+  if (!mr || !mr->live_start || !mr->live_kick_active) return;
+  ax = b->x < 0 ? -b->x : b->x;
+  az = b->z < 0 ? -b->z : b->z;
+  dx = b->x - mr->live_kick_target_x;
+  dz = b->z - mr->live_kick_target_z;
+  if (mr->live_kick_frames != 0u) mr->live_kick_frames--;
+  if (mr->live_kick_frames == 0u || mr->goal_armed || mr->state.phase != 2u ||
+      ax > 0x6C0 || az > 0xC00 ||
+      (dx <= 0x20 && dx >= -0x20 && dz <= 0x20 && dz >= -0x20))
+    mr->live_kick_active = 0;
+}
+
 static void match_run_live_control_update(struct fifa96_match_run *mr) {
   int32_t t;
   int32_t id = FIFA96_MATCH_ENTITY_NONE;
@@ -2578,6 +2686,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_kickoff_touch = 0u;
     return;
   }
+  match_run_live_kick_latch(mr);
   t = match_run_live_control_team(mr);
   if (t < 0) return;
   if (mr->live_kickoff_touch != 0u) {
@@ -2889,6 +2998,15 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->live_kickoff_touch = 0;          /* P7: no live kickoff possession latch */
   mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
   mr->live_kick_hold = 0;              /* P7: no live possession hold */
+  mr->live_kick_active = 0;            /* P7: no live ball flight */
+  mr->live_kick_frames = 0;
+  mr->live_kick_target_x = 0;
+  mr->live_kick_target_z = 0;
+  mr->live_kick_speed = 0;
+  mr->live_kick_sig_actor = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_sig_traj = 0;
+  mr->live_kick_sig_flags = 0;
+  mr->live_kick_sig_code = 0;
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
   memset(mr->formation_current, 0, sizeof mr->formation_current);
@@ -2941,6 +3059,15 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->live_kickoff_touch = 0;          /* P7: fresh live kickoff latch */
   mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
   mr->live_kick_hold = 0;              /* P7: fresh live possession hold */
+  mr->live_kick_active = 0;            /* P7: fresh live ball flight */
+  mr->live_kick_frames = 0;
+  mr->live_kick_target_x = 0;
+  mr->live_kick_target_z = 0;
+  mr->live_kick_speed = 0;
+  mr->live_kick_sig_actor = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_sig_traj = 0;
+  mr->live_kick_sig_flags = 0;
+  mr->live_kick_sig_code = 0;
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;
@@ -5171,28 +5298,34 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
   struct fifa96_match_ball *b = &mr->entities.ball;
   fifa96_camera *cam = &mr->render.camera;
   int32_t delta = (int32_t)mr->state.frame_delta;
+  int live_flight = 0;
   b->max_speed = 5;                                         /* 0x8BB08 */
+  /* P7 / FU-345: the live kick flight override (derived; see
+   * match_run_live_kick_latch). Non-live runs never set live_start. */
+  if (mr->live_start) live_flight = match_run_live_kick_flight_step(mr, b);
   if (mr->state.phase == 2u) {                              /* 0x8BB55 */
-    if (mr->state.period > 3u) {                            /* 0x8BB65 */
-      b->target_x = b->x;                                   /* 0x8BB74 */
-      b->target_y = b->y;
-      b->target_z = b->z;
-    } else {
-      int32_t cam_z = cam->pos_z;
-      int32_t three_q = cam_z - (cam_z >> 2);               /* 0x8BB8A */
-      int32_t neg_eighth = (-three_q) >> 1;                 /* 0x8BB8E/96 */
-      int32_t tx = neg_eighth;                              /* ECX */
-      int32_t tz = three_q;                                 /* EBX */
-      int32_t dx = neg_eighth - cam->pos_x;                 /* 0x8BB9E EDI */
-      int32_t dz = three_q - cam_z;                         /* 0x8BBAD ESI */
-      b->target_y = 0;                                      /* 0x8BBA7 */
-      if (fifa96_entity_distance(dx, dz) < 0x120) {         /* 0x8BBBB */
-        tx += dx < 0 ? -0x120 : 0x120;                      /* 0x8BBC2..CC */
-        tz += dz < 0 ? -0x120 : 0x120;                      /* 0x8BBD4..E0 */
-        b->max_speed = 7;                                   /* 0x8BBE6 */
+    if (live_flight == 0) {
+      if (mr->state.period > 3u) {                            /* 0x8BB65 */
+        b->target_x = b->x;                                   /* 0x8BB74 */
+        b->target_y = b->y;
+        b->target_z = b->z;
+      } else {
+        int32_t cam_z = cam->pos_z;
+        int32_t three_q = cam_z - (cam_z >> 2);               /* 0x8BB8A */
+        int32_t neg_eighth = (-three_q) >> 1;                 /* 0x8BB8E/96 */
+        int32_t tx = neg_eighth;                              /* ECX */
+        int32_t tz = three_q;                                 /* EBX */
+        int32_t dx = neg_eighth - cam->pos_x;                 /* 0x8BB9E EDI */
+        int32_t dz = three_q - cam_z;                         /* 0x8BBAD ESI */
+        b->target_y = 0;                                      /* 0x8BBA7 */
+        if (fifa96_entity_distance(dx, dz) < 0x120) {         /* 0x8BBBB */
+          tx += dx < 0 ? -0x120 : 0x120;                      /* 0x8BBC2..CC */
+          tz += dz < 0 ? -0x120 : 0x120;                      /* 0x8BBD4..E0 */
+          b->max_speed = 7;                                   /* 0x8BBE6 */
+        }
+        b->target_x = tx;                                     /* 0x8BBF0 */
+        b->target_z = tz;                                     /* 0x8BBF6 */
       }
-      b->target_x = tx;                                     /* 0x8BBF0 */
-      b->target_z = tz;                                     /* 0x8BBF6 */
     }
   }
   /* 0x8BDEC: the FUN_0008DCD4 metric of (target - ball). */
@@ -5277,6 +5410,7 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
       b->z += (int32_t)b->vel_z * delta;
     }
   }
+  match_run_live_kick_flight_end(mr, b);
   b->machine_ran = 1;
 }
 

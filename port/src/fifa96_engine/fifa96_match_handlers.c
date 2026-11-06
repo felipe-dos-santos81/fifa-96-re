@@ -1173,6 +1173,32 @@ static int match_kick_run(struct fifa96_match_run *mr, const fifa96_action_kick 
   slot.word6 = s->slot_word6;
   slot.dir_x = mr->record.dir_x;
   slot.dir_z = mr->record.dir_z;
+  /* P7 / FU-345: the live slot direction is recomputed from the current input
+   * every frame (FU-70 `FUN_00078950`), so a stationary KICK release has
+   * `dir = (0,0)` and the row's grounded L2 arm passes the zero pair to
+   * `kick_dir_vector`, staging a zero vector. The native type-dir arm
+   * (`0x7BBB9`) is the facing fallback for the other modes; apply the same
+   * table for the live human slot owner when the slot pair is zero. This is a
+   * derived aim fallback for the unported live facing producer, not auto-aim:
+   * the direction comes from the record's own `+0x8E` type/facing byte and the
+   * team side. M1/M2 never set live_start. */
+  if (mr->live_start && slot_present != 0u && slot.dir_x == 0 &&
+      slot.dir_z == 0) {
+    uint8_t type8 = mr->record.type;
+    if (type8 < 8u) {
+      uint32_t team8 = (uint32_t)mr->record.entity_id /
+                       FIFA96_MATCH_ENTITY_RECORDS;
+      int8_t fx = match_kick_dir_x[type8];
+      int8_t fz = match_kick_dir_z[type8];
+      if (team8 < FIFA96_MATCH_ENTITY_TEAMS &&
+          mr->entities.team[team8].side == 1u) {
+        fx = (int8_t)-fx;
+        fz = (int8_t)-fz;
+      }
+      slot.dir_x = fx;
+      slot.dir_z = fz;
+    }
+  }
   memset(&ctx, 0, sizeof ctx);
   ctx.camera_x = s->camera_x;
   ctx.camera_y = s->camera_y;
