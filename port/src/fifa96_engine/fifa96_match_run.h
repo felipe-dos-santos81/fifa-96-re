@@ -1397,6 +1397,11 @@ struct fifa96_match_run {
    * writer) is the derived producer. The kickoff formation seed reads
    * `formation[controlled_side]` for the 0x14BFC0 `6*id` placement name. */
   uint8_t formation[2];
+  /* P11: the resource-loaded `.fmt` seed succeeded. The live kickoff taker
+   * placement substitutes for the skipped cutscene only when a formation
+   * actually moved the records; the no-ISO/synthetic fixtures keep their
+   * legacy zero-position state and the original control flow. */
+  uint8_t formation_seeded;
   /* P6: the pre-begin Team Select handout (see struct fifa96_match_matchup).
    * `set_matchup` only stages; begin consumes the next pending handout into
    * `matchup_active` after its formation reset, and the kickoff seed uses the

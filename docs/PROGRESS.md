@@ -4418,3 +4418,12 @@ close-out below).
   **P10-L7**; the native 3dwpts bowl/goal nets stay **P10-L2**, the native
   lens/camera director **P10-L6**, and the HUD **P10-L5**. `make check` 119/119;
   M1/M2 exact by `cmp`.
+
+- **P11 playable Release + kickoff placement (2026-11-06).** The windowed
+  executable now builds in a Release tree (`build-release/`) without the ASan
+  per-pixel fake-stack cost; `make check` keeps the instrumented test tree.
+  The live kickoff places the seeded taker on the ball (and the restart bind
+  seeds human possession), gated on the resource `.fmt` formation seed so the
+  no-ISO fixtures keep their legacy control flow; the opening KICK now has a
+  carrier. A release trace reaches 355 frames and clock `00:11` after 11 s.
+  `make check` **119/119**; M1/M2 exact by `cmp`.

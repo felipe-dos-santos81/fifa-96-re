@@ -1386,6 +1386,17 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   struct live_fixture f;
   live_fixture_make(&f);
   struct fifa96_match_run_render *r = &f.mr.render;
+  assert(f.mr.live_control_taker != FIFA96_MATCH_ENTITY_NONE);
+  {
+    uint32_t tt = (uint32_t)f.mr.live_control_taker / FIFA96_MATCH_ENTITY_RECORDS;
+    uint32_t ii = (uint32_t)f.mr.live_control_taker % FIFA96_MATCH_ENTITY_RECORDS;
+    const struct fifa96_match_entity *te = &f.mr.entities.team[tt].records[ii];
+    /* P11: the skipped kickoff cutscene's placement — the taker starts on the
+     * ball, so the opening KICK has a carrier. The clock is phase-class driven
+     * and is not gated on this touch. */
+    assert(abs(te->pos_x - f.mr.entities.ball.x) <= 4);
+    assert(abs(te->pos_z - f.mr.entities.ball.z) <= 4);
+  }
 
   assert(r->pitch_art.staged == 1);
   assert(r->pitch_art.tile_h != NULL && r->pitch_art.tile_v != NULL);

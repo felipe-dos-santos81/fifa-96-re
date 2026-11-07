@@ -2516,11 +2516,41 @@ static int32_t match_run_live_control_team(const struct fifa96_match_run *mr) {
       mr, (uint8_t)(mr->phase_machine.side_controlled & 1u));
 }
 
+/* P11: the native kickoff cutscene places the taker on the ball; the live
+ * bootstrap skips that cutscene and keeps the `.fmt` formation, so the
+ * nearest record is 0x199 from the ball and the opening KICK has no carrier.
+ * Put the seeded taker on the ball (a derived [D] placement for the unported
+ * cutscene) and face it at the opponent goal. Live-only; the clock itself is
+ * phase-class driven and is not gated on this touch. */
+static void match_run_live_control_place_taker(struct fifa96_match_run *mr,
+                                               int32_t taker) {
+  uint32_t team;
+  uint32_t idx;
+  struct fifa96_match_entity *e;
+  if (!mr || !mr->live_start || taker < 0 ||
+      taker >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return;
+  team = (uint32_t)taker / FIFA96_MATCH_ENTITY_RECORDS;
+  idx = (uint32_t)taker % FIFA96_MATCH_ENTITY_RECORDS;
+  if (idx == 0u) return;                      /* keeper: never the taker */
+  e = &mr->entities.team[team].records[idx];
+  e->pos_x = mr->entities.ball.x;
+  e->pos_y = mr->entities.ball.y;
+  e->pos_z = mr->entities.ball.z;
+  e->target_x = e->pos_x;
+  e->target_y = e->pos_y;
+  e->target_z = e->pos_z;
+  e->dir_x = 0;
+  e->dir_z = mr->entities.team[team].side == 0u ? 1 : -1;
+}
+
 /* P7 / FU-345: the live kickoff seed. Called once at the end of the live
  * begin, after the kickoff placement committed the formation: select the
  * controlled side's nearest outfield record to the ball (the native
  * `FUN_0008D8EC` select skips record 0 / the keeper), merge the FU-70 slot onto
- * it, publish it as the actor and install the carrier state. */
+ * it, publish it as the actor, install the carrier state and (when the
+ * resource `.fmt` seed moved the pool) put it on the ball (the skipped kickoff
+ * cutscene's placement). */
 static void match_run_live_control_seed(struct fifa96_match_run *mr) {
   int32_t t;
   int32_t taker = FIFA96_MATCH_ENTITY_NONE;
@@ -2536,6 +2566,8 @@ static void match_run_live_control_seed(struct fifa96_match_run *mr) {
   }
   if (taker != FIFA96_MATCH_ENTITY_NONE &&
       match_run_live_control_bind(mr, taker, 1) == 1) {
+    if (mr->formation_seeded)
+      match_run_live_control_place_taker(mr, taker);
     mr->live_kickoff_touch = 1u;
     mr->live_control_taker = taker;
   }
@@ -2795,10 +2827,12 @@ static void match_run_live_kick_flight_end(struct fifa96_match_run *mr,
 }
 
 /* P7 / FU-345 (restart): bind the human control to its nearest outfield record
- * at a phase-1 -> phase-2 restart, without awarding possession (the opponent
- * keeps the kickoff ball). The native restart's own control producer is the
- * unported FU-295 caller chain; this only rebinds the FU-70 slot / actor /
- * team target / camera through the same native helpers as the live seed. */
+ * at a phase-1 -> phase-2 restart, put it on the ball and install the carrier
+ * state. The native restart's own control producer is the unported FU-295
+ * caller chain; the human-restart possession and placement are a labelled [D]
+ * stand-in (the native conceding-side kickoff split is unported), applied only
+ * when the resource `.fmt` seed moved the pool. The same native helpers as the
+ * live seed rebind the FU-70 slot / actor / team target / camera. */
 static void match_run_live_restart_bind(struct fifa96_match_run *mr) {
   int32_t t;
   int32_t id = FIFA96_MATCH_ENTITY_NONE;
@@ -2812,8 +2846,16 @@ static void match_run_live_restart_bind(struct fifa96_match_run *mr) {
     if (index >= 0)
       id = (int32_t)((uint32_t)t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
   }
-  if (id != FIFA96_MATCH_ENTITY_NONE)
+  if (id == FIFA96_MATCH_ENTITY_NONE) return;
+  if (!mr->formation_seeded) {
     (void)match_run_live_control_bind(mr, id, 0);
+    return;
+  }
+  if (match_run_live_control_bind(mr, id, 1) == 1) {
+    match_run_live_control_place_taker(mr, id);
+    mr->live_kickoff_touch = 1u;
+    mr->live_control_taker = id;
+  }
 }
 
 /* P7-L2 (tackle/possession stand-in): the static AI restart can park an
@@ -3520,6 +3562,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   /* FU-148 S4: the native [0x14C1E4]/[0x14C1E5] BSS default is 0. */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
+  mr->formation_seeded = 0;
   /* P6: no Team Select handout is staged until set_matchup. */
   memset(&mr->matchup, 0, sizeof mr->matchup);
   mr->matchup_pending = 0;
@@ -3751,6 +3794,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * cannot inherit a previous match's handout. */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
+  mr->formation_seeded = 0;
   mr->matchup_active = 0;
   if (mr->matchup_pending) {
     mr->formation[0] = mr->matchup.formation[0];
@@ -3797,6 +3841,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
   int formation_seeded = match_run_formation_seed(mr);
+  mr->formation_seeded = (uint8_t)(formation_seeded != 0);
   /* P6: when the two Team Select formations differ, team 1 keeps its own
    * `.fmt` placement (the home seed above laid out both teams). Equal ids skip
    * the reseed, so every direct-begin/M2 path is byte-identical. */

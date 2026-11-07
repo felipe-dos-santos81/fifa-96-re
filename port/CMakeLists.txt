@@ -5,6 +5,18 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Wextra -Werror)
 include_directories(src)
 enable_testing()
+
+# The test tree stays ASan/UBSan-instrumented (the AGENTS gate). The playable
+# windowed executable is built in a separate Release tree with this OFF: the
+# per-pixel pitch caster calls a helper ~300k times per frame, and ASan's
+# fake-stack allocation there turns a 30 Hz match into a slideshow.
+option(FIFA96_SANITIZE_ENGINE "Build the engine and game with ASan/UBSan" ON)
+set(FIFA96_ENGINE_SAN_FLAGS "")
+set(FIFA96_ENGINE_SAN_LINK "")
+if(FIFA96_SANITIZE_ENGINE)
+  set(FIFA96_ENGINE_SAN_FLAGS -fsanitize=address,undefined -fno-sanitize-recover=all)
+  set(FIFA96_ENGINE_SAN_LINK -fsanitize=address,undefined)
+endif()
 add_library(fifa96_file src/fifa96_loader/fifa96_file.c)
 add_executable(test_file tests/test_file.c)
 target_link_libraries(test_file PRIVATE fifa96_file)
@@ -70,8 +82,8 @@ add_test(NAME test_record COMMAND test_record WORKING_DIRECTORY ${CMAKE_SOURCE_D
 # P6: the PCCD/PCDB team database parser (pure bytes; the engine decodes the
 # RefPack container and owns the arena). Sanitizer-instrumented like the engine.
 add_library(fifa96_pccd src/fifa96_loader/fifa96_pccd.c)
-target_compile_options(fifa96_pccd PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
-target_link_options(fifa96_pccd INTERFACE -fsanitize=address,undefined)
+target_compile_options(fifa96_pccd PRIVATE ${FIFA96_ENGINE_SAN_FLAGS})
+target_link_options(fifa96_pccd INTERFACE ${FIFA96_ENGINE_SAN_LINK})
 
 add_library(fifa96_kvgt src/fifa96_loader/fifa96_kvgt.c)
 target_link_libraries(fifa96_kvgt PRIVATE fifa96_record)
@@ -458,10 +470,10 @@ add_library(fifa96_engine
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror
-  -fsanitize=address,undefined -fno-sanitize-recover=all)
+  ${FIFA96_ENGINE_SAN_FLAGS})
 # INTERFACE: the sanitizer runtime reaches every consumer of this static
-# archive, including any future one — intended here.
-target_link_options(fifa96_engine INTERFACE -fsanitize=address,undefined)
+# archive in the gate build; the Release game tree turns it off.
+target_link_options(fifa96_engine INTERFACE ${FIFA96_ENGINE_SAN_LINK})
 target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing fifa96_vgt_player
                                           fifa96_frontend fifa96_sprite fifa96_record fifa96_bigf
                                           fifa96_pccd
@@ -719,8 +731,8 @@ if(SDL3_FOUND)
   add_executable(fifa96 src/fifa96_engine/fifa96_main.c
                  src/fifa96_engine/platform_sdl3.c)
   target_link_libraries(fifa96 PRIVATE fifa96_engine SDL3::SDL3)
-  target_compile_options(fifa96 PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
-  target_link_options(fifa96 PRIVATE -fsanitize=address,undefined)
+  target_compile_options(fifa96 PRIVATE ${FIFA96_ENGINE_SAN_FLAGS})
+  target_link_options(fifa96 PRIVATE ${FIFA96_ENGINE_SAN_LINK})
 else()
   message(STATUS "engine: SDL3 NOT found -> headless-only build")
 endif()

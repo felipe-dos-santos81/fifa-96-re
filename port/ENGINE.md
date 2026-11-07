@@ -10773,3 +10773,49 @@ when none decode. The early no-floor branch now still invokes the wall. The
 `staged` contract is floor + crowd required, stand banks optional.
 
 **Gate.** `make check` **119/119**; M1/M2 exact by `cmp` remain the authority.
+
+## Phase 65 — P11: playable Release build + kickoff placement (2026-11-06)
+
+**Why.** The windowed `fifa96` executable was linked with ASan/UBSan like the
+test tree. The P10 pitch caster calls `pitch_ray` once per pixel; at 640x480
+that is ~300k instrumented calls per frame, and ASan's fake-stack allocation
+dominated the frame. The live match ran at ~2 fps, so the 30-frames-per-second
+match clock appeared stuck at `00:00` and the game was a slideshow. A second
+defect: the live begin skipped the native kickoff cutscene and seeded the
+nearest outfield record (`0x199` from the ball) without moving it, so the
+opening KICK had no carrier.
+
+**Build split.** `port/CMakeLists.txt` gains
+`FIFA96_SANITIZE_ENGINE` (default ON). The engine, `fifa96_pccd` and the
+`fifa96` executable use conditional sanitizer flags. `make check` keeps the
+instrumented `build/` tree; `make game` and bare `make run` configure
+`build-release/` with `CMAKE_BUILD_TYPE=Release` and the option OFF. This is a
+build-topology change only: the test gate still compiles and runs the engine
+with ASan/UBSan, while the playable executable does not pay the per-pixel
+fake-stack cost.
+
+**Kickoff placement.** `match_run_live_control_place_taker` puts the seeded
+taker on the ball and faces it at the opponent goal. The live seed calls it
+after a successful FU-70 slot/actor/carrier bind; the phase-1 → phase-2 restart
+bind now seeds the carrier (`seed_carrier=1`) and uses the same placement
+(human restart possession is a labelled [D] stand-in for the unported
+conceding-side split). Both are gated on `formation_seeded`: the retail
+`.fmt` seed moves the pool and needs the cutscene placement; the no-ISO
+synthetic fixtures keep their legacy zero-position/control flow. The clock
+itself is phase-class driven and is not gated on the touch; the placement is
+what makes the opening KICK possible.
+
+**Verification.** `test_engine_match_render` asserts the taker's position is
+the ball position after a live begin. The release play-test trace reaches 355
+frames and clock `00:11` after an 11 s run (previously 8 frames / `00:00`);
+the committed `docs/screens/p11-match-playable.png` shows the taker on the
+ball, the running HUD and the camera-follow view. The sanitized `make check`
+gate remains the authority; M1/M2 are untouched by the live-only placement.
+
+**Remaining legs.** The native 3dwpts stadium/goal nets are **P10-L2**, the
+native camera director/aim **P10-L6**, the HUD art **P10-L5**, the full CPU
+AI/dribble/pass the P9 row-05 legs, and the other front-end screens **P2-L1**.
+The release build does not change those claims.
+
+**Gate.** `make check` **119/119**; M1 and M2 exact by `cmp`; the Release tree
+builds `fifa96` with no ASan/UBSan runtime dependency.

@@ -75,9 +75,9 @@ with the six producer-blocked rows named in the phase-36/38 registers
 ## Build and run
 
 ```bash
-make check                     # configure + strict build + full CTest suite (119 tests)
-make run                       # windowed native engine on data/game/FIFAPCCD96.iso (no extra args)
-make game                      # explicit alias for the same windowed native engine
+make check                     # sanitized gate: configure + strict build + full CTest suite (119 tests)
+make run                       # playable Release engine on data/game/FIFAPCCD96.iso (no extra args)
+make game                      # build/run the playable Release engine (build-release/)
 make run FILE=data/game/FIFAPCCD96.iso    # host runner: sniff the ISO, bounded decode pass under build/run/
 make run FILE=port/tests/golden/fw1.qfs   # any container: envelope/QFS/POG/TGV/VIV auto-detect + decode
 make run ARGS="--help"         # host runner modes; ARGS="video FILE --out build/play" etc.
@@ -94,6 +94,12 @@ The windowed SDL3 build is the playable game:
 ```bash
 make game                     # or: make run
 ```
+
+`make game` builds a **Release** executable in `build-release/`; the
+`make check` gate keeps its ASan/UBSan build so the per-pixel pitch caster
+runs at play speed in the game and stays instrumented in the tests. The live
+kickoff puts the selected taker on the ball (the skipped cutscene placement),
+so **Z** releases the opening kick immediately.
 
 It boots the intro (any key skips it) into the native **Game Select** screen.
 Move with the arrows and press **Enter** to choose. **Friendly** opens the

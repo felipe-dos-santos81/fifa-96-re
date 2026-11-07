@@ -10,7 +10,9 @@ CTEST = ctest
 FILE ?=
 ARGS ?=
 
-.PHONY: help configure build test check run game clean rebuild tsr capture trace
+.PHONY: help configure build test check run game game-build clean rebuild tsr capture trace
+GAME_BUILD ?= build-release
+GAME_CMAKE_FLAGS = -DCMAKE_BUILD_TYPE=Release -DFIFA96_SANITIZE_ENGINE=OFF
 
 # ── Build & test ───────────────────────────────────────────────────────────────
 
@@ -34,14 +36,17 @@ check: test ## Exactly the gate set: configure + strict build + full suite
 
 # ── Run ────────────────────────────────────────────────────────────────────────
 
-run: build ## Build and run the port (no args = windowed native engine on data/game/FIFAPCCD96.iso)
-	@if [ -n "$(FILE)" ]; then ./$(BUILD)/fifa96_play auto "$(FILE)"; \
-	elif [ -n "$(ARGS)" ]; then ./$(BUILD)/fifa96_play $(ARGS); \
-	else ./$(BUILD)/fifa96 data/game/FIFAPCCD96.iso; fi
+run: ## Build and run (no args = windowed game; FILE/ARGS = host runner)
+	@if [ -n "$(FILE)" ]; then $(MAKE) --no-print-directory build; ./$(BUILD)/fifa96_play auto "$(FILE)"; \
+	elif [ -n "$(ARGS)" ]; then $(MAKE) --no-print-directory build; ./$(BUILD)/fifa96_play $(ARGS); \
+	else $(MAKE) --no-print-directory game; fi
 
-game: build ## Build and run the native engine (needs SDL3 + data/game/FIFAPCCD96.iso)
-	@test -x $(BUILD)/fifa96 || { echo "fifa96 not built (SDL3 missing)"; exit 1; }
-	./$(BUILD)/fifa96 $(if $(FILE),$(FILE),data/game/FIFAPCCD96.iso)
+game: game-build ## Build and run the native engine (needs SDL3 + data/game/FIFAPCCD96.iso)
+	./$(GAME_BUILD)/fifa96 $(if $(FILE),$(FILE),data/game/FIFAPCCD96.iso)
+
+game-build: ## Build the playable Release engine (no sanitizer overhead)
+	$(CMAKE) -S $(PORT_DIR) -B $(GAME_BUILD) $(GAME_CMAKE_FLAGS)
+	$(CMAKE) --build $(GAME_BUILD) --target fifa96
 
 # ── Maintenance ────────────────────────────────────────────────────────────────
 
