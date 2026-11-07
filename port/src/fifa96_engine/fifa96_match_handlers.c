@@ -6887,6 +6887,28 @@ static int32_t match_phase_04_cell(const struct fifa96_match_run *mr,
  * T1 direction-pair scaler over the `[rec+0xC]` metadata (the phase-02/0x15
  * port `match_phase_dcc8_apply`). `target[1] = 0` is written by the shared
  * `0x6DF3C` tail. */
+int32_t fifa96_match_pitch_cell(int32_t focus_x, int32_t focus_z, uint8_t side) {
+  int32_t x_bin;
+  int32_t z_bin;
+  int32_t cell;
+  x_bin = (focus_x + 0x86B) / 0x14B;          /* 0x6D879..0x6D88B */
+  if ((int16_t)x_bin < 0) x_bin = 0;
+  else if ((int16_t)x_bin > 0xC) x_bin = 0xC;
+  z_bin = (focus_z + 0xC1E) / 0x10E;          /* 0x6D88D..0x6D8A2 */
+  if ((int16_t)z_bin < 0) z_bin = 0;
+  else if ((int16_t)z_bin > 0x16) z_bin = 0x16;
+  cell = z_bin * 0xD + x_bin;                 /* 0x6D8D0/0x6D8D3 */
+  return side == 0u ? cell : 0x12A - cell;
+}
+
+void fifa96_match_phase_apply_cell(struct fifa96_match_run *mr,
+                                   struct fifa96_match_entity *rec,
+                                   int32_t cell) {
+  if (mr == NULL || rec == NULL) return;
+  if (cell < 0 || cell > 0x12A) return;
+  match_phase_dcc8_apply(mr, rec, cell);
+}
+
 int fifa96_match_phase_04(struct fifa96_match_run *mr) {
   struct fifa96_match_entity *rec;
   const int32_t *p;
@@ -8152,33 +8174,22 @@ unsigned fifa96_match_port_install_live(void) {
 }
 
 /* FU-338 §4; the reason strings are corrected by phase-51 T5 (R1 §2.4 + R3
- * §2/§4) — the old "phase 6 blocked / writer-less `[0x158882]`" text is
- * retired. Install-live rows whose natural producer is structurally unproven:
- *  - actions `0x13`/`0x1F`: their only installer is the phase-6 arm
- *    (`0x8D4A2` -> `0x8D532`/`0x8D569`). The arm is reachable only via the
- *    stage-3 latch when the ball-row kind transitions kind 3 at stage 2 to
- *    kind != 3 at stage 3, or via the mode-4 Practise term (`[0x14C32A]`;
- *    only `FUN_00032DE0`/hub case 8 passes mode 4); no ordinary-play witness
- *    (the latch-release catalogue is R51-L1, runtime R51-L2; FU-338 §8 rules
- *    the same-frame install out statically).
- *  - phase `0x06`: the same latch reason. `[0x158882]` is the ball block's
- *    `+0x96` = `row_flags & 1` with a real writer (`FUN_0006E724` `0x6E7E7`;
- *    reset clear `0x73D3A`), latched by the act-2 stage-2 body as "kind was
- *    3", and the engine models it (`mr->ball_row_flag_158882`); `[0x14C32A]`
- *    is the second term, not the only blocker. The `0x8948D` decision-word
- *    read stays a leg (R3 §4: a read-before-write callee-local, not a caller
- *    parameter). */
+ * §2/§4) and Phase 70. Install-live rows whose natural producer is still
+ * structurally unproven:
+ *  - action `0x0D`: the installer gate is unproduced (phase-38).
+ *  - actions `0x28`/`0x2A`: the phase-0x14 chooser arm is unfed.
+ *
+ * Phase 70 closes the old act-2 latch entries: the ordinary ball appearance
+ * pass (FUN_0008AF38 0x8B65B -> FUN_0008BAF0 -> FUN_0006FE84, row-0x49 settle
+ * -> successor row 0x00) releases `[0x158882]`, so ordinary kind-1/2 fouls
+ * reach the phase-7 free kick and the phase-6 penalty band. Actions `0x13`
+ * (penalty taker) and `0x1F` (keeper) and phase `0x06` are therefore naturally
+ * reachable; `test_live_foul_reaches_penalty` pins the penalty fork. */
 const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS] = {
   {FIFA96_MATCH_PORT_ACTION, 0x0D},  /* phase-38: installer gate unproduced */
-  {FIFA96_MATCH_PORT_ACTION, 0x13},  /* phase_arm(6) only; kind 3 at stage 2 ->
-                                      * non-3 at stage 3; no ordinary-play
-                                      * witness */
-  {FIFA96_MATCH_PORT_ACTION, 0x1F},  /* same */
   {FIFA96_MATCH_PORT_ACTION, 0x28},  /* phase-0x14 chooser arm unfed */
   {FIFA96_MATCH_PORT_ACTION, 0x2A},  /* same */
-  {FIFA96_MATCH_PORT_PHASE, 0x06},   /* the same stage-3 latch; the 0x8948D
-                                      * stale-local read stays a leg */
   /* Phase 0x1F is closed: the sit-0xC install invokes act 9 now (0x8AF0E
    * EBX=1 / 0x88937 CALL [0x158808]); the native one-shot stage-0 run is
    * observable before the match-init act-0xA supersession. */

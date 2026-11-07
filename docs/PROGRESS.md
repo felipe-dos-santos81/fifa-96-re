@@ -4473,3 +4473,37 @@ close-out below).
   second-half goal kickoffs: a bounded phase-0x0C/phase-1 force returns to
   phase 2 without resetting the half clock. `test_live_goal_kickoff_auto_release`
   pins it; `make check` **124/124**; M1/M2 exact.
+
+- **Phase 70 live referee rules (2026-11-07).** Ordinary contact fouls now
+  reach the ported free-kick/penalty chain. The missing producer was not
+  `[0x158882]` itself but the ordinary ball appearance pass: `FUN_0008AF38`
+  runs `FUN_0008BAF0` only under session byte 0, and the row-`0x49` settle
+  (`0x280`, successor row `0x00` flags `0x07`) sets the latch the act-2
+  stage-3 gate reads. The engine models that settle release, wires the live
+  opponent tackle through `fifa96_match_run_contact`, and passes the receive
+  target (the `0x157770` stand-in) to the offside own-nearest query instead of
+  the ball. New tests cover a live foul -> free kick, the penalty
+  row-0x13/0x1F fork, and the receive-target offside regression. The natural
+  wired count is now **61/80** (64/80 install-live, 3 blocked); `make check`
+  **124/124**; M1/M2 exact by `cmp`. Human-derived tackles, the visual
+  appearance frame walk, full 10-player AI and the native camera/3dwpts art
+  remain legs.
+
+- **Phase 71 live render-eye stabilizer (2026-11-07).** The live view now
+  converges the rendered camera-0 eye at most `0x30` units per granted frame
+  and clamps the focus to the native FU-71 bounds (`|x| <= 0x6C0`,
+  `|z| <= 0xAB0`) instead of teleporting when a native pan hands back to the
+  derived ball-follow. The simulation camera cell and the M1/M2 tapes are
+  untouched; `test_live_render_eye_stabilizer` pins the bound and the clamp.
+  `make check` **124/124**; M1/M2 exact. Native camera director/lens (P10-L6)
+  and the 3dwpts stadium (P10-L2) remain open.
+
+- **Phase 72 live off-ball team shape (2026-11-07).** The live outfield now
+  consumes the bound `pl.fmt` cell metadata directly: `fifa96_match_pitch_cell`
+  maps the camera focus through the native 13×23 grid and
+  `fifa96_match_phase_apply_cell` writes the per-record `0x6DCC8` target for
+  idle code-3 records, so the whole team shape moves instead of only the team
+  target/carrier. The shared row-`0x03` slot stays `NULL` (no M2 re-pin);
+  `test_live_offball_shape_moves_team` pins at least 16 of 20 outfield records
+  moving with no score/phase write. `make check` **124/124**; M1/M2 exact.
+  The native `FUN_0007F7E0` support-run machine remains a separate leg.

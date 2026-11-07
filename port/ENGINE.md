@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-78/78 native dispatch bodies ported (100%) — 58/80 dispatch slots wired
+78/78 native dispatch bodies ported (100%) — 61/80 dispatch slots wired
 (64/80 install-live)
 (38 action + the wired phase rows 0x02, 0x0D, 0x10, 0x13, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
@@ -11009,3 +11009,132 @@ existing restart bind place the taker, so the half clock is not reset.
 `test_live_goal_kickoff_auto_release` pins the phase-2 landing; the stale
 smoke's 03:44 goal freeze is the failure this closes. `make check` **124/124**;
 M1/M2 exact.
+
+## Phase 70 — live referee rules (2026-11-07)
+
+**Outcome.** Ordinary contact fouls now reach the ported free-kick/penalty
+chain, the live opponent tackle runs the native contact decision, and live
+offside uses the native reception target instead of the ball. The live referee
+is no longer a fixture-only path.
+
+**The missing release (erratum to the Phase 68 leg).** The old “`[0x158882]`
+release writer is missing” claim is superseded by fresh evidence. The act-2
+stage-3 gate at `0x894A2` really does hold on the immediate re-entry, but the
+ordinary-match ball appearance pass releases it:
+
+```
+FUN_0008AF38 0x8B65B  CMP byte[0x14C32A],0
+              0x8B662  JNZ 0x8B669
+              0x8B664  CALL 0x8BAF0        ; ordinary session only
+              0x8B669  ... CALL [0x158808] ; the act handler
+FUN_0008BAF0 0x8C05A  CALL 0x6FE84         ; appearance machine
+FUN_0006FE84 0x6FF67/0x6FF85 CALL 0x6E724(0x1587EC, 0x00)
+```
+
+The act-2 stage-2 body installs row `0x49` (flags `0x00` -> latch 0); the
+row-`0x49` settle frames are `0x80/0x40/0x1C0` (`read_memory 0x10E9FC`, total
+`0x280`), and the successor row `0x00` has flags `0x07` -> `[0x158882] = 1`.
+The next act tick then takes `0x894A2 JNZ 0x894C4`. The engine models the
+release with `ball_settle_timer`/`ball_settle_active`, ticked before the act
+handler with the native `frame_delta << 4` (`0x6FFA5..0x6FFAE`); the visual
+frame walk stays the L14.8.b leg.
+
+**Live contact.** `match_run_live_contact_tackle` calls
+`fifa96_match_run_contact(mr, 2, tackler, carrier, point)` before the derived
+possession swap, with the challenged record's position (the native row-`0x0B`
+arm-1 point `0x81BC3`) and an idle-act guard. A decision keeps the fouled
+carrier’s ball and starts the ported act-3/act-8 sequence; a clean contact
+still swaps possession. The 45-frame tackle cooldown is shared.
+
+**Offside.** The own-nearest query is the reception target computed by
+`fifa96_match_run_ball_receive` (the engine stand-in for native `0x157770`),
+not the ball; at the synchronous receive the ball is still at the passer.
+`match_run_offside_reception_at` threads the query and the public
+`fifa96_match_run_offside_reception` keeps the ball-based direct-geometry
+behavior. The `[0x157823]` mirror is now passed from the engine cell.
+
+**Census.** Phase `0x06`, action `0x13` and action `0x1F` are naturally
+reachable from the ordinary penalty fork; the blocked set drops 6 -> 3 and the
+natural wired count **58/80 -> 61/80** (install-live stays 64/80). README and
+the census test are updated in the same commit.
+
+**Tests and gate.** `test_live_ai_tackle_foul_reaches_free_kick` drives the
+live contact registration, the act-2 settle hold and the phase-7 taker;
+`test_live_foul_reaches_penalty` pins the phase-6/row-0x13/0x1F fork;
+`test_foul_taker_held_on_live_default` now asserts the release instead of the
+old hold; `test_offside_reachable_from_live_receive` stages the ball at the
+passer and the target on the own-nearest, so the ball-based query would fail.
+**Gate:** `make check` **124/124**; M1/M2 exact by `cmp`.
+
+**Legs.** The human-derived tackle still awards possession without a contact
+decision (the native pad row-`0x0B` remains the input route); the visual
+appearance frame walk, full 10-player AI, native 3dwpts/camera art and the
+native substitution/tie-menu bodies remain open. The `0x8948D` decision-word
+read stays FU166-L6.
+
+## Phase 71 — live render-eye stabilizer (2026-11-07)
+
+**Outcome.** The live view no longer teleports when a native pan hands back to
+the derived ball-follow. The simulation camera stays the exact FU-71 cell; only
+the rendered camera-0 eye is smoothed and clamped.
+
+**Why.** `match_run_live_camera_follow` returns early while a pan is active and
+then hard-assigns `camera.pos_x/z = ball + lead`; the rendered eye is
+`focus + camera-0 offset`, so a pan handoff can move the eye by the whole
+focus delta in one granted frame. The native FU-71 bounds are already in the
+repo (`fifa96_camera_out_of_bounds`: `|x| > 0x6C0`, `|z| > 0xAB0`), and the
+derived far wall sits at `x = 0x7E0 + 64`, so the unclamped focus could put the
+eye within 180 units of the wall.
+
+**Implementation.** `render.render_eye_x/y/z` + `render_eye_valid` are new
+render-only state (cleared by the existing `reset_render` memset). The update
+runs at the top of `match_run_live_camera_follow`, before the pan early return:
+
+- focus x/z clamp to `[-0x6C0, 0x6C0]` / `[-0xAB0, 0xAB0]`;
+- target eye = clamped focus + the camera-0 type offsets (`-100,488,1100`);
+- first use or a > `0x600` axis error snaps; otherwise each axis moves at most
+  `0x30` per granted frame (a 2-unit deadzone lands exactly).
+
+`fifa96_match_run_render_eye` feeds the render pass; `fifa96_match_run_eye`
+keeps the exact `focus + type0` result for the existing tests and callers.
+
+**Tests and gate.** `test_live_render_eye_stabilizer` pins the 0x30 per-frame
+bound and the native clamp. `make check` **124/124**; M1/M2 exact by `cmp` (the
+stabilizer is live-only and the tapes never set `live_start`).
+
+**Legs.** The native camera director/orientation (`FUN_0004E834`, P10-L6) and
+the 3dwpts stadium (`FUN_000610C4`, P10-L2) remain open; the stabilizer is a
+derived presentation stand-in, not a native producer.
+
+## Phase 72 — live off-ball team shape (2026-11-07)
+
+**Outcome.** The live match now moves the whole outfield shape, not only the
+team target and the ball carrier. The shared row-`0x03` dispatch slot stays
+`NULL`; the live path consumes the already-bound `pl.fmt` cell metadata
+directly.
+
+**Why.** `fifa96_outfield_forced_action` gives every non-target record code 3,
+and row `0x03` (the off-ball target producer) is `NULL`, so those records kept
+their kickoff targets. The native body is the `0x6D870` pitch-cell map plus the
+`0x6DCC8` direction-pair scaler over `rec->phase_meta` (`0x6DE44`, rows
+03/04/07). Wiring the shared slot moved the M2 tape at frame 29
+(`test_engine_match_handlers`/`test_engine_m2` pins), so this slice is a
+live-only consumer.
+
+**Implementation.** `fifa96_match_pitch_cell` exports the pure 13×23 map
+(`x_bin = (x + 0x86B) / 0x14B`, `z_bin = (z + 0xC1E) / 0x10E`, cell =
+`z_bin*0xD + x_bin`, side 1 mirrored `0x12A - cell`). `fifa96_match_phase_apply_cell`
+wraps the existing `match_phase_dcc8_apply` with an explicit cell.
+`match_run_live_offball_shape` runs before the entity chain, phase-2/live-only,
+and writes targets for active idle code-3 outfield records that are not the
+ball carrier, team target or second pick. Unbound `phase_meta` is the native
+gate and stays a no-op.
+
+**Tests and gate.** `test_live_offball_shape_moves_team` stages synthetic
+metadata and pins that at least 16 of the 20 outfield records move with no
+score/phase write. `make check` **124/124**; M1/M2 exact by `cmp` (the shared
+table and tapes are untouched).
+
+**Legs.** The native `FUN_0007F7E0` attacking support-run machine remains a
+separate slice (FU251-L8); the cell quantization is a derived live cadence
+(the native refresh is event-driven via `FUN_000700F4`).

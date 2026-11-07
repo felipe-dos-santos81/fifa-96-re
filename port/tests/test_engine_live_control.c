@@ -141,6 +141,24 @@ static void stage_ball(struct fifa96_match_run *mr, int32_t x, int32_t y, int32_
   mr->entities.ball.target_z = z;
 }
 
+/* Stage an eligible pool for the phase-arm pick (both teams' records 1..10
+ * active with distinct targets; the pick skips index 0 and the +0x98/+0x9A
+ * exclusions, FUN_00079CCC). */
+static void lc_stage_restarts(struct fifa96_match_run *mr) {
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &mr->entities.team[t].records[i];
+      e->active = 1;
+      e->skip_98 = 0;
+      e->skip_9a = 0;
+      e->target_x = (int32_t)((t * FIFA96_MATCH_ENTITY_RECORDS + i) * 0x100);
+      e->target_z = 0;
+      e->pos_x = e->target_x;
+      e->pos_z = 0;
+    }
+  }
+}
+
 /* P9 helpers. The pool team index carrying a side byte (the same scan the live
  * control/opponent update uses). */
 static int32_t lc_team_for_side(struct fifa96_match_run *mr, uint8_t side) {
@@ -1892,6 +1910,10 @@ static void test_live_cpu_carrier_acts(void) {
   mr->live_cpu_hold = 0;
   mr->live_cpu_actions = 0;
   mr->live_cpu_carrier = FIFA96_MATCH_ENTITY_NONE;
+  /* This fixture pins the derived CPU action, not the referee: keep the
+   * opponent's contact clean so the tackle/claim path still hands it the ball
+   * (Phase 70 wires the live contact decision into that same path). */
+  mr->config.field_4c306 = 0;
   for (int i = 0; i < 48; i++) one_granted_frame(mr);
   assert(mr->live_cpu_actions >= 1u);
   assert(mr->entities.ball.z < 0x600);
@@ -1945,11 +1967,266 @@ static void test_live_ai_tackles_human(void) {
   mr->live_save_hold = 0u;
   mr->live_ai_tackle_cd = 0u;
   mr->entities.ball.carrier = carrier;
+  /* Possession-only fixture: the live contact decision is tested separately in
+   * test_live_ai_tackle_foul_reaches_free_kick. */
+  mr->config.field_4c306 = 0;
   for (int i = 0; i < 4; i++) one_granted_frame(mr);
   assert(mr->entities.ball.carrier == rival);
   assert(mr->live_ai_tackle_cd != 0u);
   assert(mr->score[0] == 0u && mr->score[1] == 0u);
   assert(mr->state.phase == 2u);
+  drop_lc_fixture(&f);
+}
+
+/* Phase 70 live referee: the opponent contact now runs the native foul
+ * decision, the act-2 stage-3 hold is released by the ordinary ball-settle
+ * pass, and the free-kick taker arms. */
+static void test_live_ai_tackle_foul_reaches_free_kick(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t human = lc_team_for_side(mr, (uint8_t)(mr->phase_machine.side_controlled & 1u));
+  uint32_t opp;
+  int32_t carrier;
+  int32_t rival;
+  uint16_t value;
+  int observed_hold = 0;
+  assert(human >= 0);
+  opp = 1u - (uint32_t)human;
+  carrier = mr->entities.controlled;
+  assert(carrier > 0 && carrier < 11);
+  rival = (int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + 3u);
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *h = &mr->entities.team[(uint32_t)human].records[i];
+    struct fifa96_match_entity *o = &mr->entities.team[opp].records[i];
+    if ((int32_t)i != carrier) {
+      h->pos_x = 0x3000;
+      h->pos_z = 0x3000;
+    } else {
+      h->pos_x = 0;
+      h->pos_z = 0;
+    }
+    h->target_x = h->pos_x;
+    h->target_z = h->pos_z;
+    if ((int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + i) == rival) {
+      o->pos_x = 0x20;
+      o->pos_z = 0;
+    } else {
+      o->pos_x = 0x900;
+      o->pos_z = 0x900;
+    }
+    o->target_x = o->pos_x;
+    o->target_z = o->pos_z;
+  }
+  stage_ball(mr, 0, 0, 0);
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_active = 0u;
+  mr->live_kick_hold = 0u;
+  mr->live_save_hold = 0u;
+  mr->live_ai_tackle_cd = 0u;
+  mr->entities.ball.carrier = carrier;
+  /* 1) The live contact hook registers the duel. With fouls Off the native
+   * decision gate skips and the clean tackle still wins the ball. */
+  mr->config.field_4c306 = 0;
+  one_granted_frame(mr);
+  assert(mr->referee.contact_kind == 2u);
+  assert(mr->referee.rec_first == rival);
+  assert(mr->referee.rec_second == carrier);
+  assert(mr->referee.recall_consumed == 0u);
+  assert(mr->act.id == 0u);
+  assert(mr->state.phase == 2u);
+  assert(mr->entities.ball.carrier == rival);
+
+  /* 2) The full live referee flow. The direct contact seam uses the exact
+   * native decision inputs; seed 0 + three draws passes the 1-in-8 skip and
+   * draw 5 (0x584D & 0x3F = 0x0D) selects foul kind 1. */
+  mr->config.field_4c306 = 2;
+  mr->config.field_4c30a = 1;
+  mr->entities.ball.carrier = carrier;
+  mr->act.id = 0u;
+  mr->referee.sequence = FIFA96_REF_SEQ_NONE;
+  mr->state.phase = 2u;
+  (void)fifa96_rng_seed(&mr->rng, 0);
+  for (int i = 0; i < 3; i++) (void)fifa96_rng_step(&mr->rng, &value);
+  {
+    const int32_t point[3] = {0, 0, 0};
+    assert(fifa96_match_run_contact(mr, 2u, rival, carrier, point) == 1);
+  }
+  assert(mr->referee.recall_consumed == 1u);
+  assert(mr->referee.contact_kind == 1u);
+  assert(mr->referee.foul_kind == 1u);
+  assert(mr->act.id == 3u);
+  assert(mr->state.phase == 0x0Fu);
+  assert(mr->whistle_seq != 0u);
+  assert(mr->entities.ball.carrier == carrier);   /* no possession swap */
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+
+  lc_stage_restarts(mr);
+  for (int i = 0; i < 300; i++) {
+    one_granted_frame(mr);
+    if (mr->act.id == 2u && mr->ref_restart_stage == 2u &&
+        mr->ball_settle_active != 0u)
+      observed_hold = 1;
+    if (mr->state.phase == 7u && mr->act.id == 0u) break;
+  }
+  assert(observed_hold);                     /* the stage-3 hold is visible */
+  assert(mr->state.phase == 7u);
+  assert(mr->act.id == 0u);
+  assert(mr->ball_settle_active == 0u);
+  assert(mr->ball_row_flag_158882 == 1u);
+  {
+    int found = 0;
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (mr->entities.team[(uint32_t)human].records[i].code == 0x12u) found = 1;
+    assert(found);                           /* the free-kick taker is armed */
+  }
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  drop_lc_fixture(&f);
+}
+
+/* Phase 70: the ordinary-session penalty fork. The contact point in the
+ * fouler-side spot band selects phase 6 and installs the row-0x13 penalty
+ * taker / row-0x1F keeper through the same release. */
+static void test_live_foul_reaches_penalty(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t human = lc_team_for_side(mr, (uint8_t)(mr->phase_machine.side_controlled & 1u));
+  uint32_t opp;
+  int32_t carrier;
+  int32_t rival;
+  uint16_t value;
+  int32_t point[3];
+  assert(human >= 0);
+  opp = 1u - (uint32_t)human;
+  carrier = mr->entities.controlled;
+  if (carrier < human * (int32_t)FIFA96_MATCH_ENTITY_RECORDS ||
+      carrier >= (human + 1) * (int32_t)FIFA96_MATCH_ENTITY_RECORDS)
+    carrier = (int32_t)((uint32_t)human * FIFA96_MATCH_ENTITY_RECORDS + 1u);
+  rival = (int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + 3u);
+  lc_stage_restarts(mr);
+  mr->config.field_4c306 = 2;
+  mr->config.field_4c30a = 1;
+  mr->state.phase = 2u;
+  /* The penalty band is side-relative: side 0 uses z in [-0xB10,-0x7B0],
+   * side 1 the mirrored positive band; |x| < 0x420 in both cases. */
+  point[0] = 0x100;
+  point[1] = 0;
+  point[2] = mr->entities.team[opp].side == 0u ? -0x800 : 0x800;
+  (void)fifa96_rng_seed(&mr->rng, 0);
+  for (int i = 0; i < 3; i++) (void)fifa96_rng_step(&mr->rng, &value);
+  assert(fifa96_match_run_contact(mr, 2u, rival, carrier, point) == 1);
+  assert(mr->act.id == 3u && mr->state.phase == 0x0Fu);
+  for (int i = 0; i < 300; i++) {
+    one_granted_frame(mr);
+    if (mr->state.phase == 6u && mr->act.id == 0u) break;
+  }
+  assert(mr->state.phase == 6u);
+  assert(mr->act.id == 0u);
+  assert(mr->ball_settle_active == 0u);
+  assert(mr->ball_row_flag_158882 == 1u);
+  {
+    int taker = 0, keeper = 0;
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (mr->entities.team[(uint32_t)human].records[i].code == 0x13u) taker = 1;
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (mr->entities.team[opp].records[i].code == 0x1Fu) keeper = 1;
+    assert(taker);
+    assert(keeper);
+  }
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  drop_lc_fixture(&f);
+}
+
+/* Phase 71: the render-only eye moves at most 0x30 per granted frame and
+ * converges on the clamped camera-0 pose; the simulation camera stays the
+ * native FU-71 cell. */
+static void test_live_render_eye_stabilizer(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  fifa96_render_pos prev, cur, exact;
+  int32_t dx, dz;
+  one_granted_frame(mr);
+  fifa96_match_run_render_eye(mr, &prev);
+  assert(mr->render.render_eye_valid == 1u);
+  /* A native pan active keeps the derived follow out; jump the focus and pin
+   * the pan cells so the render eye must absorb the delta. */
+  mr->render.camera.event_param = 0x20;
+  mr->render.camera.speed = 1;
+  mr->render.camera.pos_x += 0x400;
+  mr->render.camera.pos_z += 0x200;
+  one_granted_frame(mr);
+  fifa96_match_run_render_eye(mr, &cur);
+  dx = cur.x - prev.x; if (dx < 0) dx = -dx;
+  dz = cur.z - prev.z; if (dz < 0) dz = -dz;
+  assert(dx <= 0x30 && dz <= 0x30);
+  /* Clear the pan and let the eye converge on the exact live pose. */
+  mr->render.camera.event_param = 0;
+  mr->render.camera.speed = 0;
+  mr->entities.ball.x = 0;
+  mr->entities.ball.z = 0;
+  mr->entities.ball.vel_x = 0;
+  mr->entities.ball.vel_z = 0;
+  for (int i = 0; i < 120; i++) {
+    prev = cur;
+    one_granted_frame(mr);
+    fifa96_match_run_render_eye(mr, &cur);
+    dx = cur.x - prev.x; if (dx < 0) dx = -dx;
+    dz = cur.z - prev.z; if (dz < 0) dz = -dz;
+    assert(dx <= 0x30 && dz <= 0x30);
+  }
+  (void)exact;
+  /* The focus may pan while the eye converges; the observable claim is the
+   * per-frame bound plus the native FU-71 clamp, not a frozen target. */
+  assert(cur.x >= -0x6C0 + FIFA96_MATCH_RUN_TYPE0_X);
+  assert(cur.x <= 0x6C0 + FIFA96_MATCH_RUN_TYPE0_X);
+  assert(cur.z >= -0xAB0 + FIFA96_MATCH_RUN_TYPE0_Z);
+  assert(cur.z <= 0xAB0 + FIFA96_MATCH_RUN_TYPE0_Z);
+  assert(mr->render.render_eye_valid == 1u);
+  drop_lc_fixture(&f);
+}
+
+/* Phase 72: the live off-ball shape moves every idle outfield record from the
+ * bound pl.fmt cell metadata (the derived row-03 consumer). */
+static void test_live_offball_shape_moves_team(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  static int8_t meta[0x12B * 2];
+  int moved = 0;
+  for (size_t i = 0; i < sizeof meta; i += 2) {
+    meta[i] = 0x10;
+    meta[i + 1] = 0x10;
+  }
+  mr->config.field_4c306 = 0;              /* keep contact out of this slice */
+  mr->entities.ball.x = 0;
+  mr->entities.ball.z = 0;
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    mr->entities.team[t].target = FIFA96_MATCH_ENTITY_NONE;
+    mr->entities.team[t].second = FIFA96_MATCH_ENTITY_NONE;
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &mr->entities.team[t].records[i];
+      e->active = 1;
+      e->skip_98 = 0;
+      e->skip_9a = 0;
+      e->code = 3;
+      e->phase_meta = meta;
+      e->pos_x = 0;
+      e->pos_z = 0;
+      e->target_x = 0;
+      e->target_z = 0;
+    }
+  }
+  for (int i = 0; i < 30; i++) one_granted_frame(mr);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      const struct fifa96_match_entity *e = &mr->entities.team[t].records[i];
+      int32_t dx = e->pos_x < 0 ? -e->pos_x : e->pos_x;
+      int32_t dz = e->pos_z < 0 ? -e->pos_z : e->pos_z;
+      if (dx > 0x20 || dz > 0x20) moved++;
+    }
+  assert(moved >= 16);                     /* 20 outfield, carrier/target/second skip */
+  assert(mr->state.phase == 2u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
   drop_lc_fixture(&f);
 }
 
@@ -1992,6 +2269,10 @@ int main(void) {
   test_live_opponent_far_claim_rejected();
   test_live_cpu_carrier_acts();
   test_live_ai_tackles_human();
+  test_live_ai_tackle_foul_reaches_free_kick();
+  test_live_foul_reaches_penalty();
+  test_live_render_eye_stabilizer();
+  test_live_offball_shape_moves_team();
   test_live_pause_substitutions();
   test_live_defender_blocks_both_sides();
   test_live_shot_block_mouth_edge();

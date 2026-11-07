@@ -7207,15 +7207,18 @@ static void test_foul_taker_held_on_live_default(void) {
   assert(mr.referee.contact_kind == 1u);  /* the live contact ran */
   assert(mr.act.id == 8u && mr.state.phase == 0u);  /* the deferred BX=1 fallback */
   /* drive the chain: the act-8 sweep -> the deferred sit-9/sit-0xA arm -> act 2
-   * stage 0/1 -> the stage-2 terminal gate, which holds (no live completion). */
-  for (int i = 0; i < 60; i++) one_granted_frame(&mr);
-  assert(mr.act.id == 2u);                /* the act-2 machine, still armed */
-  assert(mr.ref_restart_stage == 2u);     /* the stage-3 split reached, held */
-  assert(mr.state.phase == 0x0Au);        /* no decision phase write */
-  /* the honest-stop: neither foul-taker row is installed on the live default. */
-  assert((mr.dispatched_ok & ((1ull << 0x12) | (1ull << 0x13))) == 0u);
-  assert(mr.entities.team[1].records[1].code != 0x12u);
-  assert(mr.entities.team[1].records[1].code != 0x13u);
+   * stage 0/1 -> the stage-2 split -> the ordinary ball-settle release
+   * (Phase 70) -> the phase-7/6 decision. */
+  for (int i = 0; i < 120; i++) one_granted_frame(&mr);
+  assert(mr.act.id == 0u);                 /* the decision consumed the act */
+  assert(mr.ref_restart_stage == 2u);      /* the stage-3 split ran */
+  assert(mr.ball_row_flag_158882 == 1u);   /* the row-0x00 successor latch */
+  assert(mr.ball_settle_active == 0u);     /* the release was consumed */
+  assert(mr.state.phase == 7u || mr.state.phase == 6u);
+  assert(mr.score[0] == 0u && mr.score[1] == 0u);
+  /* the fouled side's taker row is armed and dispatched; no score corruption
+   * is allowed. */
+  assert((mr.dispatched_ok & ((1ull << 0x12) | (1ull << 0x13))) != 0u);
 
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
@@ -7378,8 +7381,11 @@ static void match_live_receive_offside_stage(struct fifa96_match_run *mr) {
     }
   mr->entities.team[0].side = 0;
   mr->entities.team[1].side = 1;
+  /* The ball stays at the passer; the receive target (the camera triple) is
+   * the 0x157770 query. A ball-based own-nearest would pick the receiver
+   * itself and suppress the check — the Phase-70 regression. */
   mr->entities.ball.x = 0;
-  mr->entities.ball.z = 0x800;
+  mr->entities.ball.z = 0;
   mr->entities.team[0].records[1].pos_x = 0;      /* the own-nearest */
   mr->entities.team[0].records[1].pos_z = 0x800;
   mr->entities.team[0].records[3].pos_x = 0;      /* the receiver (actor) */
@@ -7388,7 +7394,11 @@ static void match_live_receive_offside_stage(struct fifa96_match_run *mr) {
   mr->entities.team[1].records[2].pos_z = 0x400;
   mr->entities.team[0].records[3].code = 0u;      /* eligible +0x91 code */
   mr->entities.team[0].records[3].active = 1u;
-  mr->render.camera.pos_z = 0;                    /* |camera_ref| <= 0x990 */
+  /* The receive arm's own-nearest query is the 0x157770 target computed from
+   * the camera triple (Phase 70), not the ball. Park the camera target on the
+   * ball/own-nearest point; camera_ref 0x800 stays inside the 0x990 gate. */
+  mr->render.camera.pos_x = 0;
+  mr->render.camera.pos_z = 0x800;
 }
 
 /* FU276-L2 (phase-26b Task 5): the live receive arm FUN_0007A084 calls the

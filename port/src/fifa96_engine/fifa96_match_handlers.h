@@ -97,7 +97,7 @@ struct fifa96_match_blocked_row {
   uint8_t domain;
   uint8_t code;
 };
-#define FIFA96_MATCH_PORT_BLOCKED_ROWS 6u
+#define FIFA96_MATCH_PORT_BLOCKED_ROWS 3u
 extern const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS];
 
@@ -228,6 +228,18 @@ int fifa96_match_phase_00(struct fifa96_match_run *mr);
  * (the live mapper clamps cells >= 0, so the DX<0 arm is a dead arm in the
  * shipped image, unit-fixture driven). */
 int fifa96_match_phase_04(struct fifa96_match_run *mr);
+
+/* Phase 72 — the native 0x6D870 pitch-cell map (13 x-bins x 23 z-bins), without
+ * the row-04 camera z bias. `side` selects the primary or mirrored cell
+ * (`0x12A - cell`). Returns 0..0x12A. */
+int32_t fifa96_match_pitch_cell(int32_t focus_x, int32_t focus_z, uint8_t side);
+
+/* Phase 72 — apply the native 0x6DCC8 direction-pair scaler to one record with
+ * an explicit metadata cell index (0..0x12A). The record's `phase_meta` must be
+ * bound; NULL is a no-op. Writes target x/z and target y = 0. */
+void fifa96_match_phase_apply_cell(struct fifa96_match_run *mr,
+                                   struct fifa96_match_entity *rec,
+                                   int32_t cell);
 /* `0x6E05C` — row `05` (FU-192 §2.7): the goal-relative celebration line.
  * Both arms are ported: the `target := rec position` copy (different
  * team-block, the goal record itself, or metric >= the 0x5A0/0x12C0 limit) and

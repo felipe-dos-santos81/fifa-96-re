@@ -20,6 +20,16 @@
 
 /* FU-145 S2: the shared phase write (definition in the phase-driver
  * section below; used by begin/reset paths above it). */
+/* Phase 70: the ball-settle release (definitions in the referee section below;
+ * used by the init/reset/begin and frame paths above them). */
+static void match_run_ball_settle_clear(struct fifa96_match_run *mr);
+static void match_run_ball_settle_step(struct fifa96_match_run *mr);
+static int match_run_offside_reception_at(struct fifa96_match_run *mr,
+                                          int32_t receiver,
+                                          int32_t query_x, int32_t query_z,
+                                          const struct fifa96_ref_metric *metric,
+                                          int32_t camera_ref, uint8_t mirror,
+                                          uint8_t *offside);
 /* FU-70 §1.2 slot tables (flat 0x11064E direction map and the animation chain
  * T1 0x10E1DC -> T2 0x10E1EC / T3 0x10E1F5). */
 static const uint8_t match_run_slot_map[16] = {
@@ -1908,8 +1918,67 @@ static void match_run_entity_drain(struct fifa96_match_run *mr) {
  * the engine's row-04/ball-receive producers may rebind it later). Derived
  * stand-in for the unported FU-310 camera place, not a native producer; the
  * native rig smoothing and the live orientation director stay open legs. */
+/* Phase 71 — the live render-eye stabilizer [D].
+ *
+ * The FU-71 focus cell is the simulation camera, but the rendered eye is the
+ * camera-0 rig (focus + type-0 offset). A native pan handoff currently hard-sets
+ * the focus and the rendered eye jumps by the whole delta in one granted frame
+ * (measured 376 x / 79 y / 248 z at the P14 smoke). The stabilizer keeps the
+ * simulation cell exact and clamps the render-only eye to the native FU-71
+ * bounds (`|x| <= 0x6C0`, `|z| <= 0xAB0`) with a 0x30-per-frame step. It is a
+ * derived presentation stand-in, not a claim of the native director (P10-L6). */
+#define MATCH_RUN_RENDER_EYE_MAX_STEP 0x30
+#define MATCH_RUN_RENDER_EYE_SNAP 0x600
+#define MATCH_RUN_RENDER_EYE_BOUND_X 0x6C0
+#define MATCH_RUN_RENDER_EYE_BOUND_Z 0xAB0
+
+static int32_t match_run_render_eye_abs(int32_t v) {
+  return v < 0 ? -v : v;
+}
+
+static int32_t match_run_render_eye_step(int32_t cur, int32_t target) {
+  int32_t d = target - cur;
+  if (d > MATCH_RUN_RENDER_EYE_MAX_STEP) d = MATCH_RUN_RENDER_EYE_MAX_STEP;
+  if (d < -MATCH_RUN_RENDER_EYE_MAX_STEP) d = -MATCH_RUN_RENDER_EYE_MAX_STEP;
+  if (match_run_render_eye_abs(target - (cur + d)) <= 2) return target;
+  return cur + d;
+}
+
+static void match_run_render_eye_update(struct fifa96_match_run *mr) {
+  int32_t fx, fy, fz, tx, ty, tz;
+  struct fifa96_match_run_render *r;
+  if (!mr || !mr->live_start) return;
+  r = &mr->render;
+  fx = r->camera.pos_x;
+  fy = r->camera.pos_y;
+  fz = r->camera.pos_z;
+  if (fx > MATCH_RUN_RENDER_EYE_BOUND_X) fx = MATCH_RUN_RENDER_EYE_BOUND_X;
+  if (fx < -MATCH_RUN_RENDER_EYE_BOUND_X) fx = -MATCH_RUN_RENDER_EYE_BOUND_X;
+  if (fz > MATCH_RUN_RENDER_EYE_BOUND_Z) fz = MATCH_RUN_RENDER_EYE_BOUND_Z;
+  if (fz < -MATCH_RUN_RENDER_EYE_BOUND_Z) fz = -MATCH_RUN_RENDER_EYE_BOUND_Z;
+  tx = fx + FIFA96_MATCH_RUN_TYPE0_X;
+  ty = fy + FIFA96_MATCH_RUN_TYPE0_Y;
+  tz = fz + FIFA96_MATCH_RUN_TYPE0_Z;
+  if (r->render_eye_valid == 0u ||
+      match_run_render_eye_abs(tx - r->render_eye_x) > MATCH_RUN_RENDER_EYE_SNAP ||
+      match_run_render_eye_abs(ty - r->render_eye_y) > MATCH_RUN_RENDER_EYE_SNAP ||
+      match_run_render_eye_abs(tz - r->render_eye_z) > MATCH_RUN_RENDER_EYE_SNAP) {
+    r->render_eye_x = tx;
+    r->render_eye_y = ty;
+    r->render_eye_z = tz;
+    r->render_eye_valid = 1u;
+    return;
+  }
+  r->render_eye_x = match_run_render_eye_step(r->render_eye_x, tx);
+  r->render_eye_y = match_run_render_eye_step(r->render_eye_y, ty);
+  r->render_eye_z = match_run_render_eye_step(r->render_eye_z, tz);
+}
+
 static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   struct fifa96_camera *cam = &mr->render.camera;
+  /* Phase 71: converge the render-only eye before the pan/follow early return,
+   * so a native pan handoff is smoothed rather than teleported. */
+  match_run_render_eye_update(mr);
   /* P8: a human live shot (and its save hold) keeps the derived ball-follow even
    * while a native pan event is active. The opponent contest can emit a row-04
    * camera event of its own; without this the live focus froze at the pitch
@@ -2193,6 +2262,7 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
   mr->ball_row_flag_158882 = 0;        /* the native reset clear 0x73D3A */
+  match_run_ball_settle_clear(mr);     /* Phase 70: no staged settle */
   match_run_reset_screen_state(mr);    /* FU-146 S3: no installed handler */
   (void)fifa96_match_entities_release(&mr->entities);
   return 0;
@@ -3284,6 +3354,66 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
  * ball possession cell, never a record, score, phase or goal cell. */
 #define MATCH_RUN_LIVE_OPPONENT_RETARGET 0x400
 
+/* Phase 70 — the live contact decision [D].
+ *
+ * The derived opponent tackle is the one live contact producer that bypassed
+ * the native referee chain. It now registers the contact through the ported
+ * `fifa96_match_run_contact` (the native registrar + row-0x0C re-call /
+ * decision shape) before the possession swap. The contact point is the
+ * challenged record's position (the native row-0x0B arm-1 point,
+ * `0x81BC3 LEA ECX,[ESI+0x59]`); the decision kind is the native duel kind 2.
+ * Returns 1 when the decision ran, 0 when the settings/skip gate left the
+ * contact unresolved and the tackle should still win the ball. */
+static int match_run_live_contact_tackle(struct fifa96_match_run *mr,
+                                         int32_t tackler, int32_t carrier) {
+  const struct fifa96_match_entity *victim;
+  int32_t point[3];
+  if (!mr || !mr->live_start || mr->state.phase != 2u) return 0;
+  if (tackler < 0 || carrier < 0) return 0;
+  if (mr->act.id != 0u) return 0;                  /* a stoppage is running */
+  if (mr->referee.sequence != FIFA96_REF_SEQ_NONE) return 0;
+  if (mr->ball_settle_active != 0u) return 0;      /* a restart is settling */
+  victim = &mr->entities.team[(uint32_t)carrier / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)carrier % FIFA96_MATCH_ENTITY_RECORDS];
+  point[0] = victim->pos_x;
+  point[1] = victim->pos_y;
+  point[2] = victim->pos_z;
+  return fifa96_match_run_contact(mr, 2u, tackler, carrier, point) > 0;
+}
+
+/* Phase 72 — the live off-ball team shape [D].
+ *
+ * Native row 03 (the off-ball target producer) is the `pl.fmt` cell-table
+ * lookup at 0x6DE44/0x6DCC8, but its dispatch slot is NULL in the shared table
+ * (wiring it moved the M2 tape at frame 29). The live path consumes the same
+ * bound metadata directly: map the camera focus through 0x6D870, then apply
+ * the per-record 0x6DCC8 direction pair to every idle code-3 outfield record
+ * that is not the carrier / team target / second pick. This is a live-only
+ * stand-in for the unported row-03 producer; it writes only targets. */
+static void match_run_live_offball_shape(struct fifa96_match_run *mr) {
+  int32_t cells[2];
+  if (!mr || !mr->live_start || mr->state.phase != 2u) return;
+  cells[0] = fifa96_match_pitch_cell(mr->render.camera.pos_x,
+                                     mr->render.camera.pos_z, 0u);
+  cells[1] = fifa96_match_pitch_cell(mr->render.camera.pos_x,
+                                     mr->render.camera.pos_z, 1u);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    uint32_t side = mr->entities.team[t].side & 1u;
+    int32_t base = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS);
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &mr->entities.team[t].records[i];
+      int32_t id = base + (int32_t)i;
+      if (e->skip_98 != 0u || e->skip_9a != 0u) continue;
+      if (id == mr->entities.ball.carrier) continue;
+      if (id == mr->entities.team[t].target) continue;
+      if (id == mr->entities.team[t].second) continue;
+      if (e->code != 3u) continue;         /* the forced off-ball code */
+      if (e->phase_meta == NULL) continue; /* unbound -> native gate */
+      fifa96_match_phase_apply_cell(mr, e, cells[side]);
+    }
+  }
+}
+
 static void match_run_live_opponent_update(struct fifa96_match_run *mr) {
   int32_t human;
   uint32_t opp;
@@ -3330,10 +3460,12 @@ static void match_run_live_opponent_update(struct fifa96_match_run *mr) {
         mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
     }
   }
-  /* P14 derived opponent contact tackle [D]: when the human is carrying a
-   * stationary ball and an opponent outfield record is in contact, the
-   * defending side wins it. A cooldown keeps one tackle from chaining every
-   * frame. No foul/card is claimed from this derived path. */
+  /* P14 derived opponent contact tackle [D], Phase 70: when the human is
+   * carrying a stationary ball and an opponent outfield record is in contact,
+   * the native contact chain decides first. A decision (foul/restart) keeps
+   * the human's ball and starts the ported referee sequence; only a clean
+   * contact hands possession to the defender. A cooldown keeps one tackle
+   * from chaining every frame. */
   {
     int32_t hcarrier = mr->entities.ball.carrier;
     if (hcarrier >= (int32_t)((uint32_t)human * FIFA96_MATCH_ENTITY_RECORDS) &&
@@ -3358,6 +3490,12 @@ static void match_run_live_opponent_update(struct fifa96_match_run *mr) {
       if (best != FIFA96_MATCH_ENTITY_NONE && best_d <= 0x30) {
         struct fifa96_match_entity *o =
             &mr->entities.team[opp].records[(uint32_t)(best - base)];
+        if (match_run_live_contact_tackle(mr, best, hcarrier) != 0) {
+          /* The referee decided: possession stays with the fouled carrier
+           * until the restart places the taker. */
+          mr->live_ai_tackle_cd = 45u;
+          return;
+        }
         mr->entities.ball.carrier = best;
         mr->entities.team[opp].target = best;
         if (o->code != 5u)
@@ -3836,6 +3974,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
   mr->ball_row_flag_158882 = 0;        /* the native reset clear 0x73D3A */
+  match_run_ball_settle_clear(mr);     /* Phase 70: no staged settle */
   /* FU-149 P1: fresh set-piece dispatcher state (the match-reset seeds:
    * FUN_00073EE0 zeroes 0x157AD4/0x157AD6 and the act-8 replay bytes). */
   mr->sit_side_pending = 0;
@@ -4110,6 +4249,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
   mr->ball_row_flag_158882 = 0;        /* the native reset clear 0x73D3A */
+  match_run_ball_settle_clear(mr);     /* Phase 70: no staged settle */
   /* FU-149 P1: a fresh match drops the set-piece dispatcher state (the native
    * match reset FUN_00073EE0 zeroes the corner counters 0x157AD4/0x157AD6;
    * the [0x157ABE] swap and the incident triple carry their unported-producer
@@ -4422,6 +4562,18 @@ void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *
     out->y = mr->render.camera.pos_y;
     out->z = mr->render.camera.pos_z;
   }
+}
+
+void fifa96_match_run_render_eye(const struct fifa96_match_run *mr,
+                                 fifa96_render_pos *out) {
+  if (!mr || !out) return;
+  if (mr->live_start && mr->render.render_eye_valid != 0u) {
+    out->x = mr->render.render_eye_x;
+    out->y = mr->render.render_eye_y;
+    out->z = mr->render.render_eye_z;
+    return;
+  }
+  fifa96_match_run_eye(mr, out);
 }
 
 int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_seconds,
@@ -6252,10 +6404,12 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
       metric.side_gate = (int16_t)vector->z;     /* the 0x158738 block +4 word */
       /* The camera inputs: native [0x157754] is the camera z (the engine
        * camera.pos_z) and [0x157823] the one-shot pan/keeper mirror latch
-       * (no engine producer; staged 0). */
-      (void)fifa96_match_run_offside_reception(mr, actor_id, &metric,
-                                               mr->render.camera.pos_z, 0u,
-                                               &offside);
+       * (the port carries the cell; its native producer is unported). The
+       * own-nearest query uses the reception target computed above — the
+       * engine stand-in for the native 0x157770 triple. */
+      (void)match_run_offside_reception_at(mr, actor_id, target.x, target.z,
+                                           &metric, mr->render.camera.pos_z,
+                                           mr->flag_157823, &offside);
     }
   }
   return FIFA96_OK;
@@ -6649,6 +6803,9 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     ef.latch_157c5c = &mr->global_157c5c;
     ef.latch_157ab2 = &mr->keeper_latch_157ab2;
     ef.stamp_157c2c = &mr->global_157c2c;   /* FU300 T4 / G2 */
+    /* Phase 72: the live off-ball cell shape, before the entity chain so the
+     * targets are consumed by the same frame's mover. */
+    if (mr->live_start) match_run_live_offball_shape(mr);
     rc = fifa96_match_entities_update(&mr->entities, &ef, match_run_dispatch_entity,
                                       mr);
     if (rc != FIFA96_OK) return rc;
@@ -6783,6 +6940,10 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * here. */
     if (mr->end_word_158822 == 2u)
       mr->end_word_158822 = 0u;
+    /* Phase 70: the native ball appearance pass runs before the act handler
+     * (`0x8B664 CALL 0x8BAF0` before `0x8B672 CALL [0x158808]`), so a settle
+     * that ends this frame is visible to this frame's act tick. */
+    match_run_ball_settle_step(mr);
     /* M2 phase-15 T1 / FU-175 §2: the native act tick — the clock tail's
      * `0x8B669 CMP dword[0x158808],0 / 0x8B670 JZ / 0x8B672 CALL
      * dword[0x158808]` — runs after the ball machine (`0x8B664 CALL 0x8BAF0`)
@@ -8091,7 +8252,7 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
    * (focus + (-1920,160,30), A1 §4/A2 §2); the non-live path keeps the FU-71
    * focus triple unchanged (M1/M2). */
   fifa96_render_pos cam_src;
-  fifa96_match_run_eye(mr, &cam_src);
+  fifa96_match_run_render_eye(mr, &cam_src);
   fifa96_render_pos cam;
   err = fifa96_render_camera_stage(&cam_src, &cam);
   if (err != FIFA96_OK) return (int)err;
@@ -9341,6 +9502,49 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
  * [0x7B0,0xB10] side 1 (0x894DB..0x89550, verified). Speech 0x23 (6) /
  * 0x2A (7) on rec_second, [0x15882A] cleared (0x8955F) and the FU-149 phase
  * arm installs the taker/keeper. */
+/* Phase 70 — the derived ordinary-match ball-settle release [D].
+ *
+ * Native chain (fresh Ghidra): `FUN_0008AF38 0x8B65B` calls `FUN_0008BAF0`
+ * only when `[0x14C32A] == 0`; its tail `0x8C05A` calls `FUN_0006FE84` on the
+ * ball block, and the row-0x49 settle animation installs successor row 0x00
+ * (flags 0x07) through `FUN_0006E724` at `0x6FF67..0x6FF85`, writing
+ * `[0x158882] = 1`. The row-0x49 frame durations are 0x80/0x40/0x1C0 = 0x280
+ * (`read_memory 0x10E9FC`), and the native timer add is `[frame_delta] << 4`
+ * (`0x6FFA5..0x6FFAE`). The engine models the release only; the visual frame
+ * walk stays the L14.8.b leg. */
+#define MATCH_RUN_BALL_SETTLE_UNITS 0x280u
+
+static void match_run_ball_settle_clear(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  mr->ball_settle_timer = 0;
+  mr->ball_settle_active = 0;
+}
+
+static void match_run_ball_settle_start(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  mr->ball_settle_timer = MATCH_RUN_BALL_SETTLE_UNITS;
+  mr->ball_settle_active = 1;
+}
+
+static void match_run_ball_settle_step(struct fifa96_match_run *mr) {
+  uint32_t step;
+  if (!mr || mr->ball_settle_active == 0u) return;
+  /* The native machine is skipped under the Practise session; the act-2 gate
+   * already passes there through the session term. */
+  if (mr->session_gate_14c32a != 0u) {
+    match_run_ball_settle_clear(mr);
+    return;
+  }
+  step = (uint32_t)mr->state.frame_delta << 4;
+  if (step >= mr->ball_settle_timer) {
+    mr->ball_settle_timer = 0;
+    mr->ball_settle_active = 0;
+    mr->ball_row_flag_158882 = 1u;   /* successor row 0x00, flags 0x07 */
+  } else {
+    mr->ball_settle_timer = (uint16_t)(mr->ball_settle_timer - step);
+  }
+}
+
 static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
   int rc;
   if (mr->ref_restart_stage == 0u) {
@@ -9363,6 +9567,12 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
   if (mr->ref_restart_stage == 1u) {
     mr->ball_row_flag_158882 = mr->referee.contact_kind == 3u ? 1u : 0u;
     if (mr->session_gate_14c32a == 0u) {
+      /* Phase 70: the native stage-2 row-0x49 install leaves the latch 0; the
+       * ordinary ball appearance pass installs row 0x00 after the settle
+       * duration and the next stage-3 tick passes. Kind 3 keeps the latch 1
+       * and needs no settle. */
+      if (mr->referee.contact_kind != 3u)
+        match_run_ball_settle_start(mr);
       mr->ref_restart_stage = 2u;
       return 1;
     }
@@ -9401,6 +9611,7 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     mr->ref_speech = phase == 6u ? 0x23u : 0x2Au;
     mr->global_5882a = 0;                          /* 0x8955F */
   }
+  match_run_ball_settle_clear(mr);     /* Phase 70: the release is consumed */
   mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
   /* FU-183 §5 (phase-16 T1): the act machine owns phase 0x18 — clear the act-2
    * slot at the terminal (the retired `ref_machine = REF_RESTART` route no
@@ -10175,10 +10386,19 @@ int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
   return 0;
 }
 
-int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t receiver,
-                                       const struct fifa96_ref_metric *metric,
-                                       int32_t camera_ref, uint8_t mirror,
-                                       uint8_t *offside) {
+/* Phase 70: the receive-arm entry with the native `0x157770` reception query
+ * point threaded in. The public wrapper below keeps the ball-based behavior
+ * for the direct geometry tests; the live receive arm passes the target that
+ * `fifa96_match_run_ball_receive` already computes (the engine's 0x157770
+ * stand-in). The own-nearest query is the piece that made a live pass miss:
+ * at the synchronous receive the ball is still at the passer, so the native
+ * target — not the ball — is the receiver-scan anchor. */
+static int match_run_offside_reception_at(struct fifa96_match_run *mr,
+                                          int32_t receiver,
+                                          int32_t query_x, int32_t query_z,
+                                          const struct fifa96_ref_metric *metric,
+                                          int32_t camera_ref, uint8_t mirror,
+                                          uint8_t *offside) {
   fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
   struct fifa96_ref_receiver rec;
   struct fifa96_ref_record event_rec;
@@ -10206,8 +10426,9 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
   rec.z = mr->entities.team[rec_team].records[receiver % FIFA96_MATCH_ENTITY_RECORDS].pos_z;
   rec.side = mr->entities.team[rec_team].side;
   /* The derived FUN_0008DE8C(&0x157770, own team, 0): the own-team nearest to
-   * the ball triple (the derived stand-in for 0x157770, FU-150 leg 8), skip
-   * index 0. */
+   * the reception target (the derived stand-in for 0x157770, FU-150 leg 8),
+   * skip index 0. The live receive arm passes its computed target; the direct
+   * wrapper passes the ball. */
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     const struct fifa96_match_entity *e = &mr->entities.team[rec_team].records[i];
     candidates[i].x = (int16_t)e->pos_x;
@@ -10216,8 +10437,7 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
     candidates[i].skip_9a = e->skip_9a;
   }
   idx = fifa96_entity_find_nearest(candidates, FIFA96_MATCH_ENTITY_RECORDS, 0,
-                                   (int16_t)mr->entities.ball.x,
-                                   (int16_t)mr->entities.ball.z, &best);
+                                   (int16_t)query_x, (int16_t)query_z, &best);
   if (idx >= 0) {
     own = &mr->entities.team[rec_team].records[idx];
     own_idx = idx;
@@ -10285,6 +10505,16 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
   mr->ref_speech = ev_out.speech_code;
   *offside = 1;
   return 1;
+}
+
+int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t receiver,
+                                       const struct fifa96_ref_metric *metric,
+                                       int32_t camera_ref, uint8_t mirror,
+                                       uint8_t *offside) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  return match_run_offside_reception_at(mr, receiver, mr->entities.ball.x,
+                                        mr->entities.ball.z, metric,
+                                        camera_ref, mirror, offside);
 }
 
 int fifa96_match_run_referee_step(struct fifa96_match_run *mr) {

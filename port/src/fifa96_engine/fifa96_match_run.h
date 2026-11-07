@@ -455,6 +455,12 @@ struct fifa96_match_run_render {
    * FUN_0004B818 side mirror). Zero-initialized: a fresh match applies no
    * pose until a producer lands (the tape stays byte-identical). */
   fifa96_camera_pose_args camera_pose;
+  /* Phase 71 — the live-only render-eye stabilizer (derived [D]). The
+   * simulation camera (`camera`) stays the native FU-71 focus; the rendered
+   * eye converges toward the clamped camera-0 pose so a native pan handoff
+   * cannot teleport the view. Cleared by reset_render's memset. */
+  int32_t render_eye_x, render_eye_y, render_eye_z;
+  uint8_t render_eye_valid;
   /* FU-148 §4.2 (S4): the translation-pool seam. The native pool (FUN_00049138
    * -> FUN_00046F80) is a distinct allocation whose content producer is leg 11;
    * a caller may stage one by partitioning a buffer through
@@ -1216,6 +1222,21 @@ struct fifa96_match_run {
    * R51-L1 residue: they are not modelled and the cell is cleared by
    * init/begin/teardown (the native match-reset clear `0x73D3A`). */
   uint8_t ball_row_flag_158882;
+  /* Phase 70 — the derived ordinary-match ball-settle release [D].
+   *
+   * The native act-2 stage 2 installs ball row 0x49 (flags 0x00 ->
+   * `[0x158882] = 0`), then the ordinary-only ball appearance pass
+   * (`FUN_0008AF38 0x8B65B` -> `FUN_0008BAF0` -> `FUN_0006FE84`) walks the
+   * row's settle frames and installs successor row 0x00 (flags 0x07 ->
+   * `[0x158882] = 1`). The next act tick then passes the stage-3 gate.
+   *
+   * `ball_settle_timer` is the row-0x49 duration sum `0x280`; the step is
+   * `frame_delta << 4` (the native `0x6FFA5` timer add). This models the
+   * release, not the visual frame walk: the engine's appearance machine is
+   * L14.8.b. `ball_settle_active` is cleared by reset/begin and the act-2
+   * terminal. */
+  uint16_t ball_settle_timer;
+  uint8_t ball_settle_active;
   /* FU-149 P1 (set pieces & restarts) dispatcher state, native cells:
    *  - `sit_side_pending` = [0x15B6B8]: the queue head latches `(side == 0)`
    *    of the queued situation (0x8A977/0x8A982) before the table-1 id write;
@@ -1632,6 +1653,13 @@ int fifa96_match_run_set_mode(struct fifa96_match_run *mr, uint8_t mode);
  * separate view object. The same eye feeds the pitch and the sprite pass, so a
  * live frame stays internally consistent. NULL mr/out -> no write. */
 void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out);
+
+/* Phase 71: the live render eye. Non-live is `fifa96_match_run_eye` exactly.
+ * Live returns the stabilized camera-0 eye (clamped focus + the type-0
+ * offset, max 0x30 units of movement per granted frame). The simulation
+ * camera is untouched. NULL mr/out -> no write. */
+void fifa96_match_run_render_eye(const struct fifa96_match_run *mr,
+                                 fifa96_render_pos *out);
 
 /* Write the FU-62 §4.6 period lengths the clock's period-end check reads
  * ([0x5881A] regular periods 0/1, [0x5881C] extra periods 2/3), in whole
