@@ -4427,3 +4427,10 @@ close-out below).
   no-ISO fixtures keep their legacy control flow; the opening KICK now has a
   carrier. A release trace reaches 355 frames and clock `00:11` after 11 s.
   `make check` **119/119**; M1/M2 exact by `cmp`.
+
+- **P12 native match camera + goal mesh (2026-11-07).** The live match now
+  uses the native camera-type 0 entry (`0x107E2C`: `-100,488,1100`, yaw
+  `33900`, pitch `3900`, ratio `4608`) instead of camera object 0's attract
+  image defaults, plus the staged `Net.fsh` goal mesh and a far goal-end stand.
+  The native 3dwpts bowl/camera director remain **P10-L2/L6**. `make check`
+  **119/119**; M1/M2 exact by `cmp`.

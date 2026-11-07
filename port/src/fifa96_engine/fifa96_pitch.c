@@ -341,6 +341,7 @@ static int pitch_marking(int32_t wx, int32_t wz) {
  * correct perspective relative to the camera-0 sideline rig, while keeping the
  * native 3dwpts renderer a numbered open leg. */
 #define FIFA96_PITCH_WALL_X (FIFA96_PITCH_HALF_TOUCHLINE + 64)
+#define FIFA96_PITCH_WALL_Z (-((int32_t)FIFA96_PITCH_HALF_GOAL_LINE + 64))
 #define FIFA96_PITCH_WALL_TOP 1500
 #define FIFA96_PITCH_WALL_AD 180
 #define FIFA96_PITCH_WALL_SEAT 700
@@ -422,8 +423,7 @@ static int pitch_bank_sample(const struct fifa96_pitch_bank *bank, int32_t wz,
 }
 
 static uint8_t pitch_wall_pixel(const struct fifa96_pitch *pitch, int32_t wy, int32_t wz,
-                                const struct pitch_wall_colors *col) {
-  const int32_t half_w = (int32_t)FIFA96_PITCH_HALF_GOAL_LINE;
+                                int32_t half_w, const struct pitch_wall_colors *col) {
   uint8_t px;
   if (pitch_abs32(wy - FIFA96_PITCH_WALL_AD) <= 4 ||
       pitch_abs32(wy - FIFA96_PITCH_WALL_SEAT) <= 4 ||
@@ -479,15 +479,41 @@ static int pitch_wall_available(const struct fifa96_pitch *pitch) {
   return pitch->stand.pixels || pitch->ad.pixels || pitch->banner.pixels;
 }
 
+static void pitch_wall_colors_set(const struct fifa96_pitch *pitch,
+                                  struct pitch_wall_colors *col) {
+  col->blue = pitch->sky_index;
+  col->blue_light = pitch->line_index;
+  col->blue_dark = pitch->shade ? pitch->shade[pitch->sky_index] : pitch->sky_index;
+  col->red = pitch->sky_index;
+  col->red_light = pitch->line_index;
+  col->red_dark = col->blue_dark;
+  col->white = pitch->line_index;
+  col->grey = pitch->shade ? pitch->shade[pitch->line_index] : pitch->line_index;
+  col->dark = 0x00;
+  /* Without the live palette the wall is a monochrome sky/line fallback; the
+   * windowed match always stages the palette before this draw. */
+  if (pitch->palette) {
+    col->blue = pitch_nearest_rgb(pitch->palette, 40, 80, 180);
+    col->blue_light = pitch_nearest_rgb(pitch->palette, 110, 160, 230);
+    col->blue_dark = pitch_nearest_rgb(pitch->palette, 5, 15, 60);
+    col->red = pitch_nearest_rgb(pitch->palette, 190, 40, 40);
+    col->red_light = pitch_nearest_rgb(pitch->palette, 230, 150, 150);
+    col->red_dark = pitch_nearest_rgb(pitch->palette, 70, 10, 15);
+    col->white = pitch_nearest_rgb(pitch->palette, 245, 245, 245);
+    col->grey = pitch_nearest_rgb(pitch->palette, 120, 120, 120);
+    col->dark = pitch_nearest_rgb(pitch->palette, 0, 0, 0);
+  }
+}
+
 static int pitch_ray(const fifa96_projection_point *center, int32_t fov_w, int32_t fov_h,
                      const int32_t mt[9], int32_t sx, int32_t sy,
                      fifa96_projection_vec *out);
 
-static void pitch_wall_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s,
-                            const struct fifa96_render_pos *eye, const int32_t mt[9],
-                            const fifa96_render_clip *clip,
-                            const fifa96_projection_point *center, int32_t fov_w,
-                            int32_t fov_h) {
+static void pitch_wall_draw_x(const struct fifa96_pitch *pitch, struct fifa96_surface *s,
+                              const struct fifa96_render_pos *eye, const int32_t mt[9],
+                              const fifa96_render_clip *clip,
+                              const fifa96_projection_point *center, int32_t fov_w,
+                              int32_t fov_h) {
   if (!pitch_wall_available(pitch)) return;
   int32_t left = clip->left;
   int32_t top = clip->top;
@@ -500,28 +526,7 @@ static void pitch_wall_draw(const struct fifa96_pitch *pitch, struct fifa96_surf
   if (right <= left || bottom <= top) return;
   if (eye->x >= FIFA96_PITCH_WALL_X) return;
   struct pitch_wall_colors col;
-  col.blue = pitch->sky_index;
-  col.blue_light = pitch->line_index;
-  col.blue_dark = pitch->shade ? pitch->shade[pitch->sky_index] : pitch->sky_index;
-  col.red = pitch->sky_index;
-  col.red_light = pitch->line_index;
-  col.red_dark = col.blue_dark;
-  col.white = pitch->line_index;
-  col.grey = pitch->shade ? pitch->shade[pitch->line_index] : pitch->line_index;
-  col.dark = 0x00;
-  /* Without the live palette the wall is a monochrome sky/line fallback; the
-   * windowed match always stages the palette before this draw. */
-  if (pitch->palette) {
-    col.blue = pitch_nearest_rgb(pitch->palette, 40, 80, 180);
-    col.blue_light = pitch_nearest_rgb(pitch->palette, 110, 160, 230);
-    col.blue_dark = pitch_nearest_rgb(pitch->palette, 5, 15, 60);
-    col.red = pitch_nearest_rgb(pitch->palette, 190, 40, 40);
-    col.red_light = pitch_nearest_rgb(pitch->palette, 230, 150, 150);
-    col.red_dark = pitch_nearest_rgb(pitch->palette, 70, 10, 15);
-    col.white = pitch_nearest_rgb(pitch->palette, 245, 245, 245);
-    col.grey = pitch_nearest_rgb(pitch->palette, 120, 120, 120);
-    col.dark = pitch_nearest_rgb(pitch->palette, 0, 0, 0);
-  }
+  pitch_wall_colors_set(pitch, &col);
   for (int32_t sy = top; sy < bottom; sy++) {
     uint8_t *row = s->indexed + (size_t)sy * (size_t)s->width;
     for (int32_t sx = left; sx < right; sx++) {
@@ -542,9 +547,68 @@ static void pitch_wall_draw(const struct fifa96_pitch *pitch, struct fifa96_surf
         }
       }
       int64_t wz = (int64_t)eye->z + (t * world_dir.z >> 16);
-      row[sx] = pitch_wall_pixel(pitch, (int32_t)wy, (int32_t)wz, &col);
+      row[sx] = pitch_wall_pixel(pitch, (int32_t)wy, (int32_t)wz,
+                                 (int32_t)FIFA96_PITCH_HALF_GOAL_LINE, &col);
     }
   }
+}
+
+/* P12: the far goal-end stand. The native 3dwpts bowl has a full ring; the
+ * derived layer had only the far touchline plane, leaving the goal floating
+ * against the sky. This is the same derived wall material on the far end
+ * plane, behind the goal line (z = -(HALF_GOAL_LINE + 64)); the native
+ * point/quad bowl remains P10-L2. */
+static void pitch_wall_draw_z(const struct fifa96_pitch *pitch, struct fifa96_surface *s,
+                              const struct fifa96_render_pos *eye, const int32_t mt[9],
+                              const fifa96_render_clip *clip,
+                              const fifa96_projection_point *center, int32_t fov_w,
+                              int32_t fov_h) {
+  if (!pitch_wall_available(pitch)) return;
+  int32_t left = clip->left;
+  int32_t top = clip->top;
+  int32_t right = clip->right;
+  int32_t bottom = clip->bottom;
+  if (left < 0) left = 0;
+  if (top < 0) top = 0;
+  if (right > s->width) right = s->width;
+  if (bottom > s->height) bottom = s->height;
+  if (right <= left || bottom <= top) return;
+  if (eye->z <= FIFA96_PITCH_WALL_Z) return;
+  struct pitch_wall_colors col;
+  pitch_wall_colors_set(pitch, &col);
+  for (int32_t sy = top; sy < bottom; sy++) {
+    uint8_t *row = s->indexed + (size_t)sy * (size_t)s->width;
+    for (int32_t sx = left; sx < right; sx++) {
+      fifa96_projection_vec world_dir;
+      if (!pitch_ray(center, fov_w, fov_h, mt, sx, sy, &world_dir)) continue;
+      if (world_dir.z >= 0) continue;   /* far end plane requires a -z ray */
+      int64_t t = ((int64_t)(FIFA96_PITCH_WALL_Z - eye->z) * 65536) / world_dir.z;
+      if (t <= 0) continue;
+      int64_t wy = (int64_t)eye->y + (t * world_dir.y >> 16);
+      if (wy < 0 || wy >= FIFA96_PITCH_WALL_TOP) continue;
+      /* If the ground ray reaches the end plane closer than the wall, the
+       * pitch is in front of the stand. */
+      if (world_dir.y < 0) {
+        int64_t tg = -((int64_t)eye->y << 16) / world_dir.y;
+        if (tg > 0) {
+          int64_t gz = (int64_t)eye->z + (tg * world_dir.z >> 16);
+          if (gz > FIFA96_PITCH_WALL_Z) continue;
+        }
+      }
+      int64_t wx = (int64_t)eye->x + (t * world_dir.x >> 16);
+      row[sx] = pitch_wall_pixel(pitch, (int32_t)wy, (int32_t)wx,
+                                 (int32_t)FIFA96_PITCH_HALF_TOUCHLINE, &col);
+    }
+  }
+}
+
+static void pitch_wall_draw(const struct fifa96_pitch *pitch, struct fifa96_surface *s,
+                            const struct fifa96_render_pos *eye, const int32_t mt[9],
+                            const fifa96_render_clip *clip,
+                            const fifa96_projection_point *center, int32_t fov_w,
+                            int32_t fov_h) {
+  pitch_wall_draw_x(pitch, s, eye, mt, clip, center, fov_w, fov_h);
+  pitch_wall_draw_z(pitch, s, eye, mt, clip, center, fov_w, fov_h);
 }
 
 static int pitch_ray(const fifa96_projection_point *center, int32_t fov_w, int32_t fov_h,

@@ -66,12 +66,20 @@ struct fifa96_match_matchup {
 /* Match presentation slots: FU-85 §4 stages 23 entities (11 + 11 + ball) into
  * the render arrays; the engine keeps the same staging size. */
 #define FIFA96_MATCH_RUN_RENDER_SLOTS 23
-/* Native camera object 0 (image 0x107508): position (-1920,160,30), yaw
- * 0xBF9C, pitch 200. The live eye is `focus + camera-0 offset`; the view pose
- * uses the FU-154 statics. */
-#define FIFA96_MATCH_RUN_CAMERA0_X (-1920)
-#define FIFA96_MATCH_RUN_CAMERA0_Y 160
-#define FIFA96_MATCH_RUN_CAMERA0_Z 30
+/* Native match camera type 0 (the side-swap setup at FUN_0004D7E8 copies
+ * 0x107E2C into camera object 0): position (-100,488,1100), yaw 33900,
+ * pitch 3900, ratio 4608. The image default on 0x107508 is (-1920,160,30),
+ * yaw 0xBF9C, pitch 200; it is the pre-match/attract pose, not the live match
+ * pose. The live eye is `focus + type-0 offset`; `fifa96_match_run_reset_render`
+ * keeps the image default for non-live/tape runs. */
+#define FIFA96_MATCH_RUN_TYPE0_X (-100)
+#define FIFA96_MATCH_RUN_TYPE0_Y 488
+#define FIFA96_MATCH_RUN_TYPE0_Z 1100
+#define FIFA96_MATCH_RUN_TYPE0_YAW 33900
+#define FIFA96_MATCH_RUN_TYPE0_PITCH 3900
+#define FIFA96_MATCH_RUN_TYPE0_RATIO 4608
+/* The image-default pose on 0x107508; reset_render seeds it for non-live/tape
+ * runs and the live begin overrides yaw/pitch/ratio with the type-0 values. */
 #define FIFA96_MATCH_RUN_VIEW_YAW 0xBF9C
 #define FIFA96_MATCH_RUN_VIEW_PITCH 200
 
@@ -467,6 +475,10 @@ struct fifa96_match_run_render {
    * BIGF name at staging (0xFF = absent). */
   uint8_t ball_bank;
   uint8_t ball_roll;
+  /* P12: the GAMEART0 Net.fsh 64x64 mesh frame, parsed at staging; the
+   * derived goal-box pass samples it on the goal-line plane. */
+  struct fifa96_sprite_frame goal_net_frame;
+  uint8_t goal_net_ready;
   const struct fifa96_render_bank *fixed60;
   const struct fifa96_render_bank *fixed61;
   const uint8_t *mirror;                    /* FU-85 §1.3 0x10F2E7 table */

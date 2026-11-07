@@ -2345,6 +2345,8 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
  * `--name ball.fsh`/`--entry 37` this task). Captured by BIGF name here so the
  * render's ball slot sources it at the player-container offset. */
 #define MATCH_RUN_BALL_BANK "ball.fsh"
+#define MATCH_RUN_NET_BANK "Net.fsh"
+#define MATCH_RUN_POST_BANK "Npost.fsh"
 
 static int match_run_formation_seed_team(struct fifa96_match_run *mr, uint32_t team,
                                          uint8_t id) {
@@ -4000,6 +4002,12 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * unported) and bind the tracked record to the controlled player. These are
    * the engine's live stand-ins, not native producers. */
   if (mr->live_start) {
+    /* P12 / FU-349: FUN_0004D7E8 installs camera type 0's entry (0x107E2C)
+     * for the match; override the image-default orientation with that pose.
+     * The non-live/tape path keeps the image default. */
+    mr->render.yaw = FIFA96_MATCH_RUN_TYPE0_YAW;
+    mr->render.pitch = FIFA96_MATCH_RUN_TYPE0_PITCH;
+    mr->render.view_ratio = FIFA96_MATCH_RUN_TYPE0_RATIO;
     (void)fifa96_match_run_write_phase(mr, 2u);
     (void)fifa96_camera_event_set(&mr->render.camera, 0, 0, 0x50, 0);
     (void)fifa96_camera_event_dir(&mr->render.camera, 0, 0, 0);
@@ -4033,19 +4041,15 @@ int fifa96_match_run_set_live_start(struct fifa96_match_run *mr, int on) {
 void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out) {
   if (!mr || !out) return;
   if (mr->live_start) {
-    /* FU-343 P1 / A1 §4, A2 §2: the native renders from camera object 0
-     * (image 0x107508: +0x10 = -1920, +0x14 = 160, +0x18 = 30; first-hand
-     * `read_memory 0x107510` = 80 f8 ff ff a0 00 00 00 1e 00 00 00), while the
-     * FU-71 triple 0x15774C/50/54 is the follow/focus cell. The engine's
-     * focus is render.camera; the eye is the separate rig. */
-    /* FU-343 P1 / A1 §4, A2 §2: the native match renders from camera object 0
-     * at `focus + (-1920,160,30)`; that is the sideline rig (x is the short
-     * axis, z runs goal-to-goal). P10 briefly replaced it with a behind-goal
-     * broadcast rig, which left a huge empty foreground and pushed the play
-     * to the horizon. Restore the native camera-0 placement. */
-    out->x = mr->render.camera.pos_x + FIFA96_MATCH_RUN_CAMERA0_X;
-    out->y = mr->render.camera.pos_y + FIFA96_MATCH_RUN_CAMERA0_Y;
-    out->z = mr->render.camera.pos_z + FIFA96_MATCH_RUN_CAMERA0_Z;
+    /* P12 / FU-349: the native match setup FUN_0004D7E8 copies the camera-type
+     * table entry 0 (0x107E2C = {-100,488,1100,33900,3900,4608}) over camera
+     * object 0. The image default on 0x107508 (-1920,160,30, yaw 0xBF9C,
+     * pitch 200) is the pre-match/attract pose and is what produced the wide
+     * empty foreground. The FU-71 triple remains the focus; the live eye is the
+     * type-0 camera offset from that focus. */
+    out->x = mr->render.camera.pos_x + FIFA96_MATCH_RUN_TYPE0_X;
+    out->y = mr->render.camera.pos_y + FIFA96_MATCH_RUN_TYPE0_Y;
+    out->z = mr->render.camera.pos_z + FIFA96_MATCH_RUN_TYPE0_Z;
   } else {
     out->x = mr->render.camera.pos_x;
     out->y = mr->render.camera.pos_y;
@@ -7295,6 +7299,83 @@ static void match_run_draw_shadow(struct fifa96_surface *s,
   }
 }
 
+/* P12: the derived goal-box pass. The retail Net.fsh frame is a 64x64 indexed
+ * mesh (index 0 transparent); the goal mouth is the native classifier's
+ * |x| < 0xD0, height 0xA0, on the goal-line plane z = ±0xC1E. The plane is
+ * inverse-projected exactly like the pitch floor, so the net follows the
+ * camera without a screen-space hack. Posts/crossbar are the white marking
+ * slot. This is a derived [D] back-net plane; the native 3D net/side/top
+ * passes remain P10-L2. */
+#define MATCH_RUN_GOAL_MOUTH_HALF 0xD0
+#define MATCH_RUN_GOAL_HEIGHT 0xA0
+#define MATCH_RUN_GOAL_LINE_Z 0xC1E
+#define MATCH_RUN_GOAL_POST_W 8
+
+static void match_run_draw_goal_net(const struct fifa96_match_run_render *r,
+                                    struct fifa96_surface *s,
+                                    const fifa96_render_pos *eye,
+                                    const int32_t matrix[9],
+                                    const fifa96_render_clip *clip,
+                                    const fifa96_projection_point *center,
+                                    int32_t fov_w, int32_t fov_h) {
+  if (!r->goal_net_ready || r->goal_net_frame.pixels == NULL ||
+      r->goal_net_frame.width <= 0 || r->goal_net_frame.height <= 0)
+    return;
+  const struct fifa96_sprite_frame *net = &r->goal_net_frame;
+  int32_t mt[9];
+  for (int i = 0; i < 3; i++)
+    for (int j = 0; j < 3; j++) mt[i * 3 + j] = matrix[j * 3 + i];
+  for (int side = -1; side <= 1; side += 2) {
+    const int32_t gz = side * MATCH_RUN_GOAL_LINE_Z;
+    for (int32_t sy = clip->top; sy < clip->bottom; sy++) {
+      uint8_t *row = s->indexed + (size_t)sy * (size_t)s->width;
+      int32_t dy = (int32_t)(((int64_t)center->y - ((int64_t)sy << 16)) /
+                             (int64_t)fov_h);
+      for (int32_t sx = clip->left; sx < clip->right; sx++) {
+        int32_t dx = (int32_t)((((int64_t)sx << 16) - (int64_t)center->x) /
+                               (int64_t)fov_w);
+        fifa96_projection_vec cam_dir = {dx, dy, 1 << 16};
+        fifa96_projection_vec dir;
+        if (fifa96_projection_transform(mt, &cam_dir, &dir) != FIFA96_OK ||
+            dir.z == 0)
+          continue;
+        int64_t t = ((int64_t)(gz - eye->z) * 65536) / dir.z;
+        if (t <= 0) continue;
+        int32_t wx = eye->x + (int32_t)((t * dir.x) >> 16);
+        int32_t wy = eye->y + (int32_t)((t * dir.y) >> 16);
+        if (wx < -MATCH_RUN_GOAL_MOUTH_HALF || wx > MATCH_RUN_GOAL_MOUTH_HALF ||
+            wy < 0 || wy > MATCH_RUN_GOAL_HEIGHT)
+          continue;
+        /* The goal interior is dark behind the white mesh; otherwise the net
+         * vanishes against the white hoardings behind the goal line. */
+        row[sx] = 0x00;
+        if (wx <= -MATCH_RUN_GOAL_MOUTH_HALF + MATCH_RUN_GOAL_POST_W ||
+            wx >= MATCH_RUN_GOAL_MOUTH_HALF - MATCH_RUN_GOAL_POST_W ||
+            wy >= MATCH_RUN_GOAL_HEIGHT - MATCH_RUN_GOAL_POST_W) {
+          row[sx] = r->pitch_art.line_index;
+          continue;
+        }
+        int32_t u = (int32_t)(((int64_t)(wx + MATCH_RUN_GOAL_MOUTH_HALF) *
+                               net->width) /
+                              (2 * MATCH_RUN_GOAL_MOUTH_HALF));
+        int32_t v = (int32_t)(((int64_t)(MATCH_RUN_GOAL_HEIGHT - wy) *
+                               net->height) /
+                              MATCH_RUN_GOAL_HEIGHT);
+        if (u < 0) u = 0;
+        if (u >= net->width) u = net->width - 1;
+        if (v < 0) v = 0;
+        if (v >= net->height) v = net->height - 1;
+        uint8_t px = net->pixels[(size_t)v * (size_t)net->width + (size_t)u];
+        /* The retail Net.fsh frame is a gray 187..255 mesh, not an index-0
+         * transparent sprite: 187 is the mesh background and the >=200 values
+         * are the white cords. Keep the goal interior dark and draw only the
+         * cords, otherwise the frame is a solid white/red rectangle. */
+        if (px >= 200u) row[sx] = r->pitch_art.line_index;
+      }
+    }
+  }
+}
+
 int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *s) {
   if (!mr || !s) return -FIFA96_ERR_INVALID;
   struct fifa96_match_run_render *r = &mr->render;
@@ -7395,6 +7476,7 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     err = (fifa96_err_t)fifa96_pitch_draw(&r->pitch_art, s, &cam, view_yaw, matrix,
                                           &clip, &center, lens_w, lens_h);
     if (err != FIFA96_OK) return (int)err;
+    match_run_draw_goal_net(r, s, &cam, matrix, &clip, &center, lens_w, lens_h);
   }
 
   /* FU-89 §6/FUN_000589E0: the near-depth threshold `[0x54350]` is
@@ -7710,6 +7792,8 @@ struct match_stage_set {
   int32_t clockfont_index; /* BIGF entry named clockfnt.fsh, -1 when absent */
   int32_t playfont_index;  /* BIGF entry named playfnt.fsh, -1 when absent */
   int32_t ball_index;      /* BIGF entry named ball.fsh, -1 when absent (T2) */
+  int32_t net_index;       /* BIGF entry named Net.fsh, -1 when absent (P12) */
+  int32_t post_index;      /* BIGF entry named Npost.fsh, -1 when absent (P12) */
 };
 
 /* The native by-name lookup (FUN_000A81A5) lowercases ASCII, so the staged
@@ -7965,6 +8049,8 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
   set->clockfont_index = -1;
   set->playfont_index = -1;
   set->ball_index = -1;
+  set->net_index = -1;
+  set->post_index = -1;
   uint8_t *container = NULL;
   size_t container_len = 0;
   if (match_stage_container(file, file_len, &container, &container_len) != 0) return -1;
@@ -7989,6 +8075,10 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
       set->playfont_index = (int32_t)i;
     if (name && match_run_name_eq(name, MATCH_RUN_BALL_BANK))
       set->ball_index = (int32_t)i;
+    if (name && match_run_name_eq(name, MATCH_RUN_NET_BANK))
+      set->net_index = (int32_t)i;
+    if (name && match_run_name_eq(name, MATCH_RUN_POST_BANK))
+      set->post_index = (int32_t)i;
     uint8_t *bank = NULL;
     uint32_t bank_len = 0;
     uint32_t bank_count = 0;
@@ -8055,9 +8145,12 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   struct fifa96_sprite_frame hud_bar;
   uint16_t hud_bar_height = 0;
   uint8_t hud_bar_ready = 0;
+  struct fifa96_sprite_frame goal_net_frame;
+  uint8_t goal_net_ready = 0;
   int rc;
 
   memset(hud_font, 0, sizeof hud_font);
+  memset(&goal_net_frame, 0, sizeof goal_net_frame);
   memset(&hud_bar, 0, sizeof hud_bar);
 
   if (!mr || !s || !player_bank || !pitch_bank) return -FIFA96_ERR_INVALID;
@@ -8181,6 +8274,20 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
              * native pointers are always both set before the HUD can run). */
             hud_bar_ready = (uint8_t)(bar_ok && layout_ok);
           }
+        } else if ((int32_t)i == pitch.net_index) {
+          /* P12: the GAMEART0 Net.fsh 64x64 mesh frame (the retail bank has
+           * five frames; frame 4 is the full mesh). The derived goal plane
+           * samples this indexed frame with index 0 transparent. */
+          fifa96_sprite_bank net_bank;
+          fifa96_sprite_entry net_entry;
+          if (fifa96_sprite_bank_parse(copy, set->items[i].len, &net_bank) ==
+              FIFA96_OK) {
+            uint32_t frame = net_bank.count > 4u ? 4u : 0u;
+            if (fifa96_sprite_bank_entry(&net_bank, frame, &net_entry) == FIFA96_OK &&
+                fifa96_sprite_frame_parse(&net_bank, net_entry.offset,
+                                          &goal_net_frame) == FIFA96_OK)
+              goal_net_ready = 1;
+          }
         }
       }
       b->base = copy;
@@ -8230,6 +8337,8 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   r->hud_bar = hud_bar;
   r->hud_bar_height = hud_bar_height;
   r->hud_bar_ready = hud_bar_ready;
+  r->goal_net_frame = goal_net_frame;
+  r->goal_net_ready = goal_net_ready;
   /* FU-343 (P4): derive the live HUD colours from the palette this stage
    * captured; stage_pitch refreshes them again after the final live palette. */
   match_run_hud_colors_refresh(mr);

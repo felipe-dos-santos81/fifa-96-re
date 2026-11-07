@@ -10819,3 +10819,38 @@ The release build does not change those claims.
 
 **Gate.** `make check` **119/119**; M1 and M2 exact by `cmp`; the Release tree
 builds `fifa96` with no ASan/UBSan runtime dependency.
+
+## Phase 66 — P12: native match camera type 0 and the goal mesh (2026-11-07)
+
+**Errata — the live camera pose.** Phase 63/64 and the P11 playable build used
+camera object 0's image defaults (`0x107508`: `-1920,160,30`, yaw `0xBF9C`,
+pitch `200`, ratio `0x1500`) as the live eye. That is the attract/pre-match
+pose. Fresh Ghidra `disassemble_function 0x4D7E8` shows the camera-type setup
+copying `PTR_DAT_00108B64[type] + 0x48 + index*0x18` into the camera object;
+the type-0 table at `0x1089B4` points at `0x107E2C`, and `read_memory
+0x107E2C` is `9c ff ff ff e8 01 00 00 4c 04 00 00 6c 84 00 00 3c 0f 00 00
+00 12 00 00` = `{-100, 488, 1100, 33900, 3900, 4608}`. The live begin now
+installs that yaw/pitch/ratio and the eye is the type-0 offset from the FU-71
+follow focus. The image defaults stay on non-live/tape runs, so M1/M2 are
+byte-identical. The derived ball-follow and the native `FUN_0004E834` director
+remain **P10-L6**.
+
+**Goal mesh.** The derived goal pass stages `GAMEART0` entry 36 `Net.fsh`
+frame 4 (64x64, gray mesh; 187 background, >=200 white cords) and
+inverse-projects the goal-line plane `z=±0xC1E` through the same camera matrix
+as the floor. The goal mouth is the native classifier's `|x| < 0xD0`, height
+`0xA0`; the interior is dark, the cords/posts/crossbar use the white marking
+slot. This is a derived back-net plane; the native 3D goal-net/side/top passes
+remain **P10-L2**.
+
+**Stadium.** The far goal-end wall at `z=-(0xC1E+64)` uses the same derived
+STAR/STAS/STAB/STAC materials as the far touchline wall, closing the black
+void behind the goal. The native 3dwpts point/quad bowl (`FUN_000610C4`,
+`0x15438C`/`0x1543D4`) remains **P10-L2**; the wall material/tiers remain
+**P10-L7**.
+
+**Verification.** `test_engine_match_render` pins the type-0 eye/angles and
+the staged 64x64 net frame; the live wall hash still proves the banks are
+consumed. The release screenshot `docs/screens/p12-match-goal-net.png` shows
+the goal net inside the end stand. **Gate:** `make check` **119/119**; M1/M2
+exact by `cmp`.

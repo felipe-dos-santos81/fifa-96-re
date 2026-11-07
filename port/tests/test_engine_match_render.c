@@ -1370,14 +1370,14 @@ static void test_live_start_gate_and_eye(void) {
 
   mr.live_start = 1;
   fifa96_match_run_eye(&mr, &eye);
-  /* FU-343 / native camera 0: the live sideline rig is focus + (-1920,160,30);
-   * the P10 behind-goal broadcast offset was a visual regression. */
-  assert(eye.x == 480 + FIFA96_MATCH_RUN_CAMERA0_X);
-  assert(eye.y == 0 + FIFA96_MATCH_RUN_CAMERA0_Y);
-  assert(eye.z == -120 + FIFA96_MATCH_RUN_CAMERA0_Z);
-  assert(eye.x - mr.render.camera.pos_x == FIFA96_MATCH_RUN_CAMERA0_X);
-  assert(eye.y - mr.render.camera.pos_y == FIFA96_MATCH_RUN_CAMERA0_Y);
-  assert(eye.z - mr.render.camera.pos_z == FIFA96_MATCH_RUN_CAMERA0_Z);
+  /* P12 / FU-349: the native match uses camera type 0's entry
+   * (0x107E2C), not the image-default camera-0 statics. */
+  assert(eye.x == 480 + FIFA96_MATCH_RUN_TYPE0_X);
+  assert(eye.y == 0 + FIFA96_MATCH_RUN_TYPE0_Y);
+  assert(eye.z == -120 + FIFA96_MATCH_RUN_TYPE0_Z);
+  assert(eye.x - mr.render.camera.pos_x == FIFA96_MATCH_RUN_TYPE0_X);
+  assert(eye.y - mr.render.camera.pos_y == FIFA96_MATCH_RUN_TYPE0_Y);
+  assert(eye.z - mr.render.camera.pos_z == FIFA96_MATCH_RUN_TYPE0_Z);
   fifa96_match_run_eye(NULL, &eye);
   fifa96_match_run_eye(&mr, NULL);
 }
@@ -1401,6 +1401,9 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   assert(r->pitch_art.staged == 1);
   assert(r->pitch_art.tile_h != NULL && r->pitch_art.tile_v != NULL);
   assert(r->pitch_art.crowd.pixels != NULL);
+  /* P12: the GAMEART0 Net.fsh 64x64 mesh frame is staged for the goal pass. */
+  assert(r->goal_net_ready == 1);
+  assert(r->goal_net_frame.width == 64 && r->goal_net_frame.height == 64);
   /* The same GAMESTD1 container carries the derived far-stand wall banks. */
   assert(r->pitch_art.stand.pixels != NULL &&
          r->pitch_art.stand.w == FIFA96_PITCH_STAND_W);
@@ -1440,9 +1443,12 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   assert(fifa96_engine_step(f.engine) == 0);
   fifa96_render_pos eye;
   fifa96_match_run_eye(&f.mr, &eye);
-  assert(eye.x == r->camera.pos_x + FIFA96_MATCH_RUN_CAMERA0_X);
-  assert(eye.y == r->camera.pos_y + FIFA96_MATCH_RUN_CAMERA0_Y);
-  assert(eye.z == r->camera.pos_z + FIFA96_MATCH_RUN_CAMERA0_Z);
+  assert(eye.x == r->camera.pos_x + FIFA96_MATCH_RUN_TYPE0_X);
+  assert(eye.y == r->camera.pos_y + FIFA96_MATCH_RUN_TYPE0_Y);
+  assert(eye.z == r->camera.pos_z + FIFA96_MATCH_RUN_TYPE0_Z);
+  assert(r->yaw == FIFA96_MATCH_RUN_TYPE0_YAW);
+  assert(r->pitch == FIFA96_MATCH_RUN_TYPE0_PITCH);
+  assert(r->view_ratio == FIFA96_MATCH_RUN_TYPE0_RATIO);
 
   /* The rendered live frame is mostly pitch (the floor plus the derived
    * stand wall), not the cleared background. */

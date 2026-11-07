@@ -111,8 +111,9 @@ and Sound Effects are live; the other rows are stored for later (the Controls
 page and Reset Defaults row are port additions). The other six native Game
 Select entries are shown dimmed (not ported yet). The shell composes the real
 640x480 MOD2/MOD1 art, the SLICK title/menu fonts and the animated VS mark;
-the match uses the native camera-0 sideline view with a stadium stand built
-from the native stand/crowd banks, mowing stripes and player shadows. The windowed build renders at the native
+the match uses the native camera type-0 high follow view, a derived
+stadium stand/end wall built from the native stand/crowd banks, the native
+`Net.fsh` goal mesh, mowing stripes and player shadows. The windowed build renders at the native
 640x480 surface in a 1280x960 window; the headless tape path stays 320x240.
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
