@@ -25,3 +25,6 @@
  * 0x7CD60 request handler is the word's consumer (pressed code-3 / released
  * code-0 rows). SDL3 binds V. */
 #define FIFA96_ENGINE_KEY_LONG_BALL 10
+/* P14 derived pause substitution key (SDL3 S). No match action; the engine
+ * consumes it only while a live match is paused. */
+#define FIFA96_ENGINE_KEY_SUBST 11

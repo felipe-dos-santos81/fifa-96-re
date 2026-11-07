@@ -384,7 +384,9 @@ int fifa96_engine_step(struct fifa96_engine *e) {
         int32_t raw = keys[i].raw_code;
         if (raw == FIFA96_ENGINE_KEY_QUIT) continue;   /* handled above */
         if (e->match->paused) {
-          if (raw == FIFA96_ENGINE_KEY_CONFIRM)
+          if (raw == FIFA96_ENGINE_KEY_SUBST)
+            (void)fifa96_match_run_pause_substitute(e->match);
+          else if (raw == FIFA96_ENGINE_KEY_CONFIRM)
             (void)fifa96_match_run_set_paused(e->match, 0);
           else if (raw == FIFA96_ENGINE_KEY_DECLINE)
             (void)fifa96_match_lifecycle_request_exit(&e->match->lc);

@@ -44,6 +44,8 @@ static void test_scancode_map(void) {
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_X) == FIFA96_ENGINE_KEY_DECLINE);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_Z) == FIFA96_ENGINE_KEY_KICK);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_C) == FIFA96_ENGINE_KEY_PASS);
+  assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_V) == FIFA96_ENGINE_KEY_LONG_BALL);
+  assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_S) == FIFA96_ENGINE_KEY_SUBST);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_ESCAPE) == FIFA96_ENGINE_KEY_QUIT);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_A) == 0);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_UNKNOWN) == 0);
@@ -66,9 +68,10 @@ static void test_button_map(void) {
          FIFA96_ENGINE_KEY_DECLINE);
   assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_WEST) ==
          FIFA96_ENGINE_KEY_LONG_BALL);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_NORTH) ==
+         FIFA96_ENGINE_KEY_SUBST);
   assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_START) ==
          FIFA96_ENGINE_KEY_QUIT);
-  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_NORTH) == 0);
 }
 
 static void push_key_down(SDL_Scancode sc) {

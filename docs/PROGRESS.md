@@ -4448,3 +4448,14 @@ close-out below).
   `make check` **123/123**; M1/M2 exact by `cmp`. The native 3dwpts/camera/HUD
   art, native competition data/screens and native save body remain numbered
   legs.
+
+- **P14 match contest, bench and cup shootout (2026-11-07).** The live opponent
+  now passes/shoots after a bounded hold, can win a stationary ball with a
+  cooldown tackle, and the keeper releases saves to a teammate. Pause **S**
+  makes up to three derived substitutions using the PCCD bench names; a drawn
+  Tournament/Playoff tie opens a five-round player-facing penalty shootout
+  (left/centre/right kick and dive) and applies the winner to the bracket.
+  New `test_engine_shootout`; live-control and front-end-mode tests extended.
+  `make check` **124/124**; M1/M2 exact by `cmp`. Native contact
+  fouls/offside (missing release producer), native substitution selection,
+  native extra time/shootout, and the 3dwpts/camera/HUD art remain legs.

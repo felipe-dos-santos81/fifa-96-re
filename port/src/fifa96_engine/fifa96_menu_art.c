@@ -1051,7 +1051,8 @@ static int menu_art_draw_hires(struct fifa96_surface *s,
       st->screen == FIFA96_MENU_SCREEN_LOAD_GAME ||
       st->screen == FIFA96_MENU_SCREEN_SAVE_GAME ||
       st->screen == FIFA96_MENU_SCREEN_MODEM ||
-      st->screen == FIFA96_MENU_SCREEN_LIST) {
+      st->screen == FIFA96_MENU_SCREEN_LIST ||
+      st->screen == FIFA96_MENU_SCREEN_SHOOTOUT) {
     hires_list_screen(st);
     hires_present(s, menu_art.hires_pal_team);
     return 1;
@@ -1088,6 +1089,7 @@ void fifa96_menu_art_draw(struct fifa96_surface *s, const struct fifa96_menu_sta
     case FIFA96_MENU_SCREEN_SAVE_GAME:
     case FIFA96_MENU_SCREEN_MODEM:
     case FIFA96_MENU_SCREEN_LIST:
+    case FIFA96_MENU_SCREEN_SHOOTOUT:
       menu_draw_list_screen(s, st, &colors);
       break;
     default:

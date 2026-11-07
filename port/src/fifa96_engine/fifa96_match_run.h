@@ -18,6 +18,7 @@
 #include "fifa96_loader/fifa96_match_pace.h"
 #include "fifa96_loader/fifa96_match_state.h"
 #include "fifa96_loader/fifa96_palette.h"
+#include "fifa96_loader/fifa96_pccd.h"
 #include "fifa96_loader/fifa96_referee.h"
 #include "fifa96_loader/fifa96_render.h"
 #include "fifa96_loader/fifa96_rng.h"
@@ -1364,6 +1365,21 @@ struct fifa96_match_run {
   uint8_t live_kick_shot;
   uint16_t live_save_hold;
   int32_t live_save_record;            /* defending pool id or NONE */
+  /* P14 derived CPU depth. The opponent carrier gets one bounded pass/shot
+   * through the existing live flight (no native AI chooser is claimed), and
+   * the keeper outlet below uses the same primitive. Live-only; init/begin
+   * zero the counters. */
+  uint16_t live_cpu_hold;
+  uint16_t live_cpu_actions;
+  int32_t live_cpu_carrier;            /* opponent pool id or NONE */
+  uint16_t live_ai_tackle_cd;          /* derived opponent contact cooldown */
+  /* P14 derived pause substitutions: PCCD roster names/numbers copied by the
+   * bridge, a three-sub counter and the temporary pause notice. Live-only. */
+  char roster_name[2][FIFA96_PCCD_ROSTER_COUNT][24];
+  uint8_t roster_number[2][FIFA96_PCCD_ROSTER_COUNT];
+  uint8_t sub_used[2];
+  char sub_notice[40];
+  uint16_t sub_notice_ticks;
   /* P7 / FU-345 (restart): set while a live phase-1 restart is pending, then
    * consumed on the phase-1 -> phase-2 transition to bind the human control to
    * its nearest outfield record without awarding the ball (the opponent keeps
@@ -1636,6 +1652,13 @@ int fifa96_match_run_set_config(struct fifa96_match_run *mr,
  * `paused` is idempotent. Returns 0, -FIFA96_ERR_INVALID (NULL),
  * -FIFA96_ERR_STATE (run not live) or -FIFA96_ERR_UNSUPPORTED (not live). */
 int fifa96_match_run_set_paused(struct fifa96_match_run *mr, int paused);
+
+/* P14 derived pause substitution: while paused and live, replace the first
+ * available outfield roster name with the next unused bench slot. Max three per
+ * side. Updates the R1 strip/record state and a temporary pause notice; writes
+ * no score/phase cell. Returns 1 when a substitution was applied, 0 when no
+ * slot is available, or a negative error for invalid/unsupported state. */
+int fifa96_match_run_pause_substitute(struct fifa96_match_run *mr);
 
 /* FU-343 (P4): skip the live POST dwell (ENTER/ESC on the FULL TIME panel).
  * Sets `post_skip`; the next run step requests the lifecycle exit and runs the

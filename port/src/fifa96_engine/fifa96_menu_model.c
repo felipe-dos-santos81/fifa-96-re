@@ -225,6 +225,7 @@ static int menu_model_screen_rows(const struct fifa96_menu_model *model) {
     case FIFA96_MENU_SCREEN_LOAD_GAME:
     case FIFA96_MENU_SCREEN_SAVE_GAME: return FIFA96_MENU_SAVE_SLOTS;
     case FIFA96_MENU_SCREEN_MODEM: return 2;
+    case FIFA96_MENU_SCREEN_SHOOTOUT: return 3;
     case FIFA96_MENU_SCREEN_LIST:
       return model->list_count > 0 ? model->list_count : 1;
     default: return 0;
@@ -337,6 +338,7 @@ int fifa96_menu_model_nav(struct fifa96_menu_model *model, int32_t code) {
     case FIFA96_MENU_SCREEN_LOAD_GAME:
     case FIFA96_MENU_SCREEN_SAVE_GAME:
     case FIFA96_MENU_SCREEN_MODEM:
+    case FIFA96_MENU_SCREEN_SHOOTOUT:
     case FIFA96_MENU_SCREEN_LIST: {
       int rows = menu_model_screen_rows(model);
       if (code == 0 && model->list_row > 0) model->list_row--;
@@ -431,6 +433,8 @@ enum fifa96_menu_action fifa96_menu_model_activate(struct fifa96_menu_model *mod
       return FIFA96_MENU_ACTION_NONE;   /* notice row is not actionable */
     case FIFA96_MENU_SCREEN_LIST:
       return FIFA96_MENU_ACTION_NONE;   /* read-only */
+    case FIFA96_MENU_SCREEN_SHOOTOUT:
+      return FIFA96_MENU_ACTION_SHOOTOUT_SELECT;
     case FIFA96_MENU_SCREEN_OPTIONS: {
       if (model->option_page != FIFA96_MENU_OPTION_PAGE_LIST) {
         model->option_page = FIFA96_MENU_OPTION_PAGE_LIST;

@@ -64,6 +64,31 @@ void fifa96_team_data_shutdown(struct fifa96_team_data *td);
 int fifa96_team_data_lookup(const struct fifa96_team_data *td, uint32_t lang_id,
                             struct fifa96_team_identity *identity);
 
+/* Resolve one roster slot (0..15) of `lang_id`'s exposed team: the slot's
+ * `identity.roster[slot]` player-table index is passed to
+ * `fifa96_pccd_player`, and the player's name is copied into `name` with a
+ * terminating NUL (truncated to `cap - 1` bytes when needed). The PCCD player
+ * record has no shirt-number field, so `number` is the stable 1-based roster
+ * slot (`slot + 1`), independent of the player id. Like `lookup`, the name is
+ * copied out of `td`'s borrowed arena; parse results borrow `td`'s database.
+ * Returns 0, -FIFA96_ERR_INVALID (NULL `td`/`name`/`number`, `cap == 0`, or
+ * `slot > 15`), -FIFA96_ERR_STATE (not initialised), -FIFA96_ERR_NOT_FOUND
+ * (lang_id not exposed or the roster slot names a missing player), or another
+ * negated PCCD parser error. */
+int fifa96_team_data_player(const struct fifa96_team_data *td, uint32_t lang_id,
+                            uint8_t slot, char *name, size_t cap,
+                            uint8_t *number);
+
+/* Fill all 16 roster names/numbers for `lang_id` into `names`/`numbers` and set
+ * `*count` to 16. A missing player or an empty name becomes "PLAYER n" with
+ * number n, where n is the 1-based slot (`slot + 1`). Returns 0,
+ * -FIFA96_ERR_INVALID (any NULL argument), -FIFA96_ERR_STATE (not
+ * initialised), -FIFA96_ERR_NOT_FOUND (lang_id not exposed), or another
+ * negated PCCD parser error; on error `*count` is left 0. */
+int fifa96_team_data_roster(const struct fifa96_team_data *td, uint32_t lang_id,
+                            char names[16][24], uint8_t numbers[16],
+                            int *count);
+
 /* The 44-entry map's mode-4 index for a LANG id, or -1 when the id is not one
  * of the exposed teams. Pure: works without an initialised team data. */
 int fifa96_team_data_lang_index(uint32_t lang_id);

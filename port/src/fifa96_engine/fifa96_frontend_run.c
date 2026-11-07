@@ -5,6 +5,10 @@
 
 #define FRONTEND_RUN_QUEUE_CAP 8
 
+static void frontend_native_begin_shootout(struct fifa96_frontend_run *fr,
+                                           uint8_t fixture_index);
+static int frontend_native_finish_shootout(struct fifa96_frontend_run *fr);
+
 /* M1 approximation of the FU-66 action-code space (FUN_00016350 is not
  * decomposed): directions are menu-navigation codes 0..3, CONFIRM is the
  * -10 action the confirm gate upgrades to CONFIRM (else DECLINE), and
@@ -373,6 +377,37 @@ static void frontend_native_menu_state_fill(const struct fifa96_frontend_run *fr
       st->list_help = st->list_help_text;
       break;
     }
+    case FIFA96_MENU_SCREEN_SHOOTOUT: {
+      uint8_t phase = fifa96_shootout_phase(&fr->shootout);
+      st->title = "PENALTY SHOOTOUT";
+      st->list_title = phase == FIFA96_SHOOTOUT_PHASE_USER_DIVE ? "YOUR DIVE"
+                                                                 : "YOUR KICK";
+      st->list_footer = "Enter: choose   X: back";
+      st->footer = st->list_footer;
+      st->list_row_count = 3;
+      st->list_selected = fr->menu.list_row;
+      st->list_scroll = 0;
+      st->list_text[0][0] = '\0';
+      snprintf(st->list_text[0], sizeof st->list_text[0], "%s", "Left");
+      st->list_rows[0].label = st->list_text[0];
+      st->list_rows[0].enabled = 1;
+      snprintf(st->list_text[1], sizeof st->list_text[1], "%s", "Centre");
+      st->list_rows[1].label = st->list_text[1];
+      st->list_rows[1].enabled = 1;
+      snprintf(st->list_text[2], sizeof st->list_text[2], "%s", "Right");
+      st->list_rows[2].label = st->list_text[2];
+      st->list_rows[2].enabled = 1;
+      {
+        char summary[80];
+        if (fifa96_shootout_summary(&fr->shootout, summary, sizeof summary) == 0)
+          snprintf(st->list_help_text, sizeof st->list_help_text, "%s", summary);
+        else
+          snprintf(st->list_help_text, sizeof st->list_help_text, "%s",
+                   "Pens: idle");
+        st->list_help = st->list_help_text;
+      }
+      break;
+    }
     case FIFA96_MENU_SCREEN_MODEM:
       st->title = "Modem Setup";
       st->list_title = "Modem Setup";
@@ -607,6 +642,22 @@ static void frontend_native_handle_action(struct fifa96_frontend_run *fr,
         fr->menu.screen = FIFA96_MENU_SCREEN_COMPETITION_HUB;
       break;
     }
+    case FIFA96_MENU_ACTION_SHOOTOUT_SELECT: {
+      uint8_t phase = fifa96_shootout_phase(&fr->shootout);
+      uint8_t choice = (uint8_t)fr->menu.list_row;
+      if (choice > FIFA96_SHOOTOUT_CHOICE_RIGHT) break;
+      if (phase == FIFA96_SHOOTOUT_PHASE_USER_KICK) {
+        if (fifa96_shootout_select_kick(&fr->shootout, choice) != 0) break;
+      } else if (phase == FIFA96_SHOOTOUT_PHASE_USER_DIVE) {
+        if (fifa96_shootout_select_dive(&fr->shootout, choice) != 0) break;
+      } else {
+        break;
+      }
+      fr->menu.list_row = 0;
+      if (fifa96_shootout_phase(&fr->shootout) == FIFA96_SHOOTOUT_PHASE_DONE)
+        (void)frontend_native_finish_shootout(fr);
+      break;
+    }
     case FIFA96_MENU_ACTION_HUB_EXIT:
       fr->menu.pending_kind = 0;
       break;
@@ -713,6 +764,14 @@ int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surf
     fr->menu.list_scroll = 0;
     fr->menu.list_count = 5;
   }
+  if (fr->shootout.phase == FIFA96_SHOOTOUT_PHASE_USER_KICK ||
+      fr->shootout.phase == FIFA96_SHOOTOUT_PHASE_USER_DIVE) {
+    fr->menu.screen = FIFA96_MENU_SCREEN_SHOOTOUT;
+    fr->menu.pending_kind = fr->mode;
+    fr->menu.list_row = 0;
+    fr->menu.list_scroll = 0;
+    fr->menu.list_count = 3;
+  }
   return 0;
 }
 
@@ -720,6 +779,55 @@ void fifa96_frontend_run_set_save_dir(struct fifa96_frontend_run *fr, const char
   if (fr == NULL) return;
   if (dir == NULL || dir[0] == '\0') dir = ".";
   snprintf(fr->save_dir, sizeof fr->save_dir, "%s", dir);
+}
+
+/* P14 derived cup decider: a draw opens a player-facing shootout instead of
+ * the silent hash/replay path. The competitive fixture stays unplayed until
+ * the shootout resolves; the model and screen are front-end state only. */
+static void frontend_native_begin_shootout(struct fifa96_frontend_run *fr,
+                                           uint8_t fixture_index) {
+  uint32_t seed = fr->competition.seed ^
+                  ((uint32_t)fixture_index + 1u) * 0x9E3779B9u ^ 0x5EEDu;
+  if (fifa96_shootout_init(&fr->shootout, seed, 0u) != 0) return;
+  fr->shootout_fixture = fixture_index;
+  fr->menu.screen = FIFA96_MENU_SCREEN_SHOOTOUT;
+  fr->menu.list_row = 0;
+  fr->menu.list_scroll = 0;
+  fr->menu.list_count = 3;
+  fr->menu.pending_kind = fr->mode;
+}
+
+static int frontend_native_finish_shootout(struct fifa96_frontend_run *fr) {
+  struct fifa96_competition_fixture *fixture;
+  uint8_t winner = fifa96_shootout_winner(&fr->shootout);
+  uint8_t home_goals = fifa96_shootout_user_score(&fr->shootout);
+  uint8_t away_goals = fifa96_shootout_cpu_score(&fr->shootout);
+  if (fr->competition.state != FIFA96_COMPETITION_ACTIVE) return -1;
+  if (fr->shootout_fixture >= FIFA96_COMPETITION_FIXTURES) return -1;
+  fixture = &fr->competition.fixtures[fr->shootout_fixture];
+  if (fixture->user == 0) return -1;
+  if (winner == FIFA96_SHOOTOUT_NO_WINNER)
+    winner = (uint8_t)(fr->shootout.seed & 1u);
+  /* The user fixture is always presented as home by the competition model. */
+  if (winner == 0u) {
+    if (home_goals <= away_goals) home_goals = (uint8_t)(away_goals + 1u);
+  } else {
+    if (away_goals <= home_goals) away_goals = (uint8_t)(home_goals + 1u);
+  }
+  if (fifa96_competition_apply_result(&fr->competition, fr->shootout_fixture,
+                                      home_goals, away_goals) != 0)
+    return -1;
+  fixture = &fr->competition.fixtures[fr->shootout_fixture];
+  fixture->shootout = 1u;
+  fixture->winner = winner == 0u ? fixture->home : fixture->away;
+  frontend_native_auto_save(fr);
+  frontend_native_clear_handoff(fr);
+  fr->menu.screen = FIFA96_MENU_SCREEN_COMPETITION_HUB;
+  fr->menu.pending_kind = fr->mode;
+  fr->menu.list_row = 0;
+  fr->menu.list_scroll = 0;
+  fr->menu.list_count = 5;
+  return 0;
 }
 
 int fifa96_frontend_run_match_result(struct fifa96_frontend_run *fr,
@@ -732,6 +840,17 @@ int fifa96_frontend_run_match_result(struct fifa96_frontend_run *fr,
     if (fr->competition.state == FIFA96_COMPETITION_ACTIVE) {
       uint8_t home = home_goals > 255u ? 255u : (uint8_t)home_goals;
       uint8_t away = away_goals > 255u ? 255u : (uint8_t)away_goals;
+      /* P14: a drawn cup tie opens the player-facing shootout; the fixture
+       * stays unplayed until the decider resolves. */
+      if ((fr->competition.kind == FIFA96_COMPETITION_TOURNAMENT ||
+           fr->competition.kind == FIFA96_COMPETITION_PLAYOFF) &&
+          home == away && fr->competition.current < FIFA96_COMPETITION_FIXTURES) {
+        frontend_native_begin_shootout(fr, fr->competition.current);
+        if (fr->shootout.phase != FIFA96_SHOOTOUT_PHASE_IDLE) {
+          frontend_native_clear_handoff(fr);
+          return 0;
+        }
+      }
       if (fifa96_competition_apply_result(&fr->competition,
                                           fr->competition.current, home,
                                           away) != 0)

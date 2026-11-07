@@ -458,6 +458,7 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_match_run.c
   src/fifa96_engine/fifa96_competition.c
   src/fifa96_engine/fifa96_save.c
+  src/fifa96_engine/fifa96_shootout.c
   src/fifa96_engine/fifa96_pitch.c
   src/fifa96_engine/fifa96_match_handlers.c
   src/fifa96_engine/fifa96_match_entities.c
@@ -624,6 +625,14 @@ target_include_directories(test_engine_save PRIVATE src)
 target_compile_options(test_engine_save PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_save PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_save COMMAND test_engine_save
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
+
+add_executable(test_engine_shootout tests/test_engine_shootout.c)
+target_link_libraries(test_engine_shootout PRIVATE fifa96_engine)
+target_include_directories(test_engine_shootout PRIVATE src)
+target_compile_options(test_engine_shootout PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_shootout PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_shootout COMMAND test_engine_shootout
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
 
 add_executable(test_engine_mode_flow tests/test_engine_mode_flow.c)

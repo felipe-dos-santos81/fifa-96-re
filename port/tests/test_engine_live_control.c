@@ -1528,6 +1528,14 @@ static void test_live_keeper_saves_centre_side(uint32_t side) {
     }
     assert(mr->live_save_hold == 0u);
   }
+  /* P14: the keeper outlet releases the saved ball to a teammate through the
+   * same live flight rather than leaving it pinned. */
+  one_granted_frame(mr);
+  assert(mr->live_save_record == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr->live_kick_active == 1u);
+  assert(mr->live_kick_shot == 0u);
+  assert(mr->score[side] == 0u && mr->score[side ^ 1u] == 0u);
+  assert(mr->state.phase == 2u);
   drop_lc_fixture(&f);
 }
 
@@ -1844,6 +1852,130 @@ static void test_live_stale_aim_two_kicks(void) {
   drop_lc_fixture(&f);
 }
 
+/* P14 live CPU carrier action: after a short hold, the opponent carrier
+ * launches one pass/shot through the existing flight primitive. The human is
+ * parked out of range; score and phase stay untouched. */
+static void test_live_cpu_carrier_acts(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t human = lc_team_for_side(mr, (uint8_t)(mr->phase_machine.side_controlled & 1u));
+  uint32_t opp;
+  int32_t rival;
+  assert(human >= 0);
+  opp = 1u - (uint32_t)human;
+  rival = (int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + 3u);
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *h = &mr->entities.team[(uint32_t)human].records[i];
+    struct fifa96_match_entity *o = &mr->entities.team[opp].records[i];
+    h->pos_x = 0x4000;
+    h->pos_z = 0x4000;
+    h->target_x = h->pos_x;
+    h->target_z = h->pos_z;
+    if ((int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + i) == rival) {
+      o->pos_x = 0;
+      o->pos_z = 0x600;
+    } else {
+      o->pos_x = 0x900;
+      o->pos_z = 0x900;
+    }
+    o->target_x = o->pos_x;
+    o->target_z = o->pos_z;
+  }
+  stage_ball(mr, 0, 0, 0x600);
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_active = 0u;
+  mr->live_kick_hold = 0u;
+  mr->live_save_hold = 0u;
+  mr->entities.ball.carrier = rival;
+  mr->entities.team[opp].target = rival;
+  mr->live_cpu_hold = 0;
+  mr->live_cpu_actions = 0;
+  mr->live_cpu_carrier = FIFA96_MATCH_ENTITY_NONE;
+  for (int i = 0; i < 48; i++) one_granted_frame(mr);
+  assert(mr->live_cpu_actions >= 1u);
+  assert(mr->entities.ball.z < 0x600);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(mr->state.phase == 2u);
+  assert(mr->entities.controlled >= 0 && mr->entities.controlled < 11);
+  drop_lc_fixture(&f);
+}
+
+/* P14 derived opponent contact tackle: the defending side can win a stationary
+ * human ball; the cooldown keeps the human from instantly reclaiming. */
+static void test_live_ai_tackles_human(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t human = lc_team_for_side(mr, (uint8_t)(mr->phase_machine.side_controlled & 1u));
+  uint32_t opp;
+  int32_t carrier;
+  int32_t rival;
+  assert(human >= 0);
+  opp = 1u - (uint32_t)human;
+  carrier = mr->entities.controlled;
+  assert(carrier > 0 && carrier < 11);
+  rival = (int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + 3u);
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *h = &mr->entities.team[(uint32_t)human].records[i];
+    struct fifa96_match_entity *o = &mr->entities.team[opp].records[i];
+    if ((int32_t)i != carrier) {
+      h->pos_x = 0x3000;
+      h->pos_z = 0x3000;
+    } else {
+      h->pos_x = 0;
+      h->pos_z = 0;
+    }
+    h->target_x = h->pos_x;
+    h->target_z = h->pos_z;
+    if ((int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + i) == rival) {
+      o->pos_x = 0x20;
+      o->pos_z = 0;
+    } else {
+      o->pos_x = 0x900;
+      o->pos_z = 0x900;
+    }
+    o->target_x = o->pos_x;
+    o->target_z = o->pos_z;
+  }
+  stage_ball(mr, 0, 0, 0);
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_active = 0u;
+  mr->live_kick_hold = 0u;
+  mr->live_save_hold = 0u;
+  mr->live_ai_tackle_cd = 0u;
+  mr->entities.ball.carrier = carrier;
+  for (int i = 0; i < 4; i++) one_granted_frame(mr);
+  assert(mr->entities.ball.carrier == rival);
+  assert(mr->live_ai_tackle_cd != 0u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(mr->state.phase == 2u);
+  drop_lc_fixture(&f);
+}
+
+/* P14 derived pause substitution: three applied roster swaps, fourth refused,
+ * no score/phase write. */
+static void test_live_pause_substitutions(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  uint8_t side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
+  assert(fifa96_match_run_set_paused(mr, 1) == 0);
+  for (int slot = 0; slot < (int)FIFA96_PCCD_ROSTER_COUNT; slot++)
+    (void)snprintf(mr->roster_name[side][slot],
+                   sizeof mr->roster_name[side][slot], "P%d", slot + 1);
+  assert(fifa96_match_run_pause_substitute(mr) == 1);
+  assert(fifa96_match_run_pause_substitute(mr) == 1);
+  assert(fifa96_match_run_pause_substitute(mr) == 1);
+  assert(mr->sub_used[side] == 3u);
+  assert(mr->render.sub.active == 1u);
+  assert(mr->sub_notice[0] != '\0');
+  assert(fifa96_match_run_pause_substitute(mr) == 0);
+  assert(mr->sub_used[side] == 3u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(mr->state.phase == 2u);
+  drop_lc_fixture(&f);
+}
+
 int main(void) {
   test_live_begin_seeds_kickoff_carrier();
   test_live_carrier_dribbles_with_ball();
@@ -1858,6 +1990,9 @@ int main(void) {
   test_live_goal_after_kick();
   test_live_opponent_presses_and_claims();
   test_live_opponent_far_claim_rejected();
+  test_live_cpu_carrier_acts();
+  test_live_ai_tackles_human();
+  test_live_pause_substitutions();
   test_live_defender_blocks_both_sides();
   test_live_shot_block_mouth_edge();
   test_live_shot_block_skips_hidden_defender();

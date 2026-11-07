@@ -318,27 +318,30 @@ static void test_cup_replay_and_bracket(int item, uint8_t kind) {
   uint8_t round = fr.competition.round;
   assert(fifa96_competition_fixture(&fr.competition, (uint8_t)fixture_index) != NULL);
 
-  /* First draw: the cup keeps the same fixture for the replay. */
+  /* P14: a drawn cup tie opens the interactive shootout. Drive the three-way
+   * choice rows (LEFT each time) until the model finishes and the front-end
+   * applies the winner and returns to the hub. */
   assert(fifa96_frontend_run_match_result(&fr, 1, 1) == 0);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_SHOOTOUT);
+  assert(fifa96_shootout_phase(&fr.shootout) == FIFA96_SHOOTOUT_PHASE_USER_KICK);
+  /* The engine calls frontend_run_reset after match_result; the active
+   * shootout screen must survive that reset. */
+  assert(fifa96_frontend_run_reset(&fr, s) == 0);
+  assert(fr.menu.screen == FIFA96_MENU_SCREEN_SHOOTOUT);
+  for (int kick = 0; kick < 60 && fr.menu.screen == FIFA96_MENU_SCREEN_SHOOTOUT;
+       kick++) {
+    press(&fr, FIFA96_ENGINE_KEY_CONFIRM);
+    step(&fr, s);
+  }
   assert(fr.menu.screen == FIFA96_MENU_SCREEN_COMPETITION_HUB);
   int advanced = fr.competition.current != fixture_index ||
                  fr.competition.round != round ||
                  fr.competition.state != FIFA96_COMPETITION_ACTIVE;
-  const struct fifa96_competition_fixture *replayed =
+  const struct fifa96_competition_fixture *decided =
       fifa96_competition_fixture(&fr.competition, (uint8_t)fixture_index);
-  assert(replayed != NULL);
-  assert(replayed->replay >= 1 || advanced);
-
-  /* Keep drawing until the derived shootout advances or eliminates the user. */
-  for (int attempt = 0; attempt < 5 && !advanced; attempt++) {
-    uint8_t before_current = fr.competition.current;
-    uint8_t before_round = fr.competition.round;
-    assert(fifa96_frontend_run_match_result(&fr, 1, 1) == 0);
-    advanced = fr.competition.current != before_current ||
-               fr.competition.round != before_round ||
-               fr.competition.state != FIFA96_COMPETITION_ACTIVE;
-  }
-  assert(advanced);
+  assert(decided != NULL);
+  assert(decided->shootout != 0 || fr.competition.eliminated != 0);
+  assert(advanced || fr.competition.state == FIFA96_COMPETITION_COMPLETE);
   int shootout = 0;
   for (uint8_t i = 0; i < fr.competition.fixture_count; i++) {
     const struct fifa96_competition_fixture *f =

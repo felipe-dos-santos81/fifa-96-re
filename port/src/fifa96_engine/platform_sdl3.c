@@ -30,7 +30,7 @@
  * P9: the set must cover the whole match action block through LONG_BALL (10);
  * stopping at PASS (9) made a held V / pad West a one-shot pulse, so the
  * engine derived a release on the next poll instead of holding 0x40. */
-#define SDL3_HELD_CODES (FIFA96_ENGINE_KEY_LONG_BALL + 1)
+#define SDL3_HELD_CODES (FIFA96_ENGINE_KEY_SUBST + 1)
 
 struct sdl_state {
   SDL_Window *win;
@@ -158,6 +158,7 @@ int fifa96_platform_sdl3_map_scancode(int scancode) {
     case SDL_SCANCODE_Z:         return FIFA96_ENGINE_KEY_KICK;
     case SDL_SCANCODE_C:         return FIFA96_ENGINE_KEY_PASS;
     case SDL_SCANCODE_V:         return FIFA96_ENGINE_KEY_LONG_BALL;
+    case SDL_SCANCODE_S:         return FIFA96_ENGINE_KEY_SUBST;
     case SDL_SCANCODE_ESCAPE:    return FIFA96_ENGINE_KEY_QUIT;
     default:                     return 0;
   }
@@ -177,6 +178,7 @@ int fifa96_platform_sdl3_map_button(int b) {
     case SDL_GAMEPAD_BUTTON_SOUTH:      return FIFA96_ENGINE_KEY_CONFIRM;
     case SDL_GAMEPAD_BUTTON_EAST:       return FIFA96_ENGINE_KEY_DECLINE;
     case SDL_GAMEPAD_BUTTON_WEST:       return FIFA96_ENGINE_KEY_LONG_BALL;
+    case SDL_GAMEPAD_BUTTON_NORTH:      return FIFA96_ENGINE_KEY_SUBST;
     case SDL_GAMEPAD_BUTTON_START:      return FIFA96_ENGINE_KEY_QUIT;
     default:                            return 0;
   }

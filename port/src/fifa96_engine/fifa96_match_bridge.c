@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 #include "fifa96_engine/fifa96_match_bridge.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
@@ -50,6 +51,36 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
   if (rc != 0) return rc;
   rc = fifa96_match_run_set_mode(mr, eng->frontend.mode);
   if (rc != 0) return rc;
+  /* P14 substitution roster: provisional labels until the PCCD player-name
+   * handoff fills them. The native match still uses the same 11 record slots;
+   * the menu is a derived bench aid. */
+  for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
+    for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++) {
+      if (mr->roster_name[side][slot][0] == '\0')
+        (void)snprintf(mr->roster_name[side][slot],
+                       sizeof mr->roster_name[side][slot], "PLAYER %u",
+                       (unsigned)(slot + 1u));
+      if (mr->roster_number[side][slot] == 0u)
+        mr->roster_number[side][slot] = (uint8_t)(slot + 1u);
+    }
+  }
+  if (eng->team_data.ready) {
+    for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
+      char names[FIFA96_PCCD_ROSTER_COUNT][24];
+      uint8_t numbers[FIFA96_PCCD_ROSTER_COUNT];
+      int count = 0;
+      if (fifa96_team_data_roster(&eng->team_data, eng->frontend.team_id[side],
+                                  names, numbers, &count) == 0) {
+        for (int slot = 0; slot < count && slot < (int)FIFA96_PCCD_ROSTER_COUNT;
+             slot++) {
+          (void)snprintf(mr->roster_name[side][slot],
+                         sizeof mr->roster_name[side][slot], "%.23s",
+                         names[slot]);
+          mr->roster_number[side][slot] = numbers[slot];
+        }
+      }
+    }
+  }
   eng->match_halftime_steps = 0;
   eng->match_halftime_pressed = 0;
   eng->frontend.match_start = 0;   /* consumed: no instant re-entry */

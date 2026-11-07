@@ -18,7 +18,9 @@
 #include "fifa96_engine/fifa96_match_bridge.h"
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_platform_null.h"
+#include "fifa96_engine/fifa96_team_data.h"
 #include "fifa96_loader/fifa96_err.h"
+#include "fifa96_loader/fifa96_pccd.h"
 
 #define MODEL_TEST_COUNT 0x150u
 #define MENU_ISO_PATH "data/game/FIFAPCCD96.iso"
@@ -964,6 +966,130 @@ static void test_native_held_input_after_reset(void) {
   fifa96_surface_destroy(s);
 }
 
+/* Synthetic PCDB: one team at mode-4 slots 0..7 and three players. Bytes follow
+ * the parsed layout exactly (team block 0x70, player block 0x110, strings
+ * 0x190); roster[0]=player 0 ("Alpha"), [1]=player 1 ("Bravo"), [2]=player 2
+ * (empty name), [15]=99 (missing player). */
+#define SYNTH_PCDB_LEN 0x200u
+
+static size_t build_synthetic_pcdb(uint8_t *buf, size_t cap) {
+  const size_t len = SYNTH_PCDB_LEN;
+  assert(len <= cap);
+  memset(buf, 0, len);
+  memcpy(buf, "PCDB", 4);
+  put32le(buf + 0x04, 0x14u);   /* header size */
+  put32le(buf + 0x08, 0x70u);   /* team block */
+  put32le(buf + 0x0C, 0x110u);  /* player block */
+  put32le(buf + 0x10, 0x190u);  /* string pool */
+  put32le(buf + 0x14, 0x40u);   /* mode-table base */
+  put32le(buf + 0x18, 5u);      /* mode count (mode 4 = World) */
+  for (uint32_t m = 0; m < 5u; m++) put32le(buf + 0x1C + m * 4u, m * 4u);
+  /* Modes 0..3 each have one slot at 0x40..0x4F; mode 4 owns 0x50..0x6F. */
+  for (size_t off = 0x50; off < 0x70; off += 4u) put32le(buf + off, 0u);
+
+  put32le(buf + 0x70, 0x49u);  /* team fixed-record size */
+  put32le(buf + 0x74, 1u);     /* team count */
+  put32le(buf + 0x78, 0x80u);  /* team record offset */
+  put32le(buf + 0x80, 0x1234u);
+  put32le(buf + 0x84, 0u);     /* name_long -> pool +0 */
+  put32le(buf + 0x88, 10u);    /* name_short -> pool +10 */
+  put32le(buf + 0x8C, 0u);     /* name_medium -> pool +0 */
+  buf[0x80 + 0x12] = 1u;       /* formation */
+  put32le(buf + 0x80 + 0x49 + 0u * 4u, 0u);
+  put32le(buf + 0x80 + 0x49 + 1u * 4u, 1u);
+  put32le(buf + 0x80 + 0x49 + 2u * 4u, 2u);
+  put32le(buf + 0x80 + 0x49 + 15u * 4u, 99u);
+
+  put32le(buf + 0x110, 0x24u);  /* player stride */
+  put32le(buf + 0x114, 3u);     /* player count */
+  put32le(buf + 0x118, 0x11u);  /* player 0 */
+  buf[0x118 + 0x05] = 14u;      /* "Alpha" */
+  buf[0x118 + 0x09] = 'F';
+  buf[0x118 + 0x1B] = 90u;
+  put32le(buf + 0x13C, 0x22u);  /* player 1 */
+  buf[0x13C + 0x05] = 20u;      /* "Bravo" */
+  buf[0x13C + 0x09] = 'M';
+  put32le(buf + 0x160, 0x33u);  /* player 2, empty name */
+  buf[0x160 + 0x05] = 26u;
+  buf[0x160 + 0x09] = 'D';
+
+  memcpy(buf + 0x190, "Synthland", 10u);  /* pool +0 */
+  memcpy(buf + 0x190 + 10u, "SYN", 4u);   /* pool +10 */
+  memcpy(buf + 0x190 + 14u, "Alpha", 6u); /* pool +14 */
+  memcpy(buf + 0x190 + 20u, "Bravo", 6u); /* pool +20 */
+  buf[0x190 + 26u] = '\0';                /* pool +26, empty */
+  return len;
+}
+
+/* Roster/name API: NULL/unready/invalid-lang contracts plus a synthetic team
+ * exercising name truncation, the 1-based number, and the PLAYER n fallbacks. */
+static void test_team_data_roster_api(void) {
+  uint8_t *pcdb = malloc(SYNTH_PCDB_LEN);
+  assert(pcdb != NULL);
+  size_t len = build_synthetic_pcdb(pcdb, SYNTH_PCDB_LEN);
+
+  struct fifa96_team_data td;
+  memset(&td, 0, sizeof td);
+  char name[24];
+  char names[16][24];
+  uint8_t number = 0;
+  uint8_t numbers[16];
+  int count = -1;
+
+  assert(fifa96_team_data_player(NULL, 0x023u, 0, name, sizeof name,
+                                 &number) == -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_roster(NULL, 0x023u, names, numbers, &count) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_player(&td, 0x023u, 0, name, sizeof name, &number) ==
+         -FIFA96_ERR_STATE);
+  assert(fifa96_team_data_roster(&td, 0x023u, names, numbers, &count) ==
+         -FIFA96_ERR_STATE);
+
+  assert(fifa96_pccd_parse(pcdb, len, &td.db) == FIFA96_OK);
+  td.ready = 1;
+
+  assert(fifa96_team_data_player(&td, 0x023u, 0, NULL, sizeof name, &number) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_player(&td, 0x023u, 0, name, sizeof name, NULL) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_player(&td, 0x023u, 0, name, 0u, &number) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_player(&td, 0x023u, 16u, name, sizeof name,
+                                 &number) == -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_player(&td, 0x000u, 0, name, sizeof name, &number) ==
+         -FIFA96_ERR_NOT_FOUND);
+  assert(fifa96_team_data_roster(&td, 0x023u, NULL, numbers, &count) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_roster(&td, 0x023u, names, NULL, &count) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_roster(&td, 0x023u, names, numbers, NULL) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_team_data_roster(&td, 0x000u, names, numbers, &count) ==
+         -FIFA96_ERR_NOT_FOUND);
+
+  assert(fifa96_team_data_player(&td, 0x023u, 0, name, sizeof name, &number) ==
+         0);
+  assert(strcmp(name, "Alpha") == 0 && number == 1u);
+  assert(fifa96_team_data_player(&td, 0x023u, 1, name, sizeof name, &number) ==
+         0);
+  assert(strcmp(name, "Bravo") == 0 && number == 2u);
+  assert(fifa96_team_data_player(&td, 0x023u, 0, name, 4u, &number) == 0);
+  assert(strcmp(name, "Alp") == 0 && number == 1u);
+  assert(fifa96_team_data_player(&td, 0x023u, 15u, name, sizeof name,
+                                 &number) == -FIFA96_ERR_NOT_FOUND);
+
+  assert(fifa96_team_data_roster(&td, 0x023u, names, numbers, &count) == 0);
+  assert(count == 16);
+  assert(strcmp(names[0], "Alpha") == 0 && numbers[0] == 1u);
+  assert(strcmp(names[1], "Bravo") == 0 && numbers[1] == 2u);
+  assert(strcmp(names[2], "PLAYER 3") == 0 && numbers[2] == 3u);
+  assert(strcmp(names[3], "Alpha") == 0 && numbers[3] == 4u);
+  assert(strcmp(names[15], "PLAYER 16") == 0 && numbers[15] == 16u);
+
+  memset(&td, 0, sizeof td);
+  free(pcdb);
+}
+
 int main(void) {
   test_item_table();
   test_game_select_navigation();
@@ -977,6 +1103,7 @@ int main(void) {
   test_native_held_input_after_reset();
   test_native_fixture_reaches_handoff();
   test_native_pccd_handoff();
+  test_team_data_roster_api();
   test_bridge_applies_options();
   test_bridge_direct_begin_keeps_defaults();
   puts("test_engine_menu_model OK");

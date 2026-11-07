@@ -10922,3 +10922,53 @@ P13-L3; full 10-player AI, native open-play keeper dive, fouls/offside live
 proof, substitutions and the native penalty shootout remain the P7/P8/P9
 legs. The derived competition modes and save records are explicitly not
 native-faithful.
+
+## Phase 68 — P14: match contest, bench and cup shootout (2026-11-07)
+
+**Outcome.** The live match now has a contesting opponent, a keeper that
+distributes, a pause substitution path, and a player-facing penalty shootout
+for drawn cup ties. All new match behavior is derived [D] and `live_start` /
+front-end gated; M1/M2 stay byte-identical.
+
+**CPU and keeper (derived, live-only).** After a 30-frame possession hold the
+opponent carrier passes to a forward teammate or shoots at the human goal
+through the existing live flight/ball-machine primitive
+(`match_run_live_cpu_kick`). A stationary human carrier can be won by a nearby
+opponent with a 45-frame contact cooldown. The P9 keeper save now releases
+through the same primitive to a teammate / the attacking half after the
+30-frame pin (`match_run_live_keeper_outlet`). These are not native AI
+chooser/keeper-distribution bodies; the native row-03 tail, `FUN_0007F7E0`
+and the keeper distribution chain remain legs.
+
+**Substitutions (derived).** While paused, S substitutes the first available
+outfield roster slot with the next bench slot, at most three per side. PCCD
+roster names/numbers are handed through the new
+`fifa96_team_data_player`/`_roster` API and the match bridge; the pause panel
+shows the swap (screenshot `docs/screens/p14-substitution.png`). The existing
+R1 strip fields are populated, but the native `FUN_00041494` selection/timing
+and the native pause-menu body remain legs.
+
+**Penalty shootout (derived).** `fifa96_shootout` is a pure five-round
+kick/dive model with deterministic CPU choices and sudden death to a 20-round
+cap. A drawn Tournament/Playoff match now opens the front-end `SHOOTOUT`
+screen instead of the silent hash/replay; the result is applied to the cup
+fixture and auto-saved. Native extra time and a native shootout entry do not
+exist in the proven image (FU-237); both remain legs.
+
+**Referee.** The Options Fouls/Offside values still reach
+`fifa96_match_config`, but the live contact-foul path is deliberately not
+wired: the ported act-2 stage 2 holds at phase 0x0A for live kind-1 contacts
+because the native `[0x158882]` release writer is missing. Offside likewise
+still lacks a live-pass metric proof. Faking a whistle/restart was rejected;
+the next referee slice must port the release producer. This is an explicit
+leg, not a silent omission.
+
+**Tests and gate.** New `test_engine_shootout`; extended
+`test_engine_live_control` (CPU action, opponent tackle, keeper outlet,
+three-sub pause), `test_engine_frontend_modes` (interactive cup decider),
+`test_engine_menu_model` (PCCD roster API), SDL3 key map (S/North) and
+match bridge roster handoff. **Gate:** `make check` **124/124**; M1/M2 exact
+by `cmp`; release smoke covers the pause substitution with real PCCD names and
+the match HUD. The native contact fouls/offside, native substitution
+selection, native extra time/shootout, 3dwpts/camera/HUD art and native
+competition data/save/modem remain the recorded legs.

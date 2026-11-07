@@ -8,6 +8,7 @@
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_engine/fifa96_save.h"
+#include "fifa96_engine/fifa96_shootout.h"
 #include "fifa96_engine/fifa96_surface.h"
 #include "fifa96_engine/fifa96_team_data.h"
 #include "fifa96_loader/fifa96_frontend.h"
@@ -66,6 +67,8 @@ struct fifa96_frontend_run {
    * 4 Practise); `competition` is serialized with the save slots. */
   uint8_t  mode;
   struct fifa96_competition competition;
+  struct fifa96_shootout shootout;   /* P14 derived cup-decider state */
+  uint8_t  shootout_fixture;          /* competition fixture index */
   char     save_dir[FIFA96_SAVE_PATH_MAX];  /* default "." */
 };
 
