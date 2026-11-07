@@ -4459,3 +4459,17 @@ close-out below).
   `make check` **124/124**; M1/M2 exact by `cmp`. Native contact
   fouls/offside (missing release producer), native substitution selection,
   native extra time/shootout, and the 3dwpts/camera/HUD art remain legs.
+
+- **P14 half-time/goal gate errata (2026-11-07).** The stale P13 smoke exposed
+  that the half-time panel/auto was keyed on period 1 and KICK; a second-half
+  goal restart could show HALF TIME and the 3-second gate did not release.
+  A dedicated half-time-pending flag now gates the panel, the auto uses a PASS
+  hold, and a bounded match-run fallback releases the gate. Current release
+  smoke shows HALF TIME at 02:00 and the second half running; screenshots
+  `docs/screens/p14-half-time.png`/`p14-second-half.png`. `make check`
+  **124/124**; M1/M2 exact.
+
+- **P14 goal-restart addendum (2026-11-07).** The half-time fix was extended to
+  second-half goal kickoffs: a bounded phase-0x0C/phase-1 force returns to
+  phase 2 without resetting the half clock. `test_live_goal_kickoff_auto_release`
+  pins it; `make check` **124/124**; M1/M2 exact.

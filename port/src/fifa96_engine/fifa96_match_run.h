@@ -1385,6 +1385,12 @@ struct fifa96_match_run {
    * its nearest outfield record without awarding the ball (the opponent keeps
    * the kickoff possession). Live-only; init/begin clear it. */
   uint8_t live_restart_pending;
+  /* P14: the half-time panel/auto only applies to the actual half-time gate,
+   * not a second-half goal restart (which also has phase 1 and period index 1).
+   * Set at the period 0->1 completion; cleared when phase 2 resumes. */
+  uint8_t live_halftime_pending;
+  uint16_t live_halftime_frames;   /* granted-frame auto-release dwell */
+  uint16_t live_kickoff_frames;    /* goal/restart auto-release dwell */
   /* FU-197 §2/§5 (M2 phase-17 T2): the act-4 sit-2..4 formation-order arm's
    * state. `formation_order[side][i]` mirrors the desired line-up matrix
    * `0x14C360 + side*0x7B + i*4`; `formation_current[side][i]` mirrors the

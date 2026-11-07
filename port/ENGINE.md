@@ -10972,3 +10972,40 @@ by `cmp`; release smoke covers the pause substitution with real PCCD names and
 the match HUD. The native contact fouls/offside, native substitution
 selection, native extra time/shootout, 3dwpts/camera/HUD art and native
 competition data/save/modem remain the recorded legs.
+
+## Phase 69 — errata: half-time / goal-restart gate (2026-11-07)
+
+**Errata to Phase 67/68.** The late depth smoke was run against the stale P13
+release binary, and it exposed a real gate bug that survived in the new code:
+the HALF TIME panel was keyed on `state.period == 1`, so a second-half goal
+restart (same period index) could draw the half-time panel and freeze. The
+engine auto also injected KICK; the native sit-1/sit-8 gate takes the PASS/C
+word, so the 3-second auto did not release.
+
+**Correction.** `live_halftime_pending` is now set only at the actual
+period-0→1 completion and cleared when phase 2 resumes. The panel is gated on
+that flag, never on period alone. The engine auto uses a 10-step PASS hold for
+both the half-time gate and goal/phase-0x0C kickoffs, and the match-run control
+update has a 90-granted-frame fallback that calls the existing
+`period_over_rearm` if input has not released the gate. Goal restarts no longer
+show HALF TIME; half-time resumes without a manual key. The render test pins
+panel-on-flag and panel-off-without-flag; the live full-time test pins the flag
+at half-time.
+
+**Evidence.** Current-release smoke: HALF TIME at 02:00
+(`docs/screens/p14-half-time.png`), second half running after the dwell
+(`docs/screens/p14-second-half.png`). The stale smoke’s CPU/keeper/old pause
+observations are superseded by the P14 binary (CPU action, keeper outlet,
+pause S, PCCD names). Contact fouls/offside and the camera/3dwpts art remain
+the recorded legs.
+
+**Gate.** `make check` **124/124**; M1/M2 exact by `cmp`.
+
+**Addendum (same session).** The half-time fallback was not sufficient for a
+second-half goal restart: the match-run now also has a 90-granted-frame
+`live_kickoff_frames` force for phase 1 / the phase-0x0C kickoff flash when no
+half-time flag is set. It writes phase 2 (not the period re-arm) and lets the
+existing restart bind place the taker, so the half clock is not reset.
+`test_live_goal_kickoff_auto_release` pins the phase-2 landing; the stale
+smoke's 03:44 goal freeze is the failure this closes. `make check` **124/124**;
+M1/M2 exact.

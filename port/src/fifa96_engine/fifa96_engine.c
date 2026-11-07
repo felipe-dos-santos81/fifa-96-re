@@ -349,23 +349,35 @@ int fifa96_engine_step(struct fifa96_engine *e) {
         continue;
       match_keys[match_count++] = keys[i];
     }
-    /* P13: the native half-time kickoff gate is player-driven. Inject one
-     * KICK press after a visible 3 s dwell so a player who waits does not
-     * soft-lock at 02:00; a manual KICK/PASS moves the phase first and clears
-     * this path. Live-only. */
-    if (e->match && e->match->live_start &&
-        e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
-        e->match->state.period == 1u && e->match->state.phase == 1u) {
-      if (e->match_halftime_steps < 600u) e->match_halftime_steps++;
-      if (e->match_halftime_steps >= 300u && !e->match_halftime_pressed &&
-          match_count < sizeof match_keys / sizeof match_keys[0]) {
-        fifa96_platform_key auto_key = {FIFA96_ENGINE_KEY_KICK, 1};
-        match_keys[match_count++] = auto_key;
-        e->match_halftime_pressed = 1;
+    /* P14: the native half-time/goal kickoff gate is player-driven. Inject one
+     * KICK press after a visible 3 s dwell for the actual half-time gate and
+     * for a second-half goal restart (both sit at phase 1); a manual KICK/PASS
+     * moves the phase first and clears this path. The half-time flag keeps a
+     * goal restart from drawing the HALF TIME panel. Live-only. */
+    {
+      int kickoff_wait = e->match && e->match->live_start &&
+                         e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
+                         (e->match->live_halftime_pending ||
+                          e->match->state.phase == 1u ||
+                          (e->match->state.phase == 0x0Cu &&
+                           e->match->global_157ac2 < 2u));
+      if (kickoff_wait) {
+        if (e->match_halftime_steps < 600u) e->match_halftime_steps++;
+        if (e->match_halftime_steps >= 300u && !e->match_halftime_pressed) {
+          e->match_halftime_pressed = 1;
+          e->match_halftime_hold = 10u;
+        }
+        if (e->match_halftime_hold != 0u &&
+            match_count < sizeof match_keys / sizeof match_keys[0]) {
+          fifa96_platform_key auto_key = {FIFA96_ENGINE_KEY_PASS, 1};
+          match_keys[match_count++] = auto_key;
+          e->match_halftime_hold--;
+        }
+      } else {
+        e->match_halftime_steps = 0;
+        e->match_halftime_pressed = 0;
+        e->match_halftime_hold = 0;
       }
-    } else {
-      e->match_halftime_steps = 0;
-      e->match_halftime_pressed = 0;
     }
     if (e->match)
       (void)fifa96_match_run_input(e->match, match_keys, match_count);

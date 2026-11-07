@@ -3097,6 +3097,30 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
   int32_t t;
   int32_t id = FIFA96_MATCH_ENTITY_NONE;
   if (!mr || !mr->live_start) return;
+  if (mr->state.phase == 2u) mr->live_halftime_pending = 0;
+  if (mr->live_halftime_pending && mr->state.phase != 2u) {
+    if (++mr->live_halftime_frames >= 90u) {
+      fifa96_match_run_period_over_rearm(mr);
+      mr->live_halftime_frames = 0;
+    }
+  } else {
+    mr->live_halftime_frames = 0;
+  }
+  /* Goal/second-half restart at phase 1 or the phase-0x0C kickoff flash: if
+   * the PASS gate has not released it after the dwell, force phase 2 and let
+   * the existing restart bind place the taker. This does not reset the half
+   * clock (unlike the half-time period re-arm). */
+  if (!mr->live_halftime_pending &&
+      (mr->state.phase == 1u ||
+       (mr->state.phase == 0x0Cu && mr->global_157ac2 < 2u))) {
+    if (++mr->live_kickoff_frames >= 90u) {
+      mr->live_restart_pending = 1u;
+      (void)fifa96_match_run_write_phase(mr, 2u);
+      mr->live_kickoff_frames = 0;
+    }
+  } else {
+    mr->live_kickoff_frames = 0;
+  }
   if (mr->live_out_pending) {
     if (mr->state.phase == 2u) {
       mr->live_out_pending = 0;
@@ -3859,6 +3883,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   memset(mr->sub_notice, 0, sizeof mr->sub_notice);
   mr->sub_notice_ticks = 0;
   mr->live_restart_pending = 0;
+  mr->live_halftime_pending = 0;
+  mr->live_halftime_frames = 0;
+  mr->live_kickoff_frames = 0;
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
   memset(mr->formation_current, 0, sizeof mr->formation_current);
@@ -3933,6 +3960,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   memset(mr->sub_notice, 0, sizeof mr->sub_notice);
   mr->sub_notice_ticks = 0;
   mr->live_restart_pending = 0;
+  mr->live_halftime_pending = 0;
+  mr->live_halftime_frames = 0;
+  mr->live_kickoff_frames = 0;
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;
@@ -4818,6 +4848,8 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
        * cell (`global_157ac2`) follows the FU-62 library's already-advanced
        * `state.period`. This is the live producer T2's situation-8 gate reads. */
       mr->global_157ac2 = mr->state.period;
+      if (mr->live_start && mr->state.period == 1u)
+        mr->live_halftime_pending = 1u;
       /* FU-208 §4.2 / FU-209 §6 (M2 phase-19 T2) + FU-225 §4/D10 (M2 phase-21
        * T4): the situation-8 selector. The roll (`:2649`, native 0x8B58A) lands
        * the index on 4 (native `[0x157AC2] == 4`, the extra-time period); the
@@ -8273,7 +8305,7 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
              mr->lc.screen == FIFA96_MATCH_SCREEN_POST)
       match_run_draw_result(mr, s);
     else if (mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
-             mr->state.period == 1u &&
+             mr->live_halftime_pending &&
              (mr->state.phase == 0x0Cu || mr->state.phase == 1u))
       match_run_draw_halftime(mr, s);
   }

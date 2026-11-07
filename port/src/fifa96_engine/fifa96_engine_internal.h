@@ -56,6 +56,7 @@ struct fifa96_engine {
    * cannot soft-lock; manual KICK/PASS still wins. */
   uint16_t match_halftime_steps;
   uint8_t match_halftime_pressed;
+  uint8_t match_halftime_hold;
 };
 
 /* P6 test seam: the match-audio percent derived from the Options block.

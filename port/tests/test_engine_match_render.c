@@ -2434,6 +2434,26 @@ static void test_ball_row_dormant(void) {
   assert(fifa96_match_run_ball_row_reachable(&mr) == 0);
 }
 
+/* P14: the half-time panel is gated by the live half-time pending flag, not
+ * merely by period 1; a second-half goal restart has period 1 too and must not
+ * draw the panel. */
+static void test_live_halftime_panel_flag_gate(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  f.mr.live_start = 1;
+  f.mr.state.period = 1;
+  f.mr.state.phase = 1;
+  f.mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  f.mr.live_halftime_pending = 1;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[95 * 320 + 55] == 0x00);   /* panel interior */
+  fifa96_surface_clear(f.s, 0x7F);
+  f.mr.live_halftime_pending = 0;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[95 * 320 + 55] == 0x7F);   /* no HALF TIME panel */
+  fifa96_surface_destroy(f.s);
+}
+
 int main(void) {
   test_init_resets_render_state();
   test_null_and_disabled();
@@ -2463,6 +2483,7 @@ int main(void) {
   test_hud_zoomed_uses_playfnt_layout();
   test_hud_live_bar_and_text_indices();
   test_hud_live_640_uniform_scale();
+  test_live_halftime_panel_flag_gate();
   test_live_pause_and_result_panels();
   test_replay_state_helpers();
   test_replay_step_machine();

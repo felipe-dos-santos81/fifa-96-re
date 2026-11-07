@@ -940,6 +940,7 @@ static void test_live_friendly_regulation_win_full_time(void) {
   assert(steps < 6000);
   assert(mr->state.phase == 0x0Cu);
   assert(mr->global_157ac2 == 1u);
+  assert(mr->live_halftime_pending == 1u);
   assert(mr->score[0] == 1u && mr->score[1] == 0u);
 
   /* The live sit-1 restart releases the second half. */
@@ -1112,6 +1113,7 @@ static void test_live_aimed_kickoff_goal_to_full_time(void) {
   assert(steps < 12000);
   assert(mr->state.phase == 0x0Cu);
   assert(mr->global_157ac2 == 1u);
+  assert(mr->live_halftime_pending == 1u);
   assert(mr->score[0] == 1u && mr->score[1] == 0u);
 
   /* The live sit-1 restart releases the second half (the tape's KICK pulse). */
@@ -1224,6 +1226,23 @@ static void test_score_plumbing(void) {
   drop_fixture(f);
 }
 
+/* P14 errata: a live goal/phase-0x0C kickoff with no half-time flag must
+ * auto-release to phase 2 within the bounded dwell instead of freezing. */
+static void test_live_goal_kickoff_auto_release(void) {
+  struct fixture f = make_p8_live_fixture();
+  struct fifa96_match_run *mr = &f.engine->match_run;
+  mr->state.phase = 0x0Cu;        /* the goal/restart kickoff flash */
+  mr->state.period = 1u;
+  mr->global_157ac2 = 1u;         /* second-half index, not a terminal */
+  mr->live_halftime_pending = 0u;
+  mr->live_kickoff_frames = 0u;
+  for (int i = 0; i < 150 && mr->state.phase != 2u; i++)
+    p8_granted_frame(mr);
+  assert(mr->state.phase == 2u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  drop_fixture(f);
+}
+
 int main(void) {
   test_not_running_state_errors();
   test_begin_installs_derived_periods();
@@ -1247,6 +1266,7 @@ int main(void) {
   test_live_post_dwell_and_skip();
   test_live_friendly_regulation_win_full_time();
   test_live_friendly_regulation_draw_full_time();
+  test_live_goal_kickoff_auto_release();
   test_live_aimed_kickoff_goal_to_full_time();
   test_run_end_lands_frontend();
   test_mark_over_only_past_half_time();

@@ -85,3 +85,14 @@ art/data/save/modem remain labelled legs.
   faked; the missing live release producer is recorded in ENGINE Phase 68.
 - Gate: `make check` 124/124; M1/M2 exact; release smoke of pause substitution
   with real PCCD names.
+
+## Errata (2026-11-07, late depth smoke)
+
+The stale P13 smoke exposed a real gate bug: the half-time panel auto was keyed
+on `period == 1` and injected KICK, so second-half goal restarts could show
+HALF TIME and the 3 s release stalled. The correction adds
+`live_halftime_pending`, gates the panel on it, uses a PASS hold for the native
+sit-1/sit-8 gate, and adds a bounded match-run `period_over_rearm` fallback for
+half-time and goal/phase-0x0C kickoffs. Tests: live full-time pending flag,
+render panel on/off flag. Current-release smoke: HALF TIME at 02:00, second
+half running; `make check` 124/124; M1/M2 exact.
