@@ -10734,3 +10734,42 @@ P10-L2 open leg.
 **Gate.** `make check` **119/119**; M1/M2 exact by `cmp` remain the authority.
 Only live_start pixels changed; the headless 320 tapes and the pinned goldens
 are untouched.
+
+## Phase 64 — P10 review corrections: pitch axis, bank provenance, leg IDs (2026-11-06)
+
+**Errata — the pitch axes.** Phase 63 and the v1 `pitch_marking` comment
+inherited A1 §4's labels *"goal lines x = ±0x7E0 = 2016, touchlines z =
+±0xC1E = 3102, halfway line x = 0"*. The goal code is the authority:
+`live_kick_target_z = ±0xB30` and `fifa96_match_goal_zone` test |z|
+(`fifa96_match_run.c`), while the native camera-0 eye sits at x = -1920. So
+**x is the touchline/width axis and z runs goal-to-goal**: touchlines
+x = ±0x7E0, goal lines z = ±0xC1E, halfway line z = 0, and the far-stand wall
+at x = +0x7E0 + 64 is behind the far touchline. The `pitch_marking` bands and
+comments are corrected; the old A1 §4 x/z labels are errata, not a second
+authority. The live pixel test now finds the halfway line as a vertical column
+away from the frame edges.
+
+**Bank provenance.** The `STARcovr`/`STAScovr`/`STABcovr` dimensions are from
+the decoded `/ART/GAMESTD1.PVI` (refpack selector 0x10, declared length
+118069): BIGF directory `STACcovr.fsh` off 0x75 size 64744, `STARcovr.fsh` off
+0xFD5D size 8232, `STABcovr.fsh` off 0x11D85 size 27616, `STMCcovr` off
+0x18965 size 440, `STAScovr.fsh` off 0x18B1D size 16920. The port's SHPI
+parser selects STAR 64x128, STAS 194x87 and STAB 128x16 (STAC 32/64/128).
+`test_engine_match_render` asserts the retail staging and that removing the
+stand banks changes the rendered frame (the wall is consumed, not dead).
+
+**Legs.** The far-stand wall's plane/heights/UV spans/tint thresholds and roof
+are the derived **P10-L7** leg (the native 3dwpts point/quad renderer
+`FUN_000610C4` with the `0x15438C`/`0x1543D4` arrays remains **P10-L2**). The
+native camera director/aim and lens remain **P10-L6**: the live pose uses the
+native camera-0 statics and the full surface focal; the earlier half-focal and
+3/4 live lenses were derived framing workarounds, not native values. The HUD
+is still **P10-L5**. The P10-L2, P10-L5 and P10-L6 legs are unchanged by this
+correction.
+
+**Contract.** The stand/ad/banner banks are optional at stage time; the wall
+draws from any of them, and the old screen-space band remains the fallback
+when none decode. The early no-floor branch now still invokes the wall. The
+`staged` contract is floor + crowd required, stand banks optional.
+
+**Gate.** `make check` **119/119**; M1/M2 exact by `cmp` remain the authority.

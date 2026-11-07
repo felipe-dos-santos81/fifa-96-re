@@ -402,8 +402,8 @@ static const uint8_t match_run_frame_records[0xD00] = {
  * for the projection matrix (first-hand 0x4C918..0x4C928), and the live
  * pose feed's mode-0 default arm writes no pose, so these statics are the
  * live seed. Same object whose +0x4C = 0x1500 is MATCH_RUN_VIEW_RATIO. */
-#define MATCH_RUN_VIEW_YAW 0xBF9C
-#define MATCH_RUN_VIEW_PITCH 200
+/* The camera-0 view constants live in fifa96_match_run.h so the renderer and
+ * the live-eye test share the same named values. */
 
 /* FU-61 §2.3 sampler mapping rows: row 0/1 is the identity pinned by
  * port/tests/test_input.c (`row_identity`). The view-dependent row index [0x7DEC]
@@ -2240,8 +2240,8 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
    * camera-0 statics (the projection matrix consumes r->yaw/r->pitch at the
    * render call); the prior zero stand-in left the phase-2 ball lead off
    * canvas. */
-  r->yaw = MATCH_RUN_VIEW_YAW;
-  r->pitch = MATCH_RUN_VIEW_PITCH;
+  r->yaw = FIFA96_MATCH_RUN_VIEW_YAW;
+  r->pitch = FIFA96_MATCH_RUN_VIEW_PITCH;
   r->view_ratio = MATCH_RUN_VIEW_RATIO;
   r->pitch_art.sky_index = FIFA96_PITCH_SKY_INDEX;
   r->pitch_art.line_index = FIFA96_PITCH_LINE_INDEX;
@@ -3998,9 +3998,9 @@ void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *
      * axis, z runs goal-to-goal). P10 briefly replaced it with a behind-goal
      * broadcast rig, which left a huge empty foreground and pushed the play
      * to the horizon. Restore the native camera-0 placement. */
-    out->x = mr->render.camera.pos_x - 1920;
-    out->y = mr->render.camera.pos_y + 160;
-    out->z = mr->render.camera.pos_z + 30;
+    out->x = mr->render.camera.pos_x + FIFA96_MATCH_RUN_CAMERA0_X;
+    out->y = mr->render.camera.pos_y + FIFA96_MATCH_RUN_CAMERA0_Y;
+    out->z = mr->render.camera.pos_z + FIFA96_MATCH_RUN_CAMERA0_Z;
   } else {
     out->x = mr->render.camera.pos_x;
     out->y = mr->render.camera.pos_y;

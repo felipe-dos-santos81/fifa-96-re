@@ -4409,3 +4409,12 @@ close-out below).
   crowd, so the stand has tiers, advertising and a roof in perspective. The
   native 3dwpts bowl and goal nets remain **P10-L2**. `make check` 119/119;
   M1/M2 exact by `cmp`.
+
+- **P10 review corrections (2026-11-06).** Corrected the pitch marking axes
+  (touchlines x, goal lines z, halfway z=0; the goal code is the authority),
+  named the camera-0 offset constants, collapsed the crowd/stand/ad/banner
+  fields into one `fifa96_pitch_bank` type with a shared sampler, and recorded
+  the GAMESTD1 decode provenance. The derived far-stand wall is now numbered
+  **P10-L7**; the native 3dwpts bowl/goal nets stay **P10-L2**, the native
+  lens/camera director **P10-L6**, and the HUD **P10-L5**. `make check` 119/119;
+  M1/M2 exact by `cmp`.

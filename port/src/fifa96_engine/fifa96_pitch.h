@@ -18,9 +18,11 @@
  *    banners). The live path inverse-projects a derived far-stand wall at the
  *    far touchline using these banks; the native 3dwpts point/quad projection
  *    (FUN_000610C4) and the goal-net pass remain the P10-L2 open leg.
- *  - the white markings (goal lines x = ±0x7E0 = 2016, touchlines z = ±0xC1E =
- *    3102, halfway line x = 0, centre circle r ~ 0x3C0) are drawn
- *    procedurally (A1 §4 [D]); the native markings are not in the Fplain tile.
+ *  - the white markings (touchlines x = ±0x7E0 = 2016, goal lines z = ±0xC1E =
+ *    3102, halfway line z = 0, centre circle r ~ 0x3C0) are drawn
+ *    procedurally (A1 §4 [D], axis corrected by the goal code); the native
+ *    markings are not in the Fplain tile. x is the width/sideline axis and z
+ *    runs goal-to-goal (`live_kick_target_z = ±0xB30`).
  *
  * The module owns decoded tile copies; fifa96_match_run_stage_pitch feeds it
  * from the engine asset table and fifa96_match_run_render draws it only on the
@@ -65,19 +67,20 @@ struct fifa96_surface;
 #define FIFA96_PITCH_SKY_INDEX 0x3Cu
 #define FIFA96_PITCH_LINE_INDEX 0xFEu
 
+struct fifa96_pitch_bank {
+  const uint8_t *pixels;       /* decoded indexed frame, or NULL */
+  int w, h;
+};
+
 struct fifa96_pitch {
-  uint8_t *owner;              /* owned 3-tile arena, or NULL */
+  uint8_t *owner;              /* owned tile/bank arena, or NULL */
   const uint8_t *tile_h;       /* FplainH.fsh frame 0, 64x64 */
   const uint8_t *tile_v;       /* FplainV.fsh frame 0, 64x64 */
-  const uint8_t *crowd;        /* STACcovr.fsh frame (128x128 preferred) */
-  int crowd_w, crowd_h;        /* selected crowd frame dimensions */
-  const uint8_t *stand;        /* STARcovr.fsh 64x128 seat rows, or NULL */
-  int stand_w, stand_h;
-  const uint8_t *ad;           /* STAScovr.fsh 194x87 EA Sports board, or NULL */
-  int ad_w, ad_h;
-  const uint8_t *banner;       /* STABcovr.fsh 128x16 banner strip, or NULL */
-  int banner_w, banner_h;
-  int staged;                  /* all three tiles present */
+  struct fifa96_pitch_bank crowd;   /* STACcovr.fsh 128x128 crowd */
+  struct fifa96_pitch_bank stand;   /* STARcovr.fsh 64x128 seat rows */
+  struct fifa96_pitch_bank ad;      /* STAScovr.fsh 194x87 hoarding */
+  struct fifa96_pitch_bank banner;  /* STABcovr.fsh 128x16 banners */
+  int staged;                  /* floor + crowd required; stand banks optional */
   uint8_t sky_index;           /* PALsys index of the sky rows */
   uint8_t line_index;          /* PALsys index of the white markings */
   const uint8_t *shade;        /* live palette shade table (or NULL) */
@@ -100,8 +103,9 @@ void fifa96_pitch_release(struct fifa96_pitch *pitch);
  * render eye (live: focus + camera-0 offset (-1920,160,30)); `matrix` is the
  * already-built fifa96_projection_matrix(yaw,pitch); `center` is the same
  * 16.16 projection centre the sprite pass uses; `fov_w`/`fov_h` are the
- * projection focal dimensions (live: the native full surface lens; non-live
- * never draws the pitch). Draw order inside: sky/fallback band, the
+ * projection focal dimensions (live: the full surface focal; the native lens
+ * director remains P10-L6; non-live never draws the pitch). Draw order
+ * inside: sky/fallback band, the
  * inverse-projected floor and markings, then the derived far-stand wall.
  * Returns 0, or -FIFA96_ERR_INVALID on NULL arguments; an unstaged pitch is a
  * no-op. */

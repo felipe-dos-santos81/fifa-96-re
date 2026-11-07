@@ -66,6 +66,14 @@ struct fifa96_match_matchup {
 /* Match presentation slots: FU-85 §4 stages 23 entities (11 + 11 + ball) into
  * the render arrays; the engine keeps the same staging size. */
 #define FIFA96_MATCH_RUN_RENDER_SLOTS 23
+/* Native camera object 0 (image 0x107508): position (-1920,160,30), yaw
+ * 0xBF9C, pitch 200. The live eye is `focus + camera-0 offset`; the view pose
+ * uses the FU-154 statics. */
+#define FIFA96_MATCH_RUN_CAMERA0_X (-1920)
+#define FIFA96_MATCH_RUN_CAMERA0_Y 160
+#define FIFA96_MATCH_RUN_CAMERA0_Z 30
+#define FIFA96_MATCH_RUN_VIEW_YAW 0xBF9C
+#define FIFA96_MATCH_RUN_VIEW_PITCH 200
 
 /* FU-158 §8.1 (phase-13 T2): the dedicated ball draw's bank capture. The
  * native presenter FUN_000572E8 draws the GAMEART0 `ball.fsh` bank (BIGF entry
