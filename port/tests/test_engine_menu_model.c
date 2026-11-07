@@ -133,8 +133,14 @@ static void test_item_table(void) {
   assert(items[0].label_id == 0x81u && items[0].code == 4u);
   assert(items[0].action == FIFA96_MENU_ACTION_FRIENDLY);
   assert(items[0].col == 1 && items[0].row == 0);
+  assert(items[1].action == FIFA96_MENU_ACTION_LEAGUE);
+  assert(items[2].action == FIFA96_MENU_ACTION_TOURNAMENT);
+  assert(items[3].action == FIFA96_MENU_ACTION_PLAYOFF);
+  assert(items[4].action == FIFA96_MENU_ACTION_PRACTISE);
   assert(items[5].label_id == 0xB3u && items[5].code == 9u && items[5].col == 0);
+  assert(items[5].action == FIFA96_MENU_ACTION_LOAD_GAME);
   assert(items[6].label_id == 0xD8u && items[6].action == FIFA96_MENU_ACTION_OPTIONS);
+  assert(items[7].action == FIFA96_MENU_ACTION_MODEM_BACK);
   assert(items[8].label_id == 0xF3u && items[8].action == FIFA96_MENU_ACTION_QUIT);
   for (int i = 0; i < FIFA96_MENU_ITEM_COUNT; i++)
     assert(fifa96_menu_model_item_fallback(i) != NULL);
@@ -173,8 +179,17 @@ static void test_game_select_navigation(void) {
   fifa96_menu_model_init(&m);
   assert(fifa96_menu_model_nav(&m, 1) == 1);
   assert(m.item == 1);
-  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_NONE);   /* disabled */
+  /* P13: Leagues is live and opens the single-team Team Select. */
+  assert(fifa96_menu_model_activate(&m) == FIFA96_MENU_ACTION_LEAGUE);
+  assert(m.screen == FIFA96_MENU_SCREEN_TEAM_SELECT);
+  assert(m.pending_kind == FIFA96_COMPETITION_LEAGUE);
+  assert(fifa96_menu_model_nav(&m, 3) == 1);   /* visitor locked */
+  assert(m.team_col == 0);
+  assert(fifa96_menu_model_nav(&m, 1) == 1);
+  assert(m.team[0] == 1);
+  assert(fifa96_menu_model_back(&m) == 1);
   assert(m.screen == FIFA96_MENU_SCREEN_GAME_SELECT);
+  assert(m.pending_kind == 0);
   assert(fifa96_menu_model_nav(&m, 2) == 1);
   assert(m.item == 6);
   assert(fifa96_menu_model_nav(&m, 3) == 1);
@@ -588,7 +603,7 @@ static void test_native_options_state_fill(void) {
   assert(st.item_count == FIFA96_MENU_ITEM_COUNT && st.selected_item == 0);
   assert(strcmp(st.title, "Game Select") == 0);
   assert(strcmp(st.items[0].label, "Friendly") == 0);
-  assert(st.items[0].enabled == 1 && st.items[1].enabled == 0);
+  assert(st.items[0].enabled == 1 && st.items[1].enabled == 1);
 
   /* Game Select -> left column -> Options -> Enter. */
   press(&fr, FIFA96_ENGINE_KEY_RIGHT);

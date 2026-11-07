@@ -48,6 +48,10 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
   }
   rc = fifa96_match_run_begin(mr, eng, selector);
   if (rc != 0) return rc;
+  rc = fifa96_match_run_set_mode(mr, eng->frontend.mode);
+  if (rc != 0) return rc;
+  eng->match_halftime_steps = 0;
+  eng->match_halftime_pressed = 0;
   eng->frontend.match_start = 0;   /* consumed: no instant re-entry */
   /* P2 handoff (A3 §3.2): when the native Team Select screen started the
    * match, stage the chosen formations and the derived 3-letter HUD names.

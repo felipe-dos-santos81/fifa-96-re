@@ -10854,3 +10854,71 @@ the staged 64x64 net frame; the live wall hash still proves the banks are
 consumed. The release screenshot `docs/screens/p12-match-goal-net.png` shows
 the goal net inside the end stand. **Gate:** `make check` **119/119**; M1/M2
 exact by `cmp`.
+
+## Phase 67 — P13: complete single-player playable wave (2026-11-07)
+
+**Outcome.** The shipped Release build now exposes every Game Select entry as a
+functional single-player flow, closes the live-match softlocks found by the
+release smoke, and renders the 640 HUD at a uniform 2x. This is a functional
+completion, not a claim that the unported native competition art/data or the
+native 3dwpts/camera/HUD art is byte-faithful.
+
+**Live match fixes (all `live_start`-gated; M1/M2 byte-identical).**
+- Row 05's camera target is overridden for the human carrier with a bounded
+  `pos + held-dir*0x80` target (the native stage-0 algebra remains OL-63);
+  the player can now run with the ball instead of kick-and-chase.
+- The live goal armer is ball-based: goal mouth, touchline (`|x|>0x7E0`) and
+  goal line/corner (`|z|>0xC1E`) select the native throw/corner/goal-kick
+  situations. A live shot whose high-speed sample skips the mouth band keeps
+  its in-mouth target latch. The shared camera-pan armer stays for non-live
+  runs; live only permits the goal-mouth case, so it cannot manufacture a
+  restart from an in-play ball.
+- A bounded direct-restart fallback places the ball/taker and returns to phase
+  2 when a native taker row (notably goal kick 0x1D stage 1) has no slot. It
+  writes no score/goal cell; the native row remains preferred.
+- Half-time shows a panel and, after 3 s, injects one KICK press/release
+  through the native sit-1 gate; manual KICK/PASS/Z still starts immediately.
+  A pure wait no longer soft-locks at 02:00.
+- The 640 live HUD uses uniform 2x bar/text geometry (120x82 at (4,394)); the
+  320 tape path remains 1:1 and byte-identical.
+- `fifa96_match_run_end` preserves `final_score[2]` for OVER/POST or a staged
+  full-time POST->EXIT (`result_pending`); a pause/abandon exit is not a
+  result. `fifa96_match_run_set_mode` installs the native mode byte and the
+  Practise `[0x14C32A]` gate.
+
+**Single-player modes (derived [D]; native mode bytes 1..4).** New
+`fifa96_competition` model: an eight-team round-robin League (28 fixtures,
+3/1/0 table), eight-team Tournament and Playoff brackets (replay twice, then
+deterministic shootout; user loss simulates the remaining bracket), and a
+no-fixture Practise descriptor. New `fifa96_save` writes ten distinct
+`F96SAVE%.2d.DAT` slots under `data/game/hdd` (magic/version/length/CRC32) and
+never overwrites native `SGAME` files. The front-end adds the hub, table/
+bracket, Load Game, Save Game and Modem notice screens, enables
+Leagues/Tournaments/Playoffs/Practise/Load Game/Modem Setup, and preserves the
+competition/settings across the post-match reset. The engine captures the
+preserved result, applies it to the fixture, auto-saves slot 0, and returns to
+the hub; Friendly returns Game Select, Practise returns Game Select. Modem
+Setup is an honest offline notice: native modem transport is not ported.
+
+**Tests.** New `test_engine_competition`, `test_engine_save`,
+`test_engine_frontend_modes`, `test_engine_mode_flow`; extended live-control
+(dribble/touchline/goal-line/inside-ball), match-render (640 HUD) and
+menu-model tests. `test_engine_mode_flow` also stages the engine's completed
+POST->EXIT result and proves the fixture is applied, slot 0 is written, and
+the front-end lands on the hub. **Gate:** `make check` **123/123**; M1/M2
+exact by `cmp`; Release `make game` smoke covers the menu, League kickoff,
+half-time/second half, hub, Load Game, slot 0 load, Simulate next, Table/
+Bracket and Save Game. Evidence:
+`docs/screens/p13-game-select.png`, `p13-league-select.png`, `p13-match-hud.png`,
+`p13-league-hub.png`, `p13-league-table.png`, `p13-load-game.png`.
+Tournament/Playoff/Practise/Modem are synthetic-flow tests; their long release
+play-through is not claimed here. The native-fidelity legs below remain.
+
+**Legs.** The native 3dwpts stadium bowl/full 3D net and native camera
+director/lens remain **P10-L2/L6**; native HUD art **P10-L5**; the native
+league/tournament/playoff screen art, fixture/table layouts, seeding/tie-break
+rules and the native `SGAME` body remain new P13-L1/L2; native modem transport
+P13-L3; full 10-player AI, native open-play keeper dive, fouls/offside live
+proof, substitutions and the native penalty shootout remain the P7/P8/P9
+legs. The derived competition modes and save records are explicitly not
+native-faithful.

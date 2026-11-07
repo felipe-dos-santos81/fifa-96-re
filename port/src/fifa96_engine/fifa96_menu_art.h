@@ -7,6 +7,7 @@
 
 #define FIFA96_MENU_VISIBLE_ROWS 8
 #define FIFA96_MENU_ENTRY_COUNT 20
+#define FIFA96_MENU_LIST_TEXT_MAX 96
 
 /* FU135 geometry: the original front-end menu is a 20-entry list showing 8
  * rows at UI x=0x85, y=0xB8+0x21*k, width=0x1BC in a 0x280x0x1E0 canvas. */
@@ -49,6 +50,22 @@ struct fifa96_menu_state {
   int option_page;              /* 0 list, 1 Controls */
   const char *help[FIFA96_MENU_OPTION_HELP_MAX];
   int help_count;
+  int team_locked;              /* P13: single-team Team Select (visitor hidden) */
+  /* P13 derived list screens: the hub, Load/Save/Modem and the read-only
+   * table/bracket snapshot. `list_rows` is the eight-row visible window;
+   * `list_row_count`/`list_selected`/`list_scroll` are the absolute model. */
+  const char *list_title;
+  const char *list_footer;
+  struct {
+    const char *label;
+    int enabled;
+  } list_rows[FIFA96_MENU_LIST_VISIBLE];
+  char list_text[FIFA96_MENU_LIST_VISIBLE][FIFA96_MENU_LIST_TEXT_MAX];
+  int list_row_count;
+  int list_selected;
+  int list_scroll;
+  const char *list_help;
+  char list_help_text[FIFA96_MENU_LIST_TEXT_MAX];
 };
 
 /* Legacy loader: tries OPTIONS.INV only (the FU-135 placeholder path; the

@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include "fifa96_engine/fifa96_competition.h"
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_team_data.h"
 
@@ -9,13 +10,14 @@
  * `label_id` the FUN_0001771C argument. */
 static const struct fifa96_menu_item_desc menu_items[FIFA96_MENU_ITEM_COUNT] = {
     {0x081u, "Friendly",    4u, 1, 0, FIFA96_MENU_ACTION_FRIENDLY},
-    {0x1BFu, "Leagues",     5u, 1, 1, FIFA96_MENU_ACTION_NONE},
-    {0x1BBu, "Tournaments", 6u, 1, 2, FIFA96_MENU_ACTION_NONE},
-    {0x1BDu, "Playoffs",    7u, 1, 3, FIFA96_MENU_ACTION_NONE},
-    {0x0EAu, "Practise",    8u, 1, 4, FIFA96_MENU_ACTION_NONE},
-    {0x0B3u, "Load Game",   9u, 0, 0, FIFA96_MENU_ACTION_NONE},
+    {0x1BFu, "Leagues",     5u, 1, 1, FIFA96_MENU_ACTION_LEAGUE},
+    {0x1BBu, "Tournaments", 6u, 1, 2, FIFA96_MENU_ACTION_TOURNAMENT},
+    {0x1BDu, "Playoffs",    7u, 1, 3, FIFA96_MENU_ACTION_PLAYOFF},
+    {0x0EAu, "Practise",    8u, 1, 4, FIFA96_MENU_ACTION_PRACTISE},
+    {0x0B3u, "Load Game",   9u, 0, 0, FIFA96_MENU_ACTION_LOAD_GAME},
     {0x0D8u, "Options",     1u, 0, 1, FIFA96_MENU_ACTION_OPTIONS},
-    {0x0C2u, "Modem Setup", 2u, 0, 2, FIFA96_MENU_ACTION_NONE},
+    /* Modem Setup opens the offline notice; the same action leaves it. */
+    {0x0C2u, "Modem Setup", 2u, 0, 2, FIFA96_MENU_ACTION_MODEM_BACK},
     {0x0F3u, "Quit to DOS", 3u, 0, 3, FIFA96_MENU_ACTION_QUIT},
 };
 
@@ -73,6 +75,18 @@ static const struct {
     {0x09Bu, "Hungary",      "HUN"},
     {0x0A4u, "Israel",       "ISR"},
 };
+
+/* P13: the Game Select action values start at 5, but `pending_kind` is the
+ * native mode byte (1..4). */
+static uint8_t menu_action_mode(enum fifa96_menu_action action) {
+  switch (action) {
+    case FIFA96_MENU_ACTION_LEAGUE: return FIFA96_COMPETITION_LEAGUE;
+    case FIFA96_MENU_ACTION_TOURNAMENT: return FIFA96_COMPETITION_TOURNAMENT;
+    case FIFA96_MENU_ACTION_PLAYOFF: return FIFA96_COMPETITION_PLAYOFF;
+    case FIFA96_MENU_ACTION_PRACTISE: return FIFA96_COMPETITION_PRACTISE;
+    default: return 0;
+  }
+}
 
 static int menu_item_at(int col, int row) {
   for (int i = 0; i < FIFA96_MENU_ITEM_COUNT; i++) {
@@ -196,6 +210,39 @@ static void menu_model_reset_screen(struct fifa96_menu_model *model) {
   model->option_row = 0;
   model->option_scroll = 0;
   model->option_page = FIFA96_MENU_OPTION_PAGE_LIST;
+  model->pending_kind = 0;
+  model->list_row = 0;
+  model->list_scroll = 0;
+  model->list_count = 0;
+}
+
+/* P13: the list screens' row counts. `.list_count` is set by the front-end for
+ * the read-only table/bracket (its content is built there); every other screen
+ * has a fixed layout. */
+static int menu_model_screen_rows(const struct fifa96_menu_model *model) {
+  switch (model->screen) {
+    case FIFA96_MENU_SCREEN_COMPETITION_HUB: return 5;
+    case FIFA96_MENU_SCREEN_LOAD_GAME:
+    case FIFA96_MENU_SCREEN_SAVE_GAME: return FIFA96_MENU_SAVE_SLOTS;
+    case FIFA96_MENU_SCREEN_MODEM: return 2;
+    case FIFA96_MENU_SCREEN_LIST:
+      return model->list_count > 0 ? model->list_count : 1;
+    default: return 0;
+  }
+}
+
+static void menu_model_list_scroll(struct fifa96_menu_model *model, int rows) {
+  if (rows < 1) rows = 1;
+  if (model->list_row < 0) model->list_row = 0;
+  if (model->list_row >= rows) model->list_row = rows - 1;
+  if (model->list_row < model->list_scroll)
+    model->list_scroll = model->list_row;
+  if (model->list_row >= model->list_scroll + FIFA96_MENU_LIST_VISIBLE)
+    model->list_scroll = model->list_row - FIFA96_MENU_LIST_VISIBLE + 1;
+  int max_scroll = rows - FIFA96_MENU_LIST_VISIBLE;
+  if (max_scroll < 0) max_scroll = 0;
+  if (model->list_scroll > max_scroll) model->list_scroll = max_scroll;
+  if (model->list_scroll < 0) model->list_scroll = 0;
 }
 
 static void menu_model_option_scroll(struct fifa96_menu_model *model) {
@@ -249,6 +296,17 @@ int fifa96_menu_model_nav(struct fifa96_menu_model *model, int32_t code) {
       return 1;
     }
     case FIFA96_MENU_SCREEN_TEAM_SELECT:
+      if (model->pending_kind != 0) {
+        /* P13: competition Team Select is single-team; the visitor cell is
+         * locked to the derived opponent and only the home cell moves. */
+        model->team_col = 0;
+        if (code == 0 || code == 1) {
+          model->team[0] =
+              (model->team[0] + (code == 0 ? FIFA96_MENU_TEAM_COUNT - 1 : 1)) %
+              FIFA96_MENU_TEAM_COUNT;
+        }
+        return 1;
+      }
       if (code == 0 || code == 1) {
         model->team[model->team_col] =
             (model->team[model->team_col] + (code == 0 ? FIFA96_MENU_TEAM_COUNT - 1 : 1)) %
@@ -275,6 +333,17 @@ int fifa96_menu_model_nav(struct fifa96_menu_model *model, int32_t code) {
       menu_model_option_scroll(model);
       return 1;
     }
+    case FIFA96_MENU_SCREEN_COMPETITION_HUB:
+    case FIFA96_MENU_SCREEN_LOAD_GAME:
+    case FIFA96_MENU_SCREEN_SAVE_GAME:
+    case FIFA96_MENU_SCREEN_MODEM:
+    case FIFA96_MENU_SCREEN_LIST: {
+      int rows = menu_model_screen_rows(model);
+      if (code == 0 && model->list_row > 0) model->list_row--;
+      else if (code == 1 && model->list_row < rows - 1) model->list_row++;
+      menu_model_list_scroll(model, rows);
+      return 1;
+    }
     default:
       return 0;
   }
@@ -288,6 +357,7 @@ enum fifa96_menu_action fifa96_menu_model_activate(struct fifa96_menu_model *mod
       if (action == FIFA96_MENU_ACTION_FRIENDLY) {
         model->screen = FIFA96_MENU_SCREEN_TEAM_SELECT;
         model->team_col = 0;
+        model->pending_kind = 0;
         return FIFA96_MENU_ACTION_NONE;
       }
       if (action == FIFA96_MENU_ACTION_OPTIONS) {
@@ -297,10 +367,70 @@ enum fifa96_menu_action fifa96_menu_model_activate(struct fifa96_menu_model *mod
         model->option_page = FIFA96_MENU_OPTION_PAGE_LIST;
         return FIFA96_MENU_ACTION_NONE;
       }
-      return action;   /* QUIT is live; the six disabled items are NONE */
+      if (action == FIFA96_MENU_ACTION_LEAGUE ||
+          action == FIFA96_MENU_ACTION_TOURNAMENT ||
+          action == FIFA96_MENU_ACTION_PLAYOFF ||
+          action == FIFA96_MENU_ACTION_PRACTISE) {
+        model->screen = FIFA96_MENU_SCREEN_TEAM_SELECT;
+        model->team_col = 0;
+        model->pending_kind = menu_action_mode(action);   /* native byte 1..4 */
+        return action;
+      }
+      if (action == FIFA96_MENU_ACTION_LOAD_GAME) {
+        model->screen = FIFA96_MENU_SCREEN_LOAD_GAME;
+        model->list_row = 0;
+        model->list_scroll = 0;
+        model->list_count = FIFA96_MENU_SAVE_SLOTS;
+        return action;
+      }
+      if (action == FIFA96_MENU_ACTION_MODEM_BACK) {
+        model->screen = FIFA96_MENU_SCREEN_MODEM;
+        model->list_row = 0;
+        model->list_scroll = 0;
+        model->list_count = 2;
+        return action;
+      }
+      return action;   /* QUIT remains live; Friendly/Options handled above */
     }
     case FIFA96_MENU_SCREEN_TEAM_SELECT:
       return FIFA96_MENU_ACTION_START_MATCH;
+    case FIFA96_MENU_SCREEN_COMPETITION_HUB:
+      switch (model->list_row) {
+        case 0: return FIFA96_MENU_ACTION_HUB_PLAY;
+        case 1: return FIFA96_MENU_ACTION_HUB_SIMULATE;
+        case 2:
+          model->screen = FIFA96_MENU_SCREEN_LIST;
+          model->list_row = 0;
+          model->list_scroll = 0;
+          return FIFA96_MENU_ACTION_HUB_TABLE;
+        case 3:
+          model->screen = FIFA96_MENU_SCREEN_SAVE_GAME;
+          model->list_row = 0;
+          model->list_scroll = 0;
+          model->list_count = FIFA96_MENU_SAVE_SLOTS;
+          return FIFA96_MENU_ACTION_HUB_SAVE;
+        case 4:
+          model->screen = FIFA96_MENU_SCREEN_GAME_SELECT;
+          model->list_row = 0;
+          model->list_scroll = 0;
+          return FIFA96_MENU_ACTION_HUB_EXIT;
+        default:
+          return FIFA96_MENU_ACTION_NONE;
+      }
+    case FIFA96_MENU_SCREEN_SAVE_GAME:
+      return FIFA96_MENU_ACTION_SAVE_SLOT;
+    case FIFA96_MENU_SCREEN_LOAD_GAME:
+      return FIFA96_MENU_ACTION_LOAD_SLOT;
+    case FIFA96_MENU_SCREEN_MODEM:
+      if (model->list_row == 1) {
+        model->screen = FIFA96_MENU_SCREEN_GAME_SELECT;
+        model->list_row = 0;
+        model->list_scroll = 0;
+        return FIFA96_MENU_ACTION_MODEM_BACK;
+      }
+      return FIFA96_MENU_ACTION_NONE;   /* notice row is not actionable */
+    case FIFA96_MENU_SCREEN_LIST:
+      return FIFA96_MENU_ACTION_NONE;   /* read-only */
     case FIFA96_MENU_SCREEN_OPTIONS: {
       if (model->option_page != FIFA96_MENU_OPTION_PAGE_LIST) {
         model->option_page = FIFA96_MENU_OPTION_PAGE_LIST;
@@ -337,7 +467,17 @@ int fifa96_menu_model_back(struct fifa96_menu_model *model) {
   if (model->screen == FIFA96_MENU_SCREEN_GAME_SELECT ||
       model->screen == FIFA96_MENU_SCREEN_LIBRARY)
     return 0;
+  if (model->screen == FIFA96_MENU_SCREEN_SAVE_GAME ||
+      model->screen == FIFA96_MENU_SCREEN_LIST) {
+    model->screen = FIFA96_MENU_SCREEN_COMPETITION_HUB;
+    model->list_row = 0;
+    model->list_scroll = 0;
+    return 1;
+  }
   model->screen = FIFA96_MENU_SCREEN_GAME_SELECT;
+  model->pending_kind = 0;
+  model->list_row = 0;
+  model->list_scroll = 0;
   return 1;
 }
 

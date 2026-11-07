@@ -1,11 +1,13 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include "fifa96_engine/fifa96_competition.h"
 #include "fifa96_engine/fifa96_keys.h"
 #include "fifa96_engine/fifa96_lang.h"
 #include "fifa96_engine/fifa96_menu_art.h"
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_platform.h"
+#include "fifa96_engine/fifa96_save.h"
 #include "fifa96_engine/fifa96_surface.h"
 #include "fifa96_engine/fifa96_team_data.h"
 #include "fifa96_loader/fifa96_frontend.h"
@@ -59,6 +61,12 @@ struct fifa96_frontend_run {
                                      * (native edge latch; 1..10 in use) */
   int      input_armed;             /* F1: 0 = drop held input until a neutral
                                      * poll; 1 = edge-latch fresh presses */
+  /* P13 derived single-player modes. `mode` is the native mode byte of the
+   * last/current flow (0 Friendly, 1 League, 2 Tournament, 3 Playoff,
+   * 4 Practise); `competition` is serialized with the save slots. */
+  uint8_t  mode;
+  struct fifa96_competition competition;
+  char     save_dir[FIFA96_SAVE_PATH_MAX];  /* default "." */
 };
 
 /* Initialise a fresh (zeroed or uninitialised) front-end run. This clears the
@@ -86,6 +94,20 @@ void fifa96_frontend_run_menu_state(const struct fifa96_frontend_run *fr,
  * `fr->native_menu` are preserved (the assets are not re-read). Returns 0, or
  * -1 for NULL arguments. */
 int fifa96_frontend_run_reset(struct fifa96_frontend_run *fr, struct fifa96_surface *s);
+
+/* P13: the derived save directory for Load/Save and auto-save slot 0. NULL or
+ * an empty string restores the default ".". The path is copied and truncated
+ * safely. */
+void fifa96_frontend_run_set_save_dir(struct fifa96_frontend_run *fr, const char *dir);
+
+/* P13 post-match result. When a League/Tournament/Playoff competition is
+ * active, record `home_goals`/`away_goals` against the current user fixture,
+ * auto-save slot 0 (a write failure is soft), and show the competition hub.
+ * Cup draws stay on the same fixture (the competition applies the replay and
+ * derived shootout rules). Friendly/Practise clear the handoff and return to
+ * Game Select. Returns 0, or -1 for NULL/invalid active state. */
+int fifa96_frontend_run_match_result(struct fifa96_frontend_run *fr,
+                                     uint16_t home_goals, uint16_t away_goals);
 
 /* P2 test/engine seam: switch between the legacy FU-135 render (0) and the
  * native Game Select model (1). The engine enables it only for the

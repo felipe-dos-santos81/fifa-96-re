@@ -456,6 +456,8 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_match_bridge.c
   src/fifa96_engine/fifa96_match_audio.c
   src/fifa96_engine/fifa96_match_run.c
+  src/fifa96_engine/fifa96_competition.c
+  src/fifa96_engine/fifa96_save.c
   src/fifa96_engine/fifa96_pitch.c
   src/fifa96_engine/fifa96_match_handlers.c
   src/fifa96_engine/fifa96_match_entities.c
@@ -606,6 +608,38 @@ target_link_libraries(test_engine_match_render PRIVATE fifa96_engine)
 target_compile_options(test_engine_match_render PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_match_render PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_render COMMAND test_engine_match_render
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
+
+add_executable(test_engine_competition tests/test_engine_competition.c)
+target_link_libraries(test_engine_competition PRIVATE fifa96_engine)
+target_include_directories(test_engine_competition PRIVATE src)
+target_compile_options(test_engine_competition PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_competition PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_competition COMMAND test_engine_competition
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
+
+add_executable(test_engine_save tests/test_engine_save.c)
+target_link_libraries(test_engine_save PRIVATE fifa96_engine)
+target_include_directories(test_engine_save PRIVATE src)
+target_compile_options(test_engine_save PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_save PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_save COMMAND test_engine_save
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
+
+add_executable(test_engine_mode_flow tests/test_engine_mode_flow.c)
+target_link_libraries(test_engine_mode_flow PRIVATE fifa96_engine)
+target_include_directories(test_engine_mode_flow PRIVATE src)
+target_compile_options(test_engine_mode_flow PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_mode_flow PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_mode_flow COMMAND test_engine_mode_flow
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
+
+add_executable(test_engine_frontend_modes tests/test_engine_frontend_modes.c)
+target_link_libraries(test_engine_frontend_modes PRIVATE fifa96_engine)
+target_include_directories(test_engine_frontend_modes PRIVATE src)
+target_compile_options(test_engine_frontend_modes PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_frontend_modes PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_frontend_modes COMMAND test_engine_frontend_modes
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..)
 
 add_executable(test_engine_match_bridge tests/test_engine_match_bridge.c)

@@ -721,6 +721,13 @@ struct fifa96_match_run {
   struct fifa96_match_pace pace;
   struct fifa96_match_state state;               /* match clock/period block */
   uint16_t score[2];                             /* per-side goal words (FU-72 §2.4) */
+  /* P13: the result survives match teardown. `fifa96_match_lifecycle_end`
+   * zeroes score[]; copy it only when the run reached OVER/POST (a pause
+   * quit must not count as a result). The engine reads this before resetting
+   * the front-end and applying the competition result. */
+  uint16_t final_score[2];
+  uint8_t final_score_valid;
+  uint8_t result_pending;      /* a full-time result is crossing POST -> EXIT */
   /* C3-OL2 (M2 playability Task 4): the FUN_00093944 writer's state cells —
    * native [0x15B670] last scoring side, [0x15B6B4] tracked goal-difference
    * side (-1 = the plain-increment sentinel) and [0x15B6A4] max goal
@@ -1158,6 +1165,20 @@ struct fifa96_match_run {
   int32_t goal_snap_x;
   int32_t goal_snap_y;
   int32_t goal_snap_z;
+  /* P13 live out-of-play armer/restart fallback [D]. The native live armer is
+   * camera-pan driven; the port arms from the ball boundary instead. `kind` is
+   * 1 touchline / 2 goal line until the scan consumes it; the pending/side/
+   * situation cells drive the bounded direct-restart fallback when a native
+   * taker row cannot install its slot (the goal-kick stage-1 hold). */
+  uint8_t live_out_kind;
+  uint8_t live_out_pending;
+  uint8_t live_out_situation;   /* 2 throw, 3 corner, 4 goal kick */
+  uint8_t live_out_side;        /* restart side byte */
+  uint16_t live_out_frames;
+  /* P13: a KICK target latched inside the mouth remains the scoring
+   * authority until the goal/restart consumes it, so a high-speed flight that
+   * samples beyond the mouth band is not reclassified as a goal-line exit. */
+  uint8_t live_shot_pending;
   /* FU-71 leg 9.6 (phase-51 (FU-71)): the far-wall arm's `0x974DC` announce
    * request (`0x71B5B`). 0 = no call (no event, or the entry `speed <= 5`
    * skip), 1 = entry speed 6..8, 2 = 9..0xA, 3 = > 0xA. The audio sink itself
@@ -1274,6 +1295,7 @@ struct fifa96_match_run {
    * follows the ball with the focus triple and the render uses the separate
    * camera-0 eye (focus + (-1920,160,30)) for pitch and sprites. */
   uint8_t live_start;
+  uint8_t match_mode;          /* P13 native front-end mode latch (0..4) */
   /* P7 / FU-345: the derived live kickoff possession latch. The live begin
    * seeds the kickoff taker as the carrier; this stays set until the first FU-73
    * kick release (or a non-play phase), keeping the human's slot on that taker
@@ -1572,6 +1594,13 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
  * headless; direct begin callers and the M2 tape leave it 0. NULL is a no-op.
  * Returns 0, -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_set_live_start(struct fifa96_match_run *mr, int on);
+
+/* P13: install the native front-end mode latch after begin (0 Friendly,
+ * 1 League, 2 Tournament, 3 Playoff, 4 Practise). Only Practise sets the
+ * [0x14C32A] session gate; the ordinary modes keep 0. NULL / mode > 4 ->
+ * -FIFA96_ERR_INVALID. This does not stage a competition result; the caller
+ * owns that. */
+int fifa96_match_run_set_mode(struct fifa96_match_run *mr, uint8_t mode);
 
 /* FU-343 (P1): the render eye. Non-live returns the FU-71 focus triple
  * (`render.camera.pos_*`, the pre-P1 behaviour). Live returns the native

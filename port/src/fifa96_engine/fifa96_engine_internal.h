@@ -51,6 +51,11 @@ struct fifa96_engine {
    * frame. */
   uint8_t match_pad_down;     /* bit 0 = CONFIRM down, bit 1 = DECLINE down */
   uint8_t match_pad_allowed;  /* same bits, armed for the live match input */
+  /* P13: the live half-time kickoff gate is player-driven natively. After a
+   * short visible dwell, inject one KICK press/release so the second half
+   * cannot soft-lock; manual KICK/PASS still wins. */
+  uint16_t match_halftime_steps;
+  uint8_t match_halftime_pressed;
 };
 
 /* P6 test seam: the match-audio percent derived from the Options block.

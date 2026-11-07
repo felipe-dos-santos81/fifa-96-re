@@ -1953,6 +1953,49 @@ static void test_hud_live_bar_and_text_indices(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* P13: the 640 live HUD is a uniform 2x panel (120x82 at (4,394)), not the
+ * historical x-stretched 120x41 strip. */
+static void test_hud_live_640_uniform_scale(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  fifa96_surface_destroy(f.s);
+  f.s = fifa96_surface_create(640, 480);
+  assert(f.s != NULL);
+  fifa96_surface_clear(f.s, 0x7F);
+  fifa96_window_define_full(&f.mr.render.window, 640, 480);
+  f.mr.live_start = 1;
+  f.mr.render.hud_name[0][0] = '1';
+  f.mr.render.hud_name[0][1] = '\0';
+  f.mr.render.hud_name[1][0] = '2';
+  f.mr.render.hud_name[1][1] = '\0';
+  f.mr.render.hud_ink = 30;
+  f.mr.render.hud_colors_ready = 0;   /* body fallback */
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  /* Bar at (4, 480-82-4=394), 4x4 from the 2x2 source. */
+  assert(f.s->indexed[394 * 640 + 4] == 0x11);
+  assert(f.s->indexed[394 * 640 + 5] == 0x11);
+  assert(f.s->indexed[394 * 640 + 6] == 0x00);
+  assert(f.s->indexed[396 * 640 + 4] == 0x00);
+  assert(f.s->indexed[396 * 640 + 6] == 0x22);
+  /* Body/shadow at 2x: (12,398) body 30, (14,400) shadow 0. */
+  assert(f.s->indexed[398 * 640 + 12] == 30);
+  assert(f.s->indexed[400 * 640 + 14] == 0);
+  /* Second row at y2+row_pitch-4 = 418; the score cell is right-aligned in
+   * the x 80..100 region. */
+  assert(f.s->indexed[418 * 640 + 12] == 30);
+  {
+    int score_body = 0;
+    for (int y = 396; y < 404; y++)
+      for (int x = 80; x < 100; x++)
+        if (f.s->indexed[y * 640 + x] == 30) score_body++;
+    assert(score_body > 0);
+  }
+  /* The bar stays inside the bottom 82 pixels, not the old 41. */
+  assert(f.s->indexed[393 * 640 + 4] == 0x7F);
+  assert(f.s->indexed[394 * 640 + 4] != 0x7F);
+  fifa96_surface_destroy(f.s);
+}
+
 /* FU-343 (P4): the live pause/FULL TIME panels draw a dark plate with the
  * derived ink border over the frozen frame. The synthetic font only carries
  * digits, so this pins the plate geometry, not the caption glyphs. */
@@ -2419,6 +2462,7 @@ int main(void) {
   test_hud_gates();
   test_hud_zoomed_uses_playfnt_layout();
   test_hud_live_bar_and_text_indices();
+  test_hud_live_640_uniform_scale();
   test_live_pause_and_result_panels();
   test_replay_state_helpers();
   test_replay_step_machine();

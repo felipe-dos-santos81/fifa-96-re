@@ -2895,6 +2895,39 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
  * unported `0x1577BE/C0/C2` camera-velocity zero (`out.camera_zero`) and the
  * `0x6E598` animation resolution (`out.anim`, OL-52) are presentation-side
  * requests. */
+/* Live-only carrier dribble [D]. The native stage-0 target algebra writes the
+ * carrier's target from the dribble direction (0x7F3A1..0x7F57B); that algebra
+ * is still OL-63, while the portable row-05 path copies the camera triple into
+ * the record target. For the human carrier the camera copy makes the player
+ * immobile, so use the held input direction with a bounded pitch target. This
+ * writes only the record target; the existing mover and ball pairing remain
+ * authoritative. */
+#define MATCH_RUN_LIVE_CARRIER_STEP 0x80
+#define MATCH_RUN_LIVE_TARGET_X 0x720
+#define MATCH_RUN_LIVE_TARGET_Z 0xB10
+
+static void match_run_live_carrier_target(struct fifa96_match_run *mr,
+                                          struct fifa96_match_run_record *r) {
+  uint8_t in = mr->input_state[0];
+  int32_t tx = r->pos_x;
+  int32_t tz = r->pos_z;
+  if ((in & 0x01u) != 0u)
+    tx += MATCH_RUN_LIVE_CARRIER_STEP;
+  else if ((in & 0x02u) != 0u)
+    tx -= MATCH_RUN_LIVE_CARRIER_STEP;
+  if ((in & 0x08u) != 0u)
+    tz += MATCH_RUN_LIVE_CARRIER_STEP;
+  else if ((in & 0x04u) != 0u)
+    tz -= MATCH_RUN_LIVE_CARRIER_STEP;
+  if (tx > MATCH_RUN_LIVE_TARGET_X) tx = MATCH_RUN_LIVE_TARGET_X;
+  if (tx < -MATCH_RUN_LIVE_TARGET_X) tx = -MATCH_RUN_LIVE_TARGET_X;
+  if (tz > MATCH_RUN_LIVE_TARGET_Z) tz = MATCH_RUN_LIVE_TARGET_Z;
+  if (tz < -MATCH_RUN_LIVE_TARGET_Z) tz = -MATCH_RUN_LIVE_TARGET_Z;
+  r->target_x = tx;
+  r->target_y = r->pos_y;
+  r->target_z = tz;
+}
+
 static int fifa96_match_action_05(struct fifa96_match_run *mr) {
   struct fifa96_match_run_record *r = &mr->record;
   struct fifa96_match_entity *e;
@@ -2997,9 +3030,14 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
     r->controlled = 0;
   }
   if (out.target_camera != 0) {          /* 0x7F24E..0x7F258 */
-    r->target_x = mr->render.camera.pos_x;
-    r->target_y = mr->render.camera.pos_y;
-    r->target_z = mr->render.camera.pos_z;
+    if (mr->live_start && id == mr->entities.controlled &&
+        mr->entities.ball.carrier == id) {
+      match_run_live_carrier_target(mr, r);
+    } else {
+      r->target_x = mr->render.camera.pos_x;
+      r->target_y = mr->render.camera.pos_y;
+      r->target_z = mr->render.camera.pos_z;
+    }
   }
   if (out.dirs != 0) {                   /* 0x7F386/0x7F397 */
     mr->entities.ball.pos_dir_x = (int8_t)out.dir_x;

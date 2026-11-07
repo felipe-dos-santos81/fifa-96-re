@@ -4434,3 +4434,17 @@ close-out below).
   image defaults, plus the staged `Net.fsh` goal mesh and a far goal-end stand.
   The native 3dwpts bowl/camera director remain **P10-L2/L6**. `make check`
   **119/119**; M1/M2 exact by `cmp`.
+
+- **P13 complete single-player playable wave (2026-11-07).** All Game Select
+  entries are live: Friendly, a derived eight-team League, Tournament and
+  Playoff (play/simulate, table/bracket, replays then a derived shootout),
+  Practise, ten-slot Load/Save (`F96SAVE%.2d.DAT`), Options and an honest
+  offline Modem notice. The live match gains carrier dribbling, ball-based
+  throw/corner/goal-kick exits with a bounded restart fallback, an automatic
+  half-time kickoff after the visible panel, preserved final scores for the
+  competition handoff, and a uniform 2x 640 HUD. New tests include
+  `test_engine_competition`, `test_engine_save`,
+  `test_engine_frontend_modes` and `test_engine_mode_flow`.
+  `make check` **123/123**; M1/M2 exact by `cmp`. The native 3dwpts/camera/HUD
+  art, native competition data/screens and native save body remain numbered
+  legs.

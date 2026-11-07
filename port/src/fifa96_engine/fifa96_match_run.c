@@ -2182,6 +2182,12 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
   mr->goal_snap_z = 0;
+  mr->live_out_kind = 0;
+  mr->live_out_pending = 0;
+  mr->live_out_situation = 0;
+  mr->live_out_side = 0;
+  mr->live_out_frames = 0;
+  mr->live_shot_pending = 0;
   mr->camera_arm_announce = 0;         /* FU-71 leg 9.6: no 0x974DC request */
   mr->situation_id = 0;
   mr->situation_pending = 0;
@@ -2605,6 +2611,10 @@ static void match_run_live_control_seed(struct fifa96_match_run *mr) {
  *    caller; the transient kick code 7 is never overwritten).
  */
 #define MATCH_RUN_LIVE_CONTROL_RANGE 0x400
+/* P13 live ball-boundary/restart constants (the derived live armer). */
+#define MATCH_RUN_LIVE_TOUCHLINE_X 0x7E0
+#define MATCH_RUN_LIVE_GOALLINE_Z 0xC1E
+#define MATCH_RUN_LIVE_RESTART_WAIT 90u
 #define MATCH_RUN_LIVE_CONTROL_HOLD_FRAMES 30u
 
 static int match_run_live_control_near(const struct fifa96_match_run *mr,
@@ -2774,6 +2784,7 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
       kick_row ? MATCH_RUN_LIVE_FLIGHT_GOAL_FRAMES : MATCH_RUN_LIVE_FLIGHT_FRAMES;
   mr->live_kick_active = 1u;
   mr->live_kick_shot = kick_row ? 1u : 0u;   /* P8: the shot block's gate */
+  mr->live_shot_pending = kick_row ? 1u : 0u; /* P13: mouth target latch */
   mr->live_kick_sig_actor = id;
   mr->live_kick_sig_traj = pair->traj;
   mr->live_kick_sig_vx = pair->vector.x;
@@ -2806,23 +2817,37 @@ static int match_run_live_kick_flight_step(struct fifa96_match_run *mr,
 
 /* Clear the flight after the frame's integration: arrival, out-of-play,
  * goal/phase transition or the bounded window. */
+static int match_run_live_shot_on_target(const struct fifa96_match_run *mr) {
+  int32_t target_z;
+  if (!mr || !mr->live_kick_shot) return 0;
+  target_z = mr->live_kick_target_z;
+  if (target_z < 0) target_z = 0 - target_z;
+  return mr->live_kick_target_x > -FIFA96_MATCH_LIVE_GOAL_MOUTH_X &&
+         mr->live_kick_target_x < FIFA96_MATCH_LIVE_GOAL_MOUTH_X &&
+         target_z >= 0xB10;
+}
+
 static void match_run_live_kick_flight_end(struct fifa96_match_run *mr,
                                            const struct fifa96_match_ball *b) {
   int32_t ax;
   int32_t az;
   int32_t dx;
   int32_t dz;
+  int keep_on_target;
   if (!mr || !mr->live_start || !mr->live_kick_active) return;
   ax = b->x < 0 ? -b->x : b->x;
   az = b->z < 0 ? -b->z : b->z;
   dx = b->x - mr->live_kick_target_x;
   dz = b->z - mr->live_kick_target_z;
+  keep_on_target = match_run_live_shot_on_target(mr);
   if (mr->live_kick_frames != 0u) mr->live_kick_frames--;
   if (mr->live_kick_frames == 0u || mr->goal_armed || mr->state.phase != 2u ||
-      ax > 0x6C0 || az > 0xC00 ||
+      ax > 0x6C0 || (az > 0xC00 && !keep_on_target) ||
       (dx <= 0x20 && dx >= -0x20 && dz <= 0x20 && dz >= -0x20)) {
+    int keep_pending = keep_on_target && az > 0xC00;
     mr->live_kick_active = 0;
     mr->live_kick_shot = 0;
+    if (!keep_pending) mr->live_shot_pending = 0;
     match_run_live_aim_reset(mr, 0);     /* P9-fix2: no stale aim */
     match_run_live_kick_sig_clear(mr);
   }
@@ -2922,10 +2947,105 @@ static void match_run_live_aim_update(struct fifa96_match_run *mr) {
     mr->live_aim_goal_x = 0;            /* none/both depth keys = centre */
 }
 
+/* P13 live out-of-play restart fallback [D]. The native taker rows can hold
+ * at stage 1 without a keeper/restart slot (the goal-kick dead end); this
+ * bounded fallback places the ball and taker, returns to phase 2 and clears
+ * the restart machinery. It writes no score or goal cell. */
+static void match_run_live_out_force(struct fifa96_match_run *mr) {
+  struct fifa96_match_ball *b = &mr->entities.ball;
+  int32_t x;
+  int32_t z;
+  int32_t team;
+  uint8_t side = mr->live_out_side;
+  int32_t sign_x = mr->goal_snap_x < 0 ? -1 : 1;
+  int32_t sign_z = mr->goal_snap_z < 0 ? -1 : 1;
+  if (side > 1u) side = 0u;
+  switch (mr->live_out_situation) {
+    case 2u: {   /* throw-in */
+      x = sign_x * 0x7D0;
+      z = mr->goal_snap_z;
+      if (z > 0xB00) z = 0xB00;
+      if (z < -0xB00) z = -0xB00;
+      break;
+    }
+    case 3u:     /* corner */
+      x = sign_x * 0x7D0;
+      z = sign_z * 0xBF0;
+      break;
+    case 4u:     /* goal kick */
+      x = 0;
+      z = sign_z * 0xB90;
+      break;
+    default:
+      x = 0;
+      z = 0;
+      break;
+  }
+  mr->live_kick_active = 0;
+  mr->live_kick_shot = 0;
+  mr->live_kick_frames = 0;
+  mr->live_kick_hold = 0;
+  mr->live_shot_pending = 0;
+  mr->live_save_hold = 0;
+  mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
+  match_run_live_aim_reset(mr, 0);
+  match_run_live_kick_sig_clear(mr);
+  match_run_live_kick_consumed_clear(mr);
+  b->x = x;
+  b->y = 0;
+  b->z = z;
+  b->target_x = x;
+  b->target_y = 0;
+  b->target_z = z;
+  b->vel_x = 0;
+  b->vel_z = 0;
+  b->speed = 0;
+  b->carrier = FIFA96_MATCH_ENTITY_NONE;
+  (void)fifa96_ball_pair_clear(&b->pair);
+  team = match_run_live_team_for_side(mr, side);
+  if (team >= 0) {
+    int index = fifa96_match_entities_team_select(&mr->entities, (uint32_t)team,
+                                                  (int16_t)x, (int16_t)z);
+    if (index >= 0) {
+      int32_t id = (int32_t)((uint32_t)team * FIFA96_MATCH_ENTITY_RECORDS +
+                             (uint32_t)index);
+      b->carrier = id;
+      if ((uint8_t)(mr->phase_machine.side_controlled & 1u) == side &&
+          match_run_live_control_bind(mr, id, 1) == 1) {
+        match_run_live_control_place_taker(mr, id);
+        mr->live_kickoff_touch = 1u;
+        mr->live_control_taker = id;
+      } else {
+        (void)fifa96_match_entities_install(
+            &mr->entities.team[(uint32_t)team].records[(uint32_t)index],
+            (uint8_t)mr->state.phase, 5u, 0);
+      }
+    }
+  }
+  (void)fifa96_match_run_write_phase(mr, 2u);
+  mr->live_out_pending = 0;
+  mr->live_out_frames = 0;
+  mr->live_out_kind = 0;
+  mr->live_out_situation = 0;
+  mr->goal_armed = 0;
+  mr->goal_zone = 0;
+  mr->situation_pending = 0;
+  mr->situation_id = 0;
+  (void)fifa96_match_act_init(&mr->act);
+}
+
 static void match_run_live_control_update(struct fifa96_match_run *mr) {
   int32_t t;
   int32_t id = FIFA96_MATCH_ENTITY_NONE;
   if (!mr || !mr->live_start) return;
+  if (mr->live_out_pending) {
+    if (mr->state.phase == 2u) {
+      mr->live_out_pending = 0;
+      mr->live_out_frames = 0;
+    } else if (++mr->live_out_frames >= MATCH_RUN_LIVE_RESTART_WAIT) {
+      match_run_live_out_force(mr);
+    }
+  }
   if (mr->state.phase != 2u) {
     /* A staged phase (goal/celebration/restart) ends the opening latch and the
      * old taker's human authority; a phase-1 restart arms the re-bind below. */
@@ -3137,6 +3257,7 @@ static void match_run_live_save_apply(struct fifa96_match_run *mr, int32_t recor
   mr->live_kick_active = 0u;
   mr->live_kick_frames = 0u;
   mr->live_kick_shot = 0u;
+  mr->live_shot_pending = 0u;
   match_run_live_aim_reset(mr, 0);     /* P9-fix2: no stale aim */
   match_run_live_kick_sig_clear(mr);
   match_run_live_kick_consumed_clear(mr);
@@ -3506,6 +3627,12 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
   mr->goal_snap_z = 0;
+  mr->live_out_kind = 0;
+  mr->live_out_pending = 0;
+  mr->live_out_situation = 0;
+  mr->live_out_side = 0;
+  mr->live_out_frames = 0;
+  mr->live_shot_pending = 0;
   mr->camera_arm_announce = 0;         /* FU-71 leg 9.6: no 0x974DC request */
   mr->goal_record = FIFA96_MATCH_ENTITY_NONE;   /* FU-173 §4.2: no scan yet */
   mr->goal_record_side = 0;
@@ -3535,6 +3662,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
    * arm's trigger is a runtime non-permutation, FU201-L1). */
   mr->period_setup_live = 0;
   mr->live_start = 0;                  /* FU-343 P1: native begin order default */
+  mr->match_mode = 0;                  /* P13: friendly until the front-end says otherwise */
   mr->live_kickoff_touch = 0;          /* P7: no live kickoff possession latch */
   mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
   mr->live_kick_hold = 0;              /* P7: no live possession hold */
@@ -3618,6 +3746,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;
+  mr->final_score[0] = 0;
+  mr->final_score[1] = 0;
+  mr->final_score_valid = 0;
+  mr->result_pending = 0;
   mr->score_last_side = -1;            /* C3-OL2 fresh writer state (OL-87) */
   mr->score_tracked_side = -1;
   mr->score_max_diff = 0;
@@ -3745,6 +3877,12 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
   mr->goal_snap_z = 0;
+  mr->live_out_kind = 0;
+  mr->live_out_pending = 0;
+  mr->live_out_situation = 0;
+  mr->live_out_side = 0;
+  mr->live_out_frames = 0;
+  mr->live_shot_pending = 0;
   mr->camera_arm_announce = 0;         /* FU-71 leg 9.6: no 0x974DC request */
   mr->goal_record = FIFA96_MATCH_ENTITY_NONE;   /* FU-173 §4.2: no scan yet */
   mr->goal_record_side = 0;
@@ -4038,6 +4176,15 @@ int fifa96_match_run_set_live_start(struct fifa96_match_run *mr, int on) {
   return 0;
 }
 
+int fifa96_match_run_set_mode(struct fifa96_match_run *mr, uint8_t mode) {
+  if (!mr || mode > 4u) return -FIFA96_ERR_INVALID;
+  mr->match_mode = mode;
+  /* FUN_0001B7B8: only mode 4 (Practise) sets [0x14C32A]; the ordinary
+   * played modes clear it. Set after begin, which seeds the direct arm. */
+  mr->session_gate_14c32a = mode == 4u ? 1u : 0u;
+  return 0;
+}
+
 void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out) {
   if (!mr || !out) return;
   if (mr->live_start) {
@@ -4227,6 +4374,8 @@ int fifa96_match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
   if (phase == 2u) {
     mr->goal_armed = 0;
     mr->goal_zone = 0;
+  } else {
+    mr->live_shot_pending = 0;
   }
   /* FU-191 §4/§9: the native FUN_000740A0 runs the per-team FUN_0008D098 walk
    * (0x740C8 team[side], 0x740DB team[side^1]) immediately after the [0x157A4D]
@@ -5152,15 +5301,72 @@ static uint8_t match_run_ball_side(const struct fifa96_match_run *mr) {
  * `[0x15781E]` zone. The scan/direct-fallback chain then runs unchanged. This
  * is a labelled stand-in for the unported live producer (native camera
  * director/FU-310); it never writes the score. */
+static void match_run_live_out_force(struct fifa96_match_run *mr);
+
 static void match_run_live_goal_arm(struct fifa96_match_run *mr) {
   const struct fifa96_match_ball *ball = &mr->entities.ball;
-  if (!mr->live_start || mr->state.phase != 2u || mr->goal_armed) return;
-  if (!fifa96_match_goal_zone(ball->x, ball->y, ball->z)) return;
-  mr->goal_armed = 1u;                         /* 0x713DB [0x15781D] = 1 */
-  mr->goal_snap_x = ball->x;                   /* 0x713E3 MOVSD x3 */
-  mr->goal_snap_y = 0;                         /* the native y force */
-  mr->goal_snap_z = ball->z;
-  mr->goal_zone = 1u;                          /* 0x713F2 classifier true */
+  int32_t abs_x;
+  int32_t abs_z;
+  uint8_t side;
+  if (!mr->live_start || mr->state.phase != 2u || mr->goal_armed ||
+      mr->live_out_pending)
+    return;
+  if (fifa96_match_goal_zone(ball->x, ball->y, ball->z)) {
+    mr->goal_armed = 1u;                       /* 0x713DB [0x15781D] = 1 */
+    mr->goal_snap_x = ball->x;                 /* 0x713E3 MOVSD x3 */
+    mr->goal_snap_y = 0;                       /* the native y force */
+    mr->goal_snap_z = ball->z;
+    mr->goal_zone = 1u;                        /* 0x713F2 classifier true */
+    mr->live_out_kind = 0;
+    return;
+  }
+  /* A sampled ball can skip the 0xB10..0xB90 mouth band at the live flight
+   * speed. If a live shot's latched target is inside the mouth and the ball is
+   * on that target's goal side, arm the mouth instead of classifying the
+   * overshoot as a goal-line exit. This is derived [D]; it never writes score
+   * itself, only the native armer cells the scan consumes. */
+  if ((mr->live_kick_active && mr->live_kick_shot) || mr->live_shot_pending) {
+    int32_t target_z = mr->live_kick_target_z;
+    int32_t target_mag = target_z < 0 ? 0 - target_z : target_z;
+    if (mr->live_kick_target_x > -FIFA96_MATCH_LIVE_GOAL_MOUTH_X &&
+        mr->live_kick_target_x < FIFA96_MATCH_LIVE_GOAL_MOUTH_X &&
+        target_mag >= 0xB10 &&
+        ((target_z > 0 && ball->z > 0xB10) ||
+         (target_z < 0 && ball->z < -0xB10))) {
+      mr->goal_armed = 1u;
+      mr->goal_snap_x = ball->x;
+      mr->goal_snap_y = 0;
+      mr->goal_snap_z = ball->z;
+      mr->goal_zone = 1u;
+      mr->live_out_kind = 0;
+      return;
+    }
+  }
+  abs_x = ball->x < 0 ? 0 - ball->x : ball->x;
+  abs_z = ball->z < 0 ? 0 - ball->z : ball->z;
+  side = match_run_ball_side(mr);
+  /* Goal line/corner first: a ball beyond both lines is a corner, not a
+   * throw-in. */
+  if (abs_z > MATCH_RUN_LIVE_GOALLINE_Z) {
+    mr->goal_armed = 1u;
+    mr->goal_snap_x = ball->x;
+    mr->goal_snap_y = 0;
+    mr->goal_snap_z = ball->z;
+    mr->goal_zone = 0;
+    mr->live_out_kind = 2u;                    /* goal line: corner/goal kick */
+    mr->live_out_side = side;
+    return;
+  }
+  if (abs_x > MATCH_RUN_LIVE_TOUCHLINE_X) {
+    mr->goal_armed = 1u;
+    mr->goal_snap_x = ball->x;
+    mr->goal_snap_y = 0;
+    mr->goal_snap_z = ball->z;
+    mr->goal_zone = 0;
+    mr->live_out_kind = 1u;                    /* touchline: throw-in */
+    mr->live_out_side = (uint8_t)(side ^ 1u);
+    return;
+  }
 }
 
 int fifa96_match_run_goal_scan(struct fifa96_match_run *mr) {
@@ -5175,6 +5381,43 @@ int fifa96_match_run_goal_scan(struct fifa96_match_run *mr) {
    * ET-skip branch is not taken here — leg L8). */
   if (mr->state.phase != 2u && mr->state.phase != 0x10u) return 0;
   if (!mr->goal_armed) return 0;
+  if (mr->live_out_pending) return 0;
+  if (mr->live_out_kind == 1u) {
+    /* P13 live touchline exit [D]: the native armer is camera-pan driven and
+     * absent live; the ball boundary now selects the throw-in arm directly. */
+    int rc;
+    if (mr->state.phase != 2u) return 0;
+    rc = fifa96_match_run_set_piece(mr, 2u, mr->live_out_side, 1u);
+    if (rc != 0) return rc;
+    mr->live_out_situation = 2u;
+    mr->live_out_pending = 1u;
+    mr->live_out_frames = 0;
+    mr->live_out_kind = 0;
+    mr->goal_armed = 0;
+    mr->goal_zone = 0;
+    return 1;
+  }
+  if (mr->live_out_kind == 2u) {
+    /* P13 live goal-line exit [D]: corner vs goal kick uses the native
+     * condition (`(snap z < 0) == (ball side == 1)`) with the ball-side byte
+     * captured at the boundary. */
+    int rc;
+    uint8_t ball = mr->live_out_side;
+    uint8_t cond;
+    if (mr->state.phase != 2u) return 0;
+    cond = ((mr->goal_snap_z < 0) == (ball == 1u)) ? 1u : 0u;
+    rc = fifa96_match_run_set_piece(mr, (uint8_t)(3u + cond),
+                                    (uint8_t)(ball ^ 1u), 0u);
+    if (rc != 0) return rc;
+    mr->live_out_situation = (uint8_t)(3u + cond);
+    mr->live_out_side = (uint8_t)(ball ^ 1u);
+    mr->live_out_pending = 1u;
+    mr->live_out_frames = 0;
+    mr->live_out_kind = 0;
+    mr->goal_armed = 0;
+    mr->goal_zone = 0;
+    return 1;
+  }
   /* 0x8896B..0x88983: |snapshot z| (full 32-bit magnitude; the native NEG
    * wraps INT_MIN to itself) <= 0xB20 selects the throw-in arm 0x88BCC. */
   {
@@ -6143,7 +6386,10 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * phase/bound gates run inside. Runs after the camera update, before the
      * entity chain (the FUN_000736AC position inside FUN_0004B100). */
     if (fifa96_camera_out_of_bounds(mr->render.camera.pos_x,
-                                    mr->render.camera.pos_z))
+                                    mr->render.camera.pos_z) &&
+        (!mr->live_start ||
+         fifa96_match_goal_zone(mr->entities.ball.x, mr->entities.ball.y,
+                                mr->entities.ball.z)))
       (void)fifa96_match_goal_arm(mr);
     (void)fifa96_match_display_update(&mr->render.display, mr->state.frame_delta, 0);
     /* FU-141: the FU-67 entity chain (selection, record walk with the FU-137
@@ -6374,6 +6620,7 @@ int fifa96_match_run_resolve(struct fifa96_match_run *mr) {
     (void)fifa96_match_lifecycle_resolve_over(&mr->lc);   /* OVER -> POST */
   }
   if (mr->lc.screen == FIFA96_MATCH_SCREEN_POST) {
+    mr->result_pending = 1;
     (void)fifa96_match_lifecycle_request_exit(&mr->lc);   /* POST -> EXIT */
   }
   if (fifa96_match_lifecycle_should_exit(&mr->lc)) return fifa96_match_run_end(mr);
@@ -6436,6 +6683,7 @@ int fifa96_match_run_step(struct fifa96_match_run *mr) {
     if (mr->lc.screen == FIFA96_MATCH_SCREEN_POST) {
       if (mr->post_timer != 0) mr->post_timer--;
       if (mr->post_timer == 0 || mr->post_skip) {
+        mr->result_pending = 1;
         (void)fifa96_match_lifecycle_request_exit(&mr->lc); /* POST -> EXIT */
         return fifa96_match_run_end(mr);
       }
@@ -6454,6 +6702,17 @@ int fifa96_match_run_step(struct fifa96_match_run *mr) {
 int fifa96_match_run_end(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
+  /* P13: preserve the regulation/extra-time result before lifecycle_end zeroes
+   * the live score pair. A pause/abandon exit is not a result. */
+  if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
+      mr->lc.screen == FIFA96_MATCH_SCREEN_POST || mr->result_pending) {
+    mr->final_score[0] = mr->score[0];
+    mr->final_score[1] = mr->score[1];
+    mr->final_score_valid = 1;
+  } else {
+    mr->final_score_valid = 0;
+  }
+  mr->result_pending = 0;
   match_run_camera_trace_close(mr);   /* FU313 §4.1: idempotent with teardown */
   int rc = fifa96_match_lifecycle_end(&mr->lc, &mr->pace);
   struct fifa96_engine *eng = mr->engine;
@@ -6468,6 +6727,7 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
    * render state anyway; this keeps the post-end state honest (and the
    * live_start render gates closed) between end and the next begin. */
   mr->live_start = 0;
+  mr->match_mode = 0;
   mr->render.team_remap_ready = 0;
   mr->render.hud_colors_ready = 0;
   mr->render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
@@ -6719,6 +6979,64 @@ static void match_run_hud_centered(struct fifa96_surface *s, const fifa96_font *
   match_run_hud_text(s, font, str, x, y, body, shadow);
 }
 
+/* P13: the 640 live HUD is a uniform 2x native panel, not an x-stretched 320
+ * strip. Render the glyphs once into a small transparent scratch and expand
+ * them; the 320 path keeps the exact existing blit. */
+#define MATCH_RUN_HUD_SCRATCH_W 512
+#define MATCH_RUN_HUD_SCRATCH_H 40
+
+static void match_run_hud_text_scaled(struct fifa96_surface *s,
+                                      const fifa96_font *font, const char *str,
+                                      int x, int y, uint8_t body, uint8_t shadow,
+                                      int scale_x, int scale_y) {
+  if (scale_x <= 1 && scale_y <= 1) {
+    match_run_hud_text(s, font, str, x, y, body, shadow);
+    return;
+  }
+  uint8_t scratch[MATCH_RUN_HUD_SCRATCH_W * MATCH_RUN_HUD_SCRATCH_H];
+  memset(scratch, 0, sizeof scratch);
+  if (fifa96_font_blit(scratch, MATCH_RUN_HUD_SCRATCH_W,
+                       MATCH_RUN_HUD_SCRATCH_H, font, str, 4, 4, 1) != FIFA96_OK)
+    return;
+  for (int pass = 0; pass < 2; pass++) {
+    int ox = pass == 0 ? scale_x : 0;
+    int oy = pass == 0 ? scale_y : 0;
+    uint8_t colour = pass == 0 ? shadow : body;
+    for (int sy = 0; sy < MATCH_RUN_HUD_SCRATCH_H; sy++) {
+      for (int sx = 0; sx < MATCH_RUN_HUD_SCRATCH_W; sx++) {
+        if (scratch[sy * MATCH_RUN_HUD_SCRATCH_W + sx] == 0) continue;
+        for (int dy = 0; dy < scale_y; dy++) {
+          int py = y + (sy - 4) * scale_y + oy + dy;
+          if (py < 0 || py >= s->height) continue;
+          uint8_t *row = s->indexed + (size_t)py * (size_t)s->width;
+          for (int dx = 0; dx < scale_x; dx++) {
+            int px = x + (sx - 4) * scale_x + ox + dx;
+            if (px >= 0 && px < s->width) row[px] = colour;
+          }
+        }
+      }
+    }
+  }
+}
+
+static void match_run_hud_centered_scaled(struct fifa96_surface *s,
+                                          const fifa96_font *font, const char *str,
+                                          int cell_x, int cell_y, int cell_w,
+                                          int cell_h, uint8_t body, uint8_t shadow,
+                                          int scale_x, int scale_y) {
+  if (scale_x <= 1 && scale_y <= 1) {
+    match_run_hud_centered(s, font, str, cell_x, cell_y, cell_w, cell_h, body,
+                           shadow);
+    return;
+  }
+  int w = fifa96_font_text_width(font, str) * scale_x;
+  int x = cell_x + (cell_w - w) / 2;
+  int y = cell_y;
+  int pad = (cell_h - 12 * scale_y) / 2;
+  if (pad > 0) y += pad;
+  match_run_hud_text_scaled(s, font, str, x, y, body, shadow, scale_x, scale_y);
+}
+
 /* The HUD pass: bar -> name0 -> name1 -> score0 -> score1 -> period -> clock
  * (FU-148 §1.4). `mr->score[2]`/`state.total_seconds`/`state.period` are the
  * engine seam for the native `0x157AC5/7`, `0x157AB4` and `0x157AC2`. */
@@ -6746,7 +7064,7 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
   if (y1 > s->height) y1 = s->height;
 
   const int ui_x = (s->width >= 640 && mr->live_start) ? 2 : 1;
-  const int ui_y = 1;
+  const int ui_y = (s->width >= 640 && mr->live_start) ? 2 : 1;
   const int row_pitch = (zoomed ? 9 : 12) * ui_y;
   const int x_left = x0 + (zoomed ? 3 : 6) * ui_x;
   int clock_x = x0 + (zoomed ? 0x23 : 0x32) * ui_x;
@@ -6781,18 +7099,23 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
   }
 
   match_run_hud_bar(s, mr, bar_x, bar_y, ui_x, ui_y);
-  match_run_hud_text(s, font, r->hud_name[0], x_left, y2, body, shadow);
-  match_run_hud_text(s, font, r->hud_name[1], x_left, y2 + row_pitch - 2, body, shadow);
-  match_run_hud_text(s, font, score_buf[0],
-                     clock_x - fifa96_font_text_width(font, score_buf[0]), y2, body,
-                     shadow);
-  match_run_hud_text(s, font, score_buf[1],
-                     clock_x - fifa96_font_text_width(font, score_buf[1]),
-                     y2 + row_pitch - 2, body, shadow);
-  match_run_hud_centered(s, font, period_buf, x0, cells_y, row_pitch - 1, row_pitch - 1,
-                         body, shadow);
-  match_run_hud_centered(s, font, clock_buf, x0 + (zoomed ? 0xE : 0x11), cells_y,
-                         clock_cell_w, row_pitch - 1, body, shadow);
+  match_run_hud_text_scaled(s, font, r->hud_name[0], x_left, y2, body, shadow,
+                            ui_x, ui_y);
+  match_run_hud_text_scaled(s, font, r->hud_name[1], x_left,
+                            y2 + row_pitch - 2 * ui_y, body, shadow, ui_x, ui_y);
+  match_run_hud_text_scaled(
+      s, font, score_buf[0],
+      clock_x - fifa96_font_text_width(font, score_buf[0]) * ui_x, y2, body,
+      shadow, ui_x, ui_y);
+  match_run_hud_text_scaled(
+      s, font, score_buf[1],
+      clock_x - fifa96_font_text_width(font, score_buf[1]) * ui_x,
+      y2 + row_pitch - 2 * ui_y, body, shadow, ui_x, ui_y);
+  match_run_hud_centered_scaled(s, font, period_buf, x0, cells_y, row_pitch - 1,
+                                row_pitch - 1, body, shadow, ui_x, ui_y);
+  match_run_hud_centered_scaled(s, font, clock_buf, x0 + (zoomed ? 0xE : 0x11),
+                                cells_y, clock_cell_w, row_pitch - 1, body, shadow,
+                                ui_x, ui_y);
 }
 
 /* FU-343 (P4): the pause and FULL TIME panels. Both are engine stand-ins for
@@ -6842,6 +7165,20 @@ static void match_run_draw_pause(const struct fifa96_match_run *mr,
                        ink, 0x00);
   match_run_panel_text(s, font, "X: QUIT TO MENU", x, MATCH_RUN_PAUSE_PANEL_W, y + 37,
                        ink, 0x00);
+}
+
+static void match_run_draw_halftime(const struct fifa96_match_run *mr,
+                                    struct fifa96_surface *s) {
+  const struct fifa96_match_run_render *r = &mr->render;
+  if (!match_run_hud_font_ready(r)) return;
+  const fifa96_font *font = match_run_hud_font(r);
+  const uint8_t ink = r->hud_colors_ready ? r->hud_ink : FIFA96_MATCH_HUD_INK_DEFAULT;
+  const int x = (s->width - 220) / 2;
+  const int y = (s->height - 58) / 2;
+  match_run_panel_fill(s, x, y, 220, 58, ink);
+  match_run_panel_text(s, font, "HALF TIME", x, 220, y + 7, ink, 0x00);
+  match_run_panel_text(s, font, "KICK OR PASS TO START", x, 220, y + 24, ink, 0x00);
+  match_run_panel_text(s, font, "AUTO IN 3 SECONDS", x, 220, y + 41, ink, 0x00);
 }
 
 static void match_run_draw_result(const struct fifa96_match_run *mr,
@@ -7675,6 +8012,10 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     else if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
              mr->lc.screen == FIFA96_MATCH_SCREEN_POST)
       match_run_draw_result(mr, s);
+    else if (mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
+             mr->state.period == 1u &&
+             (mr->state.phase == 0x0Cu || mr->state.phase == 1u))
+      match_run_draw_halftime(mr, s);
   }
   return 0;
 }

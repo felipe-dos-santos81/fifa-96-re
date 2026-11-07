@@ -562,6 +562,7 @@ static void menu_draw_team_select(struct fifa96_surface *s, const struct fifa96_
 
   menu_text_shadow(s, st->font, st->title, menu_sx(s, 12), menu_sy(s, 8), c->main);
   for (int side = 0; side < 2; side++) {
+    if (st->team_locked && side == 1) continue;
     int hx = side == 0 ? left_x : right_x;
     if (st->team_col == side)
       menu_text_shadow(s, st->font, ">", hx - menu_sx(s, 10), menu_sy(s, 44), c->main);
@@ -647,6 +648,63 @@ static void menu_draw_options(struct fifa96_surface *s, const struct fifa96_menu
   }
 
   menu_text_shadow(s, st->font, st->footer, menu_sx(s, 8), menu_sy(s, 225), c->main);
+}
+
+/* P13: the shared derived list screen (hub, Load/Save/Modem, table/bracket).
+ * It uses the existing HELV12 font, fallback/MOD2 palette and the native
+ * eight-row pitch; the snapshot is already windowed by the front-end. */
+static void menu_draw_list_screen(struct fifa96_surface *s,
+                                  const struct fifa96_menu_state *st,
+                                  const struct menu_colors *c) {
+  const int x = menu_sx(s, 24);
+  const int w = menu_sx(s, 272);
+  const int top = menu_sy(s, 42);
+  const int pitch = menu_sy(s, 19);
+  const int row_h = menu_sy(s, 16);
+  const int label_x = x + menu_sx(s, 6);
+
+  menu_fill(s, x - menu_sx(s, 6), top - menu_sy(s, 8), w + menu_sx(s, 12),
+            FIFA96_MENU_LIST_VISIBLE * pitch + menu_sy(s, 12), 0);
+  menu_fill(s, x - menu_sx(s, 6), top - menu_sy(s, 8), w + menu_sx(s, 12), 1, c->dim);
+  menu_fill(s, x - menu_sx(s, 6),
+            top - menu_sy(s, 8) + FIFA96_MENU_LIST_VISIBLE * pitch + menu_sy(s, 11),
+            w + menu_sx(s, 12), 1, c->dim);
+
+  menu_text_shadow(s, st->font, st->list_title != NULL ? st->list_title : st->title,
+                   menu_sx(s, 12), menu_sy(s, 8), c->main);
+  for (int k = 0; k < FIFA96_MENU_LIST_VISIBLE; k++) {
+    int row = st->list_scroll + k;
+    if (row >= st->list_row_count) break;
+    int y = top + k * pitch;
+    int selected = row == st->list_selected;
+    uint8_t color = selected ? c->sel_text
+                             : (st->list_rows[k].enabled ? c->main : c->dim);
+    if (selected) menu_fill(s, x, y, w, row_h, c->sel_fill);
+    if (st->list_rows[k].label == NULL) continue;
+    if (selected)
+      menu_text(s, st->font, st->list_rows[k].label, label_x,
+                y + (row_h - 13) / 2, color);
+    else
+      menu_text_shadow(s, st->font, st->list_rows[k].label, label_x,
+                       y + (row_h - 13) / 2, color);
+  }
+
+  if (st->list_row_count > FIFA96_MENU_LIST_VISIBLE) {
+    const int track_x = x + w + menu_sx(s, 6);
+    const int track_h = FIFA96_MENU_LIST_VISIBLE * pitch - (pitch - row_h);
+    int thumb_h = track_h * FIFA96_MENU_LIST_VISIBLE / st->list_row_count;
+    if (thumb_h < menu_sy(s, 8)) thumb_h = menu_sy(s, 8);
+    int span = st->list_row_count - FIFA96_MENU_LIST_VISIBLE;
+    int thumb_y = top;
+    if (span > 0) thumb_y += (track_h - thumb_h) * st->list_scroll / span;
+    menu_fill(s, track_x, top, menu_sx(s, 2), track_h, c->dim);
+    menu_fill(s, track_x, thumb_y, menu_sx(s, 2), thumb_h, c->main);
+  }
+
+  if (st->list_help != NULL)
+    menu_text_shadow(s, st->font, st->list_help, menu_sx(s, 8), menu_sy(s, 208), c->main);
+  menu_text_shadow(s, st->font, st->list_footer != NULL ? st->list_footer : st->footer,
+                   menu_sx(s, 8), menu_sy(s, 225), c->main);
 }
 
 /* ===== Native 640x480 shell ============================================ */
@@ -806,7 +864,7 @@ static void hires_game_select(const struct fifa96_menu_state *st) {
 
 static void hires_team_select(const struct fifa96_menu_state *st) {
   memcpy(menu_art.hires_canvas, menu_art.team_bg, MENU_HIRES_PIXELS);
-  hires_title("FRIENDLY", 30, 18, 400, 6);
+  hires_title(st->title != NULL ? st->title : "FRIENDLY", 30, 18, 400, 6);
   /* Vertical LEAGUE SELECT strip (native 46x163 art is a text column; draw the
    * letters stacked with the menu font). */
   for (int i = 0; i < 13; i++) {
@@ -816,12 +874,16 @@ static void hires_team_select(const struct fifa96_menu_state *st) {
   }
   /* FIFA globe mark above each team column. */
   hires_blit(menu_art.fifa_logo, MENU_LOGO_W, MENU_LOGO_H, 150, 150, 120, 114, 255);
-  hires_blit(menu_art.fifa_logo, MENU_LOGO_W, MENU_LOGO_H, 410, 150, 120, 114, 255);
+  if (!st->team_locked)
+    hires_blit(menu_art.fifa_logo, MENU_LOGO_W, MENU_LOGO_H, 410, 150, 120, 114, 255);
   hires_text_shadow(&menu_art.menu_font, st->column_label[0] ? st->column_label[0] : "Home",
                     170, 124, 1);
-  hires_text_shadow(&menu_art.menu_font, st->column_label[1] ? st->column_label[1] : "Visitor",
-                    430, 124, 1);
+  if (!st->team_locked)
+    hires_text_shadow(&menu_art.menu_font,
+                      st->column_label[1] ? st->column_label[1] : "Visitor",
+                      430, 124, 1);
   for (int side = 0; side < 2; side++) {
+    if (st->team_locked && side == 1) continue;
     int x = side == 0 ? HIRES_TEAM_LEFT_X : HIRES_TEAM_RIGHT_X;
     for (int r = 0; r < st->team_rows; r++) {
       const char *name = st->teams[side][r];
@@ -908,6 +970,63 @@ static void hires_options(const struct fifa96_menu_state *st) {
     hires_text_shadow(&menu_art.menu_font, st->footer, 170, 452, 1);
 }
 
+/* P13: the shared derived list screen at native 640x480 scale. The panel uses
+ * the same black fill/yellow rules as the Options list; the rows are the
+ * front-end's pre-windowed snapshot. */
+static void hires_list_screen(const struct fifa96_menu_state *st) {
+  memcpy(menu_art.hires_canvas, menu_art.team_bg, MENU_HIRES_PIXELS);
+  hires_title(st->list_title != NULL ? st->list_title
+                                     : (st->title != NULL ? st->title : "COMPETITION"),
+              30, 26, 590, 6);
+  const int x = 132;
+  const int w = 444;
+  const int top = 142;
+  const int pitch = 32;
+  const int row_h = 28;
+  hires_fill(x - 12, top - 12, w + 24,
+             FIFA96_MENU_LIST_VISIBLE * pitch + 12, 0);
+  hires_fill(x - 12, top - 12, w + 24, 2, 9);
+  hires_fill(x - 12, top - 12 + FIFA96_MENU_LIST_VISIBLE * pitch + 10,
+             w + 24, 2, 9);
+
+  for (int k = 0; k < FIFA96_MENU_LIST_VISIBLE; k++) {
+    int row = st->list_scroll + k;
+    if (row >= st->list_row_count) break;
+    int y = top + k * pitch;
+    int selected = row == st->list_selected;
+    if (selected) {
+      hires_fill(x, y, w, row_h, 0);
+      hires_fill(x, y, w, 2, 6);
+      hires_fill(x, y + row_h - 2, w, 2, 6);
+    }
+    if (st->list_rows[k].label == NULL) continue;
+    if (selected)
+      hires_text(&menu_art.menu_font, st->list_rows[k].label, x + 12, y + 7, 25);
+    else
+      hires_text_shadow(&menu_art.menu_font, st->list_rows[k].label, x + 12, y + 7,
+                        st->list_rows[k].enabled ? 1 : 9);
+  }
+
+  if (st->list_row_count > FIFA96_MENU_LIST_VISIBLE) {
+    int track_x = x + w + 10;
+    int track_h = FIFA96_MENU_LIST_VISIBLE * pitch - (pitch - row_h);
+    int thumb_h = track_h * FIFA96_MENU_LIST_VISIBLE / st->list_row_count;
+    if (thumb_h < 16) thumb_h = 16;
+    int span = st->list_row_count - FIFA96_MENU_LIST_VISIBLE;
+    int thumb_y = top;
+    if (span > 0) thumb_y += (track_h - thumb_h) * st->list_scroll / span;
+    hires_fill(track_x, top, 4, track_h, 9);
+    hires_fill(track_x, thumb_y, 4, thumb_h, 1);
+  }
+
+  if (st->list_help != NULL)
+    hires_text_shadow(&menu_art.menu_font, st->list_help, 134, 414, 1);
+  if (st->list_footer != NULL || st->footer != NULL)
+    hires_text_shadow(&menu_art.menu_font,
+                      st->list_footer != NULL ? st->list_footer : st->footer,
+                      134, 448, 1);
+}
+
 /* Returns 1 when the native hires shell drew the frame. The legacy library
  * path keeps the old composition. */
 static int menu_art_draw_hires(struct fifa96_surface *s,
@@ -925,6 +1044,15 @@ static int menu_art_draw_hires(struct fifa96_surface *s,
   }
   if (st->screen == FIFA96_MENU_SCREEN_OPTIONS) {
     hires_options(st);
+    hires_present(s, menu_art.hires_pal_team);
+    return 1;
+  }
+  if (st->screen == FIFA96_MENU_SCREEN_COMPETITION_HUB ||
+      st->screen == FIFA96_MENU_SCREEN_LOAD_GAME ||
+      st->screen == FIFA96_MENU_SCREEN_SAVE_GAME ||
+      st->screen == FIFA96_MENU_SCREEN_MODEM ||
+      st->screen == FIFA96_MENU_SCREEN_LIST) {
+    hires_list_screen(st);
     hires_present(s, menu_art.hires_pal_team);
     return 1;
   }
@@ -954,6 +1082,13 @@ void fifa96_menu_art_draw(struct fifa96_surface *s, const struct fifa96_menu_sta
       break;
     case FIFA96_MENU_SCREEN_OPTIONS:
       menu_draw_options(s, st, &colors);
+      break;
+    case FIFA96_MENU_SCREEN_COMPETITION_HUB:
+    case FIFA96_MENU_SCREEN_LOAD_GAME:
+    case FIFA96_MENU_SCREEN_SAVE_GAME:
+    case FIFA96_MENU_SCREEN_MODEM:
+    case FIFA96_MENU_SCREEN_LIST:
+      menu_draw_list_screen(s, st, &colors);
       break;
     default:
       menu_draw_library(s, st);

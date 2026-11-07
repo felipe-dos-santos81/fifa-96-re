@@ -225,6 +225,38 @@ static void test_live_begin_seeds_kickoff_carrier(void) {
   drop_lc_fixture(&f);
 }
 
+/* P13 / live carrier dribble: the human carrier's row-05 target is the held
+ * direction, not the camera. Before this fix the record target became the
+ * camera triple and the player could only kick-and-chase. */
+static void test_live_carrier_dribbles_with_ball(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t id = mr->entities.controlled;
+  int32_t x0, z0, bx, bz;
+  struct fifa96_match_entity *e;
+  assert(id > 0 && id < 11);
+  e = &mr->entities.team[0].records[id];
+  assert(mr->entities.ball.carrier == id);
+  x0 = e->pos_x;
+  z0 = e->pos_z;
+  {
+    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+    assert(fifa96_match_run_input(mr, &up, 1) == 0);
+  }
+  for (int i = 0; i < 8; i++) one_granted_frame(mr);
+  assert(e->pos_x > x0);
+  assert(e->target_x > x0);
+  assert(e->pos_x - x0 <= 0x80 * 8);
+  assert(e->pos_z == z0);
+  bx = mr->entities.ball.x - e->pos_x;
+  bz = mr->entities.ball.z - e->pos_z;
+  assert(fifa96_entity_distance(bx, bz) <= 0x400);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(mr->state.phase == 2u);
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  drop_lc_fixture(&f);
+}
+
 /* KICK press then release through the public input path runs row 07 on the
  * seeded carrier; the ball moves and no score is written. */
 static void test_live_kick_release_runs_row07(void) {
@@ -260,6 +292,66 @@ static void test_live_kick_release_runs_row07(void) {
          mr->entities.ball.vel_x != vx0 || mr->entities.ball.vel_z != vz0);
   assert(mr->score[0] == 0u && mr->score[1] == 0u);   /* no fabricated score */
   assert(mr->live_kickoff_touch == 0u);               /* the kick released it */
+  drop_lc_fixture(&f);
+}
+
+/* P13 live boundary armer/restart fallback: a ball over the touchline is a
+ * throw-in even when its z is beyond the old 0xB20 classifier band, and the
+ * bounded fallback returns to phase 2 instead of holding the goal-kick row. */
+static void test_live_touchline_exit_throw_in(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  for (int i = 0; i < 12 && !mr->live_out_pending; i++) {
+    stage_ball(mr, 0x7E1, 0, 0);
+    one_granted_frame(mr);
+  }
+  assert(mr->live_out_situation == 2u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  for (int i = 0; i < 140 && (mr->live_out_pending || mr->state.phase != 2u); i++)
+    one_granted_frame(mr);
+  assert(mr->state.phase == 2u);
+  assert(mr->live_out_pending == 0u);
+  assert(mr->entities.ball.x >= 0x780 && mr->entities.ball.x <= 0x800);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  drop_lc_fixture(&f);
+}
+
+static void test_live_goal_line_exit_restarts(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  for (int i = 0; i < 12 && !mr->live_out_pending; i++) {
+    stage_ball(mr, 0, 0, 0xC1F);
+    one_granted_frame(mr);
+  }
+  assert(mr->live_out_situation == 3u || mr->live_out_situation == 4u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  for (int i = 0; i < 140 && (mr->live_out_pending || mr->state.phase != 2u); i++)
+    one_granted_frame(mr);
+  assert(mr->state.phase == 2u);
+  assert(mr->live_out_pending == 0u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  drop_lc_fixture(&f);
+}
+
+static void test_live_inside_ball_never_restarts(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  for (int i = 0; i < 20; i++) {
+    stage_ball(mr, 0x6C1, 0, 0xAB1);
+    one_granted_frame(mr);
+    assert(mr->live_out_pending == 0u);
+    assert(mr->state.phase == 2u);
+  }
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
   drop_lc_fixture(&f);
 }
 
@@ -760,10 +852,13 @@ static void test_live_opponent_presses_and_claims(void) {
   stage_ball(mr, 0, 0, 0);
   mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
   for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
-    mr->entities.team[(uint32_t)human_team].records[i].pos_x = 0x600;
-    mr->entities.team[(uint32_t)human_team].records[i].pos_z = 0x600;
-    mr->entities.team[(uint32_t)human_team].records[i].target_x = 0x600;
-    mr->entities.team[(uint32_t)human_team].records[i].target_z = 0x600;
+    /* Keep the now-mobile human records outside the control range so this
+     * opponent-AI fixture still measures the opponent's claim; the old 0x600
+     * park was reachable once the human carrier stopped being camera-pinned. */
+    mr->entities.team[(uint32_t)human_team].records[i].pos_x = 0x4000;
+    mr->entities.team[(uint32_t)human_team].records[i].pos_z = 0x4000;
+    mr->entities.team[(uint32_t)human_team].records[i].target_x = 0x4000;
+    mr->entities.team[(uint32_t)human_team].records[i].target_z = 0x4000;
     mr->entities.team[opp].records[i].pos_x = 0x600;
     mr->entities.team[opp].records[i].pos_z = 0x600;
     mr->entities.team[opp].records[i].target_x = 0x600;
@@ -1751,6 +1846,10 @@ static void test_live_stale_aim_two_kicks(void) {
 
 int main(void) {
   test_live_begin_seeds_kickoff_carrier();
+  test_live_carrier_dribbles_with_ball();
+  test_live_touchline_exit_throw_in();
+  test_live_goal_line_exit_restarts();
+  test_live_inside_ball_never_restarts();
   test_live_kick_release_runs_row07();
   test_live_kick_flight_scores();
   test_live_kickoff_shot_scores();

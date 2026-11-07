@@ -9,8 +9,10 @@
  * (`-2` arg) Friendly/Leagues/Tournaments/Playoffs/Practise and left column
  * (`-3`) Load Game/Options/Modem Setup/Quit to DOS. Each item keeps its native
  * label id (the `FUN_0001771C(id)` argument) and action code (the packed widget
- * id's low byte, the value the screen returns). Only Friendly/Options/Quit are
- * live in P2; the other six are drawn disabled (A3-L1/A3-L2 legs).
+ * id's low byte, the value the screen returns). P2 originally shipped only
+ * Friendly/Options/Quit live; P13 enables every entry: Leagues/Tournaments/
+ * Playoffs/Practise open the single-team Team Select, Load Game opens the
+ * derived slot list, and Modem Setup opens the derived offline notice.
  *
  * Team Select uses the 44 national names A3 verified as plain LANG000 entries.
  * The ids are language-stable; the three-letter codes are fallbacks. P6 maps
@@ -21,6 +23,12 @@
 #define FIFA96_MENU_ITEM_COUNT 9
 #define FIFA96_MENU_TEAM_COUNT 44
 #define FIFA96_MENU_TEAM_VISIBLE 7
+
+/* P13 derived screens: the hub, Load/Save/Modem and the read-only table/
+ * bracket all share one eight-row list window. Ten save slots overflow it, so
+ * the window scrolls. */
+#define FIFA96_MENU_LIST_VISIBLE 8
+#define FIFA96_MENU_SAVE_SLOTS 10
 
 /* P6 (P6-options §1/§3): the native Options table is 26 nine-byte records at
  * 0x105340 = {u32 label LANG id; u32 choice LANG-id array; u8 max}, indexed by
@@ -60,7 +68,13 @@ enum fifa96_menu_screen {
   FIFA96_MENU_SCREEN_LIBRARY = 0,
   FIFA96_MENU_SCREEN_GAME_SELECT = 1,
   FIFA96_MENU_SCREEN_TEAM_SELECT = 2,
-  FIFA96_MENU_SCREEN_OPTIONS = 3
+  FIFA96_MENU_SCREEN_OPTIONS = 3,
+  /* P13: appended so the historical values never move. */
+  FIFA96_MENU_SCREEN_COMPETITION_HUB = 4,
+  FIFA96_MENU_SCREEN_LOAD_GAME = 5,
+  FIFA96_MENU_SCREEN_SAVE_GAME = 6,
+  FIFA96_MENU_SCREEN_MODEM = 7,
+  FIFA96_MENU_SCREEN_LIST = 8
 };
 
 enum fifa96_menu_action {
@@ -68,7 +82,22 @@ enum fifa96_menu_action {
   FIFA96_MENU_ACTION_FRIENDLY = 1,
   FIFA96_MENU_ACTION_OPTIONS = 2,
   FIFA96_MENU_ACTION_QUIT = 3,
-  FIFA96_MENU_ACTION_START_MATCH = 4
+  FIFA96_MENU_ACTION_START_MATCH = 4,
+  /* P13 single-player flows. LEAGUE..PRACTISE are also the native mode bytes
+   * (1..4) and are stored in `pending_kind` while Team Select is open. */
+  FIFA96_MENU_ACTION_LEAGUE = 5,
+  FIFA96_MENU_ACTION_TOURNAMENT = 6,
+  FIFA96_MENU_ACTION_PLAYOFF = 7,
+  FIFA96_MENU_ACTION_PRACTISE = 8,
+  FIFA96_MENU_ACTION_LOAD_GAME = 9,
+  FIFA96_MENU_ACTION_HUB_PLAY = 10,
+  FIFA96_MENU_ACTION_HUB_SIMULATE = 11,
+  FIFA96_MENU_ACTION_HUB_TABLE = 12,
+  FIFA96_MENU_ACTION_HUB_SAVE = 13,
+  FIFA96_MENU_ACTION_HUB_EXIT = 14,
+  FIFA96_MENU_ACTION_SAVE_SLOT = 15,
+  FIFA96_MENU_ACTION_LOAD_SLOT = 16,
+  FIFA96_MENU_ACTION_MODEM_BACK = 17
 };
 
 struct fifa96_menu_item_desc {
@@ -92,6 +121,14 @@ struct fifa96_menu_model {
   int option_row;           /* absolute model row 0..20 */
   int option_scroll;        /* first visible native row, 0..13 */
   int option_page;          /* 0 list, 1 Controls (port addition) */
+  /* P13: 0 = Friendly's two-column Team Select; 1..4 = the native competition
+   * mode (League/Tournament/Playoff/Practise) whose single-team Team Select is
+   * open. The hub and list screens share `list_row`/`list_scroll`; the front-end
+   * sets `list_count` when it builds a read-only table/bracket. */
+  uint8_t pending_kind;
+  int list_row;
+  int list_scroll;
+  int list_count;
 };
 
 void fifa96_menu_model_init(struct fifa96_menu_model *model);

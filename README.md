@@ -42,7 +42,7 @@ the port's golden fixtures — captured byte excerpts committed under
 | `docs/PROGRESS.md` | The current progress narrative (moved out of the README): evidence-map coverage, port chains, engine/M2 acceptance state, carried legs |
 | `port/src/fifa96_loader/` | The C port (~40 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, ISO9660 reader, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD; presentation player/blit/VGA; match layer tick/input/match-pace/state/lifecycle/event-queue/display/control/camera/ball/keeper/outfield/entity/ring/stats/frontend/competition/settings-handoff |
 | `port/src/fifa96_engine/` | The native engine layer (platform ABI, SDL3/null backends, boot/intro/front-end/match drivers, M1/M2 acceptance tapes) — see [`port/ENGINE.md`](port/ENGINE.md) |
-| `port/tests/`, `port/tests/golden/` | CTest suite (112 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
+| `port/tests/`, `port/tests/golden/` | CTest suite (123 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
 | `port/tools/fifa96_play.c` | Host runner used by `make run FILE=…` / `make run ARGS=…` ([port/HOST_RUNNER.md](port/HOST_RUNNER.md)): explicit `video`/`audio`/`sprite` modes plus `auto` (bare `FILE`) — TGV chunk stream → PPM/Mode-X, EACS/BNK/VIV → WAV, BIGF `.pvi` sprite → PPM, and an ISO9660 walk + bounded smoke pass |
 | `port/tools/fifa96_dump.c` | Standalone container dumper (debug aid) — `0xFB10` envelope, QFS, POG, `kVGT` TGV, VIV offset tables via the shared `port/tools/fifa96_detect.c` sniff |
 | `tools/*.py`, `tools/keys/` | Runtime capture rig: LE-image rebuild (`fifa96_le.py`), ISO patch/probe (`fifa96_patch.py`, `fifa96_probe.py`), trace map/bind (`fifa96_runtime.py`, `fifa96_bind.py`), VGT/fVGT extraction, key-step driver, frame export |
@@ -75,7 +75,7 @@ with the six producer-blocked rows named in the phase-36/38 registers
 ## Build and run
 
 ```bash
-make check                     # sanitized gate: configure + strict build + full CTest suite (119 tests)
+make check                     # sanitized gate: configure + strict build + full CTest suite (123 tests)
 make run                       # playable Release engine on data/game/FIFAPCCD96.iso (no extra args)
 make game                      # build/run the playable Release engine (build-release/)
 make run FILE=data/game/FIFAPCCD96.iso    # host runner: sniff the ISO, bounded decode pass under build/run/
@@ -108,22 +108,34 @@ two-team selector: the arrows change the highlighted Home/Visitor entry,
 native settings list: arrows change the value, **Enter** cycles it, and
 **X**/Backspace backs out. Half Length, Fouls, Injuries, Offside, SFX Volume
 and Sound Effects are live; the other rows are stored for later (the Controls
-page and Reset Defaults row are port additions). The other six native Game
-Select entries are shown dimmed (not ported yet). The shell composes the real
-640x480 MOD2/MOD1 art, the SLICK title/menu fonts and the animated VS mark;
-the match uses the native camera type-0 high follow view, a derived
-stadium stand/end wall built from the native stand/crowd banks, the native
-`Net.fsh` goal mesh, mowing stripes and player shadows. The windowed build renders at the native
+page and Reset Defaults row are port additions). All nine Game Select entries
+are live: **Leagues**, **Tournaments** and **Playoffs** open a derived
+eight-team competition (pick the home team, then Play/Simulate each fixture,
+view the table/bracket, save or load); **Practise** starts a no-stakes session;
+**Load Game** restores one of ten derived slots; **Modem Setup** shows the
+honest offline notice (native modem transport remains a leg). The competition
+fixtures, tables and save records are derived from the native mode bytes and
+are labelled as such; the native league/tournament screen art and data layouts
+remain open legs. The shell composes the real 640x480 MOD2/MOD1 art, the SLICK
+title/menu fonts and the animated VS mark; the match uses the native camera
+type-0 high follow view, a derived stadium stand/end wall built from the native
+stand/crowd banks, the native `Net.fsh` goal mesh, mowing stripes, player
+shadows and a uniform 2x 640 HUD. The windowed build renders at the native
 640x480 surface in a 1280x960 window; the headless tape path stays 320x240.
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
 **C** passes, **V** plays a long ball; **Esc** pauses (**Enter** resumes,
-**X** quits to the menu). At half-time press **C**/pass to start the second
-half (the native kickoff gate). Halves are 2 minutes (120 seconds) by default
+**X** quits to the menu). At half-time the panel shows for three seconds and
+then the native kickoff gate starts the second half automatically; **C**/pass
+(or **Z**) starts it immediately. Halves are 2 minutes (120 seconds) by default
 and configurable in **Options** (2/4/6/8/10/20/45-minute halves). The HUD
 shows the team codes, score, period and clock; at full time the result panel
-holds for five seconds, then returns to Game Select (or press **Enter**).
-Crowd ambience and the whistle play through SDL3 audio when the ISO is
+holds for five seconds, then returns to the competition hub for a League/
+Tournament/Playoff match or Game Select for Friendly/Practise (or press
+**Enter**). Competition progress auto-saves slot 0 after each result; the
+**Load Game** screen lists ten `F96SAVE%.2d.DAT` slots under
+`data/game/hdd/` (the distinct port format never overwrites native `SGAME`
+files). Crowd ambience and the whistle play through SDL3 audio when the ISO is
 mounted; their gain follows the SFX Volume and Sound Effects options.
 
 Gamepad: D-pad moves; **A/South** kicks in play and selects in menus;

@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_lang.h"
 #include "fifa96_engine/fifa96_match_bridge.h"
@@ -191,6 +192,13 @@ int fifa96_engine_boot(struct fifa96_engine *e) {
     e->assets = NULL;
     return -1;
   }
+  /* P13: derived saves live beside the emulated install (data/ is ignored);
+   * headless/test boots never reach the interactive hub, so no file is
+   * written unless a native-menu player asks or a result auto-saves. */
+  if (e->cfg.iso_path) {
+    (void)mkdir("data/game/hdd", 0777);
+    fifa96_frontend_run_set_save_dir(&e->frontend, "data/game/hdd");
+  }
   fifa96_menu_art_init(e->assets);
   /* P6: decode the PCCD team database into an engine-owned arena. Soft-fails
    * without the ISO (the native menu then keeps the 3-letter fallback codes and
@@ -341,6 +349,24 @@ int fifa96_engine_step(struct fifa96_engine *e) {
         continue;
       match_keys[match_count++] = keys[i];
     }
+    /* P13: the native half-time kickoff gate is player-driven. Inject one
+     * KICK press after a visible 3 s dwell so a player who waits does not
+     * soft-lock at 02:00; a manual KICK/PASS moves the phase first and clears
+     * this path. Live-only. */
+    if (e->match && e->match->live_start &&
+        e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
+        e->match->state.period == 1u && e->match->state.phase == 1u) {
+      if (e->match_halftime_steps < 600u) e->match_halftime_steps++;
+      if (e->match_halftime_steps >= 300u && !e->match_halftime_pressed &&
+          match_count < sizeof match_keys / sizeof match_keys[0]) {
+        fifa96_platform_key auto_key = {FIFA96_ENGINE_KEY_KICK, 1};
+        match_keys[match_count++] = auto_key;
+        e->match_halftime_pressed = 1;
+      }
+    } else {
+      e->match_halftime_steps = 0;
+      e->match_halftime_pressed = 0;
+    }
     if (e->match)
       (void)fifa96_match_run_input(e->match, match_keys, match_count);
     if (e->match && e->match->live_start) {
@@ -390,6 +416,15 @@ int fifa96_engine_step(struct fifa96_engine *e) {
          * before its first draw and stop the audio; the last match frame stays
          * presented for this step. */
         if (!e->match || e->mode != FIFA96_ENGINE_MODE_MATCH) {
+          /* P13: preserve the completed result before frontend_run_reset
+           * (the run teardown already zeroed score[]; final_score is the
+           * pre-teardown copy). A pause/abandon exit leaves the flag clear. */
+          if (e->frontend.mode >= FIFA96_COMPETITION_LEAGUE &&
+              e->frontend.mode <= FIFA96_COMPETITION_PRACTISE &&
+              e->match_run.final_score_valid)
+            (void)fifa96_frontend_run_match_result(
+                &e->frontend, e->match_run.final_score[0],
+                e->match_run.final_score[1]);
           (void)fifa96_frontend_run_reset(&e->frontend, e->surface);
         } else {
           /* P3: the run step above has applied this frame's whistle writer, so
