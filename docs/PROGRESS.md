@@ -4600,3 +4600,27 @@ close-out below).
   `make check` **124/124**; M1/M2 exact; release screenshot
   `docs/screens/p80-side-camera.png`, native reference
   `docs/screens/p80-native-side.png`. No golden re-pin.
+
+- **Phase 81 class-3 camera envelope and render-only focus (2026-11-08).** The
+  Phase 80 selection was right but its framing was wrong: pitch `0x0C00` (~17°)
+  instead of the native class-3 `0x2000` (45°) band, and a low sideline eye.
+  Native frames show the high side view with the far stand outside the frame.
+  Ghidra `FUN_0004db38` confirms the `0x2000` pitch clamp, the 500 (`0x1F4`)
+  side distance and the ±0x420/±0x810 position clamps. The live seed is now
+  `(-500,420,0)`, yaw `0xC000`, pitch `0x2000`, ratio `4608`. A separate
+  render-only ball focus (`view_focus_*`) keeps the presentation camera on the
+  play while the native FU-71 focus keeps its pan freeze for the ball machine
+  and AI. `make check` **124/124**; M1/M2 exact; screenshots
+  `docs/screens/p81-class3-envelope.png` and `p81-class3-kickoff.png`. The full
+  class-3 integrator, walk-row animation and shadows remain legs.
+
+- **Phase 82 live walk rows and ground shadows (2026-11-08).** The controlled
+  player stayed on anim row `0x00` while moving because terminal-row steering
+  was unported. FU-172's tables now select rows `0x01/0x02/0x03` by `speed71`
+  at each terminal timer expiry and use the table duration; the live trace
+  moved from idle to `anim=02 speed=3` / `anim=03 speed=6`. The non-live
+  successor keeps the terminal no-op so M1/M2 stay exact. The shadow pass now
+  uses a 55%-brightness palette map and a longer down-left ellipse, so players
+  read as grounded. `make check` **124/124**; M1/M2 exact; screenshot
+  `docs/screens/p82-live-walk-shadows.png`. The `+0x7F` lean producer, full
+  appearance machine, class-3 integrator and native 3dwpts art remain legs.

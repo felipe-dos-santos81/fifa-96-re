@@ -2598,7 +2598,7 @@ static void test_live_setpiece_timeout_falls_back(uint8_t phase) {
   drop_lc_fixture(&f);
 }
 
-/* Phase 71/80: the render-only eye moves at most 0x30 per granted frame and
+/* Phase 71/81: the render-only eye moves at most 0x30 per granted frame and
  * converges on the clamped class-3 side pose; the simulation camera stays the
  * native FU-71 cell. */
 static void test_live_render_eye_stabilizer(void) {
@@ -2609,24 +2609,19 @@ static void test_live_render_eye_stabilizer(void) {
   one_granted_frame(mr);
   fifa96_match_run_render_eye(mr, &prev);
   assert(mr->render.render_eye_valid == 1u);
-  /* A native pan active keeps the derived follow out; jump the focus and pin
-   * the pan cells so the render eye must absorb the delta. */
-  mr->render.camera.event_param = 0x20;
-  mr->render.camera.speed = 1;
-  mr->render.camera.pos_x += 0x400;
-  mr->render.camera.pos_z += 0x200;
+  assert(mr->render.view_focus_valid == 1u);
+  /* Jump the ball so the render-only focus must move; the eye is the bounded
+   * stabilizer and may move at most 0x30 per granted frame. */
+  mr->entities.ball.x += 0x400;
+  mr->entities.ball.z += 0x200;
+  mr->entities.ball.vel_x = 0;
+  mr->entities.ball.vel_z = 0;
   one_granted_frame(mr);
   fifa96_match_run_render_eye(mr, &cur);
   dx = cur.x - prev.x; if (dx < 0) dx = -dx;
   dz = cur.z - prev.z; if (dz < 0) dz = -dz;
   assert(dx <= 0x30 && dz <= 0x30);
-  /* Clear the pan and let the eye converge on the exact live pose. */
-  mr->render.camera.event_param = 0;
-  mr->render.camera.speed = 0;
-  mr->entities.ball.x = 0;
-  mr->entities.ball.z = 0;
-  mr->entities.ball.vel_x = 0;
-  mr->entities.ball.vel_z = 0;
+  /* Let the eye converge on the live pose. */
   for (int i = 0; i < 120; i++) {
     prev = cur;
     one_granted_frame(mr);
@@ -2643,6 +2638,28 @@ static void test_live_render_eye_stabilizer(void) {
   assert(cur.z >= -0xAB0 + FIFA96_MATCH_RUN_SIDE_Z);
   assert(cur.z <= 0xAB0 + FIFA96_MATCH_RUN_SIDE_Z);
   assert(mr->render.render_eye_valid == 1u);
+  drop_lc_fixture(&f);
+}
+
+/* Phase 81 [D]: a native pan flag must not freeze the live ball focus. The
+ * native class-3 director that consumes the pan is unported, so the derived
+ * follow keeps the play in frame. */
+static void test_live_follow_keeps_ball_during_pan(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  one_granted_frame(mr);
+  mr->render.camera.event_param = 0x20;
+  mr->render.camera.speed = 1;
+  mr->state.period = 4u;   /* freeze the phase-2 ball lead so the focus target is stable */
+  mr->entities.ball.x = 0x300;
+  mr->entities.ball.z = -0x200;
+  mr->entities.ball.vel_x = 0;
+  mr->entities.ball.vel_z = 0;
+  one_granted_frame(mr);
+  assert(mr->render.view_focus_valid == 1u);
+  assert(mr->render.view_focus_x == 0x300);
+  assert(mr->render.view_focus_z == -0x200);
+  assert(mr->render.view_focus_y == 0x50);
   drop_lc_fixture(&f);
 }
 
@@ -2930,6 +2947,7 @@ int main(void) {
   test_live_setpiece_timeout_falls_back(7u);
   test_live_setpiece_timeout_falls_back(6u);
   test_live_render_eye_stabilizer();
+  test_live_follow_keeps_ball_during_pan();
   test_live_offball_shape_moves_team();
   test_live_support_run_moves_forward();
   test_live_support_run_hysteresis_and_reset();

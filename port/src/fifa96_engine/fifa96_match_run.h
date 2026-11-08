@@ -71,18 +71,18 @@ struct fifa96_match_matchup {
  * it remains the non-live/tape pose. The earlier P12 live path used the
  * native type-0 end preset (-100,488,1100); Phase 80 replaces it with the
  * class-3 side-camera seed below. */
-/* Phase 80 [D]: the live match's side-camera seed. The native default
- * Friendly capture uses the class-3 side camera (slot 5), not the type-0 end
- * preset. This is a derived sideline follow near the left touchline: x=-1600,
- * focus y=0x50 + 80 = 0xA0 (160) eye height, z tracks the focus, yaw 0xC000
- * (look across +x), pitch 0x0C00. The native class-3 body's own position and
- * pitch integrators remain an open leg, so this is presentation framing, not
- * a claim of the class-3 output. The ratio stays the native camera 4608. */
-#define FIFA96_MATCH_RUN_SIDE_X (-1600)
-#define FIFA96_MATCH_RUN_SIDE_Y 80
+/* Phase 81 [D]: the class-3 side-camera envelope. The native handler clamps
+ * the side pitch to the 0x2000 (45 degree) band and uses the 0x1F4 (500)
+ * distance constant; the live seed carries that envelope: x=-500, eye height
+ * focus 0x50 + 420 = 0x1F4 (500), z tracks the focus, and the view looks
+ * across +x at yaw 0xC000. This is presentation framing, not a claim of the
+ * class-3 output: the native position/yaw/pitch integrators remain an open
+ * leg. The ratio stays the native camera 4608. */
+#define FIFA96_MATCH_RUN_SIDE_X (-500)
+#define FIFA96_MATCH_RUN_SIDE_Y 420
 #define FIFA96_MATCH_RUN_SIDE_Z 0
 #define FIFA96_MATCH_RUN_SIDE_YAW 0xC000
-#define FIFA96_MATCH_RUN_SIDE_PITCH 0x0C00
+#define FIFA96_MATCH_RUN_SIDE_PITCH 0x2000
 #define FIFA96_MATCH_RUN_SIDE_RATIO 4608
 /* The image-default pose on 0x107508; reset_render seeds it for non-live/tape
  * runs and the live begin overrides yaw/pitch/ratio with the side values. */
@@ -466,6 +466,11 @@ struct fifa96_match_run_render {
    * cannot teleport the view. Cleared by reset_render's memset. */
   int32_t render_eye_x, render_eye_y, render_eye_z;
   uint8_t render_eye_valid;
+  /* Phase 81 [D]: the render-only ball focus. The native FU-71 focus must stay
+   * untouched for the ball machine/AI while a native pan is active; the side
+   * presentation eye follows this ball focus instead. Live-only. */
+  int32_t view_focus_x, view_focus_y, view_focus_z;
+  uint8_t view_focus_valid;
   /* FU-148 §4.2 (S4): the translation-pool seam. The native pool (FUN_00049138
    * -> FUN_00046F80) is a distinct allocation whose content producer is leg 11;
    * a caller may stage one by partitioning a buffer through
@@ -554,6 +559,7 @@ struct fifa96_match_run_render {
    * it, while non-live runs keep the flat legacy operands. */
   uint8_t hud_text_shades[16];
   uint8_t pitch_shade[256];   /* 90% palette map for mowing stripes [D] */
+  uint8_t shadow_shade[256];  /* dark palette map for player shadows [D] */
   uint8_t hud_colors_ready;
   char hud_name[2][FIFA96_MATCH_HUD_NAME_MAX];
   /* FU-152 §4.1 (P4): the residual presenter rows. All zero at rest, so a
@@ -1348,7 +1354,7 @@ struct fifa96_match_run {
    * placement commit, writes the live phase 2, seeds one derived camera event
    * and binds camera.tracked to the controlled record; the frame body then
    * follows the ball with the focus triple and the render uses the separate
-   * Phase 80 side eye (focus + (-1600,80,0)) for pitch and sprites. */
+   * Phase 81 side eye (focus + (-500,420,0)) for pitch and sprites. */
   uint8_t live_start;
   uint8_t match_mode;          /* P13 native front-end mode latch (0..4) */
   /* P7 / FU-345: the derived live kickoff possession latch. The live begin
@@ -1740,10 +1746,10 @@ int fifa96_match_run_set_live_start(struct fifa96_match_run *mr, int on);
 int fifa96_match_run_set_mode(struct fifa96_match_run *mr, uint8_t mode);
 
 /* FU-343 (P1): the render eye. Non-live returns the FU-71 focus triple
- * (`render.camera.pos_*`, the pre-P1 behaviour). Live returns the Phase 80
+ * (`render.camera.pos_*`, the pre-P1 behaviour). Live returns the Phase 81
  * derived class-3 side eye:
  *   non-live eye = focus
- *   live eye     = focus + (-1600, 80, 0)  [Phase 80 side seed]
+ *   live eye     = focus + (-500, 420, 0)  [Phase 81 side envelope]
  * i.e. the focus triple is the ball-follow CAMERA and the rendered live eye is
  * the class-3 side stand-in. The same eye feeds the pitch and the sprite pass,
  * so a live frame stays internally consistent. NULL mr/out -> no write. */
@@ -1951,11 +1957,19 @@ void fifa96_match_run_decompose_velocity_words(struct fifa96_match_run_record *r
  * installs `next_id - 0x70`; the install frame argument is
  * `byte[+0x46] + byte[+0x3D]` (the just-zero-resolved last frame plus the
  * `+0x46 = 1` install default, so a same-size-or-smaller next row starts at
- * frame 0). Terminal rows (`flags & 1`) take the movement/steering tables
- * (`0x11052A`/`0x1105AA`, FU159-L5/FU161-L3) and are this helper's no-op.
- * The mirror octant is `(type + 4) & 7` (the 0x10F334/0x10F33C vectors
- * negate exactly; `FUN_00079C50` recomputes the same octant). Stores
+ * frame 0). The `_turn` prototype takes terminal rows (`flags & 1`) through
+ * the movement/steering tables (`0x11052A`/`0x1105AA`, FU172 §4) on every
+ * expiry: the active/inactive table is indexed by `speed71`, with the native
+ * `+2` lean path. The terminal frame duration is the table's duration
+ * (FU172 §5). `turn` is the render driver's `+0x46` lean (+1/-1; the native
+ * `+0x7F` producer is still an open leg), and the install frame is
+ * `frame + turn`. The plain `_anim_successor` prototype is the legacy/non-live
+ * wrapper and keeps the terminal no-op. The mirror octant is
+ * `(type + 4) & 7` (the 0x10F334/0x10F33C vectors negate exactly;
+ * `FUN_00079C50` recomputes the same octant). Stores
  * `anim_id`/`frame`/`row44`. NULL -> -FIFA96_ERR_INVALID. */
+int fifa96_match_run_record_anim_successor_turn(struct fifa96_match_entity *e,
+                                                int8_t turn);
 int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e);
 
 /* M2 phase-9 T3 (FU-152 §2.9 / FU-145 §1.2): the every-frame FUN_00071DF4

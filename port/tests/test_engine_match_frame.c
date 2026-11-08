@@ -3421,6 +3421,44 @@ static void test_record_row_successor_chain(void) {
   assert(fifa96_match_run_record_anim_successor(NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* FU172 §4 (Tier 2): terminal rows select the movement/walk family on every
+ * timer expiry. Active speed 1/3/6 -> 0x01/0x02/0x03; an inactive speed-0
+ * record falls to 0x26; an active speed-0 record stays on 0x00. */
+static void test_record_terminal_steering_rows(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  e = &mr.entities.team[1].records[4];
+  e->active = 1;
+  e->speed71 = 1;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x00, 0) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor_turn(e, 1) == FIFA96_OK);
+  assert(e->anim_id == 0x01 && e->frame == 1u && e->row44 == 1u);
+  e->speed71 = 3;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x00, 0) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor_turn(e, 1) == FIFA96_OK);
+  assert(e->anim_id == 0x02);
+  /* The successor installs the pre-expiry frame + lean, not a second advance:
+   * row 1 frame 3 -> row 2 frame 4. */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x01, 3) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor_turn(e, 1) == FIFA96_OK);
+  assert(e->anim_id == 0x02 && e->frame == 4u);
+  e->speed71 = 6;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x00, 0) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor_turn(e, 1) == FIFA96_OK);
+  assert(e->anim_id == 0x03);
+  e->active = 0;
+  e->speed71 = 0;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x00, 0) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor_turn(e, 1) == FIFA96_OK);
+  assert(e->anim_id == 0x26 && e->frame == 0u);
+  e->active = 1;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x00, 0) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor_turn(e, 1) == FIFA96_OK);
+  assert(e->anim_id == 0x00 && e->frame == 0u);
+  fifa96_match_run_end(&mr);
+}
+
 /* FU319 §5 (phase-33, P-MOV): the mover's live +0x43 staging —
  * `s.direct_face = r->row43`, `s.face_x/face_z = (int16_t)camera.pos_x/pos_z`
  * (the default focus pointer [0x157A73] -> 0x15774C/0x157754; FU319 §3.1).
@@ -11038,6 +11076,7 @@ int main(void) {
   test_record_anim_install_row44();
   test_dispatch_install_row43_propagates();
   test_record_row_successor_chain();
+  test_record_terminal_steering_rows();
   test_mover_row43_live_turns_toward_focus();
   test_record_jump_case_0f_snap_frame3();
   test_record_jump_impulsion();

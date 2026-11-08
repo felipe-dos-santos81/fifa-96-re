@@ -1386,10 +1386,10 @@ static void test_live_start_gate_and_eye(void) {
 
   mr.live_start = 1;
   fifa96_match_run_eye(&mr, &eye);
-  /* Phase 80: the live match uses the class-3 side seed, not the type-0
+  /* Phase 81: the live match uses the class-3 side envelope, not the type-0
    * end preset or the image-default non-live statics. */
   assert(eye.x == 480 + FIFA96_MATCH_RUN_SIDE_X);
-  assert(eye.y == 0xA0);   /* focus 0x50 + side offset 0x50 */
+  assert(eye.y == 0x1F4);   /* focus 0x50 + side offset 0x1A4 */
   assert(eye.z == -120 + FIFA96_MATCH_RUN_SIDE_Z);
   assert(eye.x - mr.render.camera.pos_x == FIFA96_MATCH_RUN_SIDE_X);
   assert(eye.y - mr.render.camera.pos_y == FIFA96_MATCH_RUN_SIDE_Y);
@@ -1459,15 +1459,16 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   assert(fifa96_engine_step(f.engine) == 0);
   fifa96_render_pos eye;
   fifa96_match_run_eye(&f.mr, &eye);
-  assert(eye.x == r->camera.pos_x + FIFA96_MATCH_RUN_SIDE_X);
-  assert(eye.y == r->camera.pos_y + FIFA96_MATCH_RUN_SIDE_Y);
-  assert(eye.z == r->camera.pos_z + FIFA96_MATCH_RUN_SIDE_Z);
+  assert(r->view_focus_valid == 1u);
+  assert(eye.x == r->view_focus_x + FIFA96_MATCH_RUN_SIDE_X);
+  assert(eye.y == r->view_focus_y + FIFA96_MATCH_RUN_SIDE_Y);
+  assert(eye.z == r->view_focus_z + FIFA96_MATCH_RUN_SIDE_Z);
   assert(r->yaw == FIFA96_MATCH_RUN_SIDE_YAW);
   assert(r->pitch == FIFA96_MATCH_RUN_SIDE_PITCH);
   assert(r->view_ratio == FIFA96_MATCH_RUN_SIDE_RATIO);
 
-  /* The rendered live frame is mostly pitch (the floor plus the derived
-   * stand wall), not the cleared background. */
+  /* The rendered live frame is mostly pitch (the high class-3 floor), not the
+   * cleared background. */
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
   uint32_t non_background = 0;
   const uint32_t total = (uint32_t)f.s->width * (uint32_t)f.s->height;
@@ -1481,8 +1482,8 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   for (uint32_t i = 0; i < total; i++)
     if (f.s->indexed[i] == r->pitch_art.line_index) line_pixels++;
   assert(line_pixels > 100);
-  /* The derived far-stand wall is actually consumed: with its banks removed
-   * the old fallback band renders a different frame. */
+  /* The class-3 high side framing excludes the far-stand band; removing the
+   * stand banks must leave this rendered frame unchanged. */
   uint64_t with_wall = fifa96_surface_hash(f.s);
   struct fifa96_pitch_bank saved_stand = r->pitch_art.stand;
   struct fifa96_pitch_bank saved_ad = r->pitch_art.ad;
@@ -1495,7 +1496,7 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   r->pitch_art.stand = saved_stand;
   r->pitch_art.ad = saved_ad;
   r->pitch_art.banner = saved_banner;
-  assert(with_wall != fallback_band);
+  assert(with_wall == fallback_band);
   /* The kickoff frame visibly contains both teams (checked in the committed
    * p10g-match-view screenshot); the pixel test above pins the axis fix. */
 

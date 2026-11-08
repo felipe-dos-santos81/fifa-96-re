@@ -1278,9 +1278,48 @@ int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,
   return FIFA96_OK;
 }
 
+/* FU172 §4 (Tier 2): the pool movement/steering tables `0x11052A`/`0x1105AA`,
+ * 16 `{row, duration}` pairs indexed by `speed71` (2*speed byte offset). The
+ * terminal row re-selects here on every frame-timer expiry; the duration is
+ * also the terminal frame duration (FU172 §5). The `+0x99` row-0x5A special
+ * case is inert (no engine record writes it; FU172-L4). */
+typedef struct match_run_steering_pair {
+  uint8_t row;
+  uint8_t duration;
+} match_run_steering_pair;
+
+static const match_run_steering_pair match_run_steering_active[16] = {
+    {0x00, 0x50}, {0x01, 0x50}, {0x01, 0x44}, {0x02, 0x40},
+    {0x02, 0x38}, {0x02, 0x34}, {0x03, 0x30}, {0x03, 0x24},
+    {0x03, 0x23}, {0x03, 0x22}, {0x03, 0x21}, {0x03, 0x20},
+    {0x03, 0x1F}, {0x03, 0x1E}, {0x03, 0x1D}, {0x03, 0x1C},
+};
+static const match_run_steering_pair match_run_steering_inactive[16] = {
+    {0x26, 0x40}, {0x29, 0xB0}, {0x29, 0x90}, {0x2A, 0x70},
+    {0x2A, 0x60}, {0x2A, 0x50}, {0x2A, 0x40}, {0x2A, 0x3F},
+    {0x2A, 0x3E}, {0x2A, 0x3D}, {0x2A, 0x3C}, {0x2A, 0x3B},
+    {0x2A, 0x3A}, {0x2A, 0x39}, {0x2A, 0x38}, {0x2A, 0x37},
+};
+
+static const match_run_steering_pair *match_run_steering_table(
+    const struct fifa96_match_entity *e) {
+  return e->active ? match_run_steering_active : match_run_steering_inactive;
+}
+
+static int match_run_steering_index(const struct fifa96_match_entity *e,
+                                    int8_t turn) {
+  int index = (int)(uint16_t)e->speed71;
+  if (index > 15) index = 15;                 /* native reads past the table;
+                                               * the engine clamps the metric */
+  if (turn < 0 && e->speed71 != 0) index++;   /* the native +2 path */
+  if (index > 15) index = 15;
+  return index;
+}
+
 /* FU-159 §3.1/§5.2 (T3): the FUN_0008E008 frame-wrap row successor (see the
  * header doc for the fresh evidence). */
-int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e) {
+int fifa96_match_run_record_anim_successor_turn(struct fifa96_match_entity *e,
+                                                int8_t turn) {
   fifa96_anim_row row;
   fifa96_anim_row next_row;
   uint8_t next;
@@ -1289,9 +1328,27 @@ int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e) {
   if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
                                   (int32_t)e->anim_id, &row) != FIFA96_OK)
     return FIFA96_OK;
-  /* Terminal rows branch to the movement/steering tables (unported; FU159-L5
-   * carries the bounds). Byte44 is the derived row-flags bit 0. */
-  if ((row.flags & 0x01u) != 0) return FIFA96_OK;
+  /* Byte44 is the derived row-flags bit 0. Terminal rows use the movement
+   * steering tables at every expiry; a same-row cell keeps the current frame
+   * (the frame resolve path). The install frame is frame + lean (EBX at
+   * 0x8E0F4/0x8E156; the lean is the render driver's anim_turn, default +1). */
+  if ((row.flags & 0x01u) != 0) {
+    int index = match_run_steering_index(e, turn);
+    next = match_run_steering_table(e)[index].row;
+    if (next == e->anim_id) return FIFA96_OK;
+    if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                    (int32_t)next, &next_row) != FIFA96_OK)
+      return FIFA96_OK;
+    frame = (int32_t)e->frame + (int32_t)turn;
+    if (frame < 0) frame = (int32_t)next_row.last_frame;   /* FUN_0008DF00 */
+    if (frame > (int32_t)next_row.last_frame) frame = 0;
+    e->anim_id = next;
+    e->frame = (uint8_t)frame;
+    e->row44 = (uint8_t)(next_row.flags & 0x01u);
+    e->row43 = (uint8_t)(next_row.flags & 0x02u);
+    e->aux_seen = FIFA96_MATCH_ENTITY_AUX_SEEN_NONE;
+    return FIFA96_OK;
+  }
   next = row.next_id;                                  /* row+3 */
   frame = (int32_t)row.last_frame + 1;   /* byte[+0x46] = 1 at install (0x6E6D8) */
   if (next == 0x6Fu) {
@@ -1313,6 +1370,18 @@ int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e) {
                                                        * (FU319 §5 writer 2) */
   e->aux_seen = FIFA96_MATCH_ENTITY_AUX_SEEN_NONE;
   return FIFA96_OK;
+}
+
+int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e) {
+  fifa96_anim_row row;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  (int32_t)e->anim_id, &row) != FIFA96_OK)
+    return FIFA96_OK;
+  /* The legacy/non-live callers keep the terminal no-op; the live scene stage
+   * opts into the FU172 steering through the _turn entry. */
+  if ((row.flags & 0x01u) != 0) return FIFA96_OK;
+  return fifa96_match_run_record_anim_successor_turn(e, 0);
 }
 
 /* FU-161 §5.4 (T3): the arm dispatch consumes the aux word's two bytes as two
@@ -1973,9 +2042,15 @@ static void match_run_render_eye_update(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r;
   if (!mr || !mr->live_start) return;
   r = &mr->render;
-  fx = r->camera.pos_x;
-  fy = r->camera.pos_y;
-  fz = r->camera.pos_z;
+  if (r->view_focus_valid) {
+    fx = r->view_focus_x;
+    fy = r->view_focus_y;
+    fz = r->view_focus_z;
+  } else {
+    fx = r->camera.pos_x;
+    fy = r->camera.pos_y;
+    fz = r->camera.pos_z;
+  }
   if (fx > MATCH_RUN_RENDER_EYE_BOUND_X) fx = MATCH_RUN_RENDER_EYE_BOUND_X;
   if (fx < -MATCH_RUN_RENDER_EYE_BOUND_X) fx = -MATCH_RUN_RENDER_EYE_BOUND_X;
   if (fz > MATCH_RUN_RENDER_EYE_BOUND_Z) fz = MATCH_RUN_RENDER_EYE_BOUND_Z;
@@ -2000,41 +2075,39 @@ static void match_run_render_eye_update(struct fifa96_match_run *mr) {
 
 static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   struct fifa96_camera *cam = &mr->render.camera;
-  /* Phase 71: converge the render-only eye before the pan/follow early return,
-   * so a native pan handoff is smoothed rather than teleported. */
-  match_run_render_eye_update(mr);
-  /* P8: a human live shot (and its save hold) keeps the derived ball-follow even
-   * while a native pan event is active. The opponent contest can emit a row-04
-   * camera event of its own; without this the live focus froze at the pitch
-   * centre and the native camera-out-of-bounds armer never reached the goal
-   * (probe: event_param 0x19 from F100, goal lost). This only keeps the [D]
-   * FU-310 live camera stand-in on the ball during the shot; non-shot frames
-   * still honour an active native pan. */
-  if ((cam->event_param != 0 || cam->speed != 0) &&
-      mr->live_kick_active == 0u && mr->live_save_hold == 0u)
-    return;   /* native pan active */
-  int32_t tracked = mr->entities.controlled;
-  if (tracked == FIFA96_MATCH_ENTITY_NONE) tracked = mr->slot.entity;
-  if (tracked != FIFA96_MATCH_ENTITY_NONE && cam->tracked != tracked)
-    (void)fifa96_camera_set_tracked(cam, tracked);
-  /* P6 task 2 / P6-L1 (FU-344): the live follow keeps the native FU-71 height
-   * `[0x157750]` = 0x50 instead of pinning y to 0. The native row-04/set-piece
-   * pan arm gate is `0x20 < y < 0x70` (A2 §2, `match_sp_pan_arm`); with y = 0
-   * every live pan stayed dead. The forward lead is the ball's velocity times
-   * the native lead quantum 8, clamped to the ±0x120 ball-machine lead band
-   * (the phase-2 `0x8BBBB` arm), so the camera stays ahead of a moving ball
-   * and the native pan/armer path sees motion first. Both are [D] stand-ins
-   * for the unported FU-310 camera place/focus and the camera director; the
-   * engine's side render eye is unchanged. */
+  struct fifa96_match_run_render *r = &mr->render;
+  /* P6 task 2 / P6-L1 (FU-344): the native follow lead is the ball velocity
+   * times 8, clamped to the ±0x120 band. Compute it once for the FU-71 focus
+   * and the separate presentation focus. */
   int32_t lead_x = (int32_t)mr->entities.ball.vel_x * 8;
   int32_t lead_z = (int32_t)mr->entities.ball.vel_z * 8;
   if (lead_x > 0x120) lead_x = 0x120;
   if (lead_x < -0x120) lead_x = -0x120;
   if (lead_z > 0x120) lead_z = 0x120;
   if (lead_z < -0x120) lead_z = -0x120;
-  cam->pos_x = mr->entities.ball.x + lead_x;
+  /* Phase 81 [D]: the presentation focus always follows the play. The native
+   * class-3 director that would consume a pan is unported, so using the frozen
+   * FU-71 focus for the eye let the ball leave the frame. Keep the simulation
+   * focus untouched below when a pan is active; only the render focus moves. */
+  r->view_focus_x = mr->entities.ball.x + lead_x;
+  r->view_focus_y = 0x50;
+  r->view_focus_z = mr->entities.ball.z + lead_z;
+  r->view_focus_valid = 1u;
+  /* Phase 71: converge the render-only eye before the pan/follow early return,
+   * so a native pan handoff is smoothed rather than teleported. */
+  match_run_render_eye_update(mr);
+  if ((cam->event_param != 0 || cam->speed != 0) &&
+      mr->live_kick_active == 0u && mr->live_save_hold == 0u)
+    return;   /* native pan active: keep the FU-71 focus frozen */
+  int32_t tracked = mr->entities.controlled;
+  if (tracked == FIFA96_MATCH_ENTITY_NONE) tracked = mr->slot.entity;
+  if (tracked != FIFA96_MATCH_ENTITY_NONE && cam->tracked != tracked)
+    (void)fifa96_camera_set_tracked(cam, tracked);
+  /* P6 task 2 / P6-L1 (FU-344): the live FU-71 focus keeps the native height
+   * 0x50 and the ball lead. The render focus above is independent. */
+  cam->pos_x = r->view_focus_x;
   cam->pos_y = 0x50;
-  cam->pos_z = mr->entities.ball.z + lead_z;
+  cam->pos_z = r->view_focus_z;
 }
 
 /* FUN_00036C70 stages the record/ball facing word in the high half of the
@@ -2065,9 +2138,9 @@ static int32_t match_run_stage_heading(int16_t word) {
  * anim_id`) selects the 0x10EF00 row; the row's +8 byte is the FU-85 resolver
  * sprite bank, and the row's last frame plus the slot's frame record duration
  * (the staged 0x10E200-family records) advance the accumulator once with
- * `delta<<4` (the whole-frame delta `[0x57A64]`, FU-62 §4.3). The row
- * successor/terminal machine and the height-gated 0x5A branch are unported
- * (open leg). */
+ * `delta<<4` (the whole-frame delta `[0x57A64]`, FU-62 §4.3). The non-terminal
+ * next_id chain is ported; terminal steering/duration is live-gated below;
+ * the height-gated row-0x5A special case remains open. */
 static void match_run_scene_stage(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r = &mr->render;
   uint32_t slot = 0;
@@ -2146,6 +2219,18 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
     if (fifa96_animation_frame(r->frames, (int32_t)e->stage.frame, row.last_frame,
                                &record) != FIFA96_OK)
       continue;
+    /* FU172 §5 (Tier 2): terminal rows take the steering table's duration
+     * (the walk cadence); non-terminal rows keep the frame record duration. */
+    uint16_t duration = record.duration;
+    /* Live-only presentation gate: the tape/headless paths keep the prior
+     * terminal no-op so M1/M2 stay byte-identical. The live match uses the
+     * native walk-family selection and cadence. */
+    int terminal = mr->live_start && rec != NULL && (row.flags & 0x01u) != 0;
+    if (terminal) {
+      /* FU172 §5: terminal duration is table[speed*2 + 1] — no lean offset. */
+      int index = match_run_steering_index(rec, 0);
+      duration = match_run_steering_table(rec)[index].duration;
+    }
     fifa96_anim_advance state;
     state.timer = e->anim_timer;
     state.delta = (uint16_t)mr->state.frame_delta;
@@ -2153,31 +2238,33 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
     state.turn = e->anim_turn;
     uint8_t prev_frame = (uint8_t)e->stage.frame;
     fifa96_anim_advance_out out;
-    if (fifa96_animation_advance(&state, record.duration, row.last_frame, &out) !=
+    if (fifa96_animation_advance(&state, duration, row.last_frame, &out) !=
         FIFA96_OK)
       continue;
     e->anim_timer = state.timer;
     e->stage.frame = out.frame_index;
     if (rec) {
       rec->frame = (uint8_t)out.frame_index;   /* OL-80 +0x3D */
-      /* FU-159 §5.2/§3.1 (T3): the `FUN_0008E008` frame-wrap row successor —
-       * the native fires it on the frame-timer expiry of the row's **last**
-       * frame (`(int)(byte[row+1]) <= frame` at `0x8E143/0x8E146`, before the
-       * advance)
-       * and installs the row's `next_id` for non-terminal rows (byte44 == 0).
-       * The engine's advance edge equivalent: `out.advanced` with the
-       * pre-advance frame at/past the row's last frame. The install's frame
-       * argument is `byte[+0x46] + byte[+0x3D]` with `+0x46 = 1` (the install
-       * default, 0x6E6D8), so the successor usually starts the next row at
-       * frame 0 (the resolver clamp); FU159-L5 carries the flags-bit-2 lean
-       * nuance. */
-      if (out.advanced && prev_frame >= row.last_frame) {
+      /* FU-159 §5.2/§3.1 + FU172 §4 (Tier 2): terminal rows re-select the
+       * walk family at every timer expiry; non-terminal rows keep the
+       * `prev_frame >= last_frame` next_id chain. The install changes the
+       * row, so re-stage the same frame's slot from the record (the native
+       * `FUN_00036C70` reads after the machine's install). */
+      if (terminal && out.advanced) {
+        uint8_t old_id = rec->anim_id;
+        /* The native install uses the pre-expiry +0x3D frame plus the lean;
+         * do not add the already-applied advance a second time. */
+        rec->frame = prev_frame;
+        (void)fifa96_match_run_record_anim_successor_turn(rec, e->anim_turn);
+        if (rec->anim_id == old_id) rec->frame = (uint8_t)out.frame_index;
+        e->stage.anim_id = (int32_t)rec->anim_id;
+        if (fifa96_animation_row_lookup(match_run_anim_rows,
+                                        FIFA96_ANIM_ROW_COUNT,
+                                        (int32_t)rec->anim_id, &row) == FIFA96_OK)
+          e->bank_index = row.sprite_bank;
+        e->stage.frame = (int32_t)rec->frame;
+      } else if (!terminal && out.advanced && prev_frame >= row.last_frame) {
         (void)fifa96_match_run_record_anim_successor(rec);
-        /* T3 review minor 5: the install changes the row, so the same
-         * frame's staged slot must re-stage the new row id and bank (the
-         * pre-computed row/bank_index above belong to the old row). The
-         * native `FUN_00036C70` reads the row at staging time, after the
-         * record machine's install. */
         e->stage.anim_id = (int32_t)rec->anim_id;
         if (fifa96_animation_row_lookup(match_run_anim_rows,
                                         FIFA96_ANIM_ROW_COUNT,
@@ -2355,7 +2442,10 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->pitch_art.sky_index = FIFA96_PITCH_SKY_INDEX;
   r->pitch_art.line_index = FIFA96_PITCH_LINE_INDEX;
   for (int i = 0; i < 256; i++) r->remap[i] = (uint8_t)(i == 0 ? 0xFF : i);
-  for (int i = 0; i < 256; i++) r->pitch_shade[i] = (uint8_t)i;
+  for (int i = 0; i < 256; i++) {
+    r->pitch_shade[i] = (uint8_t)i;
+    r->shadow_shade[i] = (uint8_t)i;
+  }
   /* FU-343 (P1): both per-team translations start as the identity; the live
    * kit stage rewrites team 1's shirt/shorts bands into the 230..245 slots
    * (A7 §4). The non-live draw never selects remap_team. */
@@ -5092,16 +5182,20 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * unported) and bind the tracked record to the controlled player. These are
    * the engine's live stand-ins, not native producers. */
   if (mr->live_start) {
-    /* Phase 80 [D]: the native default Friendly capture uses the class-3 side
-     * camera (slot 5), not the type-0 end preset installed by FUN_0004D7E8.
-     * Seed a derived side view modeled on that class; the pitch is the derived
-     * downward framing value, since the class-3 handler's pitch integrator is
-     * still an open leg. The non-live/tape path keeps the image default. */
+    /* Phase 80/81 [D]: the native default Friendly capture uses the class-3
+     * side camera (slot 5), not the type-0 end preset installed by FUN_0004D7E8.
+     * Seed the class-3 pitch/distance envelope; the native position/yaw/pitch
+     * integrators are still an open leg. The non-live/tape path keeps the image
+     * default. */
     mr->render.yaw = FIFA96_MATCH_RUN_SIDE_YAW;
     mr->render.pitch = FIFA96_MATCH_RUN_SIDE_PITCH;
     mr->render.view_ratio = FIFA96_MATCH_RUN_SIDE_RATIO;
     (void)fifa96_match_run_write_phase(mr, 2u);
     (void)fifa96_camera_event_set(&mr->render.camera, 0, 0, 0x50, 0);
+    mr->render.view_focus_x = mr->render.camera.pos_x;
+    mr->render.view_focus_y = mr->render.camera.pos_y;
+    mr->render.view_focus_z = mr->render.camera.pos_z;
+    mr->render.view_focus_valid = 1u;
     (void)fifa96_camera_event_dir(&mr->render.camera, 0, 0, 0);
     /* FU-343 (P1): bind the controlled record. The native [0x157A83] actor
      * cell (entities.controlled) is cleared by the act-9 reset and only
@@ -5145,13 +5239,20 @@ int fifa96_match_run_set_mode(struct fifa96_match_run *mr, uint8_t mode) {
 void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out) {
   if (!mr || !out) return;
   if (mr->live_start) {
-    /* Phase 80 [D]: the native default match view is the class-3 side camera
-     * (slot 5), not camera object 0's type-0 end preset. This derived sideline
-     * eye sits at x=-1600 with the focus plus an 80-unit height offset; the
-     * FU-71 triple stays the focus and the side eye follows it. */
-    out->x = mr->render.camera.pos_x + FIFA96_MATCH_RUN_SIDE_X;
-    out->y = mr->render.camera.pos_y + FIFA96_MATCH_RUN_SIDE_Y;
-    out->z = mr->render.camera.pos_z + FIFA96_MATCH_RUN_SIDE_Z;
+    /* Phase 81 [D]: the native default match view is the class-3 side camera
+     * (slot 5), not camera object 0's type-0 end preset. The derived eye uses
+     * the class-3 500-unit distance and 0x2000 pitch envelope; the FU-71 triple
+     * stays the simulation focus and the render-only view focus follows the
+     * ball independently. */
+    int32_t fx = mr->render.view_focus_valid ? mr->render.view_focus_x
+                                             : mr->render.camera.pos_x;
+    int32_t fy = mr->render.view_focus_valid ? mr->render.view_focus_y
+                                             : mr->render.camera.pos_y;
+    int32_t fz = mr->render.view_focus_valid ? mr->render.view_focus_z
+                                             : mr->render.camera.pos_z;
+    out->x = fx + FIFA96_MATCH_RUN_SIDE_X;
+    out->y = fy + FIFA96_MATCH_RUN_SIDE_Y;
+    out->z = fz + FIFA96_MATCH_RUN_SIDE_Z;
   } else {
     out->x = mr->render.camera.pos_x;
     out->y = mr->render.camera.pos_y;
@@ -8150,16 +8251,18 @@ void fifa96_match_run_hud_text_shades_from_palette(const uint8_t palette[768],
   shades[15] = ink;
 }
 
-/* P10 graphics: a subtle 90%-brightness palette map for the mowing stripes.
- * Built once per staged palette alongside the HUD shade. */
-static void match_run_pitch_shade_from_palette(const uint8_t palette[768],
-                                               uint8_t shade[256]) {
+/* P10 graphics: palette maps for the mowing stripes (90%) and the player
+ * ground shadows (55%). Built once per staged palette alongside the HUD
+ * shade. */
+static void match_run_palette_shade_from_palette(const uint8_t palette[768],
+                                                 uint8_t shade[256],
+                                                 int percent) {
   if (shade == NULL) return;
   for (int i = 0; i < 256; i++) {
     if (palette == NULL) { shade[i] = (uint8_t)i; continue; }
-    int tr = palette[i * 3 + 0] * 9 / 10;
-    int tg = palette[i * 3 + 1] * 9 / 10;
-    int tb = palette[i * 3 + 2] * 9 / 10;
+    int tr = palette[i * 3 + 0] * percent / 100;
+    int tg = palette[i * 3 + 1] * percent / 100;
+    int tb = palette[i * 3 + 2] * percent / 100;
     int best = 0;
     long best_d = -1;
     for (int j = 0; j < 256; j++) {
@@ -8174,6 +8277,16 @@ static void match_run_pitch_shade_from_palette(const uint8_t palette[768],
   shade[0] = 0;
 }
 
+static void match_run_pitch_shade_from_palette(const uint8_t palette[768],
+                                               uint8_t shade[256]) {
+  match_run_palette_shade_from_palette(palette, shade, 90);
+}
+
+static void match_run_shadow_shade_from_palette(const uint8_t palette[768],
+                                                uint8_t shade[256]) {
+  match_run_palette_shade_from_palette(palette, shade, 55);
+}
+
 static void match_run_hud_colors_refresh(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r = &mr->render;
   /* FU-343 P4 note: on the final live palette the kit stage forces the pitch
@@ -8185,12 +8298,14 @@ static void match_run_hud_colors_refresh(struct fifa96_match_run *mr) {
     fifa96_match_run_hud_text_shades_from_palette(r->palette, r->hud_ink,
                                                   r->hud_text_shades);
     match_run_pitch_shade_from_palette(r->palette, r->pitch_shade);
+    match_run_shadow_shade_from_palette(r->palette, r->shadow_shade);
     r->hud_colors_ready = 1;
   } else {
     fifa96_match_run_hud_colors_from_palette(NULL, &r->hud_ink, r->hud_shade);
     fifa96_match_run_hud_text_shades_from_palette(NULL, r->hud_ink,
                                                   r->hud_text_shades);
     match_run_pitch_shade_from_palette(NULL, r->pitch_shade);
+    match_run_shadow_shade_from_palette(NULL, r->shadow_shade);
     r->hud_colors_ready = 0;
   }
 }
@@ -9269,8 +9384,8 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   int32_t matrix[9];
   int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
   int32_t recip_y[FIFA96_PROJECTION_RECIP_COUNT];
-  /* Phase 80: the live pose uses the class-3 side seed (`r->yaw` = 0xC000,
-   * `r->pitch` = 0x0C00) and the full surface lens. Non-live keeps the image
+  /* Phase 81: the live pose uses the class-3 side envelope (`r->yaw` = 0xC000,
+   * `r->pitch` = 0x2000) and the full surface lens. Non-live keeps the image
    * default 0xBF9C/200 and the pinned projection dimensions. The ratio 4608
    * remains the native camera field, not an entity FOV term (FU-88 §5). */
   int32_t lens_w = s->width;
@@ -9285,9 +9400,9 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   if (err != FIFA96_OK) return (int)err;
 
   /* FU-85 §4 camera staging (FUN_00036C70's camera copy/bounds over the FU-71
-   * block). Phase 80 [D]: the live path renders from the separate class-3 side
-   * stand-in (focus + (-1600,80,0)); the non-live path keeps the FU-71 focus
-   * triple unchanged (M1/M2). */
+   * block). Phase 81 [D]: the live path renders from the class-3 side envelope
+   * (focus + (-500,420,0)); the non-live path keeps the FU-71 focus triple
+   * unchanged (M1/M2). */
   fifa96_render_pos cam_src;
   fifa96_match_run_render_eye(mr, &cam_src);
   fifa96_render_pos cam;
@@ -9360,9 +9475,12 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
       if (!drawable[i]) continue;
       int sx = (int)(slots[i].clean.x >> 16);
       int sy = (int)(slots[i].clean.y >> 16);
-      int rw = (i == 22u ? 4 : 10) * shadow_scale;
-      int rh = (i == 22u ? 2 : 3) * shadow_scale;
-      match_run_draw_shadow(s, &clip, sx, sy, rw, rh, r->pitch_shade, 0x00);
+      int rw = (i == 22u ? 4 : 14) * shadow_scale;
+      int rh = (i == 22u ? 2 : 5) * shadow_scale;
+      int ox = (i == 22u ? 2 : 7) * shadow_scale;
+      int oy = (i == 22u ? 1 : 3) * shadow_scale;
+      match_run_draw_shadow(s, &clip, sx - ox, sy + oy, rw, rh,
+                            r->shadow_shade, 0x00);
     }
   }
 

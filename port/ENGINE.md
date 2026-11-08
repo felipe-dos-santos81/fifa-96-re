@@ -11584,3 +11584,87 @@ The pre-existing type-0 constants are removed from the live path.
 native camera director/orientation (`FUN_0004E834`, P10-L6); native 3dwpts
 stadium/goal-net geometry (P10-L2); the native lens ratio path
 (`FUN_000441D8`, FU94) and the `0xA2A10` view-angle addend.
+
+## Phase 81 — class-3 camera envelope and render-only focus (2026-11-08)
+
+**Root cause.** Phase 80 selected the right camera class but used the wrong
+geometry: pitch `0x0C00` (~17°) instead of the class-3 `0x2000` (45°) clamp,
+and a `(-1600,80,0)` eye. The native default Friendly sequence shows a high,
+steep side view with the field filling the frame and the far stand outside it.
+The Phase 80 smoke instead showed the low sideline with the stand and a ball
+that drifted because the eye was derived from the FU-71 focus, which freezes
+while a native pan flag is active.
+
+**Evidence.** Ghidra `FUN_0004db38` (class 3) clamps pitch to
+`[0x2000,63000]` and clamps camera x/z to `±0x420`/`±0x810`; FU-100 records the
+class-3 slot-5 mapping and the 500 (`0x1F4`) side distance constant. The
+native default Friendly capture `session-probe-14c18-mode` frames 005-0054..
+005-0066 show the ball near frame centre throughout the high side view.
+
+**Implementation [D].** The live seed is now:
+
+- eye offset `(-500, 420, 0)` from the render focus; eye height `0x1F4` (500);
+- yaw `0xC000`, pitch `0x2000`, ratio `4608`.
+
+The presentation focus is separate from the native FU-71 focus:
+`render.view_focus_*` follows the ball + the lead every granted frame, and
+`fifa96_match_run_eye`/`match_run_render_eye_update` use it. The FU-71 focus
+keeps its native pan freeze for the ball machine and AI, so the simulation
+tests and M1/M2 are untouched. This remains a derived presentation envelope,
+not the class-3 integrator.
+
+**Tests and gate.** `test_engine_match_render` pins the high eye and now
+checks that the far stand is outside the high framing; `test_engine_live_control`
+adds `test_live_follow_keeps_ball_during_pan` and keeps the eye-step bounds.
+`make check` **124/124**; M1 byte-exact `09b726b7…`; M2 byte-exact
+`41521559…`. Release screenshot: `docs/screens/p81-class3-envelope.png`
+(kickoff: `docs/screens/p81-class3-kickoff.png`); native reference:
+`docs/screens/p80-native-side.png`.
+
+**Errata (Phase 80 pitch/eye).** Phase 80's low `0x0C00` pitch and
+`(-1600,80,0)` side eye were a first stand-in; they are superseded by this
+class-3 envelope. The Phase 80 class-3 selection and the live-only gate stand.
+The historical text is not rewritten.
+
+**Legs.** Full `FUN_0004DB38` yaw/pitch integrator and native camera director;
+native lens ratio path (`FUN_000441D8`, FU94); `0xA2A10` view-angle addend;
+native 3dwpts stadium/goal-net geometry (P10-L2); player walk-row animation and
+shadows are tracked separately.
+
+## Phase 82 — live walk rows and ground shadows (2026-11-08)
+
+**Symptom.** Live players slid around while their sprites stayed on the idle
+stance; the ground-shadow pass was present but mapped grass through the 90%
+mowing-stripe palette, so it read as nearly the same green.
+
+**Root cause.** FU-172 §4/§5 says terminal rows re-select the movement tables
+`0x11052A` (active) / `0x1105AA` (inactive) on every frame-timer expiry:
+active speed 1–2 -> row `0x01`, 3–5 -> `0x02`, 6+ -> `0x03`, speed 0 ->
+row `0x00`; the terminal duration comes from the same table. The engine's
+`fifa96_match_run_record_anim_successor` returned early on terminal rows, so
+the controlled record stayed on `0x00` while the mover raised `speed71` to 6
+(live trace before the fix: `anim=00 frame=0`, speed 6). The shadow pass used
+`pitch_shade` (90%) and a small centred ellipse, so it was effectively
+invisible against the mowing stripes.
+
+**Implementation [D].** Added the two 16-pair FU-172 steering tables and
+`fifa96_match_run_record_anim_successor_turn`; the live scene stage selects on
+every terminal advance, uses the table duration, and re-stages the changed row
+and bank. The non-live `fifa96_match_run_record_anim_successor` keeps the
+terminal no-op so M1/M2 remain byte-identical. Added a 55%-brightness
+`shadow_shade[256]` palette map and a longer/offset (down-left) live shadow
+ellipse under every sprite.
+
+**Evidence/verification.** Live trace after the fix:
+`anim=02 speed=3 -> anim=03 speed=6` with advancing frames; the controlled
+record leaves the idle row. `test_engine_match_frame` adds
+`test_record_terminal_steering_rows`; `test_engine_match_render` still passes
+the frame-advance hash and live render. `make check` **124/124**; M1 bytes
+exact; M2 exact after keeping the legacy wrapper path. Screenshot:
+`docs/screens/p82-live-walk-shadows.png`; native reference remains
+`docs/screens/p80-native-side.png`.
+
+**Legs.** The `+0x7F`/flags-bit-2 lean producer and the full
+FUN_0006FE84/FUN_0006E518 appearance machine (FU172-L2); walk-row cadence is
+live-derived; native 3dwpts stadium/goal-net (P10-L2); class-3 camera
+integrator/director still open.
