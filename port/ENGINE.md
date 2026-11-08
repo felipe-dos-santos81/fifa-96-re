@@ -11484,12 +11484,14 @@ record angle `((0x400 - (dword[rec+0x7B] >> 16)) & 0x3FF) << 6`, i.e. the
 `fifa96_render_slot_stage` already performs the same fold from
 `heading >> 16`; only the scene staging left record headings at zero.
 
-**Implementation.** `match_run_scene_stage` writes
-`re->stage.heading = (int32_t)((uint32_t)(uint16_t)e->face7d << 16)` beside the
-position copy. `face7d` is the live pool word written by the locomotion mover
-and the face arms; the ball uses the same high-half convention. No renderer,
-animation-row, mover, or face-producer change. The stale comment that called
-the record heading caller-owned is corrected in place. Terminal-row steering
+**Implementation.** `match_run_scene_stage` now calls the shared
+`match_run_stage_heading(int16_t)` helper beside the position copy:
+`(int32_t)((uint32_t)(uint16_t)word << 16)`. Both the record `face7d` and the
+ball heading use it, so the 16.16 convention lives in one place. `face7d` is
+the live pool word written by the locomotion mover and the face arms. No
+renderer, animation-row, mover, or face-producer change. The stale comment
+that called the record heading caller-owned is corrected in place.
+Terminal-row steering
 (flags bit 0 → the `0x11052A`/`0x1105AA` speed tables, duration override and
 lean fold) remains FU159-L5/FU172; the native `0xA2A10` view-angle addend
 remains P10-L6.
@@ -11504,10 +11506,13 @@ length 295089 B / 6522 lines. Old M2 sha
 byte-identical `09b726b7…`. The move is the intended first hash-visible record
 facing stage, not a regression.
 
-**Tests and gate.** `test_engine_match_render` stages positive and wrapped
-negative `face7d` words and asserts the slot heading high half; the existing
-`test_render` pins the heading→angle fold. `make check` **124/124**; M1 exact;
-M2 producer matches the new golden. Census unchanged: 78/78 bodies, 61/80
+**Tests and gate.** `test_engine_match_render` stages `+0x100` and `-0x100`
+face words, asserts the slot heading high-half literals and the folded angles
+`0xC000`/`0x4000` (for `-0x100`, `0x400 - (-0x100) = 0x500` masks to `0x100`);
+the generic `test_render` vectors stay. `make check` **124/124**; M1 exact; M2
+producer matches the new golden. Release smoke: a fresh windowed build starts
+a match, accepts input and renders varied record facing
+(`docs/screens/p79-facing.png`). Census unchanged: 78/78 bodies, 61/80
 natural, 64/80 install-live.
 
 **Legs.** FU159-L5/FU172 terminal-row pose/duration steering; the invalid
@@ -11518,3 +11523,11 @@ view-angle/render-direction addend (P10-L6); native 3dwpts camera rig (P10-L2).
 `port/ENGINE.md:5372` still lists "record facing `+0x7D` (`-3`)" as a remaining
 leg. This phase lands that render stage; the historical row is not rewritten,
 so this section is the current status.
+
+**FU323 erratum (render verdict).** The retained FU323 verdict at
+`port/ENGINE.md:6971-6973` says "the drawn facing is the slot heading, not
+`+0x7D`; the render stage still does not copy the face, that open leg stays".
+That statement is now historical: this phase stages the `+0x7D` word into the
+slot heading, so the drawn facing follows the live face. The FU323 position,
+AI-population and camera measurements are unchanged; this correction is
+render-staging only.

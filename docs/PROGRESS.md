@@ -4584,5 +4584,7 @@ close-out below).
   with the measured render-only diff: first differing line 2545, 3,978
   contiguous hash-only lines (2545..6522), all `state=` tags/counts unchanged,
   length 295,089 B / 6,522 lines; old sha `7c3874f7…` -> new `41521559…`; M1
-  exact. `make check` **124/124**. Terminal-row pose/duration steering and the
+  exact. `make check` **124/124**. Release smoke: a fresh windowed build
+  starts a match, accepts input and renders varied facing
+  (`docs/screens/p79-facing.png`). Terminal-row pose/duration steering and the
   native `0xA2A10` view angle remain numbered legs.

@@ -2036,6 +2036,13 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   cam->pos_z = mr->entities.ball.z + lead_z;
 }
 
+/* FUN_00036C70 stages the record/ball facing word in the high half of the
+ * native +0x7B dword. Keep the 16.16 convention in one place so the render
+ * fold (`heading >> 16`) sees the same sign-extended 10-bit word for both. */
+static int32_t match_run_stage_heading(int16_t word) {
+  return (int32_t)((uint32_t)(uint16_t)word << 16);
+}
+
 /* FU-85 §4/FUN_00036C70 (first-hand disassemble_function 0x36C70) stages the
  * 23 render slots per frame body: team 0 records 0..10 (base 0x1588A4) then
  * team 1 records 0..10 (0x1590D9), each from rec+0x59/5D/61 with hidden set by
@@ -2072,7 +2079,7 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
       re->stage.pos.z = e->pos_z;
       /* FUN_00036C70: the record angle is the +0x7D face word in the high
        * half of the native +0x7B dword; the render slot folds it. */
-      re->stage.heading = (int32_t)((uint32_t)(uint16_t)e->face7d << 16);
+      re->stage.heading = match_run_stage_heading(e->face7d);
       re->stage.anim_id = (int32_t)e->anim_id;   /* 0x36D44 byte[[rec+0x28]] */
       re->stage.frame = (int32_t)e->frame;       /* 0x36D4F byte[rec+0x3D] */
       re->stage.hidden = e->skip_9a ? 1 : 0;
@@ -2086,8 +2093,7 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
    * install, 0x887D5) selects the FU-84 row the FU-85 resolver draws; the
    * earlier zeroed stand-in resolved row 0. */
   ball->stage.anim_id = (int32_t)mr->entities.ball.appear_row;
-  ball->stage.heading =
-      (int32_t)((uint32_t)(uint16_t)mr->entities.ball.heading << 16);
+  ball->stage.heading = match_run_stage_heading(mr->entities.ball.heading);
   ball->stage.hidden = 0;
   r->entity_count = slot + 1;
 

@@ -19,10 +19,11 @@ the measured hash-only diff if the golden moves.
 
 ## Steps
 
-1. Stage `re->stage.heading = (int32_t)((uint32_t)(uint16_t)e->face7d << 16)`
-   in the player-slot loop; update the stale open-leg comment.
+1. Stage `re->stage.heading = match_run_stage_heading(e->face7d)` in the
+   player-slot loop (one shared 16.16 helper for record and ball); update the
+   stale open-leg comment.
    Check: `test_scene_stages_pool_entities` builds and asserts positive and
-   wrapped face values.
+   wrapped face values, including the render-slot fold angles.
 2. Measure the M2 candidate transcript with the ISO; classify the diff
    (`state=` unchanged, line count unchanged, hash-only) and verify M1 exact.
    Check: `cmp`/`cut`/`grep` evidence; stop if a state or line changes.
@@ -36,8 +37,10 @@ the measured hash-only diff if the golden moves.
 The record stage now publishes `face7d` in the slot heading. M2 re-pin is
 measured: first differing line 2545, 3,978 contiguous hash-only lines
 (2545..6522), all `state=` tags/counts unchanged, 295,089 B / 6,522 lines, old
-sha `7c3874f7…` -> new `41521559…`; M1 exact. `make check` 124/124. Terminal
-pose/duration steering and the `0xA2A10` view angle remain legs.
+sha `7c3874f7…` -> new `41521559…`; M1 exact. `make check` 124/124. Release
+smoke: a fresh `build-release/fifa96` window starts a match, accepts input and
+renders varied record facing; captured at `docs/screens/p79-facing.png`.
+Terminal pose/duration steering and the `0xA2A10` view angle remain legs.
 
 ## Non-goals
 

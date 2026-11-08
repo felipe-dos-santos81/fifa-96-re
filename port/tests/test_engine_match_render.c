@@ -532,12 +532,10 @@ static void test_scene_stages_pool_entities(void) {
   f.mr.entities.team[1].records[0].pos_z = 0x280;
   f.mr.entities.team[1].records[0].skip_9a = 1;
   /* Phase 79: the native +0x7D face word is staged into the record slot's
-   * heading high half. Keep the mover's direct-face latch clear so this
-   * staging assertion is not also a mover assertion. */
+   * heading high half. The fixture pool is zeroed, so the direct-face latch is
+   * clear; these values pin the staging path, not the mover. */
   f.mr.entities.team[0].records[0].face7d = 0x100;
-  f.mr.entities.team[0].records[0].row43 = 0;
   f.mr.entities.team[0].records[3].face7d = -0x100;
-  f.mr.entities.team[0].records[3].row43 = 0;
   f.mr.entities.ball.x = 0x20;
   f.mr.entities.ball.y = 0x30;
   f.mr.entities.ball.z = 0x400;
@@ -558,9 +556,15 @@ static void test_scene_stages_pool_entities(void) {
   assert(f.mr.render.entities[0].stage.pos.x == 0);
   assert(f.mr.render.entities[0].stage.pos.y == 0);
   assert(f.mr.render.entities[0].stage.pos.z == 0x200);
-  assert(f.mr.render.entities[0].stage.heading == ((int32_t)0x100 << 16));
-  assert(f.mr.render.entities[3].stage.heading ==
-         (int32_t)((uint32_t)(uint16_t)-0x100 << 16));
+  assert(f.mr.render.entities[0].stage.heading == 0x01000000);
+  assert(f.mr.render.entities[3].stage.heading == -0x01000000);
+  fifa96_render_slot folded;
+  assert(fifa96_render_slot_stage(&f.mr.render.entities[0].stage, &folded) ==
+         FIFA96_OK);
+  assert(folded.angle == 0xC000);
+  assert(fifa96_render_slot_stage(&f.mr.render.entities[3].stage, &folded) ==
+         FIFA96_OK);
+  assert(folded.angle == 0x4000);   /* 0x400 - (-0x100) = 0x500, masked to 0x100 */
   assert(f.mr.render.entities[3].stage.pos.x == 0x30);
   assert(f.mr.render.entities[11].stage.pos.x == 0x40);
   assert(f.mr.render.entities[11].stage.pos.y == 0x10);
