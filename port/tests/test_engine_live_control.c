@@ -2327,6 +2327,7 @@ static void test_live_pause_substitutions(void) {
   assert(mr->sub_used[side] == 3u);
   assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_OPEN) == 0);
   assert(mr->sub_menu_status == FIFA96_MATCH_RUN_SUB_STATUS_LIMIT);
+  assert(strstr(mr->sub_notice, "NO SUBSTITUTIONS") != NULL);
 
   assert(mr->score[0] == 0u && mr->score[1] == 0u);
   assert(mr->state.phase == 2u);

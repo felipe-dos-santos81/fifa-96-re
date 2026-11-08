@@ -7262,10 +7262,15 @@ int fifa96_match_run_pause_sub(struct fifa96_match_run *mr, int action) {
     uint8_t side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
     if (mr->sub_used[side] >= FIFA96_MATCH_RUN_SUB_LIMIT) {
       mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_LIMIT;
+      (void)snprintf(mr->sub_notice, sizeof mr->sub_notice,
+                     "NO SUBSTITUTIONS LEFT");
+      mr->sub_notice_ticks = 180u;
       return 0;
     }
     if (mr->sub_bench_avail[side] == 0) {
       mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NO_MATCH;
+      (void)snprintf(mr->sub_notice, sizeof mr->sub_notice, "NO BENCH MATCH");
+      mr->sub_notice_ticks = 180u;
       return 0;
     }
     mr->sub_menu_open = 1;
