@@ -411,8 +411,9 @@ static const uint8_t match_run_frame_records[0xD00] = {
  * 9c bf 00 00 c8 00 00 00). FUN_0004C904 copies +0x58/+0x5C into 0x14E4EC/F0
  * for the projection matrix (first-hand 0x4C918..0x4C928), and the live
  * pose feed's mode-0 default arm writes no pose, so these statics are the
- * live seed. Same object whose +0x4C = 0x1500 is MATCH_RUN_VIEW_RATIO. */
-/* The camera-0 view constants live in fifa96_match_run.h so the renderer and
+ * reset/non-live seed; Phase 80 overrides the live yaw/pitch/ratio with the
+ * side seed. Same object whose +0x4C = 0x1500 is MATCH_RUN_VIEW_RATIO. */
+/* The view/camera constants live in fifa96_match_run.h so the renderer and
  * the live-eye test share the same named values. */
 
 /* FU-61 §2.3 sampler mapping rows: row 0/1 is the identity pinned by
@@ -1936,7 +1937,7 @@ static void match_run_entity_drain(struct fifa96_match_run *mr) {
  * producers are event-driven (the live path has no kickoff event; A2 §2), so
  * the live windowed match uses the ball as the focus while no native pan event
  * is active. `render.camera` stays the FU-71 focus triple; the rendered eye is
- * the separate camera-0 rig (fifa96_match_run_eye). The `tracked` bind is kept
+ * the separate class-3 side stand-in (fifa96_match_run_eye). The `tracked` bind is kept
  * on the controlled record (the native 0x1577CA writer is the camera event;
  * the engine's row-04/ball-receive producers may rebind it later). Derived
  * stand-in for the unported FU-310 camera place, not a native producer; the
@@ -1944,7 +1945,7 @@ static void match_run_entity_drain(struct fifa96_match_run *mr) {
 /* Phase 71 — the live render-eye stabilizer [D].
  *
  * The FU-71 focus cell is the simulation camera, but the rendered eye is the
- * camera-0 rig (focus + type-0 offset). A native pan handoff currently hard-sets
+ * class-3 side stand-in (focus + side offset). A native pan handoff hard-sets
  * the focus and the rendered eye jumps by the whole delta in one granted frame
  * (measured 376 x / 79 y / 248 z at the P14 smoke). The stabilizer keeps the
  * simulation cell exact and clamps the render-only eye to the native FU-71
@@ -1979,9 +1980,9 @@ static void match_run_render_eye_update(struct fifa96_match_run *mr) {
   if (fx < -MATCH_RUN_RENDER_EYE_BOUND_X) fx = -MATCH_RUN_RENDER_EYE_BOUND_X;
   if (fz > MATCH_RUN_RENDER_EYE_BOUND_Z) fz = MATCH_RUN_RENDER_EYE_BOUND_Z;
   if (fz < -MATCH_RUN_RENDER_EYE_BOUND_Z) fz = -MATCH_RUN_RENDER_EYE_BOUND_Z;
-  tx = fx + FIFA96_MATCH_RUN_TYPE0_X;
-  ty = fy + FIFA96_MATCH_RUN_TYPE0_Y;
-  tz = fz + FIFA96_MATCH_RUN_TYPE0_Z;
+  tx = fx + FIFA96_MATCH_RUN_SIDE_X;
+  ty = fy + FIFA96_MATCH_RUN_SIDE_Y;
+  tz = fz + FIFA96_MATCH_RUN_SIDE_Z;
   if (r->render_eye_valid == 0u ||
       match_run_render_eye_abs(tx - r->render_eye_x) > MATCH_RUN_RENDER_EYE_SNAP ||
       match_run_render_eye_abs(ty - r->render_eye_y) > MATCH_RUN_RENDER_EYE_SNAP ||
@@ -2024,7 +2025,7 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
    * (the phase-2 `0x8BBBB` arm), so the camera stays ahead of a moving ball
    * and the native pan/armer path sees motion first. Both are [D] stand-ins
    * for the unported FU-310 camera place/focus and the camera director; the
-   * engine's camera-0 render eye is unchanged. */
+   * engine's side render eye is unchanged. */
   int32_t lead_x = (int32_t)mr->entities.ball.vel_x * 8;
   int32_t lead_z = (int32_t)mr->entities.ball.vel_z * 8;
   if (lead_x > 0x120) lead_x = 0x120;
@@ -5091,12 +5092,14 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * unported) and bind the tracked record to the controlled player. These are
    * the engine's live stand-ins, not native producers. */
   if (mr->live_start) {
-    /* P12 / FU-349: FUN_0004D7E8 installs camera type 0's entry (0x107E2C)
-     * for the match; override the image-default orientation with that pose.
-     * The non-live/tape path keeps the image default. */
-    mr->render.yaw = FIFA96_MATCH_RUN_TYPE0_YAW;
-    mr->render.pitch = FIFA96_MATCH_RUN_TYPE0_PITCH;
-    mr->render.view_ratio = FIFA96_MATCH_RUN_TYPE0_RATIO;
+    /* Phase 80 [D]: the native default Friendly capture uses the class-3 side
+     * camera (slot 5), not the type-0 end preset installed by FUN_0004D7E8.
+     * Seed a derived side view modeled on that class; the pitch is the derived
+     * downward framing value, since the class-3 handler's pitch integrator is
+     * still an open leg. The non-live/tape path keeps the image default. */
+    mr->render.yaw = FIFA96_MATCH_RUN_SIDE_YAW;
+    mr->render.pitch = FIFA96_MATCH_RUN_SIDE_PITCH;
+    mr->render.view_ratio = FIFA96_MATCH_RUN_SIDE_RATIO;
     (void)fifa96_match_run_write_phase(mr, 2u);
     (void)fifa96_camera_event_set(&mr->render.camera, 0, 0, 0x50, 0);
     (void)fifa96_camera_event_dir(&mr->render.camera, 0, 0, 0);
@@ -5142,15 +5145,13 @@ int fifa96_match_run_set_mode(struct fifa96_match_run *mr, uint8_t mode) {
 void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out) {
   if (!mr || !out) return;
   if (mr->live_start) {
-    /* P12 / FU-349: the native match setup FUN_0004D7E8 copies the camera-type
-     * table entry 0 (0x107E2C = {-100,488,1100,33900,3900,4608}) over camera
-     * object 0. The image default on 0x107508 (-1920,160,30, yaw 0xBF9C,
-     * pitch 200) is the pre-match/attract pose and is what produced the wide
-     * empty foreground. The FU-71 triple remains the focus; the live eye is the
-     * type-0 camera offset from that focus. */
-    out->x = mr->render.camera.pos_x + FIFA96_MATCH_RUN_TYPE0_X;
-    out->y = mr->render.camera.pos_y + FIFA96_MATCH_RUN_TYPE0_Y;
-    out->z = mr->render.camera.pos_z + FIFA96_MATCH_RUN_TYPE0_Z;
+    /* Phase 80 [D]: the native default match view is the class-3 side camera
+     * (slot 5), not camera object 0's type-0 end preset. This derived sideline
+     * eye sits at x=-1600 with the focus plus an 80-unit height offset; the
+     * FU-71 triple stays the focus and the side eye follows it. */
+    out->x = mr->render.camera.pos_x + FIFA96_MATCH_RUN_SIDE_X;
+    out->y = mr->render.camera.pos_y + FIFA96_MATCH_RUN_SIDE_Y;
+    out->z = mr->render.camera.pos_z + FIFA96_MATCH_RUN_SIDE_Z;
   } else {
     out->x = mr->render.camera.pos_x;
     out->y = mr->render.camera.pos_y;
@@ -9268,12 +9269,10 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   int32_t matrix[9];
   int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
   int32_t recip_y[FIFA96_PROJECTION_RECIP_COUNT];
-  /* FU-343 P1 / FU-154 §2.2: the live pose uses the native camera-0 statics
-   * (`r->yaw` = 0xBF9C, `r->pitch` = 200) and the full surface lens. The
-   * camera-0 record's +0x4C ratio 0x1500 is the near-threshold field, not an
-   * entity FOV term (FU-88 §5); the earlier 3/4 live lens and broadcast
-   * yaw/pitch were compensation for the removed behind-goal rig, not native
-   * values. Non-live keeps the pinned projection dimensions. */
+  /* Phase 80: the live pose uses the class-3 side seed (`r->yaw` = 0xC000,
+   * `r->pitch` = 0x0C00) and the full surface lens. Non-live keeps the image
+   * default 0xBF9C/200 and the pinned projection dimensions. The ratio 4608
+   * remains the native camera field, not an entity FOV term (FU-88 §5). */
   int32_t lens_w = s->width;
   int32_t lens_h = s->height;
   int32_t view_yaw = r->yaw;
@@ -9286,9 +9285,9 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   if (err != FIFA96_OK) return (int)err;
 
   /* FU-85 §4 camera staging (FUN_00036C70's camera copy/bounds over the FU-71
-   * block). FU-343 (P1): the live path renders from the separate camera-0 rig
-   * (focus + (-1920,160,30), A1 §4/A2 §2); the non-live path keeps the FU-71
-   * focus triple unchanged (M1/M2). */
+   * block). Phase 80 [D]: the live path renders from the separate class-3 side
+   * stand-in (focus + (-1600,80,0)); the non-live path keeps the FU-71 focus
+   * triple unchanged (M1/M2). */
   fifa96_render_pos cam_src;
   fifa96_match_run_render_eye(mr, &cam_src);
   fifa96_render_pos cam;
@@ -9465,9 +9464,9 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     if (mr->live_start && r->team_remap_ready &&
         slot < (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
       sprite_remap = r->remap_team[slot / FIFA96_MATCH_ENTITY_RECORDS];
-    /* The native projection already sizes players for the camera-0 sideline
-     * rig; the P10 2.5x live upscale was only compensation for the removed
-     * behind-goal camera. Keep the native scale for every slot. */
+    /* The native projection already sizes players for the sideline rig; the
+     * P10 2.5x live upscale was only compensation for the removed behind-goal
+     * camera. Keep the native scale for every slot. */
     int rc = match_run_draw_sprite(s, &sprite, sprite_remap, x, y, scale, frame.mirrored,
                                    &clip);
     if (rc != 0) return rc;

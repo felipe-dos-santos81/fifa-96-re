@@ -1294,8 +1294,8 @@ static void test_engine_match_step_renders(void) {
 }
 
 /* ------------------------------------------------------------------------ *
- * FU-343 (P1): the visible match — live_start gate, camera-0 eye, pitch,
- * formation and the per-team kit remap.
+ * FU-343 (P1)/Phase 80: the visible match — live_start gate, class-3 side
+ * eye, pitch, formation and the per-team kit remap.
  *
  * The ISO-gated cases use the retail containers the windowed bridge stages:
  * /ART/PLAYART.PVI + /ART/GAMEART0.PVI for the sprites/palette, then
@@ -1379,21 +1379,21 @@ static void test_live_start_gate_and_eye(void) {
   assert(fifa96_match_run_set_live_start(&mr, 1) == 0 && mr.live_start == 1);
   assert(fifa96_match_run_set_live_start(&mr, 0) == 0 && mr.live_start == 0);
 
-  assert(fifa96_camera_init(&mr.render.camera, 480, 0, -120) == FIFA96_OK);
+  assert(fifa96_camera_init(&mr.render.camera, 480, 0x50, -120) == FIFA96_OK);
   fifa96_render_pos eye = {0, 0, 0};
   fifa96_match_run_eye(&mr, &eye);
-  assert(eye.x == 480 && eye.y == 0 && eye.z == -120);   /* non-live: focus */
+  assert(eye.x == 480 && eye.y == 0x50 && eye.z == -120);   /* non-live: focus */
 
   mr.live_start = 1;
   fifa96_match_run_eye(&mr, &eye);
-  /* P12 / FU-349: the native match uses camera type 0's entry
-   * (0x107E2C), not the image-default camera-0 statics. */
-  assert(eye.x == 480 + FIFA96_MATCH_RUN_TYPE0_X);
-  assert(eye.y == 0 + FIFA96_MATCH_RUN_TYPE0_Y);
-  assert(eye.z == -120 + FIFA96_MATCH_RUN_TYPE0_Z);
-  assert(eye.x - mr.render.camera.pos_x == FIFA96_MATCH_RUN_TYPE0_X);
-  assert(eye.y - mr.render.camera.pos_y == FIFA96_MATCH_RUN_TYPE0_Y);
-  assert(eye.z - mr.render.camera.pos_z == FIFA96_MATCH_RUN_TYPE0_Z);
+  /* Phase 80: the live match uses the class-3 side seed, not the type-0
+   * end preset or the image-default non-live statics. */
+  assert(eye.x == 480 + FIFA96_MATCH_RUN_SIDE_X);
+  assert(eye.y == 0xA0);   /* focus 0x50 + side offset 0x50 */
+  assert(eye.z == -120 + FIFA96_MATCH_RUN_SIDE_Z);
+  assert(eye.x - mr.render.camera.pos_x == FIFA96_MATCH_RUN_SIDE_X);
+  assert(eye.y - mr.render.camera.pos_y == FIFA96_MATCH_RUN_SIDE_Y);
+  assert(eye.z - mr.render.camera.pos_z == FIFA96_MATCH_RUN_SIDE_Z);
   fifa96_match_run_eye(NULL, &eye);
   fifa96_match_run_eye(&mr, NULL);
 }
@@ -1459,12 +1459,12 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   assert(fifa96_engine_step(f.engine) == 0);
   fifa96_render_pos eye;
   fifa96_match_run_eye(&f.mr, &eye);
-  assert(eye.x == r->camera.pos_x + FIFA96_MATCH_RUN_TYPE0_X);
-  assert(eye.y == r->camera.pos_y + FIFA96_MATCH_RUN_TYPE0_Y);
-  assert(eye.z == r->camera.pos_z + FIFA96_MATCH_RUN_TYPE0_Z);
-  assert(r->yaw == FIFA96_MATCH_RUN_TYPE0_YAW);
-  assert(r->pitch == FIFA96_MATCH_RUN_TYPE0_PITCH);
-  assert(r->view_ratio == FIFA96_MATCH_RUN_TYPE0_RATIO);
+  assert(eye.x == r->camera.pos_x + FIFA96_MATCH_RUN_SIDE_X);
+  assert(eye.y == r->camera.pos_y + FIFA96_MATCH_RUN_SIDE_Y);
+  assert(eye.z == r->camera.pos_z + FIFA96_MATCH_RUN_SIDE_Z);
+  assert(r->yaw == FIFA96_MATCH_RUN_SIDE_YAW);
+  assert(r->pitch == FIFA96_MATCH_RUN_SIDE_PITCH);
+  assert(r->view_ratio == FIFA96_MATCH_RUN_SIDE_RATIO);
 
   /* The rendered live frame is mostly pitch (the floor plus the derived
    * stand wall), not the cleared background. */
@@ -1474,21 +1474,13 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   for (uint32_t i = 0; i < total; i++)
     if (f.s->indexed[i] != r->background) non_background++;
   assert(non_background > total * 30u / 100u);
-  /* The live pitch's halfway line is the z=0 line (vertical in the camera-0
-   * view), not the old x=0 line; the centre column must carry line pixels. */
-  int best_col = 0;
-  int best_col_lines = 0;
-  for (uint32_t x = 0; x < (uint32_t)f.s->width; x++) {
-    int lines = 0;
-    for (uint32_t y = (uint32_t)f.s->height / 2; y < (uint32_t)f.s->height; y++)
-      if (f.s->indexed[y * f.s->width + x] == r->pitch_art.line_index) lines++;
-    if (lines > best_col_lines) {
-      best_col_lines = lines;
-      best_col = (int)x;
-    }
-  }
-  assert(best_col_lines > 10);
-  assert(best_col > 20 && best_col < (int)f.s->width - 20);
+  /* The live side view renders the pitch's z=0 halfway line; its screen
+   * direction is camera-dependent, so count the line-colour pixels rather
+   * than pinning the old camera-0 vertical column. */
+  uint32_t line_pixels = 0;
+  for (uint32_t i = 0; i < total; i++)
+    if (f.s->indexed[i] == r->pitch_art.line_index) line_pixels++;
+  assert(line_pixels > 100);
   /* The derived far-stand wall is actually consumed: with its banks removed
    * the old fallback band renders a different frame. */
   uint64_t with_wall = fifa96_surface_hash(f.s);

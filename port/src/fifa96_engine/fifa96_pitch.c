@@ -302,8 +302,9 @@ static const uint8_t *pitch_tile_pick(const struct fifa96_pitch *pitch, int32_t 
  * native line coordinates (A1 §4 [D]). The pitch rectangle is x ±2155,
  * z ±3102 (FUN_0006D870, A1 §5). The gameplay goal axis is z, not x:
  * `live_kick_target_z = ±0xB30` and `fifa96_match_goal_zone` measure |z|
- * (match_run.c), while x is the touchline/width axis and the camera-0 eye
- * sits at x=-1920. So the goal lines are z ±3102, the touchlines x ±2016 and
+ * (match_run.c), while x is the touchline/width axis; the static sideline eye
+ * is x=-1920 and the live side seed is near it. So the goal lines are z ±3102,
+ * the touchlines x ±2016 and
  * the halfway line is z = 0. The earlier A1 §4 x/z labels were swapped; this
  * is the corrected mapping. */
 #define FIFA96_PITCH_LINE_HALF 6
@@ -338,7 +339,7 @@ static int pitch_marking(int32_t wx, int32_t wz) {
  * quads (P10-L2). This derived layer uses the real GAMESTD1 banks on a single
  * wall just behind the far touchline (x = +0x7E0 + 64) and inverse-projects
  * each pixel onto it. It gives the crowd, seating rows and advertising boards
- * correct perspective relative to the camera-0 sideline rig, while keeping the
+ * correct perspective relative to the side-camera rig, while keeping the
  * native 3dwpts renderer a numbered open leg. */
 #define FIFA96_PITCH_WALL_X (FIFA96_PITCH_HALF_TOUCHLINE + 64)
 #define FIFA96_PITCH_WALL_Z (-((int32_t)FIFA96_PITCH_HALF_GOAL_LINE + 64))

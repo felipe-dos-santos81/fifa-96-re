@@ -119,12 +119,13 @@ notice (native modem transport remains a leg). The competition fixtures,
 tables, shootout and save records are derived from the native mode bytes and
 are labelled as such; the native league/tournament screen art and data layouts
 remain open legs. The shell composes the real 640x480 MOD2/MOD1 art, the SLICK
-title/menu fonts and the animated VS mark; the match uses the native camera
-type-0 high follow view, a derived stadium stand/end wall built from the native
+title/menu fonts and the animated VS mark; the match uses a derived class-3
+side-camera follow view, a derived stadium stand/end wall built from the native
 stand/crowd banks, the native `Net.fsh` goal mesh, mowing stripes, player
 shadows, a live off-ball team shape with one forward support run, live record
-facing staged from the native `+0x7D` word, and a uniform 2x 640 HUD. The windowed build renders at the native
-640x480 surface in a 1280x960 window; the headless tape path stays 320x240.
+facing staged from the native `+0x7D` word, and a uniform 2x 640 HUD. The
+windowed build renders at the native 640x480 surface in a 1280x960 window;
+the headless tape path stays 320x240.
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
 **C** passes, **V** plays a long ball, **Q** switches to the next outfield

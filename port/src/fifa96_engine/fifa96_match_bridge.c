@@ -24,7 +24,7 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
   uint32_t selector = 0;
   /* FU-343 (P1): only the windowed host opts into the live-start bootstrap
    * (skip the native pre-match situation-0/act-0xA collapse, enter phase 2,
-   * seed the derived camera event/tracked, render the camera-0 eye and the
+   * seed the derived camera event/tracked, render the side eye and the
    * pitch). Headless runs (the M1/M2 tapes and every direct-begin fixture)
    * take the native begin order unchanged. */
   const int live = eng->surface != NULL && !eng->cfg.headless;

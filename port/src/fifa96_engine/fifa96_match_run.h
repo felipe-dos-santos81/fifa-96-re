@@ -67,20 +67,25 @@ struct fifa96_match_matchup {
 /* Match presentation slots: FU-85 §4 stages 23 entities (11 + 11 + ball) into
  * the render arrays; the engine keeps the same staging size. */
 #define FIFA96_MATCH_RUN_RENDER_SLOTS 23
-/* Native match camera type 0 (the side-swap setup at FUN_0004D7E8 copies
- * 0x107E2C into camera object 0): position (-100,488,1100), yaw 33900,
- * pitch 3900, ratio 4608. The image default on 0x107508 is (-1920,160,30),
- * yaw 0xBF9C, pitch 200; it is the pre-match/attract pose, not the live match
- * pose. The live eye is `focus + type-0 offset`; `fifa96_match_run_reset_render`
- * keeps the image default for non-live/tape runs. */
-#define FIFA96_MATCH_RUN_TYPE0_X (-100)
-#define FIFA96_MATCH_RUN_TYPE0_Y 488
-#define FIFA96_MATCH_RUN_TYPE0_Z 1100
-#define FIFA96_MATCH_RUN_TYPE0_YAW 33900
-#define FIFA96_MATCH_RUN_TYPE0_PITCH 3900
-#define FIFA96_MATCH_RUN_TYPE0_RATIO 4608
+/* The image default on 0x107508 is (-1920,160,30), yaw 0xBF9C, pitch 200;
+ * it remains the non-live/tape pose. The earlier P12 live path used the
+ * native type-0 end preset (-100,488,1100); Phase 80 replaces it with the
+ * class-3 side-camera seed below. */
+/* Phase 80 [D]: the live match's side-camera seed. The native default
+ * Friendly capture uses the class-3 side camera (slot 5), not the type-0 end
+ * preset. This is a derived sideline follow near the left touchline: x=-1600,
+ * focus y=0x50 + 80 = 0xA0 (160) eye height, z tracks the focus, yaw 0xC000
+ * (look across +x), pitch 0x0C00. The native class-3 body's own position and
+ * pitch integrators remain an open leg, so this is presentation framing, not
+ * a claim of the class-3 output. The ratio stays the native camera 4608. */
+#define FIFA96_MATCH_RUN_SIDE_X (-1600)
+#define FIFA96_MATCH_RUN_SIDE_Y 80
+#define FIFA96_MATCH_RUN_SIDE_Z 0
+#define FIFA96_MATCH_RUN_SIDE_YAW 0xC000
+#define FIFA96_MATCH_RUN_SIDE_PITCH 0x0C00
+#define FIFA96_MATCH_RUN_SIDE_RATIO 4608
 /* The image-default pose on 0x107508; reset_render seeds it for non-live/tape
- * runs and the live begin overrides yaw/pitch/ratio with the type-0 values. */
+ * runs and the live begin overrides yaw/pitch/ratio with the side values. */
 #define FIFA96_MATCH_RUN_VIEW_YAW 0xBF9C
 #define FIFA96_MATCH_RUN_VIEW_PITCH 200
 
@@ -457,7 +462,7 @@ struct fifa96_match_run_render {
   fifa96_camera_pose_args camera_pose;
   /* Phase 71 — the live-only render-eye stabilizer (derived [D]). The
    * simulation camera (`camera`) stays the native FU-71 focus; the rendered
-   * eye converges toward the clamped camera-0 pose so a native pan handoff
+   * eye converges toward the clamped class-3 side pose so a native pan handoff
    * cannot teleport the view. Cleared by reset_render's memset. */
   int32_t render_eye_x, render_eye_y, render_eye_z;
   uint8_t render_eye_valid;
@@ -1343,7 +1348,7 @@ struct fifa96_match_run {
    * placement commit, writes the live phase 2, seeds one derived camera event
    * and binds camera.tracked to the controlled record; the frame body then
    * follows the ball with the focus triple and the render uses the separate
-   * camera-0 eye (focus + (-1920,160,30)) for pitch and sprites. */
+   * Phase 80 side eye (focus + (-1600,80,0)) for pitch and sprites. */
   uint8_t live_start;
   uint8_t match_mode;          /* P13 native front-end mode latch (0..4) */
   /* P7 / FU-345: the derived live kickoff possession latch. The live begin
@@ -1735,18 +1740,19 @@ int fifa96_match_run_set_live_start(struct fifa96_match_run *mr, int on);
 int fifa96_match_run_set_mode(struct fifa96_match_run *mr, uint8_t mode);
 
 /* FU-343 (P1): the render eye. Non-live returns the FU-71 focus triple
- * (`render.camera.pos_*`, the pre-P1 behaviour). Live returns the native
- * camera object 0 pose (image 0x107508, A1 §4/A2 §2):
- *   eye = focus + (-1920, 160, 30)
- * i.e. the focus triple is the ball-follow CAMERA and the rendered eye is a
- * separate view object. The same eye feeds the pitch and the sprite pass, so a
- * live frame stays internally consistent. NULL mr/out -> no write. */
+ * (`render.camera.pos_*`, the pre-P1 behaviour). Live returns the Phase 80
+ * derived class-3 side eye:
+ *   non-live eye = focus
+ *   live eye     = focus + (-1600, 80, 0)  [Phase 80 side seed]
+ * i.e. the focus triple is the ball-follow CAMERA and the rendered live eye is
+ * the class-3 side stand-in. The same eye feeds the pitch and the sprite pass,
+ * so a live frame stays internally consistent. NULL mr/out -> no write. */
 void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out);
 
 /* Phase 71: the live render eye. Non-live is `fifa96_match_run_eye` exactly.
- * Live returns the stabilized camera-0 eye (clamped focus + the type-0
- * offset, max 0x30 units of movement per granted frame). The simulation
- * camera is untouched. NULL mr/out -> no write. */
+ * Live returns the stabilized side eye (clamped focus + the side offset, max
+ * 0x30 units of movement per granted frame). The simulation camera is
+ * untouched. NULL mr/out -> no write. */
 void fifa96_match_run_render_eye(const struct fifa96_match_run *mr,
                                  fifa96_render_pos *out);
 

@@ -4588,3 +4588,15 @@ close-out below).
   starts a match, accepts input and renders varied facing
   (`docs/screens/p79-facing.png`). Terminal-row pose/duration steering and the
   native `0xA2A10` view angle remain numbered legs.
+
+- **Phase 80 side-camera gameplay view (2026-11-08).** The live match had been
+  using the type-0 end preset (`-100,488,1100`, yaw `33900`, pitch `3900`),
+  which put the camera down the pitch and made the players tiny. The native
+  default Friendly path uses the class-3 side camera (slot 5; FU-100/FU-104,
+  side block `-755,120,295,45425,0,4608`). The live-only view is now a derived
+  left-side follow near the touchline: eye `focus + (-1600,80,0)`, yaw `0xC000`, pitch
+  `0x0C00`, ratio `4608`, so the camera looks across the pitch and follows the
+  FU-71 focus. The native class-3 position/pitch integrator remains a leg.
+  `make check` **124/124**; M1/M2 exact; release screenshot
+  `docs/screens/p80-side-camera.png`, native reference
+  `docs/screens/p80-native-side.png`. No golden re-pin.

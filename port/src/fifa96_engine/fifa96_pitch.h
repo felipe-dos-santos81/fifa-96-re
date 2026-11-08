@@ -100,7 +100,7 @@ int fifa96_pitch_stage(struct fifa96_pitch *pitch, const struct fifa96_engine *e
 void fifa96_pitch_release(struct fifa96_pitch *pitch);
 
 /* Draw the v1 pitch into the indexed surface, clipped to `clip`. `eye` is the
- * render eye (live: focus + camera-0 offset (-1920,160,30)); `matrix` is the
+ * render eye (live: focus + the Phase 80 side offset (-1600,80,0)); `matrix` is the
  * already-built fifa96_projection_matrix(yaw,pitch); `center` is the same
  * 16.16 projection centre the sprite pass uses; `fov_w`/`fov_h` are the
  * projection focal dimensions (live: the full surface focal; the native lens

@@ -11531,3 +11531,56 @@ That statement is now historical: this phase stages the `+0x7D` word into the
 slot heading, so the drawn facing follows the live face. The FU323 position,
 AI-population and camera measurements are unchanged; this correction is
 render-staging only.
+
+## Phase 80 — side-camera gameplay view (2026-11-08)
+
+**Symptom.** The live windowed match used the type-0 end/behind-play view:
+the camera looked down the pitch from the end, players were tiny, and a large
+slice of the derived stand dominated the frame. This was not the native
+default Friendly view.
+
+**Root cause.** The live begin installed `FUN_0004D7E8` preset 0
+(`0x107E2C = {-100,488,1100,33900,3900,4608}`) and added it to the FU-71
+focus. The native default Friendly path uses the **class-3 side camera**
+instead: FU-100 maps class 3 to camera slot 5, FU-104 records the read-only
+side block `{-755,120,295,45425,0,4608}`, and the class-3 body is
+`FUN_0004DB38` (OL-T11-76, still unported). A native default Friendly capture
+(`session-probe-14c18-mode`, FU-16's standard key route; frame
+`fifa96_005-0053.png`) and a manual DOSBox Friendly run both show the close
+sideline view, so the port was selecting the wrong camera class.
+
+**Implementation [D].** The live-only seed is now a derived left-side
+follow:
+
+- eye = FU-71 focus + `(-1600, 80, 0)`; the focus y is `0x50`, so the eye
+  height is `0xA0` (160);
+- yaw `0xC000` (look across `+x`), pitch `0x0C00`, ratio `4608`;
+- `match_run_render_eye_update`/`fifa96_match_run_eye` use the same side
+  offsets, and the live begin installs the side yaw/pitch/ratio.
+
+This is presentation framing, not a claim of the class-3 output. The native
+side block motivates the class; the exact seed is derived and the class-3
+position/pitch integrators remain unported. No camera-director/3dwpts claim is
+made. All changes are
+`live_start`-gated; non-live/tape runs keep the image-default pose, so M1/M2
+are untouched.
+
+**Tests and gate.** `test_engine_match_render` pins the side eye/yaw/pitch and
+now counts the rendered z=0 line pixels instead of assuming the old camera-0
+vertical column; `test_engine_live_control` tracks the side-offset eye bounds.
+`make check` **124/124**; M1 byte-exact `09b726b7…`; M2 byte-exact
+`41521559…`. Release smoke: the windowed build starts a Friendly match and
+shows the side view (`docs/screens/p80-side-camera.png`); the native
+comparison is `docs/screens/p80-native-side.png`.
+
+**Errata (Phase 66 type-0 claim).** Phase 66 said the live match installs
+camera type 0's entry and the eye is the type-0 offset from the FU-71 follow
+focus. That is retained as the native preset-0 record, but it is not the
+default gameplay camera: the default Friendly view is the class-3 side camera.
+The historical section is not rewritten; this section is the current status.
+The pre-existing type-0 constants are removed from the live path.
+
+**Legs.** Full class-3 `FUN_0004DB38` position/yaw/pitch integration; the
+native camera director/orientation (`FUN_0004E834`, P10-L6); native 3dwpts
+stadium/goal-net geometry (P10-L2); the native lens ratio path
+(`FUN_000441D8`, FU94) and the `0xA2A10` view-angle addend.

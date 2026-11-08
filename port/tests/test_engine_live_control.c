@@ -2598,8 +2598,8 @@ static void test_live_setpiece_timeout_falls_back(uint8_t phase) {
   drop_lc_fixture(&f);
 }
 
-/* Phase 71: the render-only eye moves at most 0x30 per granted frame and
- * converges on the clamped camera-0 pose; the simulation camera stays the
+/* Phase 71/80: the render-only eye moves at most 0x30 per granted frame and
+ * converges on the clamped class-3 side pose; the simulation camera stays the
  * native FU-71 cell. */
 static void test_live_render_eye_stabilizer(void) {
   struct lc_fixture f = make_lc_fixture();
@@ -2638,10 +2638,10 @@ static void test_live_render_eye_stabilizer(void) {
   (void)exact;
   /* The focus may pan while the eye converges; the observable claim is the
    * per-frame bound plus the native FU-71 clamp, not a frozen target. */
-  assert(cur.x >= -0x6C0 + FIFA96_MATCH_RUN_TYPE0_X);
-  assert(cur.x <= 0x6C0 + FIFA96_MATCH_RUN_TYPE0_X);
-  assert(cur.z >= -0xAB0 + FIFA96_MATCH_RUN_TYPE0_Z);
-  assert(cur.z <= 0xAB0 + FIFA96_MATCH_RUN_TYPE0_Z);
+  assert(cur.x >= -0x6C0 + FIFA96_MATCH_RUN_SIDE_X);
+  assert(cur.x <= 0x6C0 + FIFA96_MATCH_RUN_SIDE_X);
+  assert(cur.z >= -0xAB0 + FIFA96_MATCH_RUN_SIDE_Z);
+  assert(cur.z <= 0xAB0 + FIFA96_MATCH_RUN_SIDE_Z);
   assert(mr->render.render_eye_valid == 1u);
   drop_lc_fixture(&f);
 }
