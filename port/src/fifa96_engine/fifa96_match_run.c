@@ -464,16 +464,29 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
   uint8_t current[FIFA96_INPUT_PLAYERS] = { 0, 0, 0, 0 };
   uint8_t raw = 0;
   uint8_t mapped = 0;
+  int switch_down = 0;
   if (!mr) return -FIFA96_ERR_INVALID;
   if (keys) {
     for (size_t i = 0; i < count; i++) {
       uint8_t code = 0;
       if (keys[i].state != 1) continue;   /* press events only */
+      if (keys[i].raw_code == FIFA96_ENGINE_KEY_SWITCH) {
+        switch_down = 1;                  /* Phase 76: not an FU-61 word */
+        continue;
+      }
       if (match_run_key_gated(mr, keys[i].raw_code)) continue;
       if (!match_run_map_key(keys[i].raw_code, &code)) continue;
       raw |= code;
     }
   }
+  int switch_accept = mr->live_start && !mr->paused &&
+                      mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
+                      mr->state.phase == 2u && mr->live_kickoff_touch == 0u;
+  if (switch_down && !mr->live_switch_down && switch_accept)
+    mr->live_switch_press = 1u;
+  else if (!switch_accept)
+    mr->live_switch_press = 0u;
+  mr->live_switch_down = switch_down ? 1u : 0u;
   (void)fifa96_input_map(raw, match_run_input_row, &mapped);
   current[0] = mapped;
   (void)fifa96_input_update(&mr->input, current);
@@ -2723,6 +2736,39 @@ static int match_run_live_control_nearest(const struct fifa96_match_run *mr,
   }
 }
 
+/* Phase 76 [D]: the manual switch cycle. It reuses the bind's gates (own
+ * side, non-keeper, not hidden/occupied) but cycles record indices 1..10 in
+ * order, so repeated presses are deterministic and do not depend on distance.
+ * The native FU-295 auto-switch/AI caller remains P7-L1. */
+#define MATCH_RUN_LIVE_MANUAL_FRAMES 90u
+
+static int match_run_live_control_switchable(const struct fifa96_match_run *mr,
+                                             uint32_t t, int32_t id) {
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  if ((uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS != t) return 0;
+  uint32_t index = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  if (index == 0u) return 0;
+  const struct fifa96_match_entity *e = &mr->entities.team[t].records[index];
+  if (e->active == 0u || e->skip_98 != 0u || e->skip_9a != 0u) return 0;
+  return 1;
+}
+
+static int32_t match_run_live_control_switch_next(const struct fifa96_match_run *mr,
+                                                  uint32_t t, int32_t from) {
+  int start = match_run_live_control_switchable(mr, t, from)
+                  ? (int)((uint32_t)from % FIFA96_MATCH_ENTITY_RECORDS)
+                  : 0;
+  for (int step = 1; step < (int)FIFA96_MATCH_ENTITY_RECORDS; step++) {
+    int index = (start + step) % (int)FIFA96_MATCH_ENTITY_RECORDS;
+    if (index == 0) continue;
+    int32_t id = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+    if (match_run_live_control_switchable(mr, t, id)) return id;
+  }
+  return FIFA96_MATCH_ENTITY_NONE;
+}
+
 /* P7 / FU-345 (flight): latch the human kick's staged FU-73 block into a
  * derived ball-flight target. The native per-code target algebra
  * (`0x7AA3C..0x7AE2F`, OL-62) is unported, so the mapping below is explicitly
@@ -2789,6 +2835,15 @@ static void match_run_live_aim_reset(struct fifa96_match_run *mr,
 
 /* Phase 75 [D]: clear the derived support-run selection. Called on init,
  * begin, possession loss, restarts and any non-play phase. */
+/* Phase 76 [D]: clear the manual switch override/queued edge. The physical
+ * `live_switch_down` level survives a phase change until the next input poll. */
+static void match_run_live_manual_reset(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  mr->live_manual_id = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_manual_frames = 0;
+  mr->live_switch_press = 0;
+}
+
 static void match_run_live_support_reset(struct fifa96_match_run *mr) {
   if (!mr) return;
   int32_t runner = mr->live_support_runner;
@@ -3146,6 +3201,7 @@ static void match_run_live_out_force(struct fifa96_match_run *mr) {
   mr->live_cpu_carrier = FIFA96_MATCH_ENTITY_NONE;
   mr->live_ai_tackle_cd = 0;
   match_run_live_support_reset(mr);
+  match_run_live_manual_reset(mr);
   match_run_live_aim_reset(mr, 0);
   match_run_live_kick_sig_clear(mr);
   match_run_live_kick_consumed_clear(mr);
@@ -3237,6 +3293,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
     mr->live_kick_shot = 0u;
     match_run_live_support_reset(mr);
+    match_run_live_manual_reset(mr);
     match_run_live_aim_reset(mr, 1);
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
@@ -3253,6 +3310,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
     match_run_live_support_reset(mr);
+    match_run_live_manual_reset(mr);
     match_run_live_restart_bind(mr);
   }
   match_run_live_aim_update(mr);
@@ -3322,6 +3380,43 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     if (index >= 0)
       id = (int32_t)((uint32_t)t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
   }
+  /* Phase 76 [D]: manual switch. It yields to an own ball carrier; otherwise
+   * a queued edge cycles from the currently controlled record and holds the
+   * selection for 90 granted frames. */
+  int carrier_selected = id != FIFA96_MATCH_ENTITY_NONE &&
+                         id == mr->entities.ball.carrier;
+  if (carrier_selected) {
+    const struct fifa96_match_entity *ce =
+        &mr->entities.team[(uint32_t)t]
+             .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+    /* A stale/far possession cell is not the live carrier (the same range gate
+     * the carrier block uses); let the manual switch run in that case. */
+    if (!match_run_live_control_near(mr, ce)) carrier_selected = 0;
+  }
+  if (carrier_selected) {
+    match_run_live_manual_reset(mr);
+  } else {
+    if (mr->live_switch_press != 0u) {
+      mr->live_switch_press = 0u;
+      int32_t base = mr->entities.controlled;
+      if (!match_run_live_control_switchable(mr, (uint32_t)t, base)) base = id;
+      if (!match_run_live_control_switchable(mr, (uint32_t)t, base))
+        base = mr->entities.team[t].target;
+      int32_t next = match_run_live_control_switch_next(mr, (uint32_t)t, base);
+      if (next != FIFA96_MATCH_ENTITY_NONE) {
+        mr->live_manual_id = next;
+        mr->live_manual_frames = MATCH_RUN_LIVE_MANUAL_FRAMES;
+      }
+    }
+    if (mr->live_manual_frames != 0u) {
+      if (match_run_live_control_switchable(mr, (uint32_t)t, mr->live_manual_id)) {
+        id = mr->live_manual_id;
+        if (--mr->live_manual_frames == 0u) mr->live_manual_id = FIFA96_MATCH_ENTITY_NONE;
+      } else {
+        match_run_live_manual_reset(mr);
+      }
+    }
+  }
   if (id != FIFA96_MATCH_ENTITY_NONE) {
     struct fifa96_match_entity *e =
         &mr->entities.team[(uint32_t)t]
@@ -3351,6 +3446,10 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     if (mr->entities.ball.carrier != id)
       (void)match_run_live_control_tackle(mr, (uint32_t)t, id, e);
     int bind_rc = match_run_live_control_bind(mr, id, 0);
+    if (bind_rc != 1 && id == mr->live_manual_id) {
+      mr->live_manual_id = FIFA96_MATCH_ENTITY_NONE;
+      mr->live_manual_frames = 0;
+    }
     if (bind_rc == 1 &&
         mr->entities.ball.carrier == id && e->code != 5u && e->code != 7u)
       (void)fifa96_match_entities_install(e, (uint8_t)mr->state.phase, 5u, 0);
@@ -4179,6 +4278,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->live_kickoff_touch = 0;          /* P7: no live kickoff possession latch */
   mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
   match_run_live_support_reset(mr);    /* Phase 75: no support runner */
+  match_run_live_manual_reset(mr);     /* Phase 76: no manual switch */
+  mr->live_switch_down = 0;
   mr->live_kick_hold = 0;              /* P7: no live possession hold */
   mr->live_kick_active = 0;            /* P7: no live ball flight */
   mr->live_kick_frames = 0;
@@ -4255,6 +4356,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->live_kickoff_touch = 0;          /* P7: fresh live kickoff latch */
   mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
   match_run_live_support_reset(mr);    /* Phase 75: fresh support runner */
+  match_run_live_manual_reset(mr);     /* Phase 76: no manual switch */
+  mr->live_switch_down = 0;
   mr->live_kick_hold = 0;              /* P7: fresh live possession hold */
   mr->live_kick_active = 0;            /* P7: fresh live ball flight */
   mr->live_kick_frames = 0;

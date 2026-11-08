@@ -127,8 +127,9 @@ uniform 2x 640 HUD. The windowed build renders at the native
 640x480 surface in a 1280x960 window; the headless tape path stays 320x240.
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
-**C** passes, **V** plays a long ball; **Esc** pauses (**Enter** resumes,
-**X** quits to the menu). While paused, **S** opens the derived substitution
+**C** passes, **V** plays a long ball, **Q** switches to the next outfield
+player; **Esc** pauses (**Enter** resumes, **X** quits to the menu). While
+paused, **S** opens the derived substitution
 menu: arrows choose OUT, **Enter** opens the IN list, arrows choose the
 replacement, **Enter** applies it, and **X** backs out one level. It enforces
 GK-for-GK, hides used bench players and caps at three per side (the native
@@ -150,10 +151,10 @@ mounted; their gain follows the SFX Volume and Sound Effects options.
 
 Gamepad: D-pad moves; **A/South** kicks in play and selects in menus;
 **B/East** passes in play and backs out in menus; **West** plays the long
-ball; **North** opens the pause substitution menu. D-pad moves the list and
-**A/South** selects; **B/East** backs out one level. Keyboard **Enter**/
-**Backspace** share those confirm/back roles and therefore also kick/pass in
-active play.
+ball; **North** opens the pause substitution menu; **LB** switches the
+controlled outfield player. D-pad moves the list and **A/South** selects;
+**B/East** backs out one level. Keyboard **Enter**/**Backspace** share those
+confirm/back roles and therefore also kick/pass in active play.
 
 At the kickoff a **Z** press/release shoots through the native
 live-control/kick/goal path (the same kick releases the opening possession

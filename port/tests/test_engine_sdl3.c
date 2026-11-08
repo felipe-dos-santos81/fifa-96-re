@@ -46,6 +46,7 @@ static void test_scancode_map(void) {
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_C) == FIFA96_ENGINE_KEY_PASS);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_V) == FIFA96_ENGINE_KEY_LONG_BALL);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_S) == FIFA96_ENGINE_KEY_SUBST);
+  assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_Q) == FIFA96_ENGINE_KEY_SWITCH);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_ESCAPE) == FIFA96_ENGINE_KEY_QUIT);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_A) == 0);
   assert(fifa96_platform_sdl3_map_scancode(SDL_SCANCODE_UNKNOWN) == 0);
@@ -70,6 +71,8 @@ static void test_button_map(void) {
          FIFA96_ENGINE_KEY_LONG_BALL);
   assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_NORTH) ==
          FIFA96_ENGINE_KEY_SUBST);
+  assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ==
+         FIFA96_ENGINE_KEY_SWITCH);
   assert(fifa96_platform_sdl3_map_button(SDL_GAMEPAD_BUTTON_START) ==
          FIFA96_ENGINE_KEY_QUIT);
 }
@@ -251,6 +254,30 @@ static void test_held_long_ball_is_a_state_sample(void) {
   fifa96_platform_destroy(p);
 }
 
+/* Phase 76: Q / pad LB is re-presented as a held state sample so the match
+ * switch edge latch sees one physical press, not one per poll. */
+static void test_held_switch_is_a_state_sample(void) {
+  fifa96_platform *p = fifa96_platform_sdl3_create();
+  assert(p != NULL);
+  assert(p->init(p->self, 320, 240, "test") == 0);
+
+  fifa96_platform_key keys[32];
+  int count = 0;
+  push_key_down(SDL_SCANCODE_Q);
+  assert(p->poll(p->self, keys, 32, &count) == 0);
+  assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_SWITCH, 1));
+  for (int i = 0; i < 3; i++) {
+    assert(p->poll(p->self, keys, 32, &count) == 0);
+    assert(key_batch_has(keys, count, FIFA96_ENGINE_KEY_SWITCH, 1));
+  }
+  push_key_up(SDL_SCANCODE_Q);
+  assert(p->poll(p->self, keys, 32, &count) == 0);
+  assert(!key_batch_has(keys, count, FIFA96_ENGINE_KEY_SWITCH, 1));
+
+  p->shutdown(p->self);
+  fifa96_platform_destroy(p);
+}
+
 int main(void) {
   /* SDL2 and SDL3 spellings; the backend honours SDL3's hint name too. */
   setenv("SDL_VIDEO_DRIVER", "dummy", 1);
@@ -263,6 +290,7 @@ int main(void) {
   test_keyboard_reaches_match();
   test_held_key_is_a_state_sample();
   test_held_long_ball_is_a_state_sample();
+  test_held_switch_is_a_state_sample();
 
   fifa96_platform *p = fifa96_platform_sdl3_create();
   assert(p != NULL);

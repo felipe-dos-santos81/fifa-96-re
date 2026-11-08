@@ -4543,3 +4543,12 @@ close-out below).
   a close/behind-camera goal cannot paint a full-screen mesh over the pitch.
   `make check` **124/124**; M1/M2 exact; live-only, derived `[D]`; screenshot
   `docs/screens/p75-support-run.png`.
+
+- **Phase 76 derived manual player switch (2026-11-08).** **Q**/pad **LB**
+  cycles the controlled outfield record while live. The switch is edge-latched
+  (one press per physical key), cycles records 1..10, skips the keeper and
+  `+0x98`/`+0x9A` excluded records, holds for 90 granted frames, and yields to
+  a near own ball carrier. It is intentionally separate from the FU-61 action
+  word and from the native `FUN_0007D1D4` nearest-select; the native auto-switch
+  chain remains **P7-L1**. `make check` **124/124**; M1/M2 exact; live-only,
+  derived `[D]`.

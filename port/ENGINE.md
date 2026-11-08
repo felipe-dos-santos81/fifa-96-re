@@ -11307,3 +11307,47 @@ controlled team (FU-341) remains accepted and documented; L5 the `0x400`
 goal-net near clip is a derived presentation guard, not the native 3dwpts net
 pass. CPU pass completion is not claimed before the native row-05
 claim/selection producers land.
+
+## Phase 76 — derived manual player switch (2026-11-08)
+
+**Outcome.** **Q** (keyboard) or **LB** (gamepad) now cycles the controlled
+outfield record while the live match is in play. The switch is edge-latched, so
+holding the key selects once; the chosen player holds for 90 granted frames and
+yields immediately to a genuinely near own ball carrier. The native
+auto-switch/AI caller chain remains **P7-L1**; this is a derived control aid, not
+a `FUN_0007D1D4` port.
+
+**Why.** The live follow always chose the own carrier or the nearest own
+outfield record (`match_run_live_control_update`), and the native nearest-select
+handler `fifa96_match_run_select_step` exists but the live follow overwrote it
+every frame. The player had no way to choose a different defender or support
+player. The existing switch handler stages native swap requests; it is a
+nearest-select, not a cycle, so it is not reused here.
+
+**Implementation.** `FIFA96_ENGINE_KEY_SWITCH` (12) is mapped from SDL
+`Q`/`LEFT_SHOULDER` and is deliberately excluded from `match_run_map_key`, so
+it never becomes an FU-61 action word. `fifa96_match_run_input` edge-latches
+the physical level (`live_switch_down`) into `live_switch_press` only while
+live, unpaused, ACTIVE, phase 2 and outside the opening-kick latch.
+`live_manual_id`/`live_manual_frames` hold the selection.
+`match_run_live_control_switch_next` cycles record indices 1..10, skipping the
+keeper and the `+0x98`/`+0x9A` excluded records; the cycle starts after the
+current controlled/auto/target record. The override yields when the auto
+selection is an own carrier within `MATCH_RUN_LIVE_CONTROL_RANGE` (a stale/far
+possession cell is not treated as live). It clears on init/begin, staged
+restart phases, out-of-play force, bind failure and expiry. No score, phase,
+ball, team-target or slot write outside the existing bind.
+
+**Tests and gate.** `test_live_manual_switch_cycles` pins the 1 -> 2 cycle,
+held-key single step, hidden-record skip, expiry and auto return;
+`test_live_manual_switch_keeps_carrier` pins carrier priority and edge
+consumption; `test_live_switch_is_not_fu61` pins the input word separation.
+`test_engine_sdl3` pins Q/LB mapping and the held-state sample. `make check`
+**124/124**; M1/M2 exact by `cmp` (the tapes never press the switch key; no
+golden re-pin). Census unchanged: 78/78 bodies, 61/80 natural, 64/80
+install-live.
+
+**Legs.** P7-L1 native FU-295 auto-switch/AI caller and player-switch body;
+L2 the native nearest-select/swap (`0x7D1D4`/`0x786A0`) is not this cycle; L3
+the 90-frame hold is derived usability tuning; L4 gamepad bindings beyond LB;
+L5 the switch does not change camera director or AI control policy.

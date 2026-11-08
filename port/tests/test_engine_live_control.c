@@ -449,6 +449,121 @@ static void test_live_auto_switch_carrier_and_nearest(void) {
   drop_lc_fixture(&f);
 }
 
+/* Phase 76 [D]: the manual switch cycles the own outfield record and holds
+ * the selection; the physical key level is edge-latched. */
+static void press_live_switch(struct fifa96_match_run *mr) {
+  fifa96_platform_key key = {.raw_code = FIFA96_ENGINE_KEY_SWITCH, .state = 1};
+  assert(fifa96_match_run_input(mr, &key, 1) == 0);
+}
+
+static void release_live_switch(struct fifa96_match_run *mr) {
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+}
+
+static void stage_live_switch_fixture(struct fifa96_match_run *mr) {
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_active = 0u;
+  mr->live_kick_hold = 60u;   /* keep the loose-ball claim from firing */
+  mr->live_save_hold = 0u;
+  mr->ball_settle_active = 0u;
+  mr->act.id = 0u;
+  mr->phase_machine.side_controlled = 0u;
+  mr->entities.team[0].side = 0u;
+  mr->entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[0].intercept = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[0].chosen = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  /* The opponent possession cell keeps the loose-ball claim out of this test
+   * while still exercising the manual cycle. */
+  mr->entities.ball.carrier = 12;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &mr->entities.team[0].records[i];
+    e->active = 1;
+    e->code = 3;
+    e->skip_98 = 0;
+    e->skip_9a = 0;
+    e->pos_x = 0;
+    e->pos_z = 0;
+    e->target_x = 0;
+    e->target_z = 0;
+  }
+  /* Keep the ball away from every outfield record so the control follow picks
+   * the deterministic lowest-index outfield (record 1) without a possession
+   * claim; the manual cycle then runs 1 -> 2 -> ... */
+  stage_ball(mr, 0x700, 0, 0x700);
+}
+
+static void test_live_manual_switch_cycles(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  stage_live_switch_fixture(mr);
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 1);
+
+  press_live_switch(mr);
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 2);
+  assert(mr->slot.entity == 2);
+  assert(mr->render.camera.tracked == 2);
+  assert(mr->live_manual_id == 2);
+
+  /* A held key does not cycle again until release/re-press. */
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 2);
+  release_live_switch(mr);
+  press_live_switch(mr);
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 3);
+
+  /* Hidden records are skipped by the cycle itself. */
+  mr->entities.team[0].records[4].skip_98 = 1;
+  release_live_switch(mr);
+  press_live_switch(mr);
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 5);
+
+  /* The manual hold expires and the auto selection returns. */
+  mr->live_manual_frames = 1;
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 5);
+  assert(mr->live_manual_id == FIFA96_MATCH_ENTITY_NONE);
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 1);
+  drop_lc_fixture(&f);
+}
+
+static void test_live_manual_switch_keeps_carrier(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  stage_live_switch_fixture(mr);
+  mr->entities.team[0].records[3].pos_x = 0;
+  mr->entities.team[0].records[3].pos_z = 0;
+  stage_ball(mr, 0, 0, 0);
+  mr->entities.ball.carrier = 3;
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 3);
+  press_live_switch(mr);
+  one_granted_frame(mr);
+  assert(mr->entities.controlled == 3);
+  assert(mr->live_manual_id == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr->live_switch_press == 0u);
+  drop_lc_fixture(&f);
+}
+
+/* Phase 76: a switch press must never become an FU-61 action word. */
+static void test_live_switch_is_not_fu61(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  stage_live_switch_fixture(mr);
+  press_live_switch(mr);
+  assert(mr->input.prev[0] == 0);
+  assert(mr->input_state[0] == 0);
+  assert(mr->live_switch_press == 1u);
+  drop_lc_fixture(&f);
+}
+
 /* The full natural loop: live begin, the taker staged in an authentic attack
  * position in front of the +z goal, a KICK + Up press/release (P9 depth aim:
  * +0x80, outside the keeper's reach) whose native row-07 staging points at the
@@ -2453,6 +2568,9 @@ int main(void) {
   test_live_kickoff_shot_scores();
   test_live_taker_guard_and_relatch();
   test_live_auto_switch_carrier_and_nearest();
+  test_live_manual_switch_cycles();
+  test_live_manual_switch_keeps_carrier();
+  test_live_switch_is_not_fu61();
   test_live_goal_after_kick();
   test_live_opponent_presses_and_claims();
   test_live_opponent_far_claim_rejected();

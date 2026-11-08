@@ -28,3 +28,7 @@
 /* P14 derived pause substitution key (SDL3 S). No match action; the engine
  * consumes it only while a live match is paused. */
 #define FIFA96_ENGINE_KEY_SUBST 11
+/* Phase 76 derived live player switch (SDL3 Q, pad LB). Never enters the
+ * FU-61 action word; the match run consumes a rising edge as a control
+ * selection request. */
+#define FIFA96_ENGINE_KEY_SWITCH 12

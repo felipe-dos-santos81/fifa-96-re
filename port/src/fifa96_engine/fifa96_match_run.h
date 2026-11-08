@@ -1361,6 +1361,14 @@ struct fifa96_match_run {
    * possession loss clear the pair. */
   int32_t live_support_runner;         /* pool id or NONE */
   uint16_t live_support_timer;         /* granted frames held on the runner */
+  /* Phase 76 derived manual player switch [D]. A rising SWITCH key/pad edge
+   * cycles the controlled outfield record; the override holds for 90 granted
+   * frames and yields to an own ball carrier. The native auto-switch/AI chain
+   * remains P7-L1. */
+  int32_t live_manual_id;              /* manually selected own record or NONE */
+  uint16_t live_manual_frames;
+  uint8_t live_switch_down;            /* physical key/pad level */
+  uint8_t live_switch_press;           /* queued rising edge for one frame */
   /* P7 / FU-345: the derived live possession hold (in 30 Hz frames). When the
    * human's FU-73 kick pair releases the ball, the control follow clears
    * `ball.carrier` and holds off re-attaching possession for this many frames,
@@ -1614,14 +1622,17 @@ struct fifa96_match_run {
  * unreachable and leaks it. NULL is a no-op. */
 void fifa96_match_run_init(struct fifa96_match_run *mr);
 
-/* One match input poll: fold the engine key presses in `keys` (codes 1..9;
+/* One match input poll: fold the engine key presses in `keys` (codes 1..11;
  * state == 1 only) into the FU-61 keyboard-handler code byte (directions
  * 0x1/0x2/0x4/0x8 = up/down/right/left, buttons 0x10 kick / 0x20 pass), pass
  * it through the FU-61 identity mapping row into the run's fifa96_input
  * edge/held model, and latch the mapped per-player state for the frame body.
  * A key absent from a later call reads as released through the input model's
- * previous-state array. The FU-70 control slot is NOT touched here: its update
- * runs once per granted frame inside fifa96_match_run_frame (FU-70 §1.1).
+ * previous-state array. Code 12 (SWITCH) is deliberately not folded into the
+ * FU-61 word: it queues a one-frame manual control-selection edge consumed by
+ * the live control follow. The FU-70 control slot is NOT touched here: its
+ * update runs once per granted frame inside fifa96_match_run_frame (FU-70
+ * §1.1).
  * Returns 0, or -FIFA96_ERR_INVALID when `mr` is NULL; NULL `keys` and
  * `count == 0` are tolerated as a no-input poll. */
 int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_key *keys,
