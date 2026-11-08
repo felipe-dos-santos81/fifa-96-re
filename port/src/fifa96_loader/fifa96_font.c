@@ -155,6 +155,108 @@ int fifa96_font_blit(uint8_t *canvas, int canvas_w, int canvas_h, const fifa96_f
   return FIFA96_OK;
 }
 
+/* FUN_0009FFF0's shaded arm: when [0x1127EC] != 0 the native 4bpp path loads
+ * `dword[0x15B998 + nibble*4]` for every non-zero glyph pixel and passes it
+ * through FUN_000AFCB0 (the 0x15BBAC RGB-palette resolver) before plotting.
+ * The caller supplies the resolved 16-entry palette-index ramp; this function
+ * only performs the glyph/nibble decode and the ramp write. A pixel value at
+ * or beyond `shade_count` clamps to the last ramp entry (the HUD ramp is 16
+ * entries and its fonts are 4bpp). */
+int fifa96_font_blit_shaded(uint8_t *canvas, int canvas_w, int canvas_h,
+                            const fifa96_font *font, const char *str, int x, int y,
+                            const uint8_t *shades, unsigned shade_count) {
+  if (!canvas || canvas_w <= 0 || canvas_h <= 0 || !font || !font->data || !str ||
+      !shades || shade_count == 0)
+    return -FIFA96_ERR_INVALID;
+  size_t stride = ((size_t)font->bitmap_width * (size_t)font->depth + 7u) >> 3;
+  unsigned mask = (1u << font->depth) - 1u;
+  int cursor_x = x;
+  int cursor_y = y;
+  for (const unsigned char *p = (const unsigned char *)str; *p; p++) {
+    unsigned idx = (unsigned)(*p) - font->first;
+    if (idx >= font->glyph_count) continue;
+    unsigned glyph_w = font->widths ? font->widths[idx] : font->default_width;
+    unsigned glyph_h = font->heights ? font->heights[idx] : font->default_height;
+    int advance = font->advances ? (int)font->advances[idx]
+                                 : (int)font->advance_base + (int)glyph_w;
+    int off_x = font->x_offsets ? (int)font->x_offsets[idx] : 0;
+    int off_y = font->y_offsets ? (int)font->y_offsets[idx] : 0;
+    uint32_t desc = fifa96_read_u32le(font->glyphs + (size_t)idx * 4u);
+    unsigned bit = desc & 0xFFFFu;
+    unsigned row = desc >> 16;
+    int glyph_x = cursor_x + off_x;
+    int glyph_y = cursor_y + off_y;
+    for (unsigned gy = 0; gy < glyph_h; gy++) {
+      size_t row_off = ((size_t)row + gy) * stride;
+      if (row_off > font->bitmap_len) break;
+      const uint8_t *row_src = font->bitmap + row_off;
+      int py = glyph_y + (int)gy;
+      for (unsigned gx = 0; gx < glyph_w; gx++) {
+        size_t bit_pos = (size_t)bit + gx;
+        size_t byte_off = (bit_pos * font->depth) >> 3;
+        if (byte_off >= font->bitmap_len - row_off) break;
+        unsigned shift = 8u - (unsigned)font->depth - (unsigned)((bit_pos * font->depth) & 7u);
+        unsigned pixel = (unsigned)(row_src[byte_off] >> shift) & mask;
+        if (pixel == 0) continue;
+        int px = glyph_x + (int)gx;
+        if (px < 0 || px >= canvas_w || py < 0 || py >= canvas_h) continue;
+        unsigned pick = pixel < shade_count ? pixel : shade_count - 1u;
+        canvas[(size_t)py * (size_t)canvas_w + (size_t)px] = shades[pick];
+      }
+    }
+    cursor_x += advance;
+  }
+  return FIFA96_OK;
+}
+
+/* The raw glyph mask used by the 2x HUD scaler: non-zero pixels store their
+ * raw font value (1..15 for the retail 4bpp HUD fonts) instead of a colour, so
+ * the caller can scale first and apply the shade ramp at the destination.
+ * Zero pixels are transparent and leave the destination byte untouched. */
+int fifa96_font_blit_mask(uint8_t *mask, int mask_w, int mask_h,
+                          const fifa96_font *font, const char *str, int x, int y) {
+  if (!mask || mask_w <= 0 || mask_h <= 0 || !font || !font->data || !str)
+    return -FIFA96_ERR_INVALID;
+  size_t stride = ((size_t)font->bitmap_width * (size_t)font->depth + 7u) >> 3;
+  unsigned value_mask = (1u << font->depth) - 1u;
+  int cursor_x = x;
+  int cursor_y = y;
+  for (const unsigned char *p = (const unsigned char *)str; *p; p++) {
+    unsigned idx = (unsigned)(*p) - font->first;
+    if (idx >= font->glyph_count) continue;
+    unsigned glyph_w = font->widths ? font->widths[idx] : font->default_width;
+    unsigned glyph_h = font->heights ? font->heights[idx] : font->default_height;
+    int advance = font->advances ? (int)font->advances[idx]
+                                 : (int)font->advance_base + (int)glyph_w;
+    int off_x = font->x_offsets ? (int)font->x_offsets[idx] : 0;
+    int off_y = font->y_offsets ? (int)font->y_offsets[idx] : 0;
+    uint32_t desc = fifa96_read_u32le(font->glyphs + (size_t)idx * 4u);
+    unsigned bit = desc & 0xFFFFu;
+    unsigned row = desc >> 16;
+    int glyph_x = cursor_x + off_x;
+    int glyph_y = cursor_y + off_y;
+    for (unsigned gy = 0; gy < glyph_h; gy++) {
+      size_t row_off = ((size_t)row + gy) * stride;
+      if (row_off > font->bitmap_len) break;
+      const uint8_t *row_src = font->bitmap + row_off;
+      int py = glyph_y + (int)gy;
+      for (unsigned gx = 0; gx < glyph_w; gx++) {
+        size_t bit_pos = (size_t)bit + gx;
+        size_t byte_off = (bit_pos * font->depth) >> 3;
+        if (byte_off >= font->bitmap_len - row_off) break;
+        unsigned shift = 8u - (unsigned)font->depth - (unsigned)((bit_pos * font->depth) & 7u);
+        unsigned pixel = (unsigned)(row_src[byte_off] >> shift) & value_mask;
+        if (pixel == 0) continue;
+        int px = glyph_x + (int)gx;
+        if (px < 0 || px >= mask_w || py < 0 || py >= mask_h) continue;
+        mask[(size_t)py * (size_t)mask_w + (size_t)px] = (uint8_t)pixel;
+      }
+    }
+    cursor_x += advance;
+  }
+  return FIFA96_OK;
+}
+
 int fifa96_font_blit_outlined(uint8_t *canvas, int canvas_w, int canvas_h,
                               const fifa96_font *font, const char *str, int x, int y) {
   if (!canvas || canvas_w <= 0 || canvas_h <= 0 || !font || !font->data || !str)

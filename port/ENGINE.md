@@ -11138,3 +11138,68 @@ table and tapes are untouched).
 **Legs.** The native `FUN_0007F7E0` attacking support-run machine remains a
 separate slice (FU251-L8); the cell quantization is a derived live cadence
 (the native refresh is event-driven via `FUN_000700F4`).
+
+## Phase 73 — shaded HUD glyphs + crowd-tier tint (2026-11-07)
+
+**Outcome.** The live HUD now renders the native 4bpp glyph shade nibbles, so
+the team abbreviations are legible (`BRA`/`GER` in the windowed frame) instead
+of the flat-fill degenerate shapes (`B`/`R` counters became solid ink). The
+far-stand crowd band also no longer leaks the kit-remapped palette as neon
+slivers; it keeps the `STACcovr` texture through the existing four-level stand
+tint.
+
+**Erratum (FU-148 §7 OL-T11-71, quoted).** The prior leg text said: *"the
+native 4bpp plot path maps each glyph nibble through the runtime-filled
+`0x15BBAC` shade table (`FUN_00019E9C` → `FUN_000AFCB0`/`FUN_000B2A90`)"*.
+Fresh disassembly corrects that identification:
+
+- `0x15B998` is the 16-dword shade table. `FUN_0009FFF0` loads
+  `dword[0x15B998 + nibble*4]` on its shaded 4bpp arm, gated by
+  `[0x1127EC] != 0` (the flat arm at `0xA05ED` uses the caller colour).
+- `FUN_000AFCB0` resolves the dword for the active display mode; in the 8-bit
+  modes (4/8) it returns `dword[0x15BBAC + index*4]`. `0x15BBAC` is the RGB
+  palette, not the 16-entry ramp.
+- `FUN_00019E9C(idx)` copies the selected palette bank's `+0x1000` 64 bytes
+  into `0x15B998`; the exact entries are runtime palette-bank data (statically
+  zero in the LE image), so the port's nearest-palette ramp is honestly `[D]`.
+- The first-hand glyph scan (retail `clockfnt.fsh`) shows `B` row 1 =
+  `FFFB500` and row 2 = `FF3FB00` at bit 174/row 0, and `R` row 1 =
+  `FFFB5` at bit 268/row 0; zero nibbles are the only transparent pixels.
+
+**Implementation.** `fifa96_font_blit` stays byte-identical for the non-live
+and goldens paths. New `fifa96_font_blit_shaded` performs the same glyph
+geometry but writes `shades[nibble]` for every non-zero pixel; new
+`fifa96_font_blit_mask` stores the raw nibble so the 2× HUD scaler can expand
+the glyph first and apply the ramp at the destination.
+`render.hud_text_shades[16]` is built by
+`fifa96_match_run_hud_text_shades_from_palette` from the staged palette
+(linear black→`hud_ink` RGB interpolation, nearest palette entry, entry 15
+pinned to the body index). The live HUD, pause, full-time and half-time
+presenters use the shaded body pass; the flat shadow pass and the legacy
+sub/replay/overlay presenters keep their operands. The 320 path and the 640/2×
+path share the ramp (the latter through the raw mask). Non-live runs pass
+`shades = NULL`, preserving the M1/M2 byte streams.
+
+**Crowd tint.** `pitch_wall_pixel`'s crowd tier now returns
+`pitch_wall_tint(px, blue, blue_light, blue_dark, white)` instead of the raw
+`STACcovr` index. The live kit stage overwrites palette indices 30..229, which
+made the raw crowd texels read as neon slivers; the tint maps the texel's
+240/140/60 thresholds onto the stand's blue ramp and preserves the crowd
+texture. This is the derived **P10-L7** fix; the native 3dwpts point/quad
+renderer (**P10-L2**) remains a numbered open leg. The change is live-only
+(`mr->live_start && pitch_art.staged`).
+
+**Tests and gate.** `test_font` adds a synthetic 4bpp ramp/mask case and pins
+the retail `clockfnt` B/R counter pixels (`B` row 1 x4 = nibble `B`, x5 = `5`;
+row 2 x3 = `3`; flat rendering at the same pixels = body, zero stays
+transparent). `test_engine_match_render` pins
+`fifa96_match_run_hud_text_shades_from_palette`, the live 320 HUD `BRA`/`GER`
+counter pixels end-to-end from the retail font, and the 640/2× raw-mask shade
+path (a nibble-5 glyph selects entry 5, a nibble-F glyph selects entry 15).
+`make check` **124/124**; M1/M2 exact by `cmp`. Windowed capture:
+`docs/screens/p73-shaded-hud-crowd.png` (640×480, derived PNG export).
+
+**Legs.** The exact `0x15B998` entries are runtime palette-bank data, so the
+nearest-palette ramp is `[D]` (not byte-identical to the native bank). The
+native 3dwpts stadium/camera art and the full crowd bowl remain P10-L2/L6;
+the tint only removes the kit-palette leak from the derived wall.

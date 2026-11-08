@@ -2337,6 +2337,12 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->hud_ink = FIFA96_MATCH_HUD_INK_DEFAULT;
   for (int i = 0; i < 256; i++) r->hud_shade[i] = (uint8_t)(i >> 1);
   r->hud_shade[0] = 0;
+  /* OL-T11-71 errata: the live shaded-text fallback is a linear black->ink
+   * index ramp; a staged palette replaces it with the nearest-colour [D] ramp. */
+  r->hud_text_shades[0] = 0;
+  for (int i = 1; i < 16; i++)
+    r->hud_text_shades[i] =
+        (uint8_t)(((unsigned)i * FIFA96_MATCH_HUD_INK_DEFAULT + 7u) / 15u);
   r->hud_colors_ready = 0;
   for (int i = 0; i < (int)FIFA96_MATCH_RUN_RENDER_SLOTS; i++) r->entities[i].anim_turn = 1;
 }
@@ -7294,6 +7300,49 @@ void fifa96_match_run_hud_colors_from_palette(const uint8_t palette[768],
   }
 }
 
+/* FU-148 OL-T11-71 errata: the live HUD's 16-entry text ramp. The native
+ * FUN_0009FFF0 shaded arm indexes the runtime `0x15B998` table, which
+ * FUN_00019E9C copies from the selected palette bank (`+0x1000`); those exact
+ * entries are not statically derivable. Build the [D] nearest-palette ramp
+ * from black to `ink` instead: entry 0 is the transparent/zero entry, entries
+ * 1..14 interpolate the body's RGB, and entry 15 is pinned to `ink`. The HUD
+ * fonts are 4bpp, so every glyph nibble has a ramp entry. */
+void fifa96_match_run_hud_text_shades_from_palette(const uint8_t palette[768],
+                                                   uint8_t ink,
+                                                   uint8_t shades[16]) {
+  if (!shades) return;
+  shades[0] = 0;
+  if (!palette) {
+    for (int i = 1; i < 16; i++)
+      shades[i] = (uint8_t)(((unsigned)i * ink + 7u) / 15u);
+    return;
+  }
+  int ir = palette[(size_t)ink * 3u + 0u];
+  int ig = palette[(size_t)ink * 3u + 1u];
+  int ib = palette[(size_t)ink * 3u + 2u];
+  for (int i = 1; i < 16; i++) {
+    int tr = (ir * i) / 15;
+    int tg = (ig * i) / 15;
+    int tb = (ib * i) / 15;
+    int best = 0;
+    long best_d = -1;
+    for (int j = 0; j < 256; j++) {
+      int dr = palette[(size_t)j * 3u + 0u] - tr;
+      int dg = palette[(size_t)j * 3u + 1u] - tg;
+      int db = palette[(size_t)j * 3u + 2u] - tb;
+      long d = (long)dr * dr + (long)dg * dg + (long)db * db;
+      if (best_d < 0 || d < best_d) {
+        best_d = d;
+        best = j;
+      }
+    }
+    shades[i] = (uint8_t)best;
+  }
+  /* The native body entry is the selected colour; a duplicate palette entry
+   * must not steal the 15-nibble body pixel on a tie. */
+  shades[15] = ink;
+}
+
 /* P10 graphics: a subtle 90%-brightness palette map for the mowing stripes.
  * Built once per staged palette alongside the HUD shade. */
 static void match_run_pitch_shade_from_palette(const uint8_t palette[768],
@@ -7326,10 +7375,14 @@ static void match_run_hud_colors_refresh(struct fifa96_match_run *mr) {
    * value (the measured staging palette's near-white). */
   if (r->palette_ready) {
     fifa96_match_run_hud_colors_from_palette(r->palette, &r->hud_ink, r->hud_shade);
+    fifa96_match_run_hud_text_shades_from_palette(r->palette, r->hud_ink,
+                                                  r->hud_text_shades);
     match_run_pitch_shade_from_palette(r->palette, r->pitch_shade);
     r->hud_colors_ready = 1;
   } else {
     fifa96_match_run_hud_colors_from_palette(NULL, &r->hud_ink, r->hud_shade);
+    fifa96_match_run_hud_text_shades_from_palette(NULL, r->hud_ink,
+                                                  r->hud_text_shades);
     match_run_pitch_shade_from_palette(NULL, r->pitch_shade);
     r->hud_colors_ready = 0;
   }
@@ -7408,26 +7461,34 @@ static void match_run_hud_bar(struct fifa96_surface *s,
 /* Two-pass text: the shadow at (+1,+1) then the body at (x,y) (FUN_000A06FC,
  * FU-148 §1.5). FU-343 (P4): the live HUD passes outline 0x00 / body
  * `hud_ink`; the non-live passes keep the legacy colour-6 outline / colour-0
- * body. The other presenters (sub/replay/overlay) keep the legacy operands. */
+ * body. The other presenters (sub/replay/overlay) keep the legacy operands.
+ * OL-T11-71 errata: a non-NULL `shades` selects FUN_0009FFF0's shaded arm for
+ * the body pass (the native `0x15B998` ramp); the shadow pass stays flat. */
 static void match_run_hud_text(struct fifa96_surface *s, const fifa96_font *font,
                                const char *str, int x, int y, uint8_t body,
-                               uint8_t shadow) {
+                               uint8_t shadow, const uint8_t *shades) {
   (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x + 1, y + 1,
                          shadow);
-  (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x, y, body);
+  if (shades) {
+    (void)fifa96_font_blit_shaded(s->indexed, s->width, s->height, font, str, x, y,
+                                  shades, 16);
+  } else {
+    (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x, y, body);
+  }
 }
 
 /* FUN_00055BA8: centred cell text, `x += (cell_w-width)/2` (truncating),
  * `y += max(0,(cell_h-12)/2)`, then the outline/main pair. */
 static void match_run_hud_centered(struct fifa96_surface *s, const fifa96_font *font,
                                    const char *str, int cell_x, int cell_y, int cell_w,
-                                   int cell_h, uint8_t body, uint8_t shadow) {
+                                   int cell_h, uint8_t body, uint8_t shadow,
+                                   const uint8_t *shades) {
   int w = fifa96_font_text_width(font, str);
   int x = cell_x + (cell_w - w) / 2;
   int y = cell_y;
   int pad = (cell_h - 12) / 2;
   if (pad > 0) y += pad;
-  match_run_hud_text(s, font, str, x, y, body, shadow);
+  match_run_hud_text(s, font, str, x, y, body, shadow, shades);
 }
 
 /* P13: the 640 live HUD is a uniform 2x native panel, not an x-stretched 320
@@ -7439,23 +7500,31 @@ static void match_run_hud_centered(struct fifa96_surface *s, const fifa96_font *
 static void match_run_hud_text_scaled(struct fifa96_surface *s,
                                       const fifa96_font *font, const char *str,
                                       int x, int y, uint8_t body, uint8_t shadow,
-                                      int scale_x, int scale_y) {
+                                      const uint8_t *shades, int scale_x, int scale_y) {
   if (scale_x <= 1 && scale_y <= 1) {
-    match_run_hud_text(s, font, str, x, y, body, shadow);
+    match_run_hud_text(s, font, str, x, y, body, shadow, shades);
     return;
   }
   uint8_t scratch[MATCH_RUN_HUD_SCRATCH_W * MATCH_RUN_HUD_SCRATCH_H];
   memset(scratch, 0, sizeof scratch);
-  if (fifa96_font_blit(scratch, MATCH_RUN_HUD_SCRATCH_W,
-                       MATCH_RUN_HUD_SCRATCH_H, font, str, 4, 4, 1) != FIFA96_OK)
+  if (fifa96_font_blit_mask(scratch, MATCH_RUN_HUD_SCRATCH_W,
+                            MATCH_RUN_HUD_SCRATCH_H, font, str, 4, 4) != FIFA96_OK)
     return;
   for (int pass = 0; pass < 2; pass++) {
     int ox = pass == 0 ? scale_x : 0;
     int oy = pass == 0 ? scale_y : 0;
-    uint8_t colour = pass == 0 ? shadow : body;
     for (int sy = 0; sy < MATCH_RUN_HUD_SCRATCH_H; sy++) {
       for (int sx = 0; sx < MATCH_RUN_HUD_SCRATCH_W; sx++) {
-        if (scratch[sy * MATCH_RUN_HUD_SCRATCH_W + sx] == 0) continue;
+        unsigned value = scratch[sy * MATCH_RUN_HUD_SCRATCH_W + sx];
+        if (value == 0) continue;
+        uint8_t colour;
+        if (pass == 0) {
+          colour = shadow;
+        } else if (shades && value < 16u) {
+          colour = shades[value];
+        } else {
+          colour = body;
+        }
         for (int dy = 0; dy < scale_y; dy++) {
           int py = y + (sy - 4) * scale_y + oy + dy;
           if (py < 0 || py >= s->height) continue;
@@ -7474,10 +7543,11 @@ static void match_run_hud_centered_scaled(struct fifa96_surface *s,
                                           const fifa96_font *font, const char *str,
                                           int cell_x, int cell_y, int cell_w,
                                           int cell_h, uint8_t body, uint8_t shadow,
-                                          int scale_x, int scale_y) {
+                                          const uint8_t *shades, int scale_x,
+                                          int scale_y) {
   if (scale_x <= 1 && scale_y <= 1) {
     match_run_hud_centered(s, font, str, cell_x, cell_y, cell_w, cell_h, body,
-                           shadow);
+                           shadow, shades);
     return;
   }
   int w = fifa96_font_text_width(font, str) * scale_x;
@@ -7485,7 +7555,8 @@ static void match_run_hud_centered_scaled(struct fifa96_surface *s,
   int y = cell_y;
   int pad = (cell_h - 12 * scale_y) / 2;
   if (pad > 0) y += pad;
-  match_run_hud_text_scaled(s, font, str, x, y, body, shadow, scale_x, scale_y);
+  match_run_hud_text_scaled(s, font, str, x, y, body, shadow, shades, scale_x,
+                            scale_y);
 }
 
 /* The HUD pass: bar -> name0 -> name1 -> score0 -> score1 -> period -> clock
@@ -7509,6 +7580,7 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
   const struct fifa96_font *font = match_run_hud_font(r);
   const uint8_t body = mr->live_start ? r->hud_ink : 0x00;
   const uint8_t shadow = mr->live_start ? 0x00 : 0x06;
+  const uint8_t *shades = mr->live_start ? r->hud_text_shades : NULL;
   const int have_window = r->window.box.w > 0 && r->window.box.h > 0;
   int x0 = have_window ? r->window.box.x0 : 0;
   int y1 = have_window ? r->window.box.y1 : s->height;
@@ -7551,22 +7623,23 @@ static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_
 
   match_run_hud_bar(s, mr, bar_x, bar_y, ui_x, ui_y);
   match_run_hud_text_scaled(s, font, r->hud_name[0], x_left, y2, body, shadow,
-                            ui_x, ui_y);
+                            shades, ui_x, ui_y);
   match_run_hud_text_scaled(s, font, r->hud_name[1], x_left,
-                            y2 + row_pitch - 2 * ui_y, body, shadow, ui_x, ui_y);
+                            y2 + row_pitch - 2 * ui_y, body, shadow, shades,
+                            ui_x, ui_y);
   match_run_hud_text_scaled(
       s, font, score_buf[0],
       clock_x - fifa96_font_text_width(font, score_buf[0]) * ui_x, y2, body,
-      shadow, ui_x, ui_y);
+      shadow, shades, ui_x, ui_y);
   match_run_hud_text_scaled(
       s, font, score_buf[1],
       clock_x - fifa96_font_text_width(font, score_buf[1]) * ui_x,
-      y2 + row_pitch - 2 * ui_y, body, shadow, ui_x, ui_y);
+      y2 + row_pitch - 2 * ui_y, body, shadow, shades, ui_x, ui_y);
   match_run_hud_centered_scaled(s, font, period_buf, x0, cells_y, row_pitch - 1,
-                                row_pitch - 1, body, shadow, ui_x, ui_y);
+                                row_pitch - 1, body, shadow, shades, ui_x, ui_y);
   match_run_hud_centered_scaled(s, font, clock_buf, x0 + (zoomed ? 0xE : 0x11),
                                 cells_y, clock_cell_w, row_pitch - 1, body, shadow,
-                                ui_x, ui_y);
+                                shades, ui_x, ui_y);
 }
 
 /* FU-343 (P4): the pause and FULL TIME panels. Both are engine stand-ins for
@@ -7597,9 +7670,11 @@ static void match_run_panel_fill(struct fifa96_surface *s, int x, int y, int w, 
 
 static void match_run_panel_text(struct fifa96_surface *s, const fifa96_font *font,
                                  const char *str, int panel_x, int panel_w, int y,
-                                 uint8_t body, uint8_t shadow) {
+                                 uint8_t body, uint8_t shadow,
+                                 const uint8_t *shades) {
   int w = fifa96_font_text_width(font, str);
-  match_run_hud_text(s, font, str, panel_x + (panel_w - w) / 2, y, body, shadow);
+  match_run_hud_text(s, font, str, panel_x + (panel_w - w) / 2, y, body, shadow,
+                     shades);
 }
 
 static void match_run_draw_pause(const struct fifa96_match_run *mr,
@@ -7613,11 +7688,12 @@ static void match_run_draw_pause(const struct fifa96_match_run *mr,
   match_run_panel_fill(s, x, y, MATCH_RUN_PAUSE_PANEL_W, MATCH_RUN_PAUSE_PANEL_H, ink);
   match_run_panel_text(s, font,
                        mr->sub_notice_ticks != 0u ? mr->sub_notice : "PAUSED",
-                       x, MATCH_RUN_PAUSE_PANEL_W, y + 7, ink, 0x00);
+                       x, MATCH_RUN_PAUSE_PANEL_W, y + 7, ink, 0x00,
+                       r->hud_text_shades);
   match_run_panel_text(s, font, "ENTER: RESUME", x, MATCH_RUN_PAUSE_PANEL_W, y + 22,
-                       ink, 0x00);
+                       ink, 0x00, r->hud_text_shades);
   match_run_panel_text(s, font, "S: SUBSTITUTE  X: QUIT", x, MATCH_RUN_PAUSE_PANEL_W,
-                       y + 37, ink, 0x00);
+                       y + 37, ink, 0x00, r->hud_text_shades);
 }
 
 static void match_run_draw_halftime(const struct fifa96_match_run *mr,
@@ -7629,9 +7705,12 @@ static void match_run_draw_halftime(const struct fifa96_match_run *mr,
   const int x = (s->width - 220) / 2;
   const int y = (s->height - 58) / 2;
   match_run_panel_fill(s, x, y, 220, 58, ink);
-  match_run_panel_text(s, font, "HALF TIME", x, 220, y + 7, ink, 0x00);
-  match_run_panel_text(s, font, "KICK OR PASS TO START", x, 220, y + 24, ink, 0x00);
-  match_run_panel_text(s, font, "AUTO IN 3 SECONDS", x, 220, y + 41, ink, 0x00);
+  match_run_panel_text(s, font, "HALF TIME", x, 220, y + 7, ink, 0x00,
+                       r->hud_text_shades);
+  match_run_panel_text(s, font, "KICK OR PASS TO START", x, 220, y + 24, ink, 0x00,
+                       r->hud_text_shades);
+  match_run_panel_text(s, font, "AUTO IN 3 SECONDS", x, 220, y + 41, ink, 0x00,
+                       r->hud_text_shades);
 }
 
 static void match_run_draw_result(const struct fifa96_match_run *mr,
@@ -7658,11 +7737,13 @@ static void match_run_draw_result(const struct fifa96_match_run *mr,
                  (unsigned)(mr->state.period < 1u ? 1u : mr->state.period));
   match_run_panel_fill(s, x, y, MATCH_RUN_RESULT_PANEL_W, MATCH_RUN_RESULT_PANEL_H, ink);
   match_run_panel_text(s, font, "FULL TIME", x, MATCH_RUN_RESULT_PANEL_W, y + 6, ink,
-                       0x00);
-  match_run_panel_text(s, font, score, x, MATCH_RUN_RESULT_PANEL_W, y + 21, ink, 0x00);
-  match_run_panel_text(s, font, period, x, MATCH_RUN_RESULT_PANEL_W, y + 36, ink, 0x00);
+                       0x00, r->hud_text_shades);
+  match_run_panel_text(s, font, score, x, MATCH_RUN_RESULT_PANEL_W, y + 21, ink, 0x00,
+                       r->hud_text_shades);
+  match_run_panel_text(s, font, period, x, MATCH_RUN_RESULT_PANEL_W, y + 36, ink, 0x00,
+                       r->hud_text_shades);
   match_run_panel_text(s, font, "ENTER: MENU", x, MATCH_RUN_RESULT_PANEL_W, y + 51,
-                       ink, 0x00);
+                       ink, 0x00, r->hud_text_shades);
 }
 
 /* ------------------------------------------------------------------------- *
@@ -8006,7 +8087,8 @@ static void match_run_draw_sub_strip(const struct fifa96_match_run *mr,
     x = strip.row[side].x + ((max_w - scaled_w) >> 1);
     if (x < sub->x_clamp_lo + 2) x = sub->x_clamp_lo + 2;
     if (x + scaled_w > sub->x_clamp_hi) x = sub->x_clamp_hi - scaled_w - 2;
-    match_run_hud_text(s, font, sub->name[side], x, strip.row[side].y0, 0x00, 0x06);
+    match_run_hud_text(s, font, sub->name[side], x, strip.row[side].y0, 0x00, 0x06,
+                       NULL);
   }
 }
 
@@ -8026,7 +8108,7 @@ static void match_run_draw_replay(struct fifa96_match_run *mr,
       !fifa96_match_run_replay_blink_step(&r->replay, 1))
     return;
   match_run_hud_text(s, match_run_row_font(r), caption, r->replay.caption_x,
-                     r->replay.caption_y, 0x00, 0x06);
+                     r->replay.caption_y, 0x00, 0x06, NULL);
 }
 
 /* R3 (FUN_000550E4): the case row's staged lines; the per-case helpers and
@@ -8041,7 +8123,7 @@ static void match_run_draw_overlay(const struct fifa96_match_run *mr,
   for (int i = 0; i < 4; i++) {
     if (!overlay->lines[i][0]) continue;
     match_run_hud_text(s, match_run_row_font(r), overlay->lines[i], overlay->line_x[i],
-                       overlay->line_y[i], 0x00, 0x06);
+                       overlay->line_y[i], 0x00, 0x06, NULL);
   }
 }
 

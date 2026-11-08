@@ -24,9 +24,15 @@
  *  - FUN_00098630/FUN_000986B4 sum the per-char advances for the text width
  *    (chars outside [first,last] contribute nothing and draw nothing).
  *
- * Legs (FU-148 §7): the native 4bpp plot path maps each nibble through the
- * runtime-filled `0x15BBAC` shade table (`FUN_00019E9C`); the port draws a
- * flat colour index for every non-zero nibble (documented divergence). */
+ * Shaded arm (FU-148 §1.5 / OL-T11-71 errata): FUN_0009FFF0's 4bpp path is
+ * gated by `[0x1127EC]`; when set, each non-zero nibble indexes the runtime
+ * 16-dword `0x15B998` shade table and FUN_000AFCB0 resolves that value through
+ * the `0x15BBAC` RGB palette. FUN_00019E9C fills `0x15B998` from the selected
+ * palette bank (`bank + 0x1000`), so the exact entries are runtime data. The
+ * flat `fifa96_font_blit` remains for the non-live/golden paths; the live HUD
+ * uses `fifa96_font_blit_shaded` with an engine-derived nearest-palette ramp
+ * `[D]`. The earlier note naming `0x15BBAC` as the shade table was an erratum:
+ * it is the RGB palette, not the 16-entry ramp. */
 
 typedef struct fifa96_font {
   const uint8_t *data;          /* borrowed FNTI image */
@@ -70,9 +76,27 @@ int fifa96_font_text_width(const fifa96_font *font, const char *str);
 int fifa96_font_blit(uint8_t *canvas, int canvas_w, int canvas_h, const fifa96_font *font,
                      const char *str, int x, int y, uint8_t color);
 
-/* FU-152 §4.3 (P4): FUN_000544B4's two-pass text — colour 6 at (+1,+1) then
- * colour 0 at (x,y) (the native outline/main pair; the shade ramp stays
- * FU-148's recorded leg). */
+/* Draw `str` with FUN_0009FFF0's shaded arm: place and clip the glyphs exactly
+ * like `fifa96_font_blit`, but write `shades[nibble]` for each non-zero pixel
+ * (the 4bpp HUD fonts use nibbles 1..15). `shades` must hold at least
+ * `shade_count` entries; a pixel value >= shade_count clamps to the last entry.
+ * A zero nibble is transparent. Returns FIFA96_OK or -FIFA96_ERR_INVALID
+ * (NULL font/canvas/str/shades, non-positive canvas size, zero shade_count). */
+int fifa96_font_blit_shaded(uint8_t *canvas, int canvas_w, int canvas_h,
+                            const fifa96_font *font, const char *str, int x, int y,
+                            const uint8_t *shades, unsigned shade_count);
+
+/* Draw `str`'s raw glyph values into `mask` (normally zeroed first): non-zero
+ * font pixels store their raw value (1..15 for the retail 4bpp HUD fonts), zero
+ * pixels leave the destination untouched. Geometry, clipping and the return
+ * contract match `fifa96_font_blit`; the mask lets a scaler expand the glyph
+ * first and apply the shade ramp at the destination. */
+int fifa96_font_blit_mask(uint8_t *mask, int mask_w, int mask_h,
+                          const fifa96_font *font, const char *str, int x, int y);
+
+/* FU-152 §4.3 (P4): FUN_000544B4's flat two-pass text — colour 6 at (+1,+1)
+ * then colour 0 at (x,y). The live HUD uses `fifa96_font_blit_shaded` for the
+ * main pass; this legacy helper remains for the non-live/front-end callers. */
 int fifa96_font_blit_outlined(uint8_t *canvas, int canvas_w, int canvas_h,
                               const fifa96_font *font, const char *str, int x, int y);
 

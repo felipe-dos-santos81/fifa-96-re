@@ -458,12 +458,18 @@ static uint8_t pitch_wall_pixel(const struct fifa96_pitch *pitch, int32_t wy, in
       return pitch_wall_tint(px, tint, tint_light, tint_dark, col->white);
   }
   if (wy < FIFA96_PITCH_WALL_CROWD) {
+    /* P10-L7 [D]: STACcovr is authored against the stand palette, while the
+     * live kit stage overwrites indices 30..229; returning the raw texel
+     * exposes those remapped entries as neon slivers. Map the texel through
+     * the same four-level blue tint as the seating rows so the crowd texture
+     * survives without leaking kit colours. */
     if (pitch_bank_sample(&pitch->crowd, wz, half_w, FIFA96_PITCH_WALL_CROWD_SPAN,
                           pitch_bank_v(FIFA96_PITCH_WALL_CROWD, wy,
                                        FIFA96_PITCH_WALL_CROWD - FIFA96_PITCH_WALL_SEAT,
                                        pitch->crowd.h),
                           &px))
-      return px;
+      return pitch_wall_tint(px, col->blue, col->blue_light, col->blue_dark,
+                             col->white);
   }
   {
     /* Dark roof field with light truss uprights; the old band used the sky

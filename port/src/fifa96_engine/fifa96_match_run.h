@@ -542,6 +542,12 @@ struct fifa96_match_run_render {
    * byte-identical. */
   uint8_t hud_ink;
   uint8_t hud_shade[256];
+  /* OL-T11-71 errata: the native FUN_0009FFF0 shaded arm maps each glyph
+   * nibble through the runtime-filled 16-dword `0x15B998` ramp. The port
+   * derives a nearest-palette black->ink ramp [D] into this field; entry 0 is
+   * transparent/zero and entry 15 is pinned to `hud_ink`. The live HUD uses
+   * it, while non-live runs keep the flat legacy operands. */
+  uint8_t hud_text_shades[16];
   uint8_t pitch_shade[256];   /* 90% palette map for mowing stripes [D] */
   uint8_t hud_colors_ready;
   char hud_name[2][FIFA96_MATCH_HUD_NAME_MAX];
@@ -1711,6 +1717,17 @@ int fifa96_match_run_result_continue(struct fifa96_match_run *mr);
  * ignored. Exposed so the derivation is unit-pinned. */
 void fifa96_match_run_hud_colors_from_palette(const uint8_t palette[768],
                                               uint8_t *ink, uint8_t shade[256]);
+
+/* OL-T11-71 errata: derive the live HUD's 16-entry glyph shade ramp from a
+ * 768-byte RGB palette. `shades[0]` is 0 (glyph zero is transparent); entries
+ * 1..14 are the palette indices nearest the linear black->ink RGB steps and
+ * `shades[15]` is pinned to `ink` so the body nibble selects the text colour.
+ * The native `0x15B998` table is runtime palette-bank data (FUN_00019E9C), so
+ * this is the documented [D] nearest-palette stand-in. NULL palette falls back
+ * to the linear index ramp `(i * ink + 7) / 15`; NULL `shades` is ignored. */
+void fifa96_match_run_hud_text_shades_from_palette(const uint8_t palette[768],
+                                                   uint8_t ink,
+                                                   uint8_t shades[16]);
 
 /* FU-72 §2.4 plain increment: one side's goal word (`INC word [side*2 +
  * 0x57AC5]`). Since FU-146 S3 the eleven FUN_00093944 call sites (the

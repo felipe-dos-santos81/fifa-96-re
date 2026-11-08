@@ -46,8 +46,10 @@
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
 #include "fifa96_engine/fifa96_surface.h"
+#include "fifa96_loader/fifa96_bigf.h"
 #include "fifa96_loader/fifa96_err.h"
 #include "fifa96_loader/fifa96_font.h"
+#include "fifa96_loader/fifa96_record.h"
 
 /* FNV-1a over the 320x240 indexed canvas + 768-byte palette (fifa96_surface_hash):
  * pinned from the first verified run (all-zero palette, background 0, the
@@ -1953,6 +1955,151 @@ static void test_hud_live_bar_and_text_indices(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* OL-T11-71 errata: the live glyph ramp is the nearest-palette black->ink
+ * interpolation, with entry 15 pinned to the body index. A 16-step grayscale
+ * palette makes the correspondence exact; the NULL fallback is the linear
+ * index ramp. */
+static void test_hud_text_shades_from_palette(void) {
+  uint8_t palette[768];
+  memset(palette, 0, sizeof palette);
+  for (int i = 0; i < 16; i++) {
+    palette[i * 3 + 0] = (uint8_t)(i * 17);
+    palette[i * 3 + 1] = (uint8_t)(i * 17);
+    palette[i * 3 + 2] = (uint8_t)(i * 17);
+  }
+  uint8_t shades[16];
+  fifa96_match_run_hud_text_shades_from_palette(palette, 15, shades);
+  assert(shades[0] == 0);
+  for (int i = 1; i < 16; i++) assert(shades[i] == i);
+  assert(shades[15] == 15);
+
+  /* A duplicate white entry must not steal the body nibble on a tie. */
+  palette[0] = palette[15 * 3 + 0];
+  palette[1] = palette[15 * 3 + 1];
+  palette[2] = palette[15 * 3 + 2];
+  fifa96_match_run_hud_text_shades_from_palette(palette, 15, shades);
+  assert(shades[15] == 15);
+
+  fifa96_match_run_hud_text_shades_from_palette(NULL, 30, shades);
+  assert(shades[0] == 0);
+  assert(shades[1] == 2);              /* (1*30+7)/15 */
+  assert(shades[8] == 16);             /* (8*30+7)/15 */
+  assert(shades[15] == 30);
+  fifa96_match_run_hud_text_shades_from_palette(NULL, 30, NULL);
+}
+
+/* The retail HUD names are "BRA"/"GER"; the first-hand clockfnt B/R rasters
+ * carry counters at nibbles 3/5/8/B, which a flat fill turns into a solid
+ * block. Pin the actual HUD pixels: the live pass must select the shaded
+ * values while keeping zero nibbles transparent. */
+#define RETAIL_FONT_PATH "port/tests/golden/gameart0.pvi"
+
+static uint8_t *retail_font_container(size_t *out_len) {
+  FILE *fp = fopen(RETAIL_FONT_PATH, "rb");
+  *out_len = 0;
+  if (!fp) return NULL;
+  if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return NULL; }
+  long n = ftell(fp);
+  if (n < 5 || fseek(fp, 0, SEEK_SET) != 0) { fclose(fp); return NULL; }
+  uint8_t *file = malloc((size_t)n);
+  if (!file) { fclose(fp); return NULL; }
+  if (fread(file, 1, (size_t)n, fp) != (size_t)n) {
+    free(file);
+    fclose(fp);
+    return NULL;
+  }
+  fclose(fp);
+  size_t declared = ((size_t)file[2] << 16) | ((size_t)file[3] << 8) | file[4];
+  uint8_t *container = malloc(declared);
+  size_t got = 0;
+  if (!container ||
+      fifa96_record_decode(file, (size_t)n, container, declared, &got) != 0) {
+    free(file);
+    free(container);
+    return NULL;
+  }
+  free(file);
+  *out_len = got;
+  return container;
+}
+
+static const uint8_t *retail_font_entry(uint8_t *container, size_t len,
+                                        const char *name, uint32_t *out_size) {
+  struct fifa96_bigf_info info;
+  if (fifa96_bigf_parse(container, len, &info) != FIFA96_OK) return NULL;
+  for (size_t i = 0; i < info.count; i++) {
+    uint32_t off = 0, size = 0;
+    const char *entry = NULL;
+    if (fifa96_bigf_record(&info, i, &off, &size, &entry) != FIFA96_OK) return NULL;
+    if (entry && strcmp(entry, name) == 0) {
+      *out_size = size;
+      return container + off;
+    }
+  }
+  return NULL;
+}
+
+static void test_hud_live_brazil_germany_shaded_letters(void) {
+  size_t container_len = 0;
+  uint8_t *container = retail_font_container(&container_len);
+  if (!container) {
+    puts("test_engine_match_render: no retail font golden, BRA/GER HUD case skipped");
+    return;
+  }
+  uint32_t clock_len = 0;
+  const uint8_t *clock = retail_font_entry(container, container_len,
+                                           "clockfnt.fsh", &clock_len);
+  assert(clock != NULL);
+  fifa96_font clockfont;
+  assert(fifa96_font_parse(clock, clock_len, &clockfont) == FIFA96_OK);
+
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  f.mr.render.hud_font[0] = clockfont;
+  f.mr.render.hud_font_ready[0] = 1;
+  f.mr.render.hud_ink = 15;
+  f.mr.render.hud_colors_ready = 1;
+  for (int i = 0; i < 16; i++) f.mr.render.hud_text_shades[i] = (uint8_t)i;
+  f.mr.live_start = 1;
+  f.mr.state.period = 0;
+  f.mr.state.total_seconds = 0;
+  f.mr.score[0] = 0;
+  f.mr.score[1] = 0;
+  strcpy(f.mr.render.hud_name[0], "BRA");
+  strcpy(f.mr.render.hud_name[1], "GER");
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+
+  /* name0 at (6,199); B glyph x/y offsets (1,2), W=7 H=8.
+   * Row 1 is FFFB500 -> body F, counter B, edge 5, transparent 0. */
+  assert(f.s->indexed[202 * 320 + 10] == 0xB);
+  assert(f.s->indexed[202 * 320 + 11] == 0x5);
+  assert(f.s->indexed[202 * 320 + 12] == 0x7F);
+  /* Row 2 is FF3FB00; the dark counter and body survive the flat fill. */
+  assert(f.s->indexed[203 * 320 + 9] == 0x3);
+  assert(f.s->indexed[203 * 320 + 10] == 0xF);
+  assert(f.s->indexed[203 * 320 + 11] == 0xB);
+  /* R starts at cursor 12; row 1 FFFB5 -> B at x16, 5 at x17. */
+  assert(f.s->indexed[202 * 320 + 16] == 0xB);
+  assert(f.s->indexed[202 * 320 + 17] == 0x5);
+  /* A starts at cursor 18; row 3 5BFB5 -> x19..23. */
+  assert(f.s->indexed[202 * 320 + 19] == 0x5);
+  assert(f.s->indexed[202 * 320 + 20] == 0xB);
+  assert(f.s->indexed[202 * 320 + 21] == 0xF);
+
+  /* name1 "GER" at y=209; G/E/R row 1 is the same anti-aliased pattern. */
+  assert(f.s->indexed[212 * 320 + 7] == 0x5);
+  assert(f.s->indexed[212 * 320 + 8] == 0xB);
+  assert(f.s->indexed[212 * 320 + 9] == 0xF);
+  assert(f.s->indexed[212 * 320 + 13] == 0x5);
+  assert(f.s->indexed[212 * 320 + 14] == 0xB);
+  assert(f.s->indexed[212 * 320 + 15] == 0xF);
+  assert(f.s->indexed[212 * 320 + 22] == 0xB);
+  assert(f.s->indexed[212 * 320 + 23] == 0x5);
+
+  fifa96_surface_destroy(f.s);
+  free(container);
+}
+
 /* P13: the 640 live HUD is a uniform 2x panel (120x82 at (4,394)), not the
  * historical x-stretched 120x41 strip. */
 static void test_hud_live_640_uniform_scale(void) {
@@ -1993,6 +2140,43 @@ static void test_hud_live_640_uniform_scale(void) {
   /* The bar stays inside the bottom 82 pixels, not the old 41. */
   assert(f.s->indexed[393 * 640 + 4] == 0x7F);
   assert(f.s->indexed[394 * 640 + 4] != 0x7F);
+  fifa96_surface_destroy(f.s);
+}
+
+/* OL-T11-71 errata: the 2x live HUD renders the raw glyph mask into scratch,
+ * scales it, and only then applies the shade ramp. Patch the synthetic '1'
+ * glyph from nibble F to 5 and give entry 5 a distinct colour; both the 2x
+ * copies of the body pixel must select that entry, while a nibble-F glyph
+ * still selects the body entry. */
+static void test_hud_live_640_shaded_scale(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  fifa96_surface_destroy(f.s);
+  f.s = fifa96_surface_create(640, 480);
+  assert(f.s != NULL);
+  fifa96_surface_clear(f.s, 0x7F);
+  fifa96_window_define_full(&f.mr.render.window, 640, 480);
+  f.mr.live_start = 1;
+  f.mr.render.hud_name[0][0] = '1';   /* patched to nibble 5 */
+  f.mr.render.hud_name[0][1] = '\0';
+  f.mr.render.hud_name[1][0] = '2';   /* remains nibble F */
+  f.mr.render.hud_name[1][1] = '\0';
+  f.mr.render.hud_ink = 30;
+  f.mr.render.hud_colors_ready = 0;
+  f.mr.render.hud_text_shades[5] = 77;
+  f.mr.render.hud_text_shades[15] = 30;
+  /* hud_font_init puts glyph i's high nibble in byte 0xB0+i. */
+  f.font_data[0xB1] = 0x50;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  /* name0 at (12,398); the 2x body covers x12/13, y398/399. */
+  assert(f.s->indexed[398 * 640 + 12] == 77);
+  assert(f.s->indexed[398 * 640 + 13] == 77);
+  assert(f.s->indexed[399 * 640 + 12] == 77);
+  assert(f.s->indexed[399 * 640 + 13] == 77);
+  /* name1's '2' is nibble F -> ramp entry 15 = body 30. */
+  assert(f.s->indexed[418 * 640 + 12] == 30);
+  /* Shadow remains flat 0 at (+2,+2). */
+  assert(f.s->indexed[400 * 640 + 14] == 0);
   fifa96_surface_destroy(f.s);
 }
 
@@ -2482,7 +2666,10 @@ int main(void) {
   test_hud_gates();
   test_hud_zoomed_uses_playfnt_layout();
   test_hud_live_bar_and_text_indices();
+  test_hud_text_shades_from_palette();
+  test_hud_live_brazil_germany_shaded_letters();
   test_hud_live_640_uniform_scale();
+  test_hud_live_640_shaded_scale();
   test_live_halftime_panel_flag_gate();
   test_live_pause_and_result_panels();
   test_replay_state_helpers();

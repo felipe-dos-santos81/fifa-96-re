@@ -137,6 +137,59 @@ static void test_synthetic_blit(void) {
   assert(fifa96_font_blit(canvas, 0, 8, &font, "0", 0, 0, 1) == -FIFA96_ERR_INVALID);
 }
 
+/* OL-T11-71 errata: the shaded arm writes the per-nibble ramp entry, and the
+ * raw mask preserves the nibble for the 2x HUD scaler. The synthetic '0' box
+ * is patched to 3/5 on row 0 and 8/B on row 1. */
+static void test_synthetic_shaded_and_mask(void) {
+  uint8_t data[SYN_FONT_LEN];
+  syn_font_init(data);
+  data[0x50] = 0x35;   /* '0' row 0: nibbles 3,5 */
+  data[0x58] = 0x8B;   /* '0' row 1: nibbles 8,B */
+  fifa96_font font;
+  assert(fifa96_font_parse(data, SYN_FONT_LEN, &font) == FIFA96_OK);
+
+  uint8_t shades[16];
+  for (int i = 0; i < 16; i++) shades[i] = (uint8_t)(i * 10);
+  uint8_t canvas[16 * 8];
+  memset(canvas, 0, sizeof canvas);
+  assert(fifa96_font_blit_shaded(canvas, 16, 8, &font, "0", 0, 0, shades, 16) ==
+         FIFA96_OK);
+  assert(canvas[0 * 16 + 0] == 30);   /* nibble 3 */
+  assert(canvas[0 * 16 + 1] == 50);   /* nibble 5 */
+  assert(canvas[1 * 16 + 0] == 80);   /* nibble 8 */
+  assert(canvas[1 * 16 + 1] == 110);  /* nibble B */
+  assert(canvas[0 * 16 + 2] == 0);    /* outside the 2x2 box */
+
+  uint8_t mask[16 * 8];
+  memset(mask, 0, sizeof mask);
+  assert(fifa96_font_blit_mask(mask, 16, 8, &font, "0", 0, 0) == FIFA96_OK);
+  assert(mask[0] == 3 && mask[1] == 5);
+  assert(mask[16] == 8 && mask[17] == 0xB);
+
+  /* The flat path still paints every non-zero nibble with the same colour. */
+  memset(canvas, 0, sizeof canvas);
+  assert(fifa96_font_blit(canvas, 16, 8, &font, "0", 0, 0, 7) == FIFA96_OK);
+  assert(canvas[0] == 7 && canvas[1] == 7 && canvas[16] == 7 && canvas[17] == 7);
+
+  /* Clipping and range handling: only the in-canvas (1,1) pixel remains. */
+  memset(canvas, 0, sizeof canvas);
+  assert(fifa96_font_blit_shaded(canvas, 16, 8, &font, "0", -1, -1, shades, 16) ==
+         FIFA96_OK);
+  assert(canvas[0] == 110);
+  assert(canvas[1] == 0 && canvas[16] == 0);
+
+  assert(fifa96_font_blit_shaded(NULL, 16, 8, &font, "0", 0, 0, shades, 16) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_font_blit_shaded(canvas, 16, 8, &font, "0", 0, 0, NULL, 16) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_font_blit_shaded(canvas, 16, 8, &font, "0", 0, 0, shades, 0) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_font_blit_mask(NULL, 16, 8, &font, "0", 0, 0) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_font_blit_mask(mask, 0, 8, &font, "0", 0, 0) ==
+         -FIFA96_ERR_INVALID);
+}
+
 /* Without the optional tables the defaults apply: width/height defaults and
  * advance = advance_base + width (FUN_0009FFF0's DAT_00112804 == 0 arm). */
 static void test_defaults_when_tables_absent(void) {
@@ -287,6 +340,49 @@ static void test_retail_fonts(void) {
   assert(canvas[(2 + 7) * 16 + 1 + 4] == 7);   /* row 7, col 4: set */
   assert(fifa96_read_u32le(clockfont.glyphs + (0x30 - 0x20) * 4) == 0x48u);
 
+  /* OL-T11-71 errata: the first-hand clockfnt B raster is
+   *   0000000
+   *   FFFB500
+   *   FF3FB00
+   *   FF3FB00
+   *   FFFC500
+   *   FF5FB00
+   *   FF5FB00
+   *   FFFB500
+   * at bit 174/row 0 with x/y offsets (1,2). A flat blit turns the B/R
+   * counters into solid body pixels; the shaded arm must select the 5/B
+   * counter entries, while the 0 nibble stays transparent. */
+  uint8_t shades[16];
+  for (int i = 0; i < 16; i++) shades[i] = (uint8_t)i;
+  uint8_t glyph[32 * 16];
+  memset(glyph, 0, sizeof glyph);
+  assert(fifa96_font_blit_shaded(glyph, 32, 16, &clockfont, "B", 0, 0, shades,
+                                 16u) == FIFA96_OK);
+  assert(glyph[3 * 32 + 1] == 0xF);   /* row 1, col 0: body */
+  assert(glyph[3 * 32 + 4] == 0xB);   /* row 1, col 3: counter */
+  assert(glyph[3 * 32 + 5] == 0x5);   /* row 1, col 4: anti-alias edge */
+  assert(glyph[3 * 32 + 6] == 0);     /* row 1, col 5: transparent */
+  assert(glyph[4 * 32 + 3] == 0x3);   /* row 2, col 2: counter */
+  assert(glyph[4 * 32 + 4] == 0xF);   /* row 2, col 3: body */
+
+  memset(glyph, 0, sizeof glyph);
+  assert(fifa96_font_blit(glyph, 32, 16, &clockfont, "B", 0, 0, 7) == FIFA96_OK);
+  assert(glyph[3 * 32 + 4] == 7);     /* flat: counter becomes body ink */
+  assert(glyph[3 * 32 + 5] == 7);
+  assert(glyph[3 * 32 + 6] == 0);
+
+  memset(glyph, 0, sizeof glyph);
+  assert(fifa96_font_blit_mask(glyph, 32, 16, &clockfont, "B", 0, 0) ==
+         FIFA96_OK);
+  assert(glyph[3 * 32 + 4] == 0xB && glyph[3 * 32 + 5] == 0x5);
+
+  /* R uses the same counter values at bit 268 with offsets (1,2). */
+  memset(glyph, 0, sizeof glyph);
+  assert(fifa96_font_blit_shaded(glyph, 32, 16, &clockfont, "R", 0, 0, shades,
+                                 16u) == FIFA96_OK);
+  assert(glyph[3 * 32 + 4] == 0xB);
+  assert(glyph[3 * 32 + 5] == 0x5);
+
   fifa96_font playfont;
   assert(fifa96_font_parse(play, 3352u, &playfont) == FIFA96_OK);
   assert(playfont.first == 0x20 && playfont.last == 0xFF);
@@ -359,6 +455,7 @@ static void test_outlined_and_centered(void) {
 int main(void) {
   test_synthetic_parse_and_metrics();
   test_synthetic_blit();
+  test_synthetic_shaded_and_mask();
   test_defaults_when_tables_absent();
   test_parse_errors();
   test_outlined_and_centered();

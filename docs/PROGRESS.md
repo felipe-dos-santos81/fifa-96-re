@@ -4507,3 +4507,15 @@ close-out below).
   `test_live_offball_shape_moves_team` pins at least 16 of 20 outfield records
   moving with no score/phase write. `make check` **124/124**; M1/M2 exact.
   The native `FUN_0007F7E0` support-run machine remains a separate leg.
+
+- **Phase 73 shaded HUD glyphs + crowd-tier tint (2026-11-07).** The live HUD
+  now applies the native 4bpp glyph shade ramp instead of flat ink, so
+  `BRA`/`GER` render legibly with their counter/anti-alias nibbles; the
+  640/2× path scales a raw nibble mask and applies the ramp at the destination.
+  `fifa96_font_blit` stays flat for the non-live golden paths. The derived
+  far-stand crowd tier now maps `STACcovr` through the stand tint, removing the
+  kit-palette neon slivers without pretending to be the native 3dwpts bowl
+  (P10-L2 remains open). Erratum: `0x15B998` is the runtime shade table and
+  `0x15BBAC` is the RGB palette (the prior FU-148 leg text named the latter as
+  the shade table). `make check` **124/124**; M1/M2 exact; windowed evidence
+  `docs/screens/p73-shaded-hud-crowd.png`.
