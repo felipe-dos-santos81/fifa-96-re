@@ -11351,3 +11351,54 @@ install-live.
 L2 the native nearest-select/swap (`0x7D1D4`/`0x786A0`) is not this cycle; L3
 the 90-frame hold is derived usability tuning; L4 gamepad bindings beyond LB;
 L5 the switch does not change camera director or AI control policy.
+
+## Phase 77 — deliberate human contact and stable human side (2026-11-08)
+
+**Outcome.** **T** / pad **RB** now performs a deliberate human contact
+challenge on an opponent carrier within the duel range. The challenge runs the
+same `fifa96_match_run_contact` registrar and referee decision as the AI duel:
+Fouls Off returns a clean steal; Fouls On can award the fouled side a
+free-kick/penalty restart. The automatic proximity steal remains the existing
+clean derived claim and is not re-routed, so normal defending does not suddenly
+give away fouls on every adjacency.
+
+**Why.** The human proximity steal bypassed the referee entirely, while the
+manual pad duel (`0x7CE38` -> row `0x0B` -> row `0x0C`) is unreachable in live
+play because the controlled record dispatches as code 3 and the live follow
+overrides the native control slot each frame. The native auto-switch/AI caller
+chain stays P7-L1; this is a derived live contact seam over the already-ported
+referee chain.
+
+**Stable human side.** A human foul makes the native restart arm set
+`phase_machine.side_controlled` to the fouled (AI) side. The live control
+follow, restart bind, opponent/CPU drivers and the pause substitution menu now
+use a stored `live_human_side` captured at live begin; the native
+`side_controlled` cell still drives the referee/set-piece arms. This keeps the
+human on their own team through an opponent free kick rather than handing them
+the AI side.
+
+**Implementation.** `FIFA96_ENGINE_KEY_TACKLE` (13) is mapped from SDL `T` and
+`RIGHT_SHOULDER`, excluded from the FU-61 action word and edge-latched like
+the manual switch. `match_run_live_human_tackle` accepts an opponent carrier
+within `0x40`, rejects hidden records, and calls
+`match_run_live_contact_tackle` with the human as rec_a and carrier as rec_b.
+A returned decision sets a 45-frame cooldown and returns from the control
+follow; a clean result takes the ball and installs carrier code 5. The stored
+human side is set before `match_run_live_control_seed`, and
+`match_run_live_control_team`/`match_run_live_control_bind` plus the pause
+substitution side selection use it while the native cell keeps its phase-arm
+meaning. No new score/phase/goal writer; no RNG of its own.
+
+**Tests and gate.** `test_live_human_contact_clean_and_foul` pins the Fouls
+Off clean steal, the Fouls On registrar (rec_first human / rec_second carrier,
+contact_kind 1, decision and stoppage) and the stored human side after a
+simulated native restart-side flip. `test_engine_sdl3` pins T/RB and the held
+sample; the existing switch test also pins that T never becomes FU-61 input.
+`make check` **124/124**; M1/M2 exact by `cmp`. Census unchanged: 78/78 bodies,
+61/80 natural, 64/80 install-live.
+
+**Legs.** P7-L1 native auto-switch/AI caller; L2 the native pad duel dispatch
+code-3/`0x60` route; L3 the automatic proximity steal remains a clean derived
+claim (deliberate T is the adjudicated route); L4 free-kick/penalty player
+interaction remains the separate set-piece slice; L5 there is no native card
+state/asset, so no card display is claimed.

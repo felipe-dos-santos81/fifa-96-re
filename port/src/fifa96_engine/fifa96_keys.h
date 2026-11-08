@@ -32,3 +32,6 @@
  * FU-61 action word; the match run consumes a rising edge as a control
  * selection request. */
 #define FIFA96_ENGINE_KEY_SWITCH 12
+/* Phase 77 derived live contest key (SDL3 T, pad RB). Queues a deliberate
+ * human contact attempt; it is not an FU-61 action word either. */
+#define FIFA96_ENGINE_KEY_TACKLE 13

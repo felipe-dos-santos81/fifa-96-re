@@ -552,7 +552,9 @@ static void test_live_manual_switch_keeps_carrier(void) {
   drop_lc_fixture(&f);
 }
 
-/* Phase 76: a switch press must never become an FU-61 action word. */
+static void press_live_tackle(struct fifa96_match_run *mr);
+
+/* Phase 76/77: switch/tackle presses must never become FU-61 action words. */
 static void test_live_switch_is_not_fu61(void) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
@@ -561,6 +563,130 @@ static void test_live_switch_is_not_fu61(void) {
   assert(mr->input.prev[0] == 0);
   assert(mr->input_state[0] == 0);
   assert(mr->live_switch_press == 1u);
+  release_live_switch(mr);
+  press_live_tackle(mr);
+  assert(mr->input.prev[0] == 0);
+  assert(mr->input_state[0] == 0);
+  assert(mr->live_tackle_press == 1u);
+  drop_lc_fixture(&f);
+}
+
+static void press_live_tackle(struct fifa96_match_run *mr) {
+  fifa96_platform_key key = {.raw_code = FIFA96_ENGINE_KEY_TACKLE, .state = 1};
+  assert(fifa96_match_run_input(mr, &key, 1) == 0);
+}
+
+static void release_live_tackle(struct fifa96_match_run *mr) {
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+}
+
+/* Phase 77 [D]: the deliberate human contact key runs the same referee seam as
+ * the AI. Fouls Off is a clean steal; Fouls On can award the opponent restart.
+ * The stored human side survives the native restart-side flip. */
+static void test_live_human_contact_clean_and_foul(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  uint8_t human_side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
+  uint32_t human_team = human_side;
+  uint32_t opp = 1u - human_team;
+  int32_t human_id = mr->entities.controlled;
+  int32_t carrier = (int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + 3u);
+  assert(human_id >= 0 && human_id < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_active = 0u;
+  mr->live_kick_hold = 0u;
+  mr->live_save_hold = 0u;
+  mr->live_ai_tackle_cd = 60u;   /* keep the AI opponent contest out of this test */
+  mr->live_human_tackle_cd = 0u;
+  mr->ball_settle_active = 0u;
+  mr->act.id = 0u;
+  mr->referee.sequence = FIFA96_REF_SEQ_NONE;
+  mr->state.phase = 2u;
+  mr->live_human_side = human_side;
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *h = &mr->entities.team[human_team].records[i];
+    struct fifa96_match_entity *o = &mr->entities.team[opp].records[i];
+    h->pos_x = (int32_t)(i == (uint32_t)human_id ? 0 : 0x3000);
+    h->pos_z = h->pos_x;
+    h->target_x = h->pos_x;
+    h->target_z = h->pos_z;
+    o->pos_x = (int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + i) == carrier ? 0x20 : 0x900;
+    o->pos_z = o->pos_x;
+    o->target_x = o->pos_x;
+    o->target_z = o->pos_z;
+  }
+  stage_ball(mr, 0, 0, 0);
+  mr->entities.ball.carrier = carrier;
+
+  /* Fouls Off: no decision, the human wins the clean challenge. */
+  mr->config.field_4c306 = 0;
+  press_live_tackle(mr);
+  one_granted_frame(mr);
+  assert(mr->entities.ball.carrier == human_id);
+  assert(mr->act.id == 0u);
+  assert(mr->state.phase == 2u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  release_live_tackle(mr);
+
+  /* Fouls On: the same key registers a human foul and gives the opponent the
+   * restart. Seed 0 + three draws selects the kind-1 path used by the AI test. */
+  mr->config.field_4c306 = 2;
+  mr->config.field_4c30a = 1;
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *h = &mr->entities.team[human_team].records[i];
+    struct fifa96_match_entity *o = &mr->entities.team[opp].records[i];
+    h->pos_x = (int32_t)(i == (uint32_t)human_id ? 0 : 0x3000);
+    h->pos_z = h->pos_x;
+    h->target_x = h->pos_x;
+    h->target_z = h->pos_z;
+    o->pos_x = (int32_t)(opp * FIFA96_MATCH_ENTITY_RECORDS + i) == carrier ? 0x20 : 0x900;
+    o->pos_z = o->pos_x;
+    o->target_x = o->pos_x;
+    o->target_z = o->pos_z;
+  }
+  stage_ball(mr, 0, 0, 0);
+  mr->entities.ball.speed = 0;
+  mr->entities.ball.carrier = carrier;
+  /* Drop the clean challenge's human carrier code so the opponent possession
+   * cell is the one the entity chain sees. */
+  mr->entities.team[human_team].records[human_id].code = 3u;
+  mr->entities.team[human_team].records[human_id].has_ball = 0u;
+  mr->entities.team[human_team].records[human_id].carrier = 0u;
+  mr->act.id = 0u;
+  mr->referee.sequence = FIFA96_REF_SEQ_NONE;
+  mr->state.phase = 2u;
+  mr->live_human_tackle_cd = 0u;
+  (void)fifa96_rng_seed(&mr->rng, 0);
+  for (int i = 0; i < 3; i++) {
+    uint16_t value = 0;
+    (void)fifa96_rng_step(&mr->rng, &value);
+  }
+  press_live_tackle(mr);
+  one_granted_frame(mr);
+  assert(mr->referee.rec_first == human_id);
+  assert(mr->referee.rec_second == carrier);
+  assert(mr->referee.contact_kind == 1u);
+  assert(mr->referee.recall_consumed == 1u);
+  assert(mr->act.id != 0u);
+  assert(mr->state.phase != 2u);
+  assert(mr->entities.ball.carrier == carrier);
+  release_live_tackle(mr);
+
+  /* Native restart-side flip: the stored human side still selects the human
+   * team after phase 2 resumes. */
+  mr->phase_machine.side_controlled = (uint8_t)opp;
+  mr->state.phase = 2u;
+  mr->act.id = 0u;
+  mr->live_kickoff_touch = 0u;
+  mr->referee.sequence = FIFA96_REF_SEQ_NONE;
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[human_team].records[human_id].pos_x = 0;
+  mr->entities.team[human_team].records[human_id].pos_z = 0;
+  stage_ball(mr, 0, 0, 0);
+  one_granted_frame(mr);
+  assert(mr->entities.controlled >= 0 &&
+         mr->entities.controlled < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
   drop_lc_fixture(&f);
 }
 
@@ -694,6 +820,7 @@ static void test_live_kickoff_shot_scores_side(uint32_t side) {
      * let the live control follow rebind. This is a fixture switch, not ball or
      * taker staging. */
     mr->phase_machine.side_controlled = (uint8_t)side;
+    mr->live_human_side = (uint8_t)side;   /* stored human team follows the fixture flip */
     one_granted_frame(mr);
     one_granted_frame(mr);
   }
@@ -1112,6 +1239,7 @@ static void test_live_defender_blocks_shot(uint32_t side) {
          mr->entities.ball.z == 0);
   if (side != 0u) {
     mr->phase_machine.side_controlled = (uint8_t)side;
+    mr->live_human_side = (uint8_t)side;   /* stored human team follows the fixture flip */
     one_granted_frame(mr);
     one_granted_frame(mr);
   }
@@ -1599,6 +1727,7 @@ static void test_live_keeper_saves_centre_side(uint32_t side) {
   int32_t saved = 0;
   if (side != 0u) {
     mr->phase_machine.side_controlled = (uint8_t)side;
+    mr->live_human_side = (uint8_t)side;   /* stored human team follows the fixture flip */
     one_granted_frame(mr);
     one_granted_frame(mr);
   }
@@ -1745,6 +1874,7 @@ static void test_live_keeper_beaten_by_aim_side(uint32_t side, int32_t aim_key,
   int goal = 0;
   if (side != 0u) {
     mr->phase_machine.side_controlled = (uint8_t)side;
+    mr->live_human_side = (uint8_t)side;   /* stored human team follows the fixture flip */
     one_granted_frame(mr);
     one_granted_frame(mr);
   }
@@ -2571,6 +2701,7 @@ int main(void) {
   test_live_manual_switch_cycles();
   test_live_manual_switch_keeps_carrier();
   test_live_switch_is_not_fu61();
+  test_live_human_contact_clean_and_foul();
   test_live_goal_after_kick();
   test_live_opponent_presses_and_claims();
   test_live_opponent_far_claim_rejected();

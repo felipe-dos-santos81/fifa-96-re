@@ -1369,6 +1369,13 @@ struct fifa96_match_run {
   uint16_t live_manual_frames;
   uint8_t live_switch_down;            /* physical key/pad level */
   uint8_t live_switch_press;           /* queued rising edge for one frame */
+  /* Phase 77 derived human contact [D]. The stored human side survives the
+   * native restart-side flip after a human foul; the tackle edge runs the
+   * same contact/referee seam as the AI. */
+  uint8_t live_human_side;
+  uint8_t live_tackle_down;
+  uint8_t live_tackle_press;
+  uint16_t live_human_tackle_cd;
   /* P7 / FU-345: the derived live possession hold (in 30 Hz frames). When the
    * human's FU-73 kick pair releases the ball, the control follow clears
    * `ball.carrier` and holds off re-attaching possession for this many frames,

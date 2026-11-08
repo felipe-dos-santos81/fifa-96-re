@@ -4552,3 +4552,14 @@ close-out below).
   word and from the native `FUN_0007D1D4` nearest-select; the native auto-switch
   chain remains **P7-L1**. `make check` **124/124**; M1/M2 exact; live-only,
   derived `[D]`.
+
+- **Phase 77 deliberate human contact and stable human side (2026-11-08).**
+  **T**/pad **RB** makes an adjudicated human contact challenge on an opponent
+  carrier through the same registrar/referee chain as the AI: Fouls Off is a
+  clean steal, Fouls On can award a free kick/penalty. The automatic derived
+  proximity steal stays clean and is not re-routed. A stored `live_human_side`
+  (captured at live begin) now drives the live control follow, restart bind,
+  opponent/CPU drivers and pause substitution side, so a human foul that flips
+  the native `side_controlled` cell to the fouled AI side does not hand the
+  human the opponent team. `make check` **124/124**; M1/M2 exact; live-only,
+  derived `[D]`.
