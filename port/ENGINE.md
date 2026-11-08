@@ -11203,3 +11203,51 @@ path (a nibble-5 glyph selects entry 5, a nibble-F glyph selects entry 15).
 nearest-palette ramp is `[D]` (not byte-identical to the native bank). The
 native 3dwpts stadium/camera art and the full crowd bowl remain P10-L2/L6;
 the tint only removes the kit-palette leak from the derived wall.
+
+## Phase 74 — player-facing pause substitution menu (2026-11-07)
+
+**Outcome.** Pause **S**/pad North now opens a two-step OUT -> IN selection
+instead of auto-picking the next bench slot. The menu shows the PCCD names,
+numbers and positions, enforces GK-for-GK and the three-sub cap, hides already
+used bench players, and keeps the existing R1 strip/pause notice handoff.
+After a successful pair the pause plate shows `OUT > IN`; the menu is live-only
+and leaves the deterministic tapes byte-identical.
+
+**Native owner.** The native selection state machine is `FUN_00041494` case 5
+(`0x418ED..0x41C80`): status 3 is the GK mismatch (`0x41982`), status 5 the
+accepted pair (`0x41C80`) and status 8 the used-player refusal (`0x41AE3`).
+The native 16-slot desired order (`0x14C360` / `FUN_00012010`), the FSM timing
+(`0x14AEC8` timer `0x1E`, status 6 at `0x416BF`, case-7 reconcile),
+the desired-order swap (`0x41B12`/`0x41B5F`/`0x41B91`), the per-line counters
+(`0x14C3D0`/`0x14C3D1`) and CPU substitutions remain numbered legs. The port
+uses the same status codes where observed and the derived 3-cap.
+
+**Implementation.** `fifa96_team_data_roster_full` adds the PCCD position
+(+0x09) and rating (+0x1B) bytes to the existing name/number handoff; the
+bridge copies them into `render`-adjacent run state. `fifa96_match_run_sub_rebuild`
+walks the native `0x11033A` formation blocks and assigns the highest-rated
+unused player per role (then unused non-GK, then any unused), producing the
+11-record `sub_lineup` and the 5-bit bench mask; with no PCCD data it falls
+back to the identity map (pitch i -> roster i, bench 11..15).
+`fifa96_match_run_pause_sub_apply` is the single write path; the menu API
+(`fifa96_match_run_pause_sub`) drives OPEN/UP/DOWN/CONFIRM/BACK. The engine
+latches CONFIRM/DECLINE/SUBST/UP/DOWN on rising edges (`match_menu_held`), so a
+held key cannot repeat, and ESC backs out one menu level before resuming. The
+260x184 panel uses the staged HUD font and `hud_text_shades`; a selected row
+gets an ink underline. The old auto-pick function is removed; the engine's only
+consumer is the new API.
+
+**Tests and gate.** `test_engine_live_control` pins the role/rating lineup,
+the exact bench mask, OUT->IN navigation, cancel/back, the first outfield and
+GK substitutions, the used-bench and GK-mismatch statuses, the three-sub cap,
+resume-close and the no-PCCD identity fallback.
+`test_engine_match_render` pins the 260x184 panel geometry, selected-row
+underline and the non-live suppression. `test_engine_team_data` pins Brazil's
+non-GK-first roster and the full position/rating handoff. `make check`
+**124/124**; M1/M2 exact by `cmp`. Windowed evidence:
+`docs/screens/p15-sub-menu.png` and `docs/screens/p15-sub-applied.png`.
+
+**Legs.** P15-L1 native `FUN_00041494` timing/reconcile; P15-L2 native
+16-slot order/sort; P15-L3 native desired-order swap; P15-L4 body/stat
+identity; P15-L5 per-line counters and gates; P15-L6 640-scale menu/full
+used-player list; P15-L7 CPU substitutions.

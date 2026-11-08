@@ -127,9 +127,12 @@ shadows and a uniform 2x 640 HUD. The windowed build renders at the native
 
 Match controls: **arrows** move the controlled player, **Z** kicks,
 **C** passes, **V** plays a long ball; **Esc** pauses (**Enter** resumes,
-**X** quits to the menu). While paused, **S** makes a derived substitution
-from the PCCD bench names (three per side; the native selection menu remains a
-leg). The CPU opponent now passes/shoots after a short possession hold, can win
+**X** quits to the menu). While paused, **S** opens the derived substitution
+menu: arrows choose OUT, **Enter** opens the IN list, arrows choose the
+replacement, **Enter** applies it, and **X** backs out one level. It enforces
+GK-for-GK, hides used bench players and caps at three per side (the native
+selection FSM/timing remains a leg). The CPU opponent now passes/shoots after a
+short possession hold, can win
 a stationary ball with a contact tackle, and the keeper distributes after a
 save (all derived, live-only). At half-time the panel shows for three seconds
 and then the native kickoff gate starts the second half automatically;
@@ -146,8 +149,10 @@ mounted; their gain follows the SFX Volume and Sound Effects options.
 
 Gamepad: D-pad moves; **A/South** kicks in play and selects in menus;
 **B/East** passes in play and backs out in menus; **West** plays the long
-ball; **North** substitutes while paused. Keyboard **Enter**/**Backspace**
-share those confirm/back roles and therefore also kick/pass in active play.
+ball; **North** opens the pause substitution menu. D-pad moves the list and
+**A/South** selects; **B/East** backs out one level. Keyboard **Enter**/
+**Backspace** share those confirm/back roles and therefore also kick/pass in
+active play.
 
 At the kickoff a **Z** press/release shoots through the native
 live-control/kick/goal path (the same kick releases the opening possession

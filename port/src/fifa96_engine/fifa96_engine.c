@@ -99,6 +99,22 @@ static uint8_t engine_pad_down_bits(const fifa96_platform_key *keys, int count) 
   return bits;
 }
 
+/* P15: the pause-substitution menu key level. The SDL backend re-presents a
+ * held key, so the caller compares this with `match_menu_held` to get a
+ * one-shot press. */
+static uint8_t engine_menu_down_bits(const fifa96_platform_key *keys, int count) {
+  uint8_t bits = 0;
+  for (int i = 0; i < count; i++) {
+    if (keys[i].state != 1) continue;
+    if (keys[i].raw_code == FIFA96_ENGINE_KEY_CONFIRM) bits |= 1u;
+    else if (keys[i].raw_code == FIFA96_ENGINE_KEY_DECLINE) bits |= 2u;
+    else if (keys[i].raw_code == FIFA96_ENGINE_KEY_SUBST) bits |= 4u;
+    else if (keys[i].raw_code == FIFA96_ENGINE_KEY_UP) bits |= 8u;
+    else if (keys[i].raw_code == FIFA96_ENGINE_KEY_DOWN) bits |= 16u;
+  }
+  return bits;
+}
+
 /* P6: the live audio gain is the Options SFX Volume (0x11, 0..100) gated by
  * Sound Effects (0x01): settings.value[1] ? value[0x11] : 0. The default
  * 91 scales the crowd base 0x60 to 0x57; Music/Speech Volume have no
@@ -338,6 +354,9 @@ int fifa96_engine_step(struct fifa96_engine *e) {
           (uint8_t)((e->match_pad_allowed | pad_rise) & pad_down);
     }
     e->match_pad_down = pad_down;
+    const uint8_t menu_down = engine_menu_down_bits(keys, n);
+    const uint8_t menu_rise = (uint8_t)(menu_down & (uint8_t)~e->match_menu_held);
+    e->match_menu_held = menu_down;
     fifa96_platform_key match_keys[32];
     size_t match_count = 0;
     for (int i = 0; i < n; i++) {
@@ -383,7 +402,9 @@ int fifa96_engine_step(struct fifa96_engine *e) {
       (void)fifa96_match_run_input(e->match, match_keys, match_count);
     if (e->match && e->match->live_start) {
       if (esc_edge) {
-        if (e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE) {
+        if (e->match->sub_menu_open) {
+          (void)fifa96_match_run_pause_sub(e->match, FIFA96_MATCH_RUN_SUB_BACK);
+        } else if (e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE) {
           (void)fifa96_match_run_set_paused(e->match, e->match->paused ? 0 : 1);
         } else if (e->match->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
                    e->match->lc.screen == FIFA96_MATCH_SCREEN_POST) {
@@ -391,22 +412,27 @@ int fifa96_engine_step(struct fifa96_engine *e) {
         }
         /* EXIT: the staged exit is consumed by run_step below. */
       }
-      for (int i = 0; i < n; i++) {
-        if (keys[i].state != 1) continue;
-        int32_t raw = keys[i].raw_code;
-        if (raw == FIFA96_ENGINE_KEY_QUIT) continue;   /* handled above */
-        if (e->match->paused) {
-          if (raw == FIFA96_ENGINE_KEY_SUBST)
-            (void)fifa96_match_run_pause_substitute(e->match);
-          else if (raw == FIFA96_ENGINE_KEY_CONFIRM)
-            (void)fifa96_match_run_set_paused(e->match, 0);
-          else if (raw == FIFA96_ENGINE_KEY_DECLINE)
-            (void)fifa96_match_lifecycle_request_exit(&e->match->lc);
-        } else if ((e->match->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
-                    e->match->lc.screen == FIFA96_MATCH_SCREEN_POST) &&
-                   raw == FIFA96_ENGINE_KEY_CONFIRM) {
-          (void)fifa96_match_run_result_continue(e->match);
+      if (e->match->paused) {
+        if (e->match->sub_menu_open) {
+          if (menu_rise & 1u)
+            (void)fifa96_match_run_pause_sub(e->match, FIFA96_MATCH_RUN_SUB_CONFIRM);
+          else if (menu_rise & 2u)
+            (void)fifa96_match_run_pause_sub(e->match, FIFA96_MATCH_RUN_SUB_BACK);
+          else if (menu_rise & 8u)
+            (void)fifa96_match_run_pause_sub(e->match, FIFA96_MATCH_RUN_SUB_UP);
+          else if (menu_rise & 16u)
+            (void)fifa96_match_run_pause_sub(e->match, FIFA96_MATCH_RUN_SUB_DOWN);
+        } else if (menu_rise & 4u) {
+          (void)fifa96_match_run_pause_sub(e->match, FIFA96_MATCH_RUN_SUB_OPEN);
+        } else if (menu_rise & 1u) {
+          (void)fifa96_match_run_set_paused(e->match, 0);
+        } else if (menu_rise & 2u) {
+          (void)fifa96_match_lifecycle_request_exit(&e->match->lc);
         }
+      } else if ((e->match->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
+                  e->match->lc.screen == FIFA96_MATCH_SCREEN_POST) &&
+                 (menu_rise & 1u)) {
+        (void)fifa96_match_run_result_continue(e->match);
       }
     } else {
       for (int i = 0; i < n; i++) {

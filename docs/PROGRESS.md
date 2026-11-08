@@ -4519,3 +4519,14 @@ close-out below).
   `0x15BBAC` is the RGB palette (the prior FU-148 leg text named the latter as
   the shade table). `make check` **124/124**; M1/M2 exact; windowed evidence
   `docs/screens/p73-shaded-hud-crowd.png`.
+
+- **Phase 74 player-facing pause substitution menu (2026-11-07).** Pause
+  **S**/pad North opens a two-step OUT -> IN list instead of auto-picking a
+  bench slot. The derived lineup uses the PCCD position/rating bytes and the
+  native `0x11033A` formation roles (highest-rated per role, then unused),
+  enforces GK-for-GK, hides used bench players and caps at three per side. The
+  engine edge-latches the menu keys; ESC/Backspace backs out. The base pause
+  plate shows `OUT > IN` after a pair. The native `FUN_00041494` timing/reconcile,
+  16-slot order/sort, desired-order swap and CPU substitutions remain numbered
+  legs. `make check` **124/124**; M1/M2 exact; screenshots
+  `docs/screens/p15-sub-menu.png`/`p15-sub-applied.png`.

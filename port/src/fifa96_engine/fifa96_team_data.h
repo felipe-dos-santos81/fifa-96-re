@@ -89,6 +89,15 @@ int fifa96_team_data_roster(const struct fifa96_team_data *td, uint32_t lang_id,
                             char names[16][24], uint8_t numbers[16],
                             int *count);
 
+/* P15: the roster handoff plus the PCCD position/overall-rating bytes used by
+ * the derived pause-substitution lineup (position +0x09, rating +0x1B).
+ * `positions`/`ratings` may be NULL; fallback entries use position 0 and
+ * rating 0. Returns the same errors as `fifa96_team_data_roster`. */
+int fifa96_team_data_roster_full(const struct fifa96_team_data *td,
+                                 uint32_t lang_id, char names[16][24],
+                                 uint8_t numbers[16], char positions[16],
+                                 uint8_t ratings[16], int *count);
+
 /* The 44-entry map's mode-4 index for a LANG id, or -1 when the id is not one
  * of the exposed teams. Pure: works without an initialised team data. */
 int fifa96_team_data_lang_index(uint32_t lang_id);

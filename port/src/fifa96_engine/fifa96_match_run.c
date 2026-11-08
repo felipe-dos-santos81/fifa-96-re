@@ -3817,6 +3817,33 @@ static void match_run_release_meta(struct fifa96_match_run *mr) {
   mr->meta_owner = NULL;
 }
 
+/* P15: clear the derived substitution menu state. The roster/lineup arrays are
+ * cleared separately by init/begin (the bridge refills them before staging). */
+static void match_run_sub_menu_reset(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  mr->sub_menu_open = 0;
+  mr->sub_menu_side = 0;
+  mr->sub_menu_stage = 0;
+  mr->sub_menu_cursor = 0;
+  mr->sub_menu_out = FIFA96_MATCH_RUN_SUB_NONE;
+  mr->sub_menu_in = FIFA96_MATCH_RUN_SUB_NONE;
+  mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NONE;
+}
+
+static void match_run_sub_roster_reset(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  memset(mr->roster_pos, 0, sizeof mr->roster_pos);
+  memset(mr->roster_rating, 0, sizeof mr->roster_rating);
+  memset(mr->sub_lineup, 0xFF, sizeof mr->sub_lineup);
+  memset(mr->sub_bench_avail, 0, sizeof mr->sub_bench_avail);
+  mr->sub_lineup_ready = 0;
+  mr->sub_used[0] = 0;
+  mr->sub_used[1] = 0;
+  mr->sub_notice[0] = '\0';
+  mr->sub_notice_ticks = 0;
+  match_run_sub_menu_reset(mr);
+}
+
 void fifa96_match_run_init(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_lifecycle_init(&mr->lc);
@@ -4024,9 +4051,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->live_ai_tackle_cd = 0;
   memset(mr->roster_name, 0, sizeof mr->roster_name);
   memset(mr->roster_number, 0, sizeof mr->roster_number);
-  memset(mr->sub_used, 0, sizeof mr->sub_used);
-  memset(mr->sub_notice, 0, sizeof mr->sub_notice);
-  mr->sub_notice_ticks = 0;
+  match_run_sub_roster_reset(mr);
   mr->live_restart_pending = 0;
   mr->live_halftime_pending = 0;
   mr->live_halftime_frames = 0;
@@ -4101,9 +4126,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->live_ai_tackle_cd = 0;
   memset(mr->roster_name, 0, sizeof mr->roster_name);
   memset(mr->roster_number, 0, sizeof mr->roster_number);
-  memset(mr->sub_used, 0, sizeof mr->sub_used);
-  memset(mr->sub_notice, 0, sizeof mr->sub_notice);
-  mr->sub_notice_ticks = 0;
+  match_run_sub_roster_reset(mr);
   mr->live_restart_pending = 0;
   mr->live_halftime_pending = 0;
   mr->live_halftime_frames = 0;
@@ -7038,46 +7061,175 @@ int fifa96_match_run_set_paused(struct fifa96_match_run *mr, int paused) {
     (void)fifa96_match_pace_hold(&mr->pace);
   } else {
     mr->paused = 0;
+    match_run_sub_menu_reset(mr);   /* P15: resume closes the menu */
     (void)fifa96_match_pace_resume(&mr->pace);
   }
   return 0;
 }
 
-int fifa96_match_run_pause_substitute(struct fifa96_match_run *mr) {
-  uint8_t side;
-  int out_slot = -1;
-  int in_slot;
-  char out_name[24];
-  char in_name[24];
+/* P15 [D]: the derived pitch-record -> roster-slot map. The native lineup is
+ * a 16-slot desired order (0x14C360 / FUN_00012010) that the port does not
+ * own; this builder walks the native 0x11033A role layout and selects, for
+ * each pitch record in block order, the highest-rated unused player with the
+ * block's position, then the highest-rated unused non-GK, then any unused
+ * player. The map is immutable after the first substitution (the native
+ * desired-order swap is P15-L3). */
+int fifa96_match_run_sub_rebuild(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (mr->sub_used[0] != 0 || mr->sub_used[1] != 0) return 0;
+
+  for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
+    uint8_t used[FIFA96_PCCD_ROSTER_COUNT];
+    uint8_t pitch_role[FIFA96_MATCH_ENTITY_RECORDS];
+    uint8_t order[FIFA96_MATCH_ENTITY_RECORDS];
+    uint8_t seen[FIFA96_MATCH_ENTITY_RECORDS];
+    int order_count = 0;
+    memset(used, 0, sizeof used);
+    memset(pitch_role, 0, sizeof pitch_role);
+    memset(order, 0, sizeof order);
+    memset(seen, 0, sizeof seen);
+    memset(mr->sub_lineup[side], 0xFF, sizeof mr->sub_lineup[side]);
+
+    uint8_t id = mr->formation[side] <= 4u ? mr->formation[side] : 0u;
+    fifa96_match_formation_block blocks[4];
+    int block_count = fifa96_match_formation_layout(id, blocks);
+    if (block_count < 0) {
+      memset(blocks, 0, sizeof blocks);
+      block_count = 0;
+    }
+    for (int b = 0; b < block_count; b++) {
+      unsigned count = blocks[b].count > 5u ? 5u : blocks[b].count;
+      char role = blocks[b].role == 0u ? 'G'
+                  : blocks[b].role == 1u ? 'D'
+                  : blocks[b].role == 2u ? 'M'
+                                         : 'F';
+      for (unsigned s = 0; s < count; s++) {
+        uint8_t pitch = blocks[b].slots[s];
+        if (pitch >= FIFA96_MATCH_ENTITY_RECORDS || seen[pitch]) continue;
+        seen[pitch] = 1;
+        pitch_role[pitch] = (uint8_t)role;
+        order[order_count++] = pitch;
+      }
+    }
+    for (uint8_t pitch = 0; pitch < FIFA96_MATCH_ENTITY_RECORDS; pitch++)
+      if (!seen[pitch]) order[order_count++] = pitch;
+
+    for (int i = 0; i < order_count; i++) {
+      uint8_t pitch = order[i];
+      char role = (char)pitch_role[pitch];
+      int best = -1;
+      int best_rating = -1;
+      int best_non_gk = -1;
+      int best_non_gk_rating = -1;
+      int best_any = -1;
+      int best_any_rating = -1;
+      for (uint8_t r = 0; r < FIFA96_PCCD_ROSTER_COUNT; r++) {
+        if (used[r]) continue;
+        int rating = mr->roster_rating[side][r];
+        if (rating > best_non_gk_rating && mr->roster_pos[side][r] != 'G') {
+          best_non_gk_rating = rating;
+          best_non_gk = r;
+        }
+        if (rating > best_any_rating) {
+          best_any_rating = rating;
+          best_any = r;
+        }
+        if (role != '\0' && mr->roster_pos[side][r] == role &&
+            rating > best_rating) {
+          best_rating = rating;
+          best = r;
+        }
+      }
+      if (best < 0) best = best_non_gk >= 0 ? best_non_gk : best_any;
+      if (best < 0) break;
+      mr->sub_lineup[side][pitch] = (uint8_t)best;
+      used[best] = 1;
+    }
+    uint16_t bench = 0;
+    for (uint8_t r = 0; r < FIFA96_PCCD_ROSTER_COUNT; r++)
+      if (!used[r]) bench |= (uint16_t)(1u << r);
+    mr->sub_bench_avail[side] = bench;
+  }
+  mr->sub_lineup_ready = 1;
+  match_run_sub_menu_reset(mr);
+  return 1;
+}
+
+/* A bench slot's GK class must match the outgoing player's class. */
+static int match_run_sub_is_gk(const struct fifa96_match_run *mr, uint8_t side,
+                               uint8_t roster) {
+  return roster < FIFA96_PCCD_ROSTER_COUNT && mr->roster_pos[side][roster] == 'G';
+}
+
+static int match_run_sub_in_count(const struct fifa96_match_run *mr, uint8_t side,
+                                  uint8_t out_pitch) {
+  uint8_t out_roster = mr->sub_lineup[side][out_pitch];
+  int count = 0;
+  if (out_roster == FIFA96_MATCH_RUN_SUB_NONE) return 0;
+  int out_gk = match_run_sub_is_gk(mr, side, out_roster);
+  for (uint8_t r = 0; r < FIFA96_PCCD_ROSTER_COUNT; r++) {
+    if ((mr->sub_bench_avail[side] & (uint16_t)(1u << r)) == 0) continue;
+    if (match_run_sub_is_gk(mr, side, r) != out_gk) continue;
+    count++;
+  }
+  return count;
+}
+
+static int match_run_sub_in_at(const struct fifa96_match_run *mr, uint8_t side,
+                               uint8_t out_pitch, int index, uint8_t *out) {
+  uint8_t out_roster = mr->sub_lineup[side][out_pitch];
+  if (out_roster == FIFA96_MATCH_RUN_SUB_NONE) return 0;
+  int out_gk = match_run_sub_is_gk(mr, side, out_roster);
+  for (uint8_t r = 0; r < FIFA96_PCCD_ROSTER_COUNT; r++) {
+    if ((mr->sub_bench_avail[side] & (uint16_t)(1u << r)) == 0) continue;
+    if (match_run_sub_is_gk(mr, side, r) != out_gk) continue;
+    if (index-- == 0) {
+      *out = r;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int fifa96_match_run_pause_sub_apply(struct fifa96_match_run *mr,
+                                     int out_pitch, int in_roster) {
   if (!mr) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
   if (!mr->live_start || !mr->paused) return -FIFA96_ERR_UNSUPPORTED;
-  side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
-  if (mr->sub_used[side] >= 3u) return 0;
-  for (int i = 1; i <= 10; i++) {
-    int slot = (int)(1u + ((uint32_t)(i - 1 + mr->sub_used[side]) % 10u));
-    int32_t id = (int32_t)((uint32_t)side * FIFA96_MATCH_ENTITY_RECORDS +
-                           (uint32_t)slot);
-    if (id == mr->entities.controlled || id == mr->entities.ball.carrier)
-      continue;
-    out_slot = slot;
-    break;
+  if (out_pitch < 0 || out_pitch >= (int)FIFA96_MATCH_ENTITY_RECORDS ||
+      in_roster < 0 || in_roster >= (int)FIFA96_PCCD_ROSTER_COUNT)
+    return -FIFA96_ERR_INVALID;
+  if (!mr->sub_lineup_ready) (void)fifa96_match_run_sub_rebuild(mr);
+  uint8_t side = mr->sub_menu_open ? mr->sub_menu_side
+                                   : (uint8_t)(mr->phase_machine.side_controlled & 1u);
+  if (mr->sub_used[side] >= FIFA96_MATCH_RUN_SUB_LIMIT) {
+    mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_LIMIT;
+    return 0;
   }
-  if (out_slot < 0) return 0;
-  in_slot = 11 + (int)mr->sub_used[side];
-  if (in_slot >= (int)FIFA96_PCCD_ROSTER_COUNT) return 0;
-  if (mr->roster_name[side][out_slot][0] == '\0')
-    (void)snprintf(mr->roster_name[side][out_slot], sizeof mr->roster_name[side][out_slot],
-                   "PLAYER %d", out_slot + 1);
-  if (mr->roster_name[side][in_slot][0] == '\0')
-    (void)snprintf(mr->roster_name[side][in_slot], sizeof mr->roster_name[side][in_slot],
-                   "PLAYER %d", in_slot + 1);
-  (void)snprintf(out_name, sizeof out_name, "%s", mr->roster_name[side][out_slot]);
-  (void)snprintf(in_name, sizeof in_name, "%s", mr->roster_name[side][in_slot]);
-  (void)snprintf(mr->roster_name[side][out_slot],
-                 sizeof mr->roster_name[side][out_slot], "%s", in_name);
-  mr->roster_name[side][in_slot][0] = '\0';
-  mr->roster_number[side][out_slot] = mr->roster_number[side][in_slot];
+  uint16_t bit = (uint16_t)(1u << (unsigned)in_roster);
+  if ((mr->sub_bench_avail[side] & bit) == 0) {
+    mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_USED;
+    return 0;
+  }
+  uint8_t out_roster = mr->sub_lineup[side][out_pitch];
+  if (out_roster == FIFA96_MATCH_RUN_SUB_NONE) {
+    mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NO_MATCH;
+    return 0;
+  }
+  if (match_run_sub_is_gk(mr, side, out_roster) !=
+      match_run_sub_is_gk(mr, side, (uint8_t)in_roster)) {
+    mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_GK_MISMATCH;
+    return 0;
+  }
+
+  const char *out_name = mr->roster_name[side][out_roster][0]
+                             ? mr->roster_name[side][out_roster]
+                             : "PLAYER";
+  const char *in_name = mr->roster_name[side][in_roster][0]
+                            ? mr->roster_name[side][in_roster]
+                            : "PLAYER";
+  mr->sub_lineup[side][out_pitch] = (uint8_t)in_roster;
+  mr->sub_bench_avail[side] &= (uint16_t)~bit;
   (void)snprintf(mr->sub_notice, sizeof mr->sub_notice, "%.18s > %.18s",
                  out_name, in_name);
   mr->render.sub.active = 1u;
@@ -7087,15 +7239,95 @@ int fifa96_match_run_pause_substitute(struct fifa96_match_run *mr) {
   mr->render.sub.mode = 0u;
   mr->render.sub.special = 0u;
   mr->render.sub.flags[mr->sub_used[side] * 2u + side] = 1u;
-  mr->render.sub.record[1] = (uint8_t)out_slot;
-  mr->render.sub.record[5] = (uint8_t)in_slot;
+  mr->render.sub.record[1] = (uint8_t)out_pitch;
+  mr->render.sub.record[5] = (uint8_t)in_roster;
   mr->render.sub.frame5_height = 41u;
   mr->render.sub.name_width = 0;
   (void)snprintf(mr->render.sub.name[side], sizeof mr->render.sub.name[side],
                  "%.15s", in_name);
   mr->sub_used[side]++;
   mr->sub_notice_ticks = 180u;
+  mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_ACCEPTED;
   return 1;
+}
+
+int fifa96_match_run_pause_sub(struct fifa96_match_run *mr, int action) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  if (!mr->live_start) return -FIFA96_ERR_UNSUPPORTED;
+  if (action == FIFA96_MATCH_RUN_SUB_OPEN) {
+    if (!mr->paused) return -FIFA96_ERR_UNSUPPORTED;
+    if (mr->sub_menu_open) return 0;
+    if (!mr->sub_lineup_ready) (void)fifa96_match_run_sub_rebuild(mr);
+    uint8_t side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
+    if (mr->sub_used[side] >= FIFA96_MATCH_RUN_SUB_LIMIT) {
+      mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_LIMIT;
+      return 0;
+    }
+    if (mr->sub_bench_avail[side] == 0) {
+      mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NO_MATCH;
+      return 0;
+    }
+    mr->sub_menu_open = 1;
+    mr->sub_menu_side = side;
+    mr->sub_menu_stage = 0;
+    mr->sub_menu_cursor = 0;
+    mr->sub_menu_out = FIFA96_MATCH_RUN_SUB_NONE;
+    mr->sub_menu_in = FIFA96_MATCH_RUN_SUB_NONE;
+    mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NONE;
+    return 1;
+  }
+  if (action == FIFA96_MATCH_RUN_SUB_BACK) {
+    if (!mr->sub_menu_open) return 0;
+    if (mr->sub_menu_stage != 0) {
+      mr->sub_menu_stage = 0;
+      mr->sub_menu_cursor = 0;
+      mr->sub_menu_out = FIFA96_MATCH_RUN_SUB_NONE;
+      mr->sub_menu_in = FIFA96_MATCH_RUN_SUB_NONE;
+      mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NONE;
+      return 1;
+    }
+    match_run_sub_menu_reset(mr);
+    return 1;
+  }
+  if (!mr->sub_menu_open) return 0;
+  if (action == FIFA96_MATCH_RUN_SUB_UP || action == FIFA96_MATCH_RUN_SUB_DOWN) {
+    int count = mr->sub_menu_stage == 0
+                    ? (int)FIFA96_MATCH_ENTITY_RECORDS
+                    : match_run_sub_in_count(mr, mr->sub_menu_side,
+                                             mr->sub_menu_out);
+    if (count <= 0) return 0;
+    int cursor = mr->sub_menu_cursor;
+    cursor = action == FIFA96_MATCH_RUN_SUB_UP ? (cursor + count - 1) % count
+                                               : (cursor + 1) % count;
+    mr->sub_menu_cursor = (uint8_t)cursor;
+    mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NONE;
+    return 1;
+  }
+  if (action == FIFA96_MATCH_RUN_SUB_CONFIRM) {
+    if (mr->sub_menu_stage == 0) {
+      mr->sub_menu_out = mr->sub_menu_cursor;
+      mr->sub_menu_stage = 1;
+      mr->sub_menu_cursor = 0;
+      mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NONE;
+      if (match_run_sub_in_count(mr, mr->sub_menu_side, mr->sub_menu_out) == 0)
+        mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NO_MATCH;
+      return 1;
+    }
+    uint8_t in_roster = FIFA96_MATCH_RUN_SUB_NONE;
+    if (!match_run_sub_in_at(mr, mr->sub_menu_side, mr->sub_menu_out,
+                             mr->sub_menu_cursor, &in_roster)) {
+      mr->sub_menu_status = FIFA96_MATCH_RUN_SUB_STATUS_NO_MATCH;
+      return 0;
+    }
+    mr->sub_menu_in = in_roster;
+    if (fifa96_match_run_pause_sub_apply(mr, mr->sub_menu_out, in_roster) == 1) {
+      match_run_sub_menu_reset(mr);
+      return 1;
+    }
+    return 0;
+  }
+  return -FIFA96_ERR_INVALID;
 }
 
 int fifa96_match_run_result_continue(struct fifa96_match_run *mr) {
@@ -7177,6 +7409,7 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   match_run_release_meta(mr);   /* FU-199 §7.2: drop the owned `.fmt` blobs */
   mr->running = 0;
   mr->paused = 0;               /* FU-343 P4: fresh pause/POST state on reuse */
+  match_run_sub_menu_reset(mr); /* P15: no stale menu across runs */
   mr->post_timer = 0;
   mr->post_skip = 0;
   /* FU-343 P3 fix: clear the live-only mode and its one-shot stage flags so a
@@ -7694,6 +7927,120 @@ static void match_run_draw_pause(const struct fifa96_match_run *mr,
                        ink, 0x00, r->hud_text_shades);
   match_run_panel_text(s, font, "S: SUBSTITUTE  X: QUIT", x, MATCH_RUN_PAUSE_PANEL_W,
                        y + 37, ink, 0x00, r->hud_text_shades);
+}
+
+/* P15 derived pause-substitution menu [D]. Native owner: FUN_00041494 case 5;
+ * the two-step OUT/IN list, GK-only-GK and the three-sub cap are derived
+ * player-facing rules over the PCCD roster (the native FSM/16-slot order are
+ * P15-L1/L2). It is drawn only while the run is live and paused. */
+#define MATCH_RUN_SUB_PANEL_W 260
+#define MATCH_RUN_SUB_PANEL_H 184
+
+static const char *match_run_sub_display_name(const struct fifa96_match_run *mr,
+                                              uint8_t side, uint8_t roster,
+                                              char *buf, size_t cap) {
+  if (roster < FIFA96_PCCD_ROSTER_COUNT && mr->roster_name[side][roster][0])
+    return mr->roster_name[side][roster];
+  snprintf(buf, cap, "PLAYER %u", (unsigned)(roster + 1u));
+  return buf;
+}
+
+static char match_run_sub_position(const struct fifa96_match_run *mr, uint8_t side,
+                                   uint8_t roster) {
+  if (roster >= FIFA96_PCCD_ROSTER_COUNT) return ' ';
+  char pos = mr->roster_pos[side][roster];
+  return pos ? pos : ' ';
+}
+
+static const char *match_run_sub_status_text(uint8_t status) {
+  switch (status) {
+    case FIFA96_MATCH_RUN_SUB_STATUS_GK_MISMATCH: return "GK FOR GK ONLY";
+    case FIFA96_MATCH_RUN_SUB_STATUS_USED: return "PLAYER ALREADY USED";
+    case FIFA96_MATCH_RUN_SUB_STATUS_LIMIT: return "NO SUBSTITUTIONS LEFT";
+    case FIFA96_MATCH_RUN_SUB_STATUS_NO_MATCH: return "NO BENCH MATCH";
+    default: return NULL;
+  }
+}
+
+static void match_run_draw_sub_menu(const struct fifa96_match_run *mr,
+                                    struct fifa96_surface *s) {
+  const struct fifa96_match_run_render *r = &mr->render;
+  if (!mr->sub_menu_open || !match_run_hud_font_ready(r)) return;
+  const fifa96_font *font = match_run_hud_font(r);
+  const uint8_t ink = r->hud_colors_ready ? r->hud_ink : FIFA96_MATCH_HUD_INK_DEFAULT;
+  const int x = (s->width - MATCH_RUN_SUB_PANEL_W) / 2;
+  const int y = (s->height - MATCH_RUN_SUB_PANEL_H) / 2;
+  const uint8_t side = mr->sub_menu_side & 1u;
+  char title[64];
+  char row[40];
+  char name[24];
+
+  match_run_panel_fill(s, x, y, MATCH_RUN_SUB_PANEL_W, MATCH_RUN_SUB_PANEL_H, ink);
+  (void)snprintf(title, sizeof title, "SUBSTITUTE %s (%u/%u)",
+                 r->hud_name[side][0] ? r->hud_name[side] : "TEAM",
+                 (unsigned)mr->sub_used[side], (unsigned)FIFA96_MATCH_RUN_SUB_LIMIT);
+  match_run_panel_text(s, font, title, x, MATCH_RUN_SUB_PANEL_W, y + 6, ink, 0x00,
+                       r->hud_text_shades);
+
+  if (mr->sub_menu_stage == 0) {
+    for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++) {
+      uint8_t roster = mr->sub_lineup[side][pitch];
+      int row_y = y + 22 + pitch * 12;
+      const char *display = match_run_sub_display_name(mr, side, roster, name,
+                                                       sizeof name);
+      (void)snprintf(row, sizeof row, "%c %2u %.20s %c",
+                     mr->sub_menu_cursor == pitch ? '>' : ' ',
+                     (unsigned)(roster < FIFA96_PCCD_ROSTER_COUNT
+                                    ? mr->roster_number[side][roster]
+                                    : roster + 1u),
+                     display, match_run_sub_position(mr, side, roster));
+      match_run_hud_text(s, font, row, x + 12, row_y, ink, 0x00,
+                         r->hud_text_shades);
+      if (mr->sub_menu_cursor == pitch)
+        match_run_panel_fill(s, x + 12, row_y + 10, MATCH_RUN_SUB_PANEL_W - 24, 1,
+                             ink);
+    }
+  } else {
+    uint8_t out_roster = mr->sub_lineup[side][mr->sub_menu_out];
+    const char *out_display = match_run_sub_display_name(mr, side, out_roster, name,
+                                                         sizeof name);
+    (void)snprintf(row, sizeof row, "OUT: %2u %.20s %c",
+                   (unsigned)(out_roster < FIFA96_PCCD_ROSTER_COUNT
+                                  ? mr->roster_number[side][out_roster]
+                                  : out_roster + 1u),
+                   out_display, match_run_sub_position(mr, side, out_roster));
+    match_run_panel_text(s, font, row, x, MATCH_RUN_SUB_PANEL_W, y + 20, ink, 0x00,
+                         r->hud_text_shades);
+    int count = match_run_sub_in_count(mr, side, mr->sub_menu_out);
+    for (int i = 0; i < count; i++) {
+      uint8_t roster = FIFA96_MATCH_RUN_SUB_NONE;
+      (void)match_run_sub_in_at(mr, side, mr->sub_menu_out, i, &roster);
+      int row_y = y + 34 + i * 12;
+      const char *display = match_run_sub_display_name(mr, side, roster, name,
+                                                       sizeof name);
+      (void)snprintf(row, sizeof row, "%c %2u %.20s %c",
+                     mr->sub_menu_cursor == i ? '>' : ' ',
+                     (unsigned)(roster < FIFA96_PCCD_ROSTER_COUNT
+                                    ? mr->roster_number[side][roster]
+                                    : roster + 1u),
+                     display, match_run_sub_position(mr, side, roster));
+      match_run_hud_text(s, font, row, x + 12, row_y, ink, 0x00,
+                         r->hud_text_shades);
+      if (mr->sub_menu_cursor == i)
+        match_run_panel_fill(s, x + 12, row_y + 10, MATCH_RUN_SUB_PANEL_W - 24, 1,
+                             ink);
+    }
+  }
+
+  const char *status = match_run_sub_status_text(mr->sub_menu_status);
+  if (status)
+    match_run_panel_text(s, font, status, x, MATCH_RUN_SUB_PANEL_W, y + 158, ink,
+                         0x00, r->hud_text_shades);
+  match_run_panel_text(s, font,
+                       mr->sub_menu_stage == 0 ? "ENTER: SELECT  X: BACK"
+                                               : "ENTER: SUB  X: BACK",
+                       x, MATCH_RUN_SUB_PANEL_W, y + 170, ink, 0x00,
+                       r->hud_text_shades);
 }
 
 static void match_run_draw_halftime(const struct fifa96_match_run *mr,
@@ -8542,9 +8889,12 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   /* FU-343 (P4): the live pause / FULL TIME stand-in panels. Non-live runs
    * never set `paused` or hold POST, so the tape's frames stay byte-identical. */
   if (mr->live_start) {
-    if (mr->paused)
-      match_run_draw_pause(mr, s);
-    else if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
+    if (mr->paused) {
+      if (mr->sub_menu_open)
+        match_run_draw_sub_menu(mr, s);
+      else
+        match_run_draw_pause(mr, s);
+    } else if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER ||
              mr->lc.screen == FIFA96_MATCH_SCREEN_POST)
       match_run_draw_result(mr, s);
     else if (mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&

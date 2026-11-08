@@ -2230,26 +2230,127 @@ static void test_live_offball_shape_moves_team(void) {
   drop_lc_fixture(&f);
 }
 
-/* P14 derived pause substitution: three applied roster swaps, fourth refused,
- * no score/phase write. */
+/* P15 derived pause substitution: the two-step OUT/IN menu over the native
+ * formation roles, GK-only-GK, the three-sub cap and the used-bench refusal. */
+static void stage_lc_sub_roster(struct fifa96_match_run *mr) {
+  static const char pos[16] = {'G', 'D', 'D', 'D', 'D', 'M', 'M', 'M',
+                               'M', 'F', 'F', 'G', 'D', 'M', 'F', 'F'};
+  static const uint8_t rating[16] = {50, 90, 91, 92, 93, 94, 95, 96,
+                                     97, 98, 99, 80, 40, 41, 42, 43};
+  for (int side = 0; side < 2; side++) {
+    mr->formation[side] = 1;   /* 4-4-2 */
+    for (int slot = 0; slot < (int)FIFA96_PCCD_ROSTER_COUNT; slot++) {
+      (void)snprintf(mr->roster_name[side][slot],
+                     sizeof mr->roster_name[side][slot], "P%d", slot + 1);
+      mr->roster_number[side][slot] = (uint8_t)(slot + 1);
+      mr->roster_pos[side][slot] = pos[slot];
+      mr->roster_rating[side][slot] = rating[slot];
+    }
+  }
+  assert(fifa96_match_run_sub_rebuild(mr) == 1);
+}
+
 static void test_live_pause_substitutions(void) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
   uint8_t side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
+  stage_lc_sub_roster(mr);
+
+  /* Role mapping: the highest-rated GK starts, then the role blocks. */
+  assert(mr->sub_lineup[side][0] == 11u);
+  for (int pitch = 1; pitch <= 4; pitch++)
+    assert(mr->roster_pos[side][mr->sub_lineup[side][pitch]] == 'D');
+  for (int pitch = 5; pitch <= 8; pitch++)
+    assert(mr->roster_pos[side][mr->sub_lineup[side][pitch]] == 'M');
+  for (int pitch = 9; pitch <= 10; pitch++)
+    assert(mr->roster_pos[side][mr->sub_lineup[side][pitch]] == 'F');
+  assert(mr->sub_bench_avail[side] == 0xF001u);   /* 0,12,13,14,15 */
+
   assert(fifa96_match_run_set_paused(mr, 1) == 0);
-  for (int slot = 0; slot < (int)FIFA96_PCCD_ROSTER_COUNT; slot++)
-    (void)snprintf(mr->roster_name[side][slot],
-                   sizeof mr->roster_name[side][slot], "P%d", slot + 1);
-  assert(fifa96_match_run_pause_substitute(mr) == 1);
-  assert(fifa96_match_run_pause_substitute(mr) == 1);
-  assert(fifa96_match_run_pause_substitute(mr) == 1);
-  assert(mr->sub_used[side] == 3u);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_OPEN) == 1);
+  assert(mr->sub_menu_open == 1 && mr->sub_menu_stage == 0);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_DOWN) == 1);
+  assert(mr->sub_menu_cursor == 1);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_CONFIRM) == 1);
+  assert(mr->sub_menu_stage == 1);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_BACK) == 1);
+  assert(mr->sub_menu_stage == 0);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_BACK) == 1);
+  assert(mr->sub_menu_open == 0);
+
+  /* Resuming with the menu open closes it; pause again for the substitution. */
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_OPEN) == 1);
+  assert(fifa96_match_run_set_paused(mr, 0) == 0);
+  assert(mr->sub_menu_open == 0);
+  assert(fifa96_match_run_set_paused(mr, 1) == 0);
+
+  /* First outfield substitution: OUT pitch 1, first non-GK bench slot. */
+  int out1 = mr->sub_lineup[side][1];
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_OPEN) == 1);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_DOWN) == 1);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_CONFIRM) == 1);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_CONFIRM) == 1);
+  assert(mr->sub_menu_open == 0);
+  assert(mr->sub_used[side] == 1u);
+  int in1 = mr->sub_lineup[side][1];
+  assert(in1 != out1);
+  assert((mr->sub_bench_avail[side] & (1u << in1)) == 0);
+  assert((mr->sub_bench_avail[side] & (1u << out1)) == 0);
   assert(mr->render.sub.active == 1u);
   assert(mr->sub_notice[0] != '\0');
-  assert(fifa96_match_run_pause_substitute(mr) == 0);
+
+  /* Direct refusal: an outfield player cannot take the bench GK, and a used
+   * bench slot cannot return. */
+  assert(fifa96_match_run_pause_sub_apply(mr, 1, 0) == 0);
+  assert(mr->sub_menu_status == FIFA96_MATCH_RUN_SUB_STATUS_GK_MISMATCH);
+  assert(mr->sub_used[side] == 1u);
+  assert(fifa96_match_run_pause_sub_apply(mr, 2, in1) == 0);
+  assert(mr->sub_menu_status == FIFA96_MATCH_RUN_SUB_STATUS_USED);
+
+  /* GK substitution: pitch 0 has the bench GK as its only compatible IN. */
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_OPEN) == 1);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_CONFIRM) == 1);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_CONFIRM) == 1);
+  assert(mr->sub_used[side] == 2u);
+  assert(mr->sub_lineup[side][0] == 0u);
+
+  /* Third substitution, then the cap. */
+  int bench3 = -1;
+  for (int r = 0; r < (int)FIFA96_PCCD_ROSTER_COUNT; r++)
+    if ((mr->sub_bench_avail[side] & (1u << r)) != 0 &&
+        mr->roster_pos[side][r] != 'G') {
+      bench3 = r;
+      break;
+    }
+  assert(bench3 >= 0);
+  assert(fifa96_match_run_pause_sub_apply(mr, 2, bench3) == 1);
   assert(mr->sub_used[side] == 3u);
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_OPEN) == 0);
+  assert(mr->sub_menu_status == FIFA96_MATCH_RUN_SUB_STATUS_LIMIT);
+
   assert(mr->score[0] == 0u && mr->score[1] == 0u);
   assert(mr->state.phase == 2u);
+  assert(fifa96_match_run_set_paused(mr, 0) == 0);
+  assert(mr->sub_menu_open == 0);
+
+  /* Non-live runs keep the mutation gate closed. */
+  mr->live_start = 0;
+  assert(fifa96_match_run_pause_sub(mr, FIFA96_MATCH_RUN_SUB_OPEN) ==
+         -FIFA96_ERR_UNSUPPORTED);
+  mr->live_start = 1;
+  drop_lc_fixture(&f);
+}
+
+/* No PCCD positions/ratings: the identity map keeps the menu usable. */
+static void test_live_sub_identity_fallback(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  memset(mr->roster_pos, 0, sizeof mr->roster_pos);
+  memset(mr->roster_rating, 0, sizeof mr->roster_rating);
+  assert(fifa96_match_run_sub_rebuild(mr) == 1);
+  for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++)
+    assert(mr->sub_lineup[0][pitch] == pitch);
+  assert(mr->sub_bench_avail[0] == 0xF800u);   /* 11..15 */
   drop_lc_fixture(&f);
 }
 
@@ -2274,6 +2375,7 @@ int main(void) {
   test_live_render_eye_stabilizer();
   test_live_offball_shape_moves_team();
   test_live_pause_substitutions();
+  test_live_sub_identity_fallback();
   test_live_defender_blocks_both_sides();
   test_live_shot_block_mouth_edge();
   test_live_shot_block_skips_hidden_defender();

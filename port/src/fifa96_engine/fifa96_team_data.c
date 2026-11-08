@@ -179,7 +179,8 @@ int fifa96_team_data_lookup(const struct fifa96_team_data *td, uint32_t lang_id,
 static int team_data_player_at(const struct fifa96_team_data *td,
                                const struct fifa96_team_identity *identity,
                                uint8_t slot, char *name, size_t cap,
-                               uint8_t *number) {
+                               uint8_t *number, char *position,
+                               uint8_t *rating) {
   struct fifa96_pccd_player player;
   fifa96_err_t err =
       fifa96_pccd_player(&td->db, identity->roster[slot], &player);
@@ -189,6 +190,8 @@ static int team_data_player_at(const struct fifa96_team_data *td,
   if (len > 0) memcpy(name, player.name, len);
   name[len] = '\0';
   *number = (uint8_t)(slot + 1u);
+  if (position) *position = player.position;
+  if (rating) *rating = player.rating;
   return 0;
 }
 
@@ -203,12 +206,13 @@ int fifa96_team_data_player(const struct fifa96_team_data *td, uint32_t lang_id,
   struct fifa96_team_identity identity;
   int rc = fifa96_team_data_lookup(td, lang_id, &identity);
   if (rc != 0) return rc;
-  return team_data_player_at(td, &identity, slot, name, cap, number);
+  return team_data_player_at(td, &identity, slot, name, cap, number, NULL, NULL);
 }
 
-int fifa96_team_data_roster(const struct fifa96_team_data *td, uint32_t lang_id,
-                            char names[16][24], uint8_t numbers[16],
-                            int *count) {
+int fifa96_team_data_roster_full(const struct fifa96_team_data *td,
+                                 uint32_t lang_id, char names[16][24],
+                                 uint8_t numbers[16], char positions[16],
+                                 uint8_t ratings[16], int *count) {
   if (!td || !names || !numbers || !count) return -FIFA96_ERR_INVALID;
   *count = 0;
   if (!td->ready) return -FIFA96_ERR_STATE;
@@ -218,15 +222,28 @@ int fifa96_team_data_roster(const struct fifa96_team_data *td, uint32_t lang_id,
   if (rc != 0) return rc;
 
   for (uint8_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++) {
+    char pos = 0;
+    uint8_t rating = 0;
     rc = team_data_player_at(td, &identity, i, names[i], sizeof names[i],
-                             &numbers[i]);
+                             &numbers[i], &pos, &rating);
     if (rc == -FIFA96_ERR_NOT_FOUND || (rc == 0 && names[i][0] == '\0')) {
       snprintf(names[i], sizeof names[i], "PLAYER %u", (unsigned)(i + 1u));
       numbers[i] = (uint8_t)(i + 1u);
+      pos = 0;
+      rating = 0;
     } else if (rc != 0) {
       return rc;
     }
+    if (positions) positions[i] = pos;
+    if (ratings) ratings[i] = rating;
   }
   *count = (int)FIFA96_PCCD_ROSTER_COUNT;
   return 0;
+}
+
+int fifa96_team_data_roster(const struct fifa96_team_data *td, uint32_t lang_id,
+                            char names[16][24], uint8_t numbers[16],
+                            int *count) {
+  return fifa96_team_data_roster_full(td, lang_id, names, numbers, NULL, NULL,
+                                      count);
 }

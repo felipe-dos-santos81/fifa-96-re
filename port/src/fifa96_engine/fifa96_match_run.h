@@ -729,6 +729,28 @@ struct fifa96_match_run_celebration {
   fifa96_action_vec3 points[6];    /* native [0x1586D8..0x158714] */
 };
 
+/* P15 derived pause-substitution menu. The native owner is
+ * FUN_00041494 case 5 (0x418ED..0x41C80); its timing/reconcile and the 16-slot
+ * order 0x14C360 remain numbered legs. Actions are edge-dispatched by the
+ * engine; the run owns the selected side/stage/cursor and the bench/lineup
+ * map. */
+#define FIFA96_MATCH_RUN_SUB_LIMIT 3u
+#define FIFA96_MATCH_RUN_SUB_NONE 0xFFu
+#define FIFA96_MATCH_RUN_SUB_STATUS_NONE 0u
+#define FIFA96_MATCH_RUN_SUB_STATUS_GK_MISMATCH 3u
+#define FIFA96_MATCH_RUN_SUB_STATUS_ACCEPTED 5u
+#define FIFA96_MATCH_RUN_SUB_STATUS_USED 8u
+#define FIFA96_MATCH_RUN_SUB_STATUS_LIMIT 0x80u
+#define FIFA96_MATCH_RUN_SUB_STATUS_NO_MATCH 0x81u
+
+enum fifa96_match_run_sub_action {
+  FIFA96_MATCH_RUN_SUB_OPEN = 0,
+  FIFA96_MATCH_RUN_SUB_UP,
+  FIFA96_MATCH_RUN_SUB_DOWN,
+  FIFA96_MATCH_RUN_SUB_CONFIRM,
+  FIFA96_MATCH_RUN_SUB_BACK
+};
+
 struct fifa96_match_run {
   struct fifa96_match_lifecycle lc;
   struct fifa96_match_pace pace;
@@ -1400,13 +1422,31 @@ struct fifa96_match_run {
   uint16_t live_cpu_actions;
   int32_t live_cpu_carrier;            /* opponent pool id or NONE */
   uint16_t live_ai_tackle_cd;          /* derived opponent contact cooldown */
-  /* P14 derived pause substitutions: PCCD roster names/numbers copied by the
-   * bridge, a three-sub counter and the temporary pause notice. Live-only. */
+  /* P14/P15 derived pause substitutions: PCCD roster names/numbers (plus the
+   * P15 position/rating handoff), a three-sub counter and the temporary pause
+   * notice. Live-only. */
   char roster_name[2][FIFA96_PCCD_ROSTER_COUNT][24];
   uint8_t roster_number[2][FIFA96_PCCD_ROSTER_COUNT];
   uint8_t sub_used[2];
   char sub_notice[40];
   uint16_t sub_notice_ticks;
+  /* P15 derived pause-substitution selection [D]. `roster_pos`/`roster_rating`
+   * are the PCCD +0x09/+0x1B bytes; `sub_lineup[side][pitch]` maps the 11
+   * pitch records to roster slots (0xFF = unassigned); `sub_bench_avail` is
+   * the bit mask of roster slots still on the bench. The menu is live-only and
+   * cleared by init/begin/end/resume. */
+  char roster_pos[2][FIFA96_PCCD_ROSTER_COUNT];
+  uint8_t roster_rating[2][FIFA96_PCCD_ROSTER_COUNT];
+  uint8_t sub_lineup[2][FIFA96_MATCH_ENTITY_RECORDS];
+  uint16_t sub_bench_avail[2];
+  uint8_t sub_lineup_ready;
+  uint8_t sub_menu_open;
+  uint8_t sub_menu_side;
+  uint8_t sub_menu_stage;   /* 0 = OUT list, 1 = IN list */
+  uint8_t sub_menu_cursor;
+  uint8_t sub_menu_out;     /* selected OUT pitch record, or NONE */
+  uint8_t sub_menu_in;      /* selected IN roster slot, or NONE */
+  uint8_t sub_menu_status;  /* status code above; rendered while open */
   /* P7 / FU-345 (restart): set while a live phase-1 restart is pending, then
    * consumed on the phase-1 -> phase-2 transition to bind the human control to
    * its nearest outfield record without awarding the ball (the opponent keeps
@@ -1693,12 +1733,32 @@ int fifa96_match_run_set_config(struct fifa96_match_run *mr,
  * -FIFA96_ERR_STATE (run not live) or -FIFA96_ERR_UNSUPPORTED (not live). */
 int fifa96_match_run_set_paused(struct fifa96_match_run *mr, int paused);
 
-/* P14 derived pause substitution: while paused and live, replace the first
- * available outfield roster name with the next unused bench slot. Max three per
- * side. Updates the R1 strip/record state and a temporary pause notice; writes
- * no score/phase cell. Returns 1 when a substitution was applied, 0 when no
- * slot is available, or a negative error for invalid/unsupported state. */
-int fifa96_match_run_pause_substitute(struct fifa96_match_run *mr);
+/* P15 derived pause-substitution lineup [D]. Maps the 11 pitch records to PCCD
+ * roster slots using the native formation layout (0x11033A): role-matching,
+ * highest rating first, then unused non-GK, then any unused. `positions` and
+ * `ratings` are the bridge-filled PCCD bytes; with no PCCD data the map is the
+ * identity (pitch i -> roster i, bench 11..15). The map is immutable once any
+ * substitution has been applied. Returns 1 when rebuilt, 0 when refused
+ * (already used), or -FIFA96_ERR_INVALID (NULL). */
+int fifa96_match_run_sub_rebuild(struct fifa96_match_run *mr);
+
+/* P15: apply one explicit OUT/IN pair. `out_pitch` is 0..10 and `in_roster`
+ * 0..15. Enforces the derived three-sub cap, an unused bench slot, and
+ * GK-for-GK only. On success updates `sub_lineup`/`sub_bench_avail`,
+ * `sub_used`, the R1 strip/record state and the pause notice; returns 1. A
+ * refusal returns 0 with `sub_menu_status` set (3 GK mismatch, 8 used player,
+ * 0x80 limit, 0x81 no match). Negative errors: NULL/invalid index, run not
+ * running, or not live/paused. No score/phase/entity/ball write. */
+int fifa96_match_run_pause_sub_apply(struct fifa96_match_run *mr,
+                                     int out_pitch, int in_roster);
+
+/* P15: drive the two-step pause menu (OUT then IN). `action` is one of
+ * `enum fifa96_match_run_sub_action`. OPEN requires a live paused run; it
+ * refuses with status 0x80/0x81 when no substitution is available. UP/DOWN
+ * wrap the current list; CONFIRM advances OUT -> IN and then applies; BACK
+ * leaves IN -> OUT and OUT -> closed. Returns 1 when the menu state changed or
+ * a substitution applied, 0 for a refusal/no-op, or a negative error. */
+int fifa96_match_run_pause_sub(struct fifa96_match_run *mr, int action);
 
 /* FU-343 (P4): skip the live POST dwell (ENTER/ESC on the FULL TIME panel).
  * Sets `post_skip`; the next run step requests the lifecycle exit and runs the

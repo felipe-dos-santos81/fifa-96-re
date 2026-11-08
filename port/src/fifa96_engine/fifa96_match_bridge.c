@@ -31,6 +31,7 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
   int rc = fifa96_match_run_set_live_start(mr, live);
   if (rc != 0) return rc;
   eng->match_esc_held = 0;   /* FU-343 P4: fresh pause edge latch */
+  eng->match_menu_held = 0;  /* P15: fresh substitution-menu edge latch */
   /* P6: stage the Team Select handout before begin. begin explicitly resets
    * formation[] and seeds the kickoff placement, so the real per-side ids must
    * already be in the run; the post-begin set_formation below stays the live
@@ -68,15 +69,20 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
     for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
       char names[FIFA96_PCCD_ROSTER_COUNT][24];
       uint8_t numbers[FIFA96_PCCD_ROSTER_COUNT];
+      char positions[FIFA96_PCCD_ROSTER_COUNT];
+      uint8_t ratings[FIFA96_PCCD_ROSTER_COUNT];
       int count = 0;
-      if (fifa96_team_data_roster(&eng->team_data, eng->frontend.team_id[side],
-                                  names, numbers, &count) == 0) {
+      if (fifa96_team_data_roster_full(&eng->team_data, eng->frontend.team_id[side],
+                                       names, numbers, positions, ratings,
+                                       &count) == 0) {
         for (int slot = 0; slot < count && slot < (int)FIFA96_PCCD_ROSTER_COUNT;
              slot++) {
           (void)snprintf(mr->roster_name[side][slot],
                          sizeof mr->roster_name[side][slot], "%.23s",
                          names[slot]);
           mr->roster_number[side][slot] = numbers[slot];
+          mr->roster_pos[side][slot] = positions[slot];
+          mr->roster_rating[side][slot] = ratings[slot];
         }
       }
     }
@@ -111,6 +117,10 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
       if (len != 0) memcpy(mr->render.hud_name[side], eng->frontend.team_code[side], len);
     }
   }
+  /* P15: build the derived pause-substitution lineup after the live formation
+   * ids and PCCD position/rating handoff are in place. With no team data the
+   * builder's identity fallback keeps the menu usable. */
+  (void)fifa96_match_run_sub_rebuild(mr);
   /* Stage the derived default pair so a live match renders (G1 Finding 2:
    * make game kept render.enabled == 0). A staging failure is not fatal — no
    * mounted ISO, an absent bank or an undecodable container leaves the run

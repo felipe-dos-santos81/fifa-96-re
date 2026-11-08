@@ -2200,6 +2200,37 @@ static void test_live_pause_and_result_panels(void) {
   /* The HUD still draws under the pause plate (it is outside the panel). */
   assert(f.s->indexed[197 * 320 + 2] == 0x11);
 
+  /* P15 substitution menu: 260x184 at ((320-260)/2, (240-184)/2) = (30,28).
+   * The cursor underline is the ink row under row 3; row 0 stays dark. */
+  f.mr.sub_menu_open = 1;
+  f.mr.sub_menu_side = 0;
+  f.mr.sub_menu_stage = 0;
+  f.mr.sub_menu_cursor = 3;
+  for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++)
+    f.mr.sub_lineup[0][pitch] = (uint8_t)pitch;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[28 * 320 + 30] == 30);    /* border corner */
+  assert(f.s->indexed[29 * 320 + 31] == 0);     /* dark fill */
+  assert(f.s->indexed[211 * 320 + 30] == 30);   /* bottom border */
+  assert(f.s->indexed[96 * 320 + 200] == 30);   /* cursor underline */
+  assert(f.s->indexed[72 * 320 + 200] == 0);    /* row 0 not selected */
+
+  /* Closing the menu restores the base pause plate; a non-live open menu draws
+   * nothing at all. */
+  f.mr.sub_menu_open = 0;
+  f.mr.paused = 1;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[94 * 320 + 85] == 30);
+  f.mr.live_start = 0;
+  f.mr.paused = 1;
+  f.mr.sub_menu_open = 1;
+  fifa96_surface_clear(f.s, 0x7F);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[28 * 320 + 30] == 0x7F);
+  f.mr.live_start = 1;
+  f.mr.paused = 0;
+  f.mr.sub_menu_open = 0;
+
   /* FULL TIME panel: 200x68 at ((320-200)/2, (240-68)/2) = (60,86). The
    * result draw is keyed on the lifecycle screen, not the phase. */
   f.mr.paused = 0;

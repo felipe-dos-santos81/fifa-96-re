@@ -90,6 +90,26 @@ static void test_retail_identity(void) {
          identity.print[2] == 14u && identity.print[3] == 15u);
   assert(identity.roster[0] == 2047u && identity.roster[15] == 106u);
 
+  /* P15: the full handoff carries the PCCD position/rating bytes. Brazil's
+   * roster is not GK-first, so slot 0 is a forward and slots 11/14 are the
+   * keepers; the derived lineup must use the position, not the slot order. */
+  char names[16][24];
+  uint8_t numbers[16];
+  char positions[16];
+  uint8_t ratings[16];
+  int count = 0;
+  assert(fifa96_team_data_roster_full(&td, 0x023u, names, numbers, positions,
+                                      ratings, &count) == 0);
+  assert(count == 16);
+  assert(positions[0] == 'F' && ratings[0] == 95u);
+  assert(positions[10] == 'F' && ratings[10] == 99u);
+  assert(positions[11] == 'G' && ratings[11] == 70u);
+  assert(positions[14] == 'G' && ratings[14] == 84u);
+  assert(numbers[0] == 1u && numbers[15] == 16u);
+  assert(fifa96_team_data_roster_full(&td, 0x023u, names, numbers, NULL, NULL,
+                                      &count) == 0);
+  assert(count == 16);
+
   assert(fifa96_team_data_lookup(&td, 0x0A6u, &identity) == 0);
   assert(identity.pccd_index == 28u);
   assert(identity.pccd_record == 0x20u);

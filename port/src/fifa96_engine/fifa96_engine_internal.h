@@ -51,6 +51,10 @@ struct fifa96_engine {
    * frame. */
   uint8_t match_pad_down;     /* bit 0 = CONFIRM down, bit 1 = DECLINE down */
   uint8_t match_pad_allowed;  /* same bits, armed for the live match input */
+  /* P15: the raw menu-key level latch (CONFIRM/DECLINE/SUBST/UP/DOWN) so the
+   * pause substitution menu acts on rising edges even though SDL re-presents a
+   * held key every poll. Reset on bridge entry. */
+  uint8_t match_menu_held;
   /* P13: the live half-time kickoff gate is player-driven natively. After a
    * short visible dwell, inject one KICK press/release so the second half
    * cannot soft-lock; manual KICK/PASS still wins. */
