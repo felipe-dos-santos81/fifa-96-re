@@ -11251,3 +11251,59 @@ non-GK-first roster and the full position/rating handoff. `make check`
 16-slot order/sort; P15-L3 native desired-order swap; P15-L4 body/stat
 identity; P15-L5 per-line counters and gates; P15-L6 640-scale menu/full
 used-player list; P15-L7 CPU substitutions.
+
+## Phase 75 — live attacking support run + near-goal net guard (derived [D], 2026-11-07)
+
+**Outcome.** The possessing team now sends one forward (role 3, then role 2)
+on a forward support run while the carrier is live. The existing Phase 72
+off-ball block still moves the rest of the shape; the support target is applied
+after it and before the entity chain, so the mover consumes both in the same
+frame. The runner makes through-ball receptions possible at the existing
+landing/claim point, and changes the CPU pass destination; it is deliberately
+not advertised as improving CPU pass completion (the CPU runner is a code-3
+record and cannot claim).
+
+**Native owner.** The native teammate-selection/support machine is
+`FUN_0007F7E0` (FU251-L8): 2 514 bytes, sole caller `0x7F36F`, own jump table.
+It remains unported. This slice is a derived live-only stand-in, not its port;
+the `FUN_0007F7E0` machine, the second wide runner and the native row-05
+reception/claim producer remain numbered legs.
+
+**Implementation.** `live_support_runner`/`live_support_timer` are new live
+cells. `match_run_live_support_pick` walks the native `0x11033A` formation
+blocks, prefers an unused role-3 forward, then role 2, then a mid/forward
+fallback and finally any eligible outfield record; the pick is the most
+advanced by the team's attacking direction. `match_run_live_support_eligible`
+rejects the keeper, hidden/occupied records, the carrier, `team->target`,
+`team->second`, `team->intercept`, `team->chosen` and the controlled record.
+The run holds for 120 granted frames before re-evaluating; the target is
+`max(runner_front, carrier_front + 0x600)` clamped to the goal-line depth
+`0xB00` and the runner's own x channel `±0x760`. Only the runner's target is
+written; no score/phase/ball/control cell. The helper is gated on live phase 2
+and skips kickoff touch, live flights/holds, saves, ball settlement and any
+active act. It clears on init/begin, out-of-play force, restart bind, possession
+loss and every non-play phase. No RNG is used.
+
+**Near-goal net guard.** The same smoke exposed the derived P12 goal-net plane
+painting a full-screen mesh when the follow camera passed close to a goal: the
+inverse-projected plane had no near clip. `match_run_draw_goal_net` now rejects
+an intersection nearer than `0x400` world units (`[D]`), so the far-goal
+backdrop still draws at its normal depth while a near/behind-camera goal cannot
+cover the pitch. This is a presentation guard, not the native 3dwpts net pass
+(P10-L2).
+
+**Tests and gate.** `test_live_support_run_moves_forward` pins the role pick,
+target `0x500`, forward motion after 30 granted frames, untouched second pick
+and score/phase; `test_live_support_run_hysteresis_and_reset` pins the 120-frame
+hold, re-pick after expiry, second-pick exclusion and possession-loss clear.
+`make check` **124/124**; M1/M2 exact by `cmp` (the tapes never set
+`live_start`; no golden re-pin). Census unchanged: 78/78 bodies, 61/80 natural,
+64/80 install-live. Windowed evidence: `docs/screens/p75-support-run.png`.
+
+**Legs.** L1 native `FUN_0007F7E0` support machine (FU251-L8); L2 the second
+wide runner and lane split; L3 the `0x600` depth and 120-frame hold are derived
+tuning constants; L4 the one-frame `team->intercept` target clobber on the
+controlled team (FU-341) remains accepted and documented; L5 the `0x400`
+goal-net near clip is a derived presentation guard, not the native 3dwpts net
+pass. CPU pass completion is not claimed before the native row-05
+claim/selection producers land.

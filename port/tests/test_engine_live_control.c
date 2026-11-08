@@ -2230,6 +2230,93 @@ static void test_live_offball_shape_moves_team(void) {
   drop_lc_fixture(&f);
 }
 
+/* Phase 75 [D]: one possessing-team forward makes a forward support run.
+ * The carrier/target/second/control cells stay untouched; the native
+ * FUN_0007F7E0 machine is still FU251-L8. */
+static void stage_live_support_fixture(struct fifa96_match_run *mr) {
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_active = 0u;
+  mr->live_kick_hold = 0u;
+  mr->live_save_hold = 0u;
+  mr->ball_settle_active = 0u;
+  mr->act.id = 0u;
+  mr->formation[0] = 1;   /* 4-4-2 */
+  mr->entities.team[0].side = 0;
+  mr->entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[0].intercept = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[0].chosen = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &mr->entities.team[0].records[i];
+    e->active = 1;
+    e->code = 3;
+    e->skip_98 = 0;
+    e->skip_9a = 0;
+    e->has_slot = 0;
+    e->phase_meta = NULL;
+    e->pos_x = 0;
+    e->pos_z = 0;
+    e->target_x = 0;
+    e->target_z = 0;
+  }
+  /* Carrier record 5 at the ball; records 9/10 are the 442 forwards. */
+  mr->entities.team[0].records[5].pos_z = -0x100;
+  mr->entities.team[0].records[9].pos_z = 0;
+  mr->entities.team[0].records[10].pos_z = -0x100;
+  stage_ball(mr, 0, 0, -0x100);
+  mr->entities.ball.carrier = 5;
+}
+
+static void test_live_support_run_moves_forward(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  stage_live_support_fixture(mr);
+  one_granted_frame(mr);
+  assert(mr->live_support_runner == 9);       /* the more advanced forward */
+  assert(mr->entities.team[0].records[9].target_z == 0x500);
+  assert(mr->entities.team[0].records[9].target_x == 0);
+  int32_t start_z = mr->entities.team[0].records[9].pos_z;
+  for (int i = 0; i < 30; i++) one_granted_frame(mr);
+  assert(mr->entities.team[0].records[9].pos_z > start_z);
+  assert(mr->entities.team[0].target != 9);   /* runner is not the team target */
+  assert(mr->entities.team[0].second == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  assert(mr->state.phase == 2u);
+  drop_lc_fixture(&f);
+}
+
+static void test_live_support_run_hysteresis_and_reset(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  stage_live_support_fixture(mr);
+  one_granted_frame(mr);
+  assert(mr->live_support_runner == 9);
+
+  /* A more advanced teammate does not steal the run inside the hold window. */
+  mr->entities.team[0].records[10].pos_z = 0x200;
+  one_granted_frame(mr);
+  assert(mr->live_support_runner == 9);
+
+  /* After expiry the pick re-evaluates and chooses record 10. */
+  mr->live_support_timer = 120u;
+  one_granted_frame(mr);
+  assert(mr->live_support_runner == 10);
+
+  /* The second-pick exclusion is respected: force a re-pick with 10 excluded. */
+  mr->entities.team[0].second = 10;
+  mr->live_support_timer = 120u;
+  one_granted_frame(mr);
+  assert(mr->live_support_runner != 10);
+
+  /* Losing the possession cell clears the runner selection. */
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  one_granted_frame(mr);
+  assert(mr->live_support_runner == FIFA96_MATCH_ENTITY_NONE);
+  drop_lc_fixture(&f);
+}
+
 /* P15 derived pause substitution: the two-step OUT/IN menu over the native
  * formation roles, GK-only-GK, the three-sub cap and the used-bench refusal. */
 static void stage_lc_sub_roster(struct fifa96_match_run *mr) {
@@ -2375,6 +2462,8 @@ int main(void) {
   test_live_foul_reaches_penalty();
   test_live_render_eye_stabilizer();
   test_live_offball_shape_moves_team();
+  test_live_support_run_moves_forward();
+  test_live_support_run_hysteresis_and_reset();
   test_live_pause_substitutions();
   test_live_sub_identity_fallback();
   test_live_defender_blocks_both_sides();

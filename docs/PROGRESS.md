@@ -4530,3 +4530,16 @@ close-out below).
   16-slot order/sort, desired-order swap and CPU substitutions remain numbered
   legs. `make check` **124/124**; M1/M2 exact; screenshots
   `docs/screens/p15-sub-menu.png`/`p15-sub-applied.png`.
+
+- **Phase 75 live attacking support run (2026-11-07).** One possessing-team
+  forward (native formation role 3, then role 2) now makes a forward support
+  run while the carrier is live, on top of the Phase 72 off-ball shape. The
+  runner is held for 120 granted frames and re-evaluated, skips the keeper,
+  hidden/occupied records, the carrier, team target/second/intercept/chosen and
+  the controlled record, and writes only its target. This makes through-ball
+  landings reachable and changes the CPU pass destination; it does not claim
+  CPU pass completion. The native `FUN_0007F7E0` machine remains FU251-L8.
+  The same smoke added a derived `0x400` near clip to the P12 goal-net plane so
+  a close/behind-camera goal cannot paint a full-screen mesh over the pitch.
+  `make check` **124/124**; M1/M2 exact; live-only, derived `[D]`; screenshot
+  `docs/screens/p75-support-run.png`.

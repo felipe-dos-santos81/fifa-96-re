@@ -2787,6 +2787,28 @@ static void match_run_live_aim_reset(struct fifa96_match_run *mr,
   if (reset_edge) mr->live_aim_prev_input = 0;
 }
 
+/* Phase 75 [D]: clear the derived support-run selection. Called on init,
+ * begin, possession loss, restarts and any non-play phase. */
+static void match_run_live_support_reset(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  int32_t runner = mr->live_support_runner;
+  if (runner >= 0 &&
+      runner < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS *
+                         FIFA96_MATCH_ENTITY_RECORDS)) {
+    struct fifa96_match_entity *e =
+        &mr->entities.team[(uint32_t)runner / FIFA96_MATCH_ENTITY_RECORDS]
+             .records[(uint32_t)runner % FIFA96_MATCH_ENTITY_RECORDS];
+    if (e->code == 3u && e->has_slot == 0u) {
+      /* Stop a stale run immediately; the next off-ball shape pass may assign
+       * the formation/restart target. */
+      e->target_x = e->pos_x;
+      e->target_z = e->pos_z;
+    }
+  }
+  mr->live_support_runner = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_support_timer = 0;
+}
+
 static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
   struct fifa96_ball_pair_state *pair;
   struct fifa96_match_entity *e;
@@ -3123,6 +3145,7 @@ static void match_run_live_out_force(struct fifa96_match_run *mr) {
   mr->live_cpu_actions = 0;
   mr->live_cpu_carrier = FIFA96_MATCH_ENTITY_NONE;
   mr->live_ai_tackle_cd = 0;
+  match_run_live_support_reset(mr);
   match_run_live_aim_reset(mr, 0);
   match_run_live_kick_sig_clear(mr);
   match_run_live_kick_consumed_clear(mr);
@@ -3213,6 +3236,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_kickoff_touch = 0u;
     mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
     mr->live_kick_shot = 0u;
+    match_run_live_support_reset(mr);
     match_run_live_aim_reset(mr, 1);
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
@@ -3228,6 +3252,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     match_run_live_aim_reset(mr, 1);
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
+    match_run_live_support_reset(mr);
     match_run_live_restart_bind(mr);
   }
   match_run_live_aim_update(mr);
@@ -3418,6 +3443,126 @@ static void match_run_live_offball_shape(struct fifa96_match_run *mr) {
       fifa96_match_phase_apply_cell(mr, e, cells[side]);
     }
   }
+}
+
+/* Phase 75 [D]: one possessing-team support runner on top of the off-ball
+ * shape. This is deliberately not a port of FUN_0007F7E0 (FU251-L8): it picks
+ * the most advanced unused forward (role 3), then midfielder (role 2), and
+ * gives him a forward target ahead of the carrier. It writes only the runner's
+ * target and leaves the carrier/team target/second/control cells alone. */
+#define MATCH_RUN_LIVE_SUPPORT_DEPTH 0x600
+#define MATCH_RUN_LIVE_SUPPORT_Z_LIMIT 0xB00
+#define MATCH_RUN_LIVE_SUPPORT_X_LIMIT 0x760
+#define MATCH_RUN_LIVE_SUPPORT_FRAMES 120u
+
+static int match_run_live_support_eligible(const struct fifa96_match_run *mr,
+                                           uint32_t t, int32_t id) {
+  if (id < 0 || id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS *
+                                FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  if ((uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS != t) return 0;
+  uint32_t index = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  if (index == 0) return 0;   /* keeper */
+  const struct fifa96_match_entity *e = &mr->entities.team[t].records[index];
+  if (e->active == 0u || e->code != 3u) return 0;
+  if (e->skip_98 != 0u || e->skip_9a != 0u || e->has_slot != 0u) return 0;
+  if (id == mr->entities.ball.carrier) return 0;
+  if (id == mr->entities.team[t].target) return 0;
+  if (id == mr->entities.team[t].second) return 0;
+  if (id == mr->entities.team[t].intercept) return 0;
+  if (id == mr->entities.team[t].chosen) return 0;
+  if (id == mr->entities.controlled) return 0;
+  return 1;
+}
+
+static int32_t match_run_live_support_pick(const struct fifa96_match_run *mr,
+                                           uint32_t t, int32_t dir) {
+  uint8_t role[FIFA96_MATCH_ENTITY_RECORDS];
+  fifa96_match_formation_block blocks[4];
+  int have_layout = 0;
+  memset(role, 0, sizeof role);
+  uint8_t formation = mr->formation[t] <= 4u ? mr->formation[t] : 0u;
+  if (fifa96_match_formation_layout(formation, blocks) == 4) {
+    have_layout = 1;
+    for (int b = 0; b < 4; b++) {
+      unsigned count = blocks[b].count > 5u ? 5u : blocks[b].count;
+      for (unsigned s = 0; s < count; s++) {
+        uint8_t pitch = blocks[b].slots[s];
+        if (pitch < FIFA96_MATCH_ENTITY_RECORDS) role[pitch] = blocks[b].role;
+      }
+    }
+  }
+  for (int want = 3; want >= 2; want--) {
+    int32_t best = FIFA96_MATCH_ENTITY_NONE;
+    int32_t best_progress = 0;
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      if (have_layout && role[i] != (uint8_t)want) continue;
+      if (!have_layout && i < 5u) continue;
+      int32_t id = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + i);
+      if (!match_run_live_support_eligible(mr, t, id)) continue;
+      int32_t progress = dir * mr->entities.team[t].records[i].pos_z;
+      if (best == FIFA96_MATCH_ENTITY_NONE || progress > best_progress) {
+        best = id;
+        best_progress = progress;
+      }
+    }
+    if (best != FIFA96_MATCH_ENTITY_NONE) return best;
+  }
+  /* Formation unseeded/role-less: keep the runner out of the back line. */
+  for (uint32_t i = 5; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    int32_t id = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + i);
+    if (match_run_live_support_eligible(mr, t, id)) return id;
+  }
+  return FIFA96_MATCH_ENTITY_NONE;
+}
+
+static void match_run_live_support_run(struct fifa96_match_run *mr) {
+  int32_t carrier;
+  int32_t runner;
+  int32_t dir;
+  uint32_t t;
+  if (!mr || !mr->live_start || mr->state.phase != 2u) {
+    match_run_live_support_reset(mr);
+    return;
+  }
+  carrier = mr->entities.ball.carrier;
+  if (carrier < 0 ||
+      carrier >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS *
+                           FIFA96_MATCH_ENTITY_RECORDS) ||
+      mr->live_kickoff_touch != 0u || mr->live_kick_active != 0u ||
+      mr->live_kick_hold != 0u || mr->live_save_hold != 0u ||
+      mr->ball_settle_active != 0u || mr->act.id != 0u) {
+    match_run_live_support_reset(mr);
+    return;
+  }
+  t = (uint32_t)carrier / FIFA96_MATCH_ENTITY_RECORDS;
+  dir = (mr->entities.team[t].side & 1u) == 0u ? 1 : -1;
+  runner = mr->live_support_runner;
+  if (!match_run_live_support_eligible(mr, t, runner) ||
+      mr->live_support_timer >= MATCH_RUN_LIVE_SUPPORT_FRAMES) {
+    match_run_live_support_reset(mr);
+    runner = match_run_live_support_pick(mr, t, dir);
+    mr->live_support_runner = runner;
+    mr->live_support_timer = 0;
+  }
+  if (runner == FIFA96_MATCH_ENTITY_NONE) return;
+  if (mr->live_support_timer < MATCH_RUN_LIVE_SUPPORT_FRAMES)
+    mr->live_support_timer++;
+  struct fifa96_match_entity *e =
+      &mr->entities.team[t].records[(uint32_t)runner % FIFA96_MATCH_ENTITY_RECORDS];
+  const struct fifa96_match_entity *c =
+      &mr->entities.team[t].records[(uint32_t)carrier % FIFA96_MATCH_ENTITY_RECORDS];
+  int32_t front = dir * e->pos_z;
+  int32_t want = dir * c->pos_z + MATCH_RUN_LIVE_SUPPORT_DEPTH;
+  if (want < front) want = front;
+  if (want > MATCH_RUN_LIVE_SUPPORT_Z_LIMIT) want = MATCH_RUN_LIVE_SUPPORT_Z_LIMIT;
+  if (want < -MATCH_RUN_LIVE_SUPPORT_Z_LIMIT) want = -MATCH_RUN_LIVE_SUPPORT_Z_LIMIT;
+  e->target_z = dir * want;
+  e->target_x = e->pos_x;
+  if (e->target_x > MATCH_RUN_LIVE_SUPPORT_X_LIMIT)
+    e->target_x = MATCH_RUN_LIVE_SUPPORT_X_LIMIT;
+  if (e->target_x < -MATCH_RUN_LIVE_SUPPORT_X_LIMIT)
+    e->target_x = -MATCH_RUN_LIVE_SUPPORT_X_LIMIT;
 }
 
 static void match_run_live_opponent_update(struct fifa96_match_run *mr) {
@@ -4033,6 +4178,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->match_mode = 0;                  /* P13: friendly until the front-end says otherwise */
   mr->live_kickoff_touch = 0;          /* P7: no live kickoff possession latch */
   mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  match_run_live_support_reset(mr);    /* Phase 75: no support runner */
   mr->live_kick_hold = 0;              /* P7: no live possession hold */
   mr->live_kick_active = 0;            /* P7: no live ball flight */
   mr->live_kick_frames = 0;
@@ -4108,6 +4254,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->post_skip = 0;
   mr->live_kickoff_touch = 0;          /* P7: fresh live kickoff latch */
   mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  match_run_live_support_reset(mr);    /* Phase 75: fresh support runner */
   mr->live_kick_hold = 0;              /* P7: fresh live possession hold */
   mr->live_kick_active = 0;            /* P7: fresh live ball flight */
   mr->live_kick_frames = 0;
@@ -6834,7 +6981,10 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     ef.stamp_157c2c = &mr->global_157c2c;   /* FU300 T4 / G2 */
     /* Phase 72: the live off-ball cell shape, before the entity chain so the
      * targets are consumed by the same frame's mover. */
-    if (mr->live_start) match_run_live_offball_shape(mr);
+    if (mr->live_start) {
+      match_run_live_offball_shape(mr);
+      match_run_live_support_run(mr);
+    }
     rc = fifa96_match_entities_update(&mr->entities, &ef, match_run_dispatch_entity,
                                       mr);
     if (rc != FIFA96_OK) return rc;
@@ -8564,7 +8714,10 @@ static void match_run_draw_goal_net(const struct fifa96_match_run_render *r,
             dir.z == 0)
           continue;
         int64_t t = ((int64_t)(gz - eye->z) * 65536) / dir.z;
-        if (t <= 0) continue;
+        /* The derived inverse-projected plane is only a far-goal backdrop; a
+         * plane within 0x400 world units of the eye is the camera passing a
+         * goal and must not paint a mesh across the pitch (P12 [D]). */
+        if (t <= 0x400) continue;
         int32_t wx = eye->x + (int32_t)((t * dir.x) >> 16);
         int32_t wy = eye->y + (int32_t)((t * dir.y) >> 16);
         if (wx < -MATCH_RUN_GOAL_MOUTH_HALF || wx > MATCH_RUN_GOAL_MOUTH_HALF ||

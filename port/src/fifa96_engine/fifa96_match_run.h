@@ -1354,6 +1354,13 @@ struct fifa96_match_run {
    * possession range before a human can react. Live-only; init/begin clear it. */
   uint8_t live_kickoff_touch;
   int32_t live_control_taker;          /* the seeded kickoff taker id or NONE */
+  /* Phase 75 derived attacking support run [D]. One possessing-team forward or
+   * midfielder is selected from the native formation roles and given a
+   * forward target while the carrier is live. The native FUN_0007F7E0 machine
+   * remains FU251-L8; this is not its port. Live-only; init/begin/restarts and
+   * possession loss clear the pair. */
+  int32_t live_support_runner;         /* pool id or NONE */
+  uint16_t live_support_timer;         /* granted frames held on the runner */
   /* P7 / FU-345: the derived live possession hold (in 30 Hz frames). When the
    * human's FU-73 kick pair releases the ball, the control follow clears
    * `ball.carrier` and holds off re-attaching possession for this many frames,
