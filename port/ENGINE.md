@@ -11464,3 +11464,57 @@ prompt plate and its ACTIVE-screen gate. `make check` **124/124**; M1/M2 exact b
 delivery sub-table; the native set-piece camera/UI and power semantics; the
 row-0x13 head/keeper staging beyond the live shot seam; free-kick wall
 obstruction remains the existing derived/native subset.
+
+## Phase 79 — render-stage the live record facing (2026-11-08)
+
+**Outcome.** The 22 player render slots now publish the pool `+0x7D` face word
+into the slot heading, so live players draw the direction they actually face
+instead of the render-zero direction. This closes the render half of the
+FU319/FU323 face producer; the animation **pose/cadence** terminal-row steering
+stays a separate leg and this phase makes no walk-pose claim.
+
+**Evidence.** Fresh Ghidra this slice at `0x36D1A..0x36D3E` shows
+`MOVSD`×3 copying the record position to the staged slot, then
+`MOV ECX,[EDX+0x7B]` / `MOV ESI,0x400` / `SAR ECX,0x10` / `SUB ESI,ECX` /
+`MOV ECX,ESI` / `AND ECX,0x3FF` / `SHL ECX,0x6` /
+`MOV [EBP+0x155BC4],ECX`. That is the native
+record angle `((0x400 - (dword[rec+0x7B] >> 16)) & 0x3FF) << 6`, i.e. the
+`+0x7D` face word; `0x36D44/0x36D4F` then stage the anim id/frame and
+`0x36D58..0x36D61` the hidden `Y=-10000`. The port's
+`fifa96_render_slot_stage` already performs the same fold from
+`heading >> 16`; only the scene staging left record headings at zero.
+
+**Implementation.** `match_run_scene_stage` writes
+`re->stage.heading = (int32_t)((uint32_t)(uint16_t)e->face7d << 16)` beside the
+position copy. `face7d` is the live pool word written by the locomotion mover
+and the face arms; the ball uses the same high-half convention. No renderer,
+animation-row, mover, or face-producer change. The stale comment that called
+the record heading caller-owned is corrected in place. Terminal-row steering
+(flags bit 0 → the `0x11052A`/`0x1105AA` speed tables, duration override and
+lean fold) remains FU159-L5/FU172; the native `0xA2A10` view-angle addend
+remains P10-L6.
+
+**M2 re-pin (measured).** First differing line **2545** (`frame=2545`,
+`state=19/1-0`, hash `298926dde0a231ca` -> `d0e91d189461dd5a`); **3978 of
+6522** lines differ, one contiguous hash-only tail **2545..6522**, the 10-tag
+`state=` stratum set and all counts unchanged, prefix 1..2544 byte-identical,
+length 295089 B / 6522 lines. Old M2 sha
+`7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f` -> new
+`41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`; M1
+byte-identical `09b726b7…`. The move is the intended first hash-visible record
+facing stage, not a regression.
+
+**Tests and gate.** `test_engine_match_render` stages positive and wrapped
+negative `face7d` words and asserts the slot heading high half; the existing
+`test_render` pins the heading→angle fold. `make check` **124/124**; M1 exact;
+M2 producer matches the new golden. Census unchanged: 78/78 bodies, 61/80
+natural, 64/80 install-live.
+
+**Legs.** FU159-L5/FU172 terminal-row pose/duration steering; the invalid
+non-terminal `next_id >= 0x70` face write (FU318); the native `0xA2A10`
+view-angle/render-direction addend (P10-L6); native 3dwpts camera rig (P10-L2).
+
+**Register erratum (OL-T11-3).** The Task-11 close-out row retained at
+`port/ENGINE.md:5372` still lists "record facing `+0x7D` (`-3`)" as a remaining
+leg. This phase lands that render stage; the historical row is not rewritten,
+so this section is the current status.

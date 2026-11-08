@@ -4575,3 +4575,14 @@ close-out below).
   power and confirm keys. The native `0x4C114/18/1C` words, slot `word[+6]`
   hand-off and seven-arm delivery remain legs, so aim/power/confirm is labelled
   derived. `make check` **124/124**; M1/M2 exact; live-only, derived `[D]`.
+
+- **Phase 79 render-stage the live record facing (2026-11-08).** The 22 player
+  render slots now stage the pool `+0x7D` face word in the high half of the slot
+  heading, matching the native `FUN_00036C70` angle fold
+  `((0x400 - (dword[rec+0x7B] >> 16)) & 0x3FF) << 6`. Live players draw the
+  direction they face instead of the render-zero direction. M2 was re-pinned
+  with the measured render-only diff: first differing line 2545, 3,978
+  contiguous hash-only lines (2545..6522), all `state=` tags/counts unchanged,
+  length 295,089 B / 6,522 lines; old sha `7c3874f7…` -> new `41521559…`; M1
+  exact. `make check` **124/124**. Terminal-row pose/duration steering and the
+  native `0xA2A10` view angle remain numbered legs.

@@ -30,6 +30,25 @@
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m2 > port/tests/golden/engine/m2-frames.txt
  *
+ * v30 re-pin (2026-11-08, phase-79 render facing): the live record slot now
+ * stages the native `FUN_00036C70` heading from the pool `+0x7D` face word
+ * (`((0x400 - (dword[rec+0x7B] >> 16)) & 0x3FF) << 6`, carried in the same
+ * 16.16 form as the ball heading). Previously every player slot left
+ * `stage.heading` zero, so every record resolved render direction 0; the
+ * native fold was already ported in `fifa96_render_slot_stage` and the face is
+ * live from the mover. Measured transcript (ISO present): first differing
+ * line **2545** (`frame=2545`, `state=19/1-0`, hash
+ * `298926dde0a231ca` -> `d0e91d189461dd5a`); **3978 of 6522** lines differ,
+ * one contiguous hash-only tail **2545..6522**, with the 10-tag `state=`
+ * stratum set and all counts unchanged. The prefix 1..2544 is byte-identical.
+ * Length stays 295089 B / 6522 lines. M2 sha old
+ * `7c3874f794c4a9203311225b68beceeb2bd39943bd11025ea00a3b546e69469f` -> new
+ * `41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`.
+ * M1 is byte-identical (`09b726b7…`, `cmp` silent). The move is the intended
+ * consequence of the face's first hash-visible render staging, not a
+ * regression; the terminal-row steering/pose selection and the native
+ * `0xA2A10` view-angle addend remain numbered legs.
+ *
  * v29 re-pin (2026-11-05, phase-53 T2/FU-181 L5 + FU-342): the act-9
  * stage-0 match reset (`0x88FA5 CALL 0x73E28`, `fifa96_match_run_act9_reset`)
  * and the non-seeding placement commit (`0x88FBD CALL 0x73E08`,

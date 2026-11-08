@@ -2041,10 +2041,10 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
  * team 1 records 0..10 (0x1590D9), each from rec+0x59/5D/61 with hidden set by
  * rec+0x9A (staged y = -10000, 0x36D61), then slot 22 from the ball record
  * 0x15880C with the 0x15885A heading. The native record angle is
- * `((0x400 - (rec[+0x7B]>>16)) & 0x3FF) << 6`, i.e. the facing word +0x7D,
- * which the FU-141 pool does not model (FU-77 locomotion unported): the
- * record `stage.heading` stays caller-owned (open leg), while the ball's
- * modeled FU-120 heading is staged.
+ * `((0x400 - (rec[+0x7B]>>16)) & 0x3FF) << 6`, i.e. the facing word +0x7D.
+ * The pool now models that word (`face7d`, written by the live locomotion
+ * mover), so the record slot stages it in the same 16.16 heading form as the
+ * ball; `fifa96_render_slot_stage` performs the native fold.
  *
  * OL-80 (links FU-141 OL-42): the same staging passes `anim_id` from
  * `byte[[rec+0x28]]` (0x36D44) and `frame` from `byte[rec+0x3D]` (0x36D4F).
@@ -2070,6 +2070,9 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
       re->stage.pos.x = e->pos_x;
       re->stage.pos.y = e->pos_y;
       re->stage.pos.z = e->pos_z;
+      /* FUN_00036C70: the record angle is the +0x7D face word in the high
+       * half of the native +0x7B dword; the render slot folds it. */
+      re->stage.heading = (int32_t)((uint32_t)(uint16_t)e->face7d << 16);
       re->stage.anim_id = (int32_t)e->anim_id;   /* 0x36D44 byte[[rec+0x28]] */
       re->stage.frame = (int32_t)e->frame;       /* 0x36D4F byte[rec+0x3D] */
       re->stage.hidden = e->skip_9a ? 1 : 0;
