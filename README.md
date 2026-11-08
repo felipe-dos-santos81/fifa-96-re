@@ -129,8 +129,10 @@ uniform 2x 640 HUD. The windowed build renders at the native
 Match controls: **arrows** move the controlled player, **Z** kicks,
 **C** passes, **V** plays a long ball, **Q** switches to the next outfield
 player, **T** makes a deliberate contact challenge; **Esc** pauses
-(**Enter** resumes, **X** quits to the menu). While paused, **S** opens the
-derived substitution
+(**Enter** resumes, **X** quits to the menu). When the human wins a free kick
+or penalty, **Left/Right** aim across the goal mouth, **Up/Down** change power
+and **Z**/**Enter** confirms; a bounded window auto-delivers the shot if no key
+arrives. While paused, **S** opens the derived substitution
 menu: arrows choose OUT, **Enter** opens the IN list, arrows choose the
 replacement, **Enter** applies it, and **X** backs out one level. It enforces
 GK-for-GK, hides used bench players and caps at three per side (the native
@@ -167,9 +169,16 @@ both-Up/Down) shot goes to the centre, where the defending keeper usually
 saves it if it is in position; a displaced keeper can let it through.
 After a goal, arrows take the nearest defender to the ball for a contact
 tackle/claim, and **Z** kicks again with the score preserved. A live defender
-can also block a shot. The aim, the keeper save and the defender block are
-labelled live stand-ins for the unported native aim/camera director and
-open-play keeper save, not native AI.
+can also block a shot. When the human side is awarded a free kick or penalty,
+the installed taker is bound to the live controls: **Left/Right** moves the
+derived goal-mouth aim, **Up/Down** changes the power band, and **Z**/**Enter**
+launches the shot; **A/South** does the same on a pad. The native taker row is
+held at its kick stage for this window and the same derived shot is delivered
+automatically if the window expires; an opponent's taker keeps the native auto
+row. The aim, power, confirm and launch are labelled live stand-ins for the
+unported native `0x4C114/18/1C` input words and slot `word[+6]` hand-off; the
+keeper save and defender block remain the same live stand-ins as open play,
+not native AI.
 
 ## Conventions
 

@@ -2231,6 +2231,35 @@ static void test_live_pause_and_result_panels(void) {
   f.mr.paused = 0;
   f.mr.sub_menu_open = 0;
 
+  /* Phase 78 set-piece prompt: 250x58 at ((320-250)/2, 240-58-12) = (35,170).
+   * The panel is live-only and is drawn only in the active screen. */
+  f.mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  f.mr.live_sp_active = 1;
+  f.mr.live_sp_kind = 7;
+  f.mr.live_sp_aim_x = -0x40;
+  f.mr.live_sp_power = 3;
+  fifa96_surface_clear(f.s, 0x7F);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[170 * 320 + 35] == 30);   /* border corner */
+  assert(f.s->indexed[171 * 320 + 36] == 0);    /* dark fill */
+  assert(f.s->indexed[227 * 320 + 35] == 30);   /* bottom border */
+  assert(f.s->indexed[170 * 320 + 34] == 0x7F); /* outside the panel */
+  f.mr.live_sp_active = 0;
+  f.mr.live_sp_kind = 0;
+  f.mr.live_sp_aim_x = 0;
+  f.mr.live_sp_power = 0;
+  fifa96_surface_clear(f.s, 0x7F);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[170 * 320 + 35] == 0x7F);
+  /* The prompt is gated on the ACTIVE screen, not just live_start. */
+  f.mr.lc.screen = FIFA96_MATCH_SCREEN_POST;
+  f.mr.live_sp_active = 1;
+  fifa96_surface_clear(f.s, 0x7F);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[170 * 320 + 35] == 0x7F);
+  f.mr.live_sp_active = 0;
+  f.mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+
   /* FULL TIME panel: 200x68 at ((320-200)/2, (240-68)/2) = (60,86). The
    * result draw is keyed on the lifecycle screen, not the phase. */
   f.mr.paused = 0;
@@ -2256,6 +2285,14 @@ static void test_live_pause_and_result_panels(void) {
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
   assert(f.s->indexed[94 * 320 + 85] == 0x7F);
   assert(f.s->indexed[100 * 320 + 100] == 0x7F);
+  /* The set-piece prompt is live-only as well. */
+  f.mr.paused = 0;
+  f.mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  f.mr.live_sp_active = 1;
+  fifa96_surface_clear(f.s, 0x7F);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[170 * 320 + 35] == 0x7F);
+  f.mr.live_sp_active = 0;
   fifa96_surface_destroy(f.s);
 }
 

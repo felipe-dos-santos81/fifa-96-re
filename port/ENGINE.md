@@ -11402,3 +11402,65 @@ code-3/`0x60` route; L3 the automatic proximity steal remains a clean derived
 claim (deliberate T is the adjudicated route); L4 free-kick/penalty player
 interaction remains the separate set-piece slice; L5 there is no native card
 state/asset, so no card display is claimed.
+
+## Phase 78 — player-controlled free kicks and penalties (2026-11-08)
+
+**Outcome.** When the human side is awarded a free kick (phase 7) or penalty
+(phase 6), the installed row-0x12/0x13 taker is bound to the live controls and
+the native row is held at its stage-4 kick. **Left/Right** moves a derived
+goal-mouth aim, **Up/Down** selects power and **Z**/**Enter** confirms. Confirm
+resets the taker row, returns through situation `0xB` to phase 2 and launches
+the existing live flight with the derived target. If the player window expires,
+the same derived strike is auto-delivered; this is required because the native
+row-0x13 stage-5 ball-ack wait is one of the unported FU-266/FU-275 legs and can
+hold phase 6 forever. The prompt is a live-only screen-space panel ("FREE
+KICK"/"PENALTY", aim, power, confirm keys). Non-human takers keep the native
+auto row untouched.
+
+**Evidence.** The phase-7/6 arm and the taker codes are the ported
+`match_run_phase_arm` (`0x8D57B` / `0x8D4A2`, FU-149 §1.4). Rows 0x12 stage 4
+(`0x841AD`) and 0x13 stage 4 (`0x84E26`) are the auto kick points. Fresh Ghidra
+this slice at `0x84E44` shows the row-0x13 strike call as `EDX=0x40`, `EBX=0`,
+`EAX=record` (`e87b6bffff`), with the record slot `[EBP+0x20]` inspected at
+`0x84E26..0x84E36` and the `0x78AA4` restore call at `0x84E36`; the native
+`0x4C114/18/1C` words are written at `0x84CCC..0x84D0C` and passed to the
+shipped no-op `0x4C31C` (`e80676fcff`). Those words and the slot `word[+6]`
+0x20 edge remain unported, so the live aim/power/confirm mapping is explicitly
+derived rather than claimed as the native input machine.
+
+**Implementation.** `live_sp_active/hold/kind/power/frames/taker/aim_x/
+prev_input` live in `fifa96_match_run.h`. `match_run_live_setpiece_update`
+activates only when the stored human side owns an active, unhidden installed
+taker, binds it through `match_run_live_control_bind` (falling back to the
+installed record when the headless pool has no slot), samples the arrow/KICK
+edges, and auto-delivers after `MATCH_RUN_LIVE_SETPIECE_WAIT` (300 granted
+frames). The row holds only when `live_start`, `live_sp_hold` and the matching
+taker id are all set.
+`match_run_live_setpiece_kick` installs code 0 on the taker at phase 2, clears
+the pair/carrier, sets the live flight target (`aim_x`, opponent `±0xB40`),
+speed `8 + 2*power` (10..16), shot/pending flags, a 30-frame hold, and calls
+situation `0xB`. `match_run_live_out_force` clears a staged taker before its
+fallback placement and re-installs it only if the fallback selects the same
+record, so a throw/corner force cannot leave a stale 0x12/0x13 row in phase 2.
+The existing live shot block, keeper save, goal armer and out-of-play path stay
+authoritative. No new score/phase/goal writer and no RNG of its own; M1/M2
+never set `live_start`.
+
+**Tests and gate.** `test_live_ai_tackle_foul_reaches_free_kick` now pins the
+live phase-7 taker binding, the 12-frame stage-4 hold, Left aim, Up power, the
+confirm to phase 2, the side-correct `0xB40` target and actual ball movement.
+`test_live_foul_reaches_penalty` pins the phase-6 equivalent. The new
+`test_live_setpiece_does_not_hijack_opponent` pins the non-human native auto
+path through phase 2; `test_live_setpiece_out_force_clears_taker` pins the
+stale-taker reset when a throw/corner force wins the race;
+`test_live_setpiece_timeout_falls_back` pins the 300-frame auto-delivery for
+both phase 7 and phase 6 (the latter would otherwise hang on the unported
+row-0x13 ack). `test_engine_match_render` pins the live-only 250x58
+prompt plate and its ACTIVE-screen gate. `make check` **124/124**; M1/M2 exact by
+`cmp`. Census unchanged: 78/78 bodies, 61/80 natural, 64/80 install-live.
+
+**Legs.** FU-266/FU-275 L13.7 native `0x4C114/18/1C` input words, slot
+`word[+6]`/`0x20` hand-off and `0x78A84/0x78AA4` bodies; the seven-arm FK
+delivery sub-table; the native set-piece camera/UI and power semantics; the
+row-0x13 head/keeper staging beyond the live shot seam; free-kick wall
+obstruction remains the existing derived/native subset.

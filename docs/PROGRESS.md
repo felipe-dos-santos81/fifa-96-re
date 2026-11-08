@@ -4563,3 +4563,15 @@ close-out below).
   the native `side_controlled` cell to the fouled AI side does not hand the
   human the opponent team. `make check` **124/124**; M1/M2 exact; live-only,
   derived `[D]`.
+
+- **Phase 78 player-controlled free kicks and penalties (2026-11-08).** When
+  the human wins a free kick or penalty, the installed native taker is bound
+  and its row is held at stage 4: **Left/Right** aims across the goal mouth,
+  **Up/Down** changes power and **Z**/**Enter** confirms. Confirm launches the
+  existing live flight (side-correct `±0xB40` target) after returning through
+  situation `0xB`; a 300-frame window auto-delivers the same derived strike
+  (the native penalty row's ack wait is unported), and an opponent's set piece
+  keeps the native auto row. A live-only prompt shows the aim,
+  power and confirm keys. The native `0x4C114/18/1C` words, slot `word[+6]`
+  hand-off and seven-arm delivery remain legs, so aim/power/confirm is labelled
+  derived. `make check` **124/124**; M1/M2 exact; live-only, derived `[D]`.

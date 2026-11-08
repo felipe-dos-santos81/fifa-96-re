@@ -182,6 +182,15 @@ static void lc_press_kick(struct fifa96_match_run *mr, int32_t aim_key) {
   assert(fifa96_match_run_input(mr, keys, count) == 0);
 }
 
+static void lc_press_key(struct fifa96_match_run *mr, int32_t key) {
+  fifa96_platform_key k = {key, 1};
+  assert(fifa96_match_run_input(mr, &k, 1) == 0);
+}
+
+static void lc_release_keys(struct fifa96_match_run *mr) {
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+}
+
 /* The shipped ISO keeper tracks to `(0, ±0x9EA)` at the shot (P8 AI recon,
  * `P8-ai-recon.md` finding 4: engine probe, defending keeper `(0,2706)` ->
  * `(0,2538)`, the centre shot passes at distance `0x2F`). The headless fixture
@@ -2325,6 +2334,58 @@ static void test_live_ai_tackle_foul_reaches_free_kick(void) {
       if (mr->entities.team[(uint32_t)human].records[i].code == 0x12u) found = 1;
     assert(found);                           /* the free-kick taker is armed */
   }
+  one_granted_frame(mr);   /* the live phase-7 owner arms after the decision frame */
+  assert(mr->live_sp_active == 1u);
+  assert(mr->live_sp_hold == 1u);
+  assert(mr->live_sp_kind == 7u);
+  assert(mr->live_sp_taker >= (int32_t)(human * FIFA96_MATCH_ENTITY_RECORDS) &&
+         mr->live_sp_taker < (int32_t)((human + 1) * FIFA96_MATCH_ENTITY_RECORDS));
+  assert(mr->entities.controlled == mr->live_sp_taker);
+  {
+    int32_t taker = mr->live_sp_taker;
+    uint32_t idx = (uint32_t)taker % FIFA96_MATCH_ENTITY_RECORDS;
+    int32_t aim = 0;
+    uint8_t power = 0;
+    /* Put the row on its stage-4 kick and prove the live gate really holds it;
+     * without the gate this frame would auto-kick and leave phase 7. */
+    mr->entities.team[(uint32_t)human].records[idx].stage92 = 4u;
+    mr->entities.team[(uint32_t)human].records[idx].timer89 = 0u;
+    for (int i = 0; i < 12; i++) one_granted_frame(mr);
+    assert(mr->state.phase == 7u);
+    assert(mr->live_sp_active == 1u && mr->live_sp_hold == 1u);
+    assert(mr->entities.team[(uint32_t)human].records[idx].code == 0x12u);
+    assert(mr->entities.team[(uint32_t)human].records[idx].stage92 == 4u);
+    aim = mr->live_sp_aim_x;
+    power = mr->live_sp_power;
+    lc_press_key(mr, FIFA96_ENGINE_KEY_LEFT);
+    one_granted_frame(mr);
+    lc_release_keys(mr);
+    assert(mr->live_sp_aim_x < aim);
+    lc_press_key(mr, FIFA96_ENGINE_KEY_UP);
+    one_granted_frame(mr);
+    lc_release_keys(mr);
+    assert(mr->live_sp_power > power);
+    aim = mr->live_sp_aim_x;
+    lc_press_key(mr, FIFA96_ENGINE_KEY_KICK);
+    one_granted_frame(mr);
+    lc_release_keys(mr);
+    assert(mr->state.phase == 2u);
+    assert(mr->live_sp_active == 0u && mr->live_sp_hold == 0u);
+    assert(mr->live_kick_active == 1u);
+    assert(mr->live_kick_shot == 1u);
+    assert(mr->live_shot_pending == 1u);
+    assert(mr->live_kick_target_x == aim);
+    assert(mr->live_kick_target_z ==
+           (mr->entities.team[(uint32_t)human].side == 0u ? 0xB40 : -0xB40));
+    assert(mr->entities.team[(uint32_t)human].records[idx].code != 0x12u);
+    {
+      int32_t start_x = mr->entities.ball.x;
+      int32_t start_z = mr->entities.ball.z;
+      for (int i = 0; i < 30; i++) one_granted_frame(mr);
+      assert(mr->entities.ball.x != start_x || mr->entities.ball.z != start_z ||
+             mr->live_kick_active == 0u || mr->live_save_hold != 0u);
+    }
+  }
   assert(mr->score[0] == 0u && mr->score[1] == 0u);
   drop_lc_fixture(&f);
 }
@@ -2378,7 +2439,162 @@ static void test_live_foul_reaches_penalty(void) {
     assert(taker);
     assert(keeper);
   }
+  one_granted_frame(mr);   /* the live phase-6 owner arms after the decision frame */
+  assert(mr->live_sp_active == 1u);
+  assert(mr->live_sp_hold == 1u);
+  assert(mr->live_sp_kind == 6u);
+  {
+    int32_t aim = 0;
+    int32_t taker = mr->live_sp_taker;
+    uint32_t idx = (uint32_t)taker % FIFA96_MATCH_ENTITY_RECORDS;
+    mr->entities.team[(uint32_t)human].records[idx].stage92 = 4u;
+    mr->entities.team[(uint32_t)human].records[idx].timer89 = 0u;
+    for (int i = 0; i < 12; i++) one_granted_frame(mr);
+    assert(mr->state.phase == 6u);
+    assert(mr->live_sp_active == 1u && mr->live_sp_hold == 1u);
+    assert(mr->entities.team[(uint32_t)human].records[idx].stage92 == 4u);
+    aim = mr->live_sp_aim_x;
+    lc_press_key(mr, FIFA96_ENGINE_KEY_RIGHT);
+    one_granted_frame(mr);
+    lc_release_keys(mr);
+    assert(mr->live_sp_aim_x > aim);
+    aim = mr->live_sp_aim_x;
+    lc_press_key(mr, FIFA96_ENGINE_KEY_KICK);
+    one_granted_frame(mr);
+    lc_release_keys(mr);
+    assert(mr->state.phase == 2u);
+    assert(mr->live_sp_active == 0u && mr->live_sp_hold == 0u);
+    assert(mr->live_kick_active == 1u);
+    assert(mr->live_kick_shot == 1u);
+    assert(mr->live_kick_target_x == aim);
+    assert(mr->live_kick_target_z ==
+           (mr->entities.team[(uint32_t)human].side == 0u ? 0xB40 : -0xB40));
+  }
   assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  drop_lc_fixture(&f);
+}
+
+/* Phase 78 [D]: an opponent free kick must keep the native auto row; the live
+ * window binds only a taker on the stored human side. */
+static void test_live_setpiece_does_not_hijack_opponent(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t human = lc_team_for_side(mr, 0u);
+  int32_t opp = lc_team_for_side(mr, 1u);
+  assert(human >= 0 && opp >= 0);
+  mr->state.phase = 7u;
+  mr->act.id = 0u;
+  mr->phase_machine.side_controlled = 1u;
+  mr->live_human_side = 0u;
+  lc_stage_restarts(mr);
+  mr->entities.team[(uint32_t)opp].records[1].code = 0x12u;
+  mr->entities.controlled = opp * FIFA96_MATCH_ENTITY_RECORDS + 1;
+  mr->live_sp_active = 0u;
+  mr->live_sp_hold = 0u;
+  one_granted_frame(mr);
+  assert(mr->state.phase == 7u);
+  assert(mr->live_sp_active == 0u);
+  assert(mr->live_sp_hold == 0u);
+  assert(mr->entities.team[(uint32_t)opp].records[1].code == 0x12u);
+  for (int i = 0; i < 420 && mr->state.phase != 2u; i++)
+    one_granted_frame(mr);
+  assert(mr->state.phase == 2u);   /* the native opponent row still resolves */
+  drop_lc_fixture(&f);
+}
+
+/* Phase 78 [D]: an out-of-play force during a staged set piece must drop the
+ * stale taker row, not leave it to auto-fire from the fallback placement. */
+static void test_live_setpiece_out_force_clears_taker(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t human = lc_team_for_side(mr, 0u);
+  int32_t taker = human * FIFA96_MATCH_ENTITY_RECORDS + 1;
+  int32_t fallback = human * FIFA96_MATCH_ENTITY_RECORDS + 2;
+  assert(human >= 0);
+  mr->state.phase = 7u;
+  mr->act.id = 0u;
+  mr->phase_machine.side_controlled = 0u;
+  mr->live_human_side = 0u;
+  lc_stage_restarts(mr);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &mr->entities.team[(uint32_t)human].records[i];
+    e->pos_x = 0x3000;
+    e->pos_z = 0x3000;
+    e->target_x = e->pos_x;
+    e->target_z = e->pos_z;
+  }
+  mr->entities.team[(uint32_t)human].records[2].pos_x = 0x7D0;
+  mr->entities.team[(uint32_t)human].records[2].pos_z = 0;
+  mr->entities.team[(uint32_t)human].records[2].target_x = 0x7D0;
+  mr->entities.team[(uint32_t)human].records[2].target_z = 0;
+  mr->entities.team[(uint32_t)human].records[1].code = 0x12u;
+  mr->entities.team[(uint32_t)human].records[1].stage92 = 4u;
+  mr->entities.team[(uint32_t)human].records[1].timer89 = 0u;
+  mr->entities.controlled = taker;
+  mr->slot.entity = taker;
+  mr->entities.team[(uint32_t)human].target = taker;
+  mr->live_sp_active = 1u;
+  mr->live_sp_hold = 1u;
+  mr->live_sp_kind = 7u;
+  mr->live_sp_power = 3u;
+  mr->live_sp_frames = 12u;
+  mr->live_sp_taker = taker;
+  mr->live_sp_aim_x = 0;
+  mr->live_sp_prev_input = 0u;
+  mr->goal_snap_x = 1;
+  mr->goal_snap_z = 0;
+  mr->live_out_pending = 1u;
+  mr->live_out_frames = 89u;
+  mr->live_out_kind = 1u;
+  mr->live_out_situation = 2u;
+  mr->live_out_side = 0u;
+  one_granted_frame(mr);
+  assert(mr->state.phase == 2u);
+  assert(mr->live_sp_active == 0u && mr->live_sp_hold == 0u);
+  assert(mr->entities.team[(uint32_t)human].records[1].code != 0x12u);
+  assert(mr->entities.ball.carrier == fallback);
+  drop_lc_fixture(&f);
+}
+
+/* Phase 78 [D]: the bounded player window auto-delivers the derived strike.
+ * This stages the taker directly (the foul chain is covered above) and pins
+ * that an unconfirmed window cannot deadlock either phase 7 or phase 6; the
+ * native row-0x13 ack wait is one of the unported legs. */
+static void test_live_setpiece_timeout_falls_back(uint8_t phase) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t human = lc_team_for_side(mr, 0u);
+  int32_t taker;
+  uint8_t code = phase == 6u ? 0x13u : 0x12u;
+  int32_t goal_z;
+  assert(human >= 0);
+  goal_z = mr->entities.team[(uint32_t)human].side == 0u ? 0xB40 : -0xB40;
+  taker = human * FIFA96_MATCH_ENTITY_RECORDS + 1;
+  mr->state.phase = phase;
+  mr->act.id = 0u;
+  mr->phase_machine.side_controlled = 0u;
+  mr->live_human_side = 0u;
+  lc_stage_restarts(mr);
+  mr->entities.team[(uint32_t)human].records[1].code = code;
+  mr->entities.team[(uint32_t)human].records[1].stage92 = 0u;
+  mr->entities.team[(uint32_t)human].records[1].timer89 = 0u;
+  mr->entities.controlled = taker;
+  mr->slot.entity = taker;
+  mr->entities.team[(uint32_t)human].target = taker;
+  mr->live_sp_active = 1u;
+  mr->live_sp_hold = 1u;
+  mr->live_sp_kind = phase;
+  mr->live_sp_power = 3u;
+  mr->live_sp_frames = 299u;
+  mr->live_sp_taker = taker;
+  mr->live_sp_aim_x = 0;
+  mr->live_sp_prev_input = 0u;
+  one_granted_frame(mr);
+  assert(mr->state.phase == 2u);
+  assert(mr->live_sp_active == 0u && mr->live_sp_hold == 0u);
+  assert(mr->live_kick_active == 1u && mr->live_kick_shot == 1u);
+  assert(mr->live_kick_target_z == goal_z);
+  assert(mr->entities.team[(uint32_t)human].records[1].code != code);
   drop_lc_fixture(&f);
 }
 
@@ -2709,6 +2925,10 @@ int main(void) {
   test_live_ai_tackles_human();
   test_live_ai_tackle_foul_reaches_free_kick();
   test_live_foul_reaches_penalty();
+  test_live_setpiece_does_not_hijack_opponent();
+  test_live_setpiece_out_force_clears_taker();
+  test_live_setpiece_timeout_falls_back(7u);
+  test_live_setpiece_timeout_falls_back(6u);
   test_live_render_eye_stabilizer();
   test_live_offball_shape_moves_team();
   test_live_support_run_moves_forward();

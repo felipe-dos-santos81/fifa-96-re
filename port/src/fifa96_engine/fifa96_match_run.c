@@ -2850,6 +2850,179 @@ static void match_run_live_aim_reset(struct fifa96_match_run *mr,
   if (reset_edge) mr->live_aim_prev_input = 0;
 }
 
+/* Phase 78 [D]: the live free-kick/penalty taker seam. The native phase arm
+ * installs row 0x12 (free kick) or 0x13 (penalty) on the fouled team and the
+ * row auto-fires at stage 4. The native input words 0x4C114/18/1C and the slot
+ * word[+6] 0x20 edge are unported (FU-266/FU-275 legs), so this seam binds the
+ * installed taker, holds the row, and maps the live arrows/KICK to a derived
+ * goal-mouth delivery through the existing live flight primitive. Non-human
+ * takers keep the native auto path; the human timeout auto-delivers the same
+ * derived strike so the unported penalty ack wait cannot hold phase 6. */
+#define MATCH_RUN_LIVE_SETPIECE_WAIT 300u
+#define MATCH_RUN_LIVE_SETPIECE_AIM_STEP 0x20
+#define MATCH_RUN_LIVE_SETPIECE_AIM_MAX 0xC0
+#define MATCH_RUN_LIVE_SETPIECE_POWER_MIN 1u
+#define MATCH_RUN_LIVE_SETPIECE_POWER_MAX 4u
+#define MATCH_RUN_LIVE_SETPIECE_INPUT_MASK 0x1Fu
+
+static void match_run_live_setpiece_reset(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  mr->live_sp_active = 0;
+  mr->live_sp_hold = 0;
+  mr->live_sp_kind = 0;
+  mr->live_sp_power = 0;
+  mr->live_sp_prev_input = 0;
+  mr->live_sp_frames = 0;
+  mr->live_sp_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_sp_aim_x = 0;
+}
+
+static int32_t match_run_live_setpiece_find_taker(const struct fifa96_match_run *mr,
+                                                  int32_t team, uint8_t phase) {
+  uint8_t code = phase == 6u ? 0x13u : 0x12u;
+  int32_t target;
+  if (team < 0 || team >= (int32_t)FIFA96_MATCH_ENTITY_TEAMS) return -1;
+  target = mr->entities.team[(uint32_t)team].target;
+  if (target >= 0 &&
+      target < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) &&
+      (uint32_t)(target / (int32_t)FIFA96_MATCH_ENTITY_RECORDS) == (uint32_t)team &&
+      target % (int32_t)FIFA96_MATCH_ENTITY_RECORDS != 0) {
+    const struct fifa96_match_entity *e =
+        &mr->entities.team[(uint32_t)team]
+             .records[(uint32_t)target % FIFA96_MATCH_ENTITY_RECORDS];
+    if (e->active != 0u && e->skip_98 == 0u && e->skip_9a == 0u &&
+        e->code == code)
+      return target;
+  }
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e =
+        &mr->entities.team[(uint32_t)team].records[i];
+    if (e->active != 0u && e->skip_98 == 0u && e->skip_9a == 0u &&
+        e->code == code)
+      return (int32_t)((uint32_t)team * FIFA96_MATCH_ENTITY_RECORDS + i);
+  }
+  return -1;
+}
+
+static int match_run_live_setpiece_activate(struct fifa96_match_run *mr) {
+  int32_t team = match_run_live_control_team(mr);
+  uint8_t kind = (uint8_t)mr->state.phase;
+  int32_t taker;
+  if (team < 0) return 0;
+  taker = match_run_live_setpiece_find_taker(mr, team, kind);
+  if (taker < 0) return 0;
+  if (match_run_live_control_bind(mr, taker, 0) != 1) {
+    /* The phase arm's taker may not carry a FU-70 slot in the headless pool.
+     * The derived live seam still controls the installed record; the native
+     * bind/merge path is attempted first. */
+    uint32_t t = (uint32_t)taker / FIFA96_MATCH_ENTITY_RECORDS;
+    mr->slot.entity = taker;
+    mr->entities.controlled = taker;
+    mr->entities.team[t].target = taker;
+    (void)fifa96_camera_set_tracked(&mr->render.camera, taker);
+  }
+  mr->live_sp_active = 1;
+  mr->live_sp_hold = 1;
+  mr->live_sp_kind = kind;
+  mr->live_sp_power = 3;
+  mr->live_sp_prev_input = mr->input.held & MATCH_RUN_LIVE_SETPIECE_INPUT_MASK;
+  mr->live_sp_frames = 0;
+  mr->live_sp_taker = taker;
+  mr->live_sp_aim_x = 0;
+  return 1;
+}
+
+/* Phase 78 [D]: consume the player aim/power/confirm. The goal is the opponent
+ * mouth in z; x is the derived aim within the native mouth bound. The confirm
+ * resets the taker row and hands the ball to the phase-2 live flight, so the
+ * existing keeper save/goal armer/out-of-play consumers remain authoritative. */
+static void match_run_live_setpiece_kick(struct fifa96_match_run *mr) {
+  int32_t taker = mr->live_sp_taker;
+  uint32_t team;
+  struct fifa96_match_entity *e;
+  int32_t target_z;
+  int16_t speed;
+  if (taker < 0 ||
+      taker >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    match_run_live_setpiece_reset(mr);
+    return;
+  }
+  team = (uint32_t)taker / FIFA96_MATCH_ENTITY_RECORDS;
+  e = &mr->entities.team[team]
+           .records[(uint32_t)taker % FIFA96_MATCH_ENTITY_RECORDS];
+  target_z = mr->entities.team[team].side == 0u ? 0xB40 : -0xB40;
+  speed = (int16_t)(8 + (int16_t)mr->live_sp_power * 2);
+  e->timer89 = 0;
+  (void)fifa96_match_entities_install(e, 2u, 0u, 0);
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  (void)fifa96_ball_pair_clear(&mr->entities.ball.pair);
+  match_run_live_kick_consumed_clear(mr);
+  match_run_live_kick_sig_clear(mr);
+  mr->live_kick_target_x = mr->live_sp_aim_x;
+  mr->live_kick_target_z = target_z;
+  mr->live_kick_speed = speed;
+  mr->live_kick_frames = MATCH_RUN_LIVE_FLIGHT_GOAL_FRAMES;
+  mr->live_kick_active = 1u;
+  mr->live_kick_shot = 1u;
+  mr->live_shot_pending = 1u;
+  mr->live_kick_hold = MATCH_RUN_LIVE_CONTROL_HOLD_FRAMES;
+  mr->live_restart_pending = 0;
+  match_run_ball_settle_clear(mr);
+  mr->ref_restart_stage = 0;
+  (void)fifa96_match_run_situation(mr, 0x0Bu);
+  match_run_live_setpiece_reset(mr);
+}
+
+static void match_run_live_setpiece_update(struct fifa96_match_run *mr) {
+  uint8_t sample;
+  uint8_t rising;
+  int32_t team;
+  if (!mr || !mr->live_start) return;
+  if (mr->state.phase != 6u && mr->state.phase != 7u) {
+    match_run_live_setpiece_reset(mr);
+    return;
+  }
+  if (mr->live_sp_active == 0u) {
+    if (match_run_live_setpiece_activate(mr) == 0) return;
+  }
+  team = match_run_live_control_team(mr);
+  if (team < 0 || mr->live_sp_taker < 0 ||
+      match_run_live_setpiece_find_taker(mr, team, mr->live_sp_kind) !=
+          mr->live_sp_taker) {
+    match_run_live_setpiece_reset(mr);
+    return;
+  }
+  if (++mr->live_sp_frames >= MATCH_RUN_LIVE_SETPIECE_WAIT) {
+    /* Bounded player window: auto-deliver the same derived strike. The native
+     * row-0x13 stage-5 ack wait is one of the unported FU-266/FU-275 legs and
+     * can hold phase 6 forever, so the human timeout does not hand back to
+     * that row. Non-human takers still use the native auto row untouched. */
+    mr->live_sp_hold = 0;
+    match_run_live_setpiece_kick(mr);
+    return;
+  }
+  sample = mr->input.held & MATCH_RUN_LIVE_SETPIECE_INPUT_MASK;
+  rising = (uint8_t)(sample & (uint8_t)~mr->live_sp_prev_input);
+  mr->live_sp_prev_input = sample;
+  if ((rising & 0x04u) != 0u) mr->live_sp_aim_x += MATCH_RUN_LIVE_SETPIECE_AIM_STEP;
+  if ((rising & 0x08u) != 0u) mr->live_sp_aim_x -= MATCH_RUN_LIVE_SETPIECE_AIM_STEP;
+  if (mr->live_sp_aim_x > MATCH_RUN_LIVE_SETPIECE_AIM_MAX)
+    mr->live_sp_aim_x = MATCH_RUN_LIVE_SETPIECE_AIM_MAX;
+  if (mr->live_sp_aim_x < -MATCH_RUN_LIVE_SETPIECE_AIM_MAX)
+    mr->live_sp_aim_x = -MATCH_RUN_LIVE_SETPIECE_AIM_MAX;
+  if ((rising & 0x01u) != 0u &&
+      mr->live_sp_power < MATCH_RUN_LIVE_SETPIECE_POWER_MAX)
+    mr->live_sp_power++;
+  if ((rising & 0x02u) != 0u &&
+      mr->live_sp_power > MATCH_RUN_LIVE_SETPIECE_POWER_MIN)
+    mr->live_sp_power--;
+  if ((rising & 0x10u) != 0u) {
+    mr->live_sp_hold = 0;
+    match_run_live_setpiece_kick(mr);
+    return;
+  }
+}
+
 /* Phase 75 [D]: clear the derived support-run selection. Called on init,
  * begin, possession loss, restarts and any non-play phase. */
 /* Phase 76 [D]: clear the manual switch override/queued edge. The physical
@@ -3191,7 +3364,23 @@ static void match_run_live_out_force(struct fifa96_match_run *mr) {
   uint8_t side = mr->live_out_side;
   int32_t sign_x = mr->goal_snap_x < 0 ? -1 : 1;
   int32_t sign_z = mr->goal_snap_z < 0 ? -1 : 1;
+  int32_t setpiece_taker = mr->live_sp_active ? mr->live_sp_taker
+                                              : FIFA96_MATCH_ENTITY_NONE;
   if (side > 1u) side = 0u;
+  /* Phase 78 [D]: an out-of-play force can land during a staged free kick or
+   * penalty. Reset the installed taker before the fallback placement; if the
+   * fallback selects the same record it is re-installed as the throw/corner
+   * taker below, otherwise the stale 0x12/0x13 row cannot auto-fire in phase 2. */
+  if (setpiece_taker >= 0 &&
+      setpiece_taker <
+          (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    struct fifa96_match_entity *se =
+        &mr->entities.team[(uint32_t)setpiece_taker / FIFA96_MATCH_ENTITY_RECORDS]
+             .records[(uint32_t)setpiece_taker % FIFA96_MATCH_ENTITY_RECORDS];
+    se->timer89 = 0;
+    (void)fifa96_match_entities_install(se, 2u, 0u, 0);
+  }
+  match_run_live_setpiece_reset(mr);
   switch (mr->live_out_situation) {
     case 2u: {   /* throw-in */
       x = sign_x * 0x7D0;
@@ -3280,7 +3469,10 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
   int32_t t;
   int32_t id = FIFA96_MATCH_ENTITY_NONE;
   if (!mr || !mr->live_start) return;
-  if (mr->state.phase == 2u) mr->live_halftime_pending = 0;
+  if (mr->state.phase == 2u) {
+    match_run_live_setpiece_reset(mr);
+    mr->live_halftime_pending = 0;
+  }
   if (mr->live_halftime_pending && mr->state.phase != 2u) {
     if (++mr->live_halftime_frames >= 90u) {
       fifa96_match_run_period_over_rearm(mr);
@@ -3326,6 +3518,13 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     match_run_live_aim_reset(mr, 1);
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
+    /* Phase 78 [D]: the free-kick/penalty taker owns the aim/confirm window
+     * after the ordinary staged-phase cleanup; every other staged phase drops
+     * the window. */
+    if (mr->state.phase == 6u || mr->state.phase == 7u)
+      match_run_live_setpiece_update(mr);
+    else
+      match_run_live_setpiece_reset(mr);
     return;
   }
   if (mr->live_restart_pending != 0u) {
@@ -3336,6 +3535,7 @@ static void match_run_live_control_update(struct fifa96_match_run *mr) {
     mr->live_kick_active = 0u;
     mr->live_kick_shot = 0u;
     match_run_live_aim_reset(mr, 1);
+    match_run_live_setpiece_reset(mr);
     mr->live_save_hold = 0u;
     mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
     match_run_live_support_reset(mr);
@@ -4389,6 +4589,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   match_run_live_kick_consumed_clear(mr);
   mr->live_kick_shot = 0;              /* P8: no live shot flight */
   match_run_live_aim_reset(mr, 1);     /* P9: centre shot aim */
+  match_run_live_setpiece_reset(mr);   /* Phase 78: no set-piece window */
   mr->live_save_hold = 0;              /* P8: no live save hold */
   mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
   mr->live_cpu_hold = 0;
@@ -4469,6 +4670,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   match_run_live_kick_consumed_clear(mr);
   mr->live_kick_shot = 0;              /* P8: fresh live shot marker */
   match_run_live_aim_reset(mr, 1);     /* P9: fresh centre shot aim */
+  match_run_live_setpiece_reset(mr);   /* Phase 78: no set-piece window */
   mr->live_save_hold = 0;              /* P8: fresh live save hold */
   mr->live_save_record = FIFA96_MATCH_ENTITY_NONE;
   mr->live_cpu_hold = 0;
@@ -8405,6 +8607,39 @@ static void match_run_draw_sub_menu(const struct fifa96_match_run *mr,
                        r->hud_text_shades);
 }
 
+/* Phase 78 [D]: the live-only free-kick/penalty prompt. Screen-space text
+ * keeps the renderer independent of the unported native aim/camera UI. */
+#define MATCH_RUN_SP_PANEL_W 250
+#define MATCH_RUN_SP_PANEL_H 58
+
+static void match_run_draw_setpiece(const struct fifa96_match_run *mr,
+                                    struct fifa96_surface *s) {
+  const struct fifa96_match_run_render *r = &mr->render;
+  char row[48];
+  int x;
+  int y;
+  if (!mr->live_start || !mr->live_sp_active || !match_run_hud_font_ready(r))
+    return;
+  const fifa96_font *font = match_run_hud_font(r);
+  const uint8_t ink = r->hud_colors_ready ? r->hud_ink : FIFA96_MATCH_HUD_INK_DEFAULT;
+  x = (s->width - MATCH_RUN_SP_PANEL_W) / 2;
+  y = s->height - MATCH_RUN_SP_PANEL_H - 12;
+  if (y < 0) y = 0;
+  match_run_panel_fill(s, x, y, MATCH_RUN_SP_PANEL_W, MATCH_RUN_SP_PANEL_H, ink);
+  match_run_panel_text(s, font, mr->live_sp_kind == 6u ? "PENALTY" : "FREE KICK",
+                       x, MATCH_RUN_SP_PANEL_W, y + 5, ink, 0x00,
+                       r->hud_text_shades);
+  (void)snprintf(row, sizeof row, "AIM %d  POWER %u",
+                 (int)(mr->live_sp_aim_x / 0x20), (unsigned)mr->live_sp_power);
+  match_run_panel_text(s, font, row, x, MATCH_RUN_SP_PANEL_W, y + 20, ink, 0x00,
+                       r->hud_text_shades);
+  match_run_panel_text(s, font, "LEFT/RIGHT AIM  UP/DOWN POWER", x,
+                       MATCH_RUN_SP_PANEL_W, y + 34, ink, 0x00,
+                       r->hud_text_shades);
+  match_run_panel_text(s, font, "Z / ENTER: KICK", x, MATCH_RUN_SP_PANEL_W,
+                       y + 46, ink, 0x00, r->hud_text_shades);
+}
+
 static void match_run_draw_halftime(const struct fifa96_match_run *mr,
                                     struct fifa96_surface *s) {
   const struct fifa96_match_run_render *r = &mr->render;
@@ -9266,6 +9501,9 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
              mr->live_halftime_pending &&
              (mr->state.phase == 0x0Cu || mr->state.phase == 1u))
       match_run_draw_halftime(mr, s);
+    else if (mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
+             mr->live_sp_active)
+      match_run_draw_setpiece(mr, s);
   }
   return 0;
 }

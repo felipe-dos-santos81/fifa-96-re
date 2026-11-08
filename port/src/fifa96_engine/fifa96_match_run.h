@@ -1414,6 +1414,24 @@ struct fifa96_match_run {
    * cannot re-arm the aim. Live-only; the M1/M2 tapes never read it. */
   int32_t live_aim_goal_x;
   uint8_t live_aim_prev_input;   /* previous aim sample (0x73) */
+  /* Phase 78 (FU-149/FU-266 live seam) — player-controlled free kick / penalty
+   * [D]. The native phase arm installs the taker row 0x12/0x13 on the fouled
+   * side and the row auto-fires at stage 4. When the human is that taker, the
+   * live update binds the record and holds the row until the player confirms
+   * or the bounded wait expires; both paths launch the existing live flight
+   * with a derived target (aim x, opponent goal z), while a non-human taker
+   * keeps the native auto row. The shot and keeper/goal consumers stay the
+   * native/derived chain. The native input
+   * words 0x4C114/18/1C and the slot word[+6] 0x20 edge are unported legs, so
+   * the aim/power/confirm mapping is explicitly derived. Live-only. */
+  uint8_t live_sp_active;
+  uint8_t live_sp_hold;          /* row-0x12/0x13 stage-4 gate */
+  uint8_t live_sp_kind;          /* 6 penalty / 7 free kick */
+  uint8_t live_sp_power;         /* 1..4, mapped to live flight speed */
+  uint8_t live_sp_prev_input;    /* previous arrow+KICK sample */
+  uint16_t live_sp_frames;       /* active wait counter */
+  int32_t live_sp_taker;         /* bound taker pool id or NONE */
+  int32_t live_sp_aim_x;         /* derived goal-mouth x target */
   int32_t live_kick_sig_actor;
   int16_t live_kick_sig_traj;
   int16_t live_kick_sig_vx, live_kick_sig_vh, live_kick_sig_vz;

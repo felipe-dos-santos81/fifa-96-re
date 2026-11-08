@@ -2124,6 +2124,12 @@ static int fifa96_match_action_12(struct fifa96_match_run *mr) {
     stage = 4u;
   }
   if (stage == 4u) {                                      /* 0x841AD */
+    /* Phase 78 [D]: the live human taker owns the aim/confirm window. Hold the
+     * native auto delivery here; the timeout clears the gate and the row runs
+     * its normal path. */
+    if (mr->live_start && mr->live_sp_hold != 0u &&
+        mr->live_sp_taker == r->entity_id)
+      return FIFA96_OK;
     /* 0x841AD..0x84425: the kick block. The native selects the seven-arm event
      * sub-table 0x83D4C by `[0x1587B4]-1` (or the per-team 0x1587E8 table when
      * `[team+0x7E7] != 0`) and passes each arm's own vector; the
@@ -2270,6 +2276,12 @@ static int fifa96_match_action_13(struct fifa96_match_run *mr) {
     stage = 4u;
   }
   if (stage == 4u) {                                      /* 0x84E26 */
+    /* Phase 78 [D]: the live human taker owns the aim/confirm window. Hold the
+     * native auto delivery here; the timeout clears the gate and the row runs
+     * its normal path. */
+    if (mr->live_start && mr->live_sp_hold != 0u &&
+        mr->live_sp_taker == r->entity_id)
+      return FIFA96_OK;
     /* 0x84E2D..0x84E36: the FUN_00078AA4 slot restore when word[slot+6] == 0
      * (leg); 0x84E3B..0x84E44 the FUN_0007B9C4 penalty strike with a NULL
      * input vector and mode 0x40. */
