@@ -1,5 +1,6 @@
 #include "fifa96_loader/fifa96_camera.h"
 #include "fifa96_loader/fifa96_entity_update.h"
+#include "fifa96_loader/fifa96_projection.h"
 #include "fifa96_loader/fifa96_rng.h"
 
 #include <string.h>
@@ -589,15 +590,6 @@ static int32_t camera_atan16(int32_t x, int32_t z) {
   return (int32_t)(((uint32_t)angle * 0x40u) & 0xFFFFu);
 }
 
-static int32_t camera_sin16(int32_t angle) {
-  uint32_t u = (uint32_t)angle & 0xFFFFu;
-  return fifa96_entity_sine((int32_t)(u >> 6));
-}
-
-static int32_t camera_cos16(int32_t angle) {
-  return camera_sin16(angle + 0x4000);
-}
-
 static int32_t camera_mul16(int32_t a, int32_t b) {
   return (int32_t)(((int64_t)a * (int64_t)b) >> 16);
 }
@@ -640,10 +632,9 @@ int fifa96_camera_behavior_action(fifa96_camera_handler_state *st, int live,
   /* FUN_0004C7F8: X(pitch) * Y(-yaw) applied to the native vector
    * {0,0,speed}. The resulting offset is (off_x, off_y, off_z); the camera
    * is target - offset. */
-  sin_y = camera_sin16(target_yaw);
-  cos_y = camera_cos16(target_yaw);
-  sin_p = camera_sin16(target_pitch);
-  cos_p = camera_cos16(target_pitch);
+  if (fifa96_projection_sincos(target_yaw, &sin_y, &cos_y) != FIFA96_OK ||
+      fifa96_projection_sincos(target_pitch, &sin_p, &cos_p) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
   off_x = (int32_t)(((int64_t)speed *
                      camera_mul16(-cos_p, sin_y)) >> 16);
   off_y = (int32_t)(((int64_t)speed * -sin_p) >> 16);

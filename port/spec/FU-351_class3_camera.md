@@ -122,3 +122,14 @@ the `FUN_0004DB38` handler is ported. FU-348-L4 ("`FUN_0004DB38` and its
 helpers are mapped but not ported; the live eye is the derived envelope") is
 closed for the handler and live eye; the target producer and camera-type
 selection remain FU351-L1/L2.
+
+## 6. FU351-L3 closed — exact 0xA1A60 sincos (2026-11-09)
+
+**Erratum (quoted).** §5 FU351-L3: "exact `FUN_000A1A60` sine/cos 6-bit
+interpolation. The port uses the 257-entry table at `>>6` resolution..." —
+closed. `fifa96_camera_behavior_action` now calls
+`fifa96_projection_sincos` (the FU-88 port of the `0xA1A60`/`0xCE3B0`
+257-entry table plus the 6-bit correction), not the entity sine table at
+`>>6`. `fifa96_camera` links `fifa96_projection` for the primitive. The
+camera geometry, tick and clamps are unchanged; `test_camera` and the live
+camera test still pass. `make check` **124/124**; M1/M2 `cmp` exact.

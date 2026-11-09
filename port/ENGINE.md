@@ -12148,3 +12148,12 @@ class-3 target. Full record: `port/spec/FU-351_class3_camera.md`.
 ("`FUN_0004DB38` and its helpers are mapped but not ported; the live eye is
 the derived envelope") are corrected for the handler and live eye. The native
 target producer and camera-type selection remain FU351-L1/L2.
+
+## Phase 92 — exact class-3 sincos (2026-11-09)
+
+FU351-L3 closed. `fifa96_camera_behavior_action` now uses
+`fifa96_projection_sincos` (the exact FU-88 `0xA1A60`/`0xCE3B0` 257-entry
+table + 6-bit correction) instead of the entity sine table at `>>6`.
+`fifa96_camera` links `fifa96_projection` for the primitive. Geometry, tick
+and clamps are unchanged; the live and unit camera tests still pass.
+`make check` **124/124**; M1/M2 `cmp` exact. Record: FU-351 §6.

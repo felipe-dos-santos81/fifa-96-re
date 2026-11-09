@@ -4789,3 +4789,10 @@ close-out below).
   `port/spec/FU-351_class3_camera.md`. Open legs: native live target producer
   and camera-type/view-mode selection, exact `0xA1A60` sine interpolation, the
   class-3 target-history copy, and the pan/pose interaction.
+
+- **Phase 92 exact class-3 sincos (2026-11-09).** FU351-L3 closed:
+  `fifa96_camera_behavior_action` now calls `fifa96_projection_sincos`, the
+  exact FU-88 `0xA1A60`/`0xCE3B0` 257-entry table plus 6-bit correction,
+  instead of the entity sine table at `>>6`. The camera library links the
+  projection primitive; geometry, tick and clamps are unchanged.
+  `make check` green 124/124; M1/M2 `cmp` exact. Record: FU-351 §6.
