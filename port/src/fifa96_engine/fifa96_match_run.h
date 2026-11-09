@@ -1821,18 +1821,20 @@ int fifa96_match_run_set_paused(struct fifa96_match_run *mr, int paused);
  * roster slots using the native formation layout (0x11033A): role-matching,
  * highest rating first, then unused non-GK, then any unused. `positions` and
  * `ratings` are the bridge-filled PCCD bytes; with no PCCD data the map is the
- * identity (pitch i -> roster i, bench 11..15). The map is immutable once any
- * substitution has been applied. Returns 1 when rebuilt, 0 when refused
- * (already used), or -FIFA96_ERR_INVALID (NULL). */
+ * identity (pitch i -> roster i, bench 11..15). The map itself is immutable
+ * once any substitution has been applied, but the derived per-pitch appearance
+ * remap is rebuilt whenever a substitution changes it (FU-348). Returns 1 when
+ * rebuilt, 0 when refused (already used), or -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_sub_rebuild(struct fifa96_match_run *mr);
 
 /* P15: apply one explicit OUT/IN pair. `out_pitch` is 0..10 and `in_roster`
  * 0..15. Enforces the derived three-sub cap, an unused bench slot, and
  * GK-for-GK only. On success updates `sub_lineup`/`sub_bench_avail`,
- * `sub_used`, the R1 strip/record state and the pause notice; returns 1. A
- * refusal returns 0 with `sub_menu_status` set (3 GK mismatch, 8 used player,
- * 0x80 limit, 0x81 no match). Negative errors: NULL/invalid index, run not
- * running, or not live/paused. No score/phase/entity/ball write. */
+ * `sub_used`, the R1 strip/record state and the pause notice, and rebuilds
+ * `render.remap_entity` from the updated lineup (FU-348); returns 1. A refusal
+ * returns 0 with `sub_menu_status` set (3 GK mismatch, 8 used player, 0x80
+ * limit, 0x81 no match). Negative errors: NULL/invalid index, run not running,
+ * or not live/paused. No score/phase/entity/ball write. */
 int fifa96_match_run_pause_sub_apply(struct fifa96_match_run *mr,
                                      int out_pitch, int in_roster);
 

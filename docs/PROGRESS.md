@@ -4700,3 +4700,23 @@ close-out below).
   `p86-kick-pose.png`. The native lineup matrix, the full `FUN_00047298`
   template pass, native possession staging (`0x7A490`) and vertical ball
   staging remain legs.
+
+- **Phase 87 substitution remap rebuild and ball-vector/vertical re-read
+  (2026-11-09).** A pause substitution updated the lineup map but left the
+  live per-pitch appearance remap stale, so the incoming player kept the
+  outgoing player's skin/hair. The remap builder is now shared between the
+  atomic live-kit stage and a rebuild called by the substitution path
+  (`render.remap_entity` recomposed from `render.remap_team` and the updated
+  `sub_lineup`). The native `0x14C360` desired order and the full
+  `FUN_00047298` 23-descriptor pass remain legs; the fix is correct for the
+  derived map. A fresh Ghidra re-read also settles two open legs: the
+  `0x7A490` event vector is `{distance, dx, dz}` plus a separate trajectory
+  word (not a vertical triple), and the rendered ball record's Y has no
+  per-frame producer — `FUN_0008C24C` forces it to 0 and `FUN_0008BAF0` only
+  reads it. Native vertical ball physics is therefore closed as not-native;
+  no gravity/bounce model was added. The row-05 tail release/target/camera
+  algebra is now fully specified (`FU-348` §4), and the class-3 camera
+  integrator remains the prerequisite for replacing the derived carried-ball
+  glue. `make check` **124/124**; M1 exact `09b726b7…`; M2 exact
+  `41521559…`; census unchanged. Full record:
+  `port/spec/FU-348_substitution_remap_and_ball_legs.md`.

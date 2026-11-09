@@ -11927,3 +11927,50 @@ full `FUN_00047298` template pass and `FUN_0001CAEC(9/0xD)` gates remain open;
 native possession staging `0x7A490`, row-05 target algebra
 `0x7F3A1..0x7F57B`, native vertical ball staging, the ball-pair OL-52/OL-62
 row provenance and the class-3 camera integrator remain open legs.
+
+## Phase 87 — substitution remap rebuild; ball-vector/vertical re-read (2026-11-09)
+
+**Symptom.** A pause substitution changed `sub_lineup[side][pitch]` but the
+live sprite still drew the outgoing player's skin/hair. `render.remap_entity`
+was built once by `match_run_stage_live_kit`; nothing rebuilt it after
+`fifa96_match_run_pause_sub_apply`.
+
+**Fix.** `match_run_build_entity_remaps` is now the one builder used by the
+atomic stage path and by `match_run_rebuild_entity_remaps`, which
+`pause_sub_apply` calls after the lineup/bench update. It composes
+`render.remap_team[side]` with the incoming roster slot's native
+`FUN_0004C00C`/`FUN_0004C098` skin/hair classes. No score, phase, entity,
+ball, camera or census cell is written. The native `0x14C360` desired-order
+producer and the full `FUN_00047298` 23-descriptor pass remain legs; the fix
+is correct for the derived `sub_lineup` map.
+
+**Ball-vector/vertical re-read.** Fresh `0x7A140`/`0x7F360` disassembly and
+`0x7A084`/`0x795B4` decompiles settle the block: `0x158738` = distance,
+`0x15873A` = dx, `0x15873C` = dz, `0x15873E` = trajectory (camera
+height/angle parameter), `0x158740` = angle. It is a planar triple plus a
+trajectory word, not `{x,y,z}`. Fresh `get_xrefs_to 0x158810` shows the
+rendered ball record Y is written only by the reset/commit/penalty places
+(`0x88761`, `0x8C295/0x8C299`, `0x84BC6`); `FUN_0008C24C` forces y := 0
+(`0x8C299`), and `FUN_0008BAF0` only reads y and writes x/z. **Native vertical
+ball physics is not a leg because it does not exist in the read paths**; do
+not invent gravity/bounce for the native ball record.
+
+**Row-05 tail.** `0x7F3A1..0x7F57B` is fully specified in
+`port/spec/FU-348_substitution_remap_and_ball_legs.md` §4 (target triple,
+`speed = word[+0x71] + cameraY`, `0x71C94` event with
+`{distance, step_x, step_z}`, release `has_slot ? 4 : distance >> 2` plus
+`word[0x1577F8]`, clamp `0x3C`, `0x157A4F` parity arm). FU251-L2 is resolved:
+the overlapping `[ESP+0x0a] >> 0x12` is exactly `distance >> 2`. The engine
+still reports `out.tail`; the target/event binding is FU348-L3.
+
+**Class-3 camera.** `FUN_0004DB38` remains the mapped but unported side-camera
+integrator (`0x4C7D0/0x4C77C/0x4C7F8/0x49388` helpers); the live eye is the
+Phase-81 derived envelope. The carried-ball glue is a camera-director
+workaround, not a `0x7A490` stand-in: possession staging never writes the
+rendered ball record.
+
+**Verification.** `make check` **124/124**; M1 `cmp` exact `09b726b7…`; M2
+`cmp` exact `41521559…`; census unchanged 78/78 ported, 58/80 naturally wired.
+New test: `test_engine_match_render.c::test_live_substitution_rebuilds_remap`
+(RED on the pre-fix tree at the incoming skin-class assert). Full record:
+`port/spec/FU-348_substitution_remap_and_ball_legs.md`.

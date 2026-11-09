@@ -1619,6 +1619,52 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   live_fixture_drop(&f);
 }
 
+/* P15/FU-348: a substitution changes the pitch record's roster identity, so the
+ * per-pitch appearance remap must be rebuilt from the updated sub_lineup (the
+ * native FUN_00047298 template pass reads the current roster descriptor, not a
+ * stage-time snapshot). The map was built once by match_run_stage_live_kit; a
+ * stale table draws the outgoing player's skin/hair after the swap. */
+static void test_live_substitution_rebuilds_remap(void) {
+  struct live_fixture f;
+  live_fixture_make(&f);
+  struct fifa96_match_run *mr = &f.mr;
+  struct fifa96_match_run_render *r = &mr->render;
+
+  /* Stage the starting map: pitch 1 is roster 0 (skin '3' -> class 2 base
+   * 0xE4, hair '4' -> class 0). */
+  mr->sub_lineup[0][1] = 0;
+  mr->roster_skin_code[0][0] = '3';
+  mr->roster_hair_code[0][0] = '4';
+  assert(fifa96_match_run_stage_pitch(mr, f.engine) == 0);
+  assert(r->remap_entity[0][1][0xDB] == 0xE4);
+  assert(r->remap_entity[0][1][0x75] == 0xE8);
+  assert(r->remap_entity[0][1][0xD7] == 0x00);
+  assert(r->remap_entity[0][2][0xDB] == 0xF6);   /* untouched default */
+
+  /* Substitute roster 5 (skin '1' -> class 3 base 0xDB, hair '4' -> class 0)
+   * onto pitch 1. */
+  mr->roster_pos[0][0] = 'D';
+  mr->roster_pos[0][5] = 'M';
+  mr->roster_skin_code[0][5] = '1';
+  mr->roster_hair_code[0][5] = '4';
+  mr->sub_bench_avail[0] = (uint16_t)(1u << 5);
+  mr->sub_lineup_ready = 1;
+  mr->sub_used[0] = 0;
+  mr->sub_menu_open = 1;
+  mr->sub_menu_side = 0;
+  assert(fifa96_match_run_set_paused(mr, 1) == 0);
+  assert(fifa96_match_run_pause_sub_apply(mr, 1, 5) == 1);
+  assert(mr->sub_lineup[0][1] == 5);
+
+  assert(r->remap_entity[0][1][0xDB] == 0xDB);
+  assert(r->remap_entity[0][1][0x75] == 0xDF);
+  assert(r->remap_entity[0][1][0xD7] == 0x00);
+  assert(r->remap_entity[0][2][0xDB] == 0xF6);   /* pitch 2 unchanged */
+  assert(r->remap_entity[0][2][0xD7] == 0xD7);
+
+  live_fixture_drop(&f);
+}
+
 /* P6: the pre-begin Team Select handout drives the per-side formation. Team 0
  * always takes the home `.fmt`; team 1 is reseeded from its own `.fmt` only
  * when the ids differ (Brazil 1 vs Italy 2 here). */
@@ -2887,6 +2933,7 @@ int main(void) {
     test_live_begin_formation_pitch_and_kit();
     test_live_matchup_formations();
     test_live_real_team_kits();
+    test_live_substitution_rebuilds_remap();
   } else {
     puts("test_engine_match_render: no ISO, live pitch case skipped");
   }
