@@ -2117,6 +2117,18 @@ static int32_t match_run_stage_heading(int16_t word) {
   return (int32_t)((uint32_t)(uint16_t)word << 16);
 }
 
+/* Phase-84: the native 0xA2A10 view/position angle addend. The native
+ * function is a 16-bit atan2 over the camera-relative (x, z) pair with
+ * +z = 0x0000, +x = 0x4000, -z = 0x8000 and -x = 0xC000 (capstone decode of
+ * 0xA2A10 and the 0xA29F0 quadrant table). `fifa96_entity_angle` is the same
+ * atan in the native 10-bit unit, so scaling by 0x40 reproduces the 16-bit
+ * result. */
+int32_t fifa96_match_run_view_addend(int32_t rel_x, int32_t rel_z) {
+  int32_t angle10 = 0;
+  if (fifa96_entity_angle(rel_x, rel_z, &angle10) != FIFA96_OK) return 0;
+  return (int32_t)(uint16_t)((uint16_t)angle10 * 0x40u);
+}
+
 /* FU-85 §4/FUN_00036C70 (first-hand disassemble_function 0x36C70) stages the
  * 23 render slots per frame body: team 0 records 0..10 (base 0x1588A4) then
  * team 1 records 0..10 (0x1590D9), each from rec+0x59/5D/61 with hidden set by
@@ -2141,6 +2153,92 @@ static int32_t match_run_stage_heading(int16_t word) {
  * `delta<<4` (the whole-frame delta `[0x57A64]`, FU-62 §4.3). The non-terminal
  * next_id chain is ported; terminal steering/duration is live-gated below;
  * the height-gated row-0x5A special case remains open. */
+/* One native composer animation pass for a staged slot (FUN_0008E008).
+ * `delta` is the whole-frame delta of the granted 30 Hz frame; the scene
+ * composer runs once per granted frame from the frame body. */
+static void match_run_animate_entity(struct fifa96_match_run *mr, uint32_t i,
+                                     uint16_t delta) {
+  struct fifa96_match_run_render *r = &mr->render;
+  struct fifa96_match_run_entity *e = &r->entities[i];
+  struct fifa96_match_entity *rec = NULL;
+  if (i < FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)
+    rec = &mr->entities.team[i / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[i % FIFA96_MATCH_ENTITY_RECORDS];
+  if (e->stage.anim_id >= 0x6F) return;   /* the resolver's signed id gate */
+  fifa96_anim_row row;
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  (int32_t)e->stage.anim_id, &row) != FIFA96_OK)
+    return;
+  e->bank_index = row.sprite_bank;
+  /* FU-161 §5.2 (T3): the aux-0x2B frame freeze — the arm zeroed the frame
+   * timer (`word[+0x32] = 0`, 0x6EA03) for this frame while the arc is
+   * airborne, so the frame holds (native: the timer never expires; the
+   * engine skips the advance). Consumption is take-once per staging. */
+  if (rec != NULL && rec->frame_freeze) {
+    rec->frame_freeze = 0;
+    e->anim_timer = 0;
+    return;
+  }
+  fifa96_anim_frame record;
+  if (fifa96_animation_frame(r->frames, (int32_t)e->stage.frame, row.last_frame,
+                             &record) != FIFA96_OK)
+    return;
+  /* FU172 §5 (Tier 2): terminal rows take the steering table's duration
+   * (the walk cadence); non-terminal rows keep the frame record duration. */
+  uint16_t duration = record.duration;
+  /* Live-only presentation gate: the tape/headless paths keep the prior
+   * terminal no-op so M1/M2 stay byte-identical. The live match uses the
+   * native walk-family selection and cadence. */
+  int terminal = mr->live_start && rec != NULL && (row.flags & 0x01u) != 0;
+  if (terminal) {
+    /* FU172 §5: terminal duration is table[speed*2 + 1] — no lean offset. */
+    int index = match_run_steering_index(rec, 0);
+    duration = match_run_steering_table(rec)[index].duration;
+  }
+  fifa96_anim_advance state;
+  state.timer = e->anim_timer;
+  state.delta = delta;
+  state.frame_index = e->stage.frame;
+  state.turn = e->anim_turn;
+  uint8_t prev_frame = (uint8_t)e->stage.frame;
+  fifa96_anim_advance_out out;
+  if (fifa96_animation_advance(&state, duration, row.last_frame, &out) !=
+      FIFA96_OK)
+    return;
+  e->anim_timer = state.timer;
+  e->stage.frame = out.frame_index;
+  if (rec) {
+    rec->frame = (uint8_t)out.frame_index;   /* OL-80 +0x3D */
+    /* FU-159 §5.2/§3.1 + FU172 §4 (Tier 2): terminal rows re-select the
+     * walk family at every timer expiry; non-terminal rows keep the
+     * `prev_frame >= last_frame` next_id chain. The install changes the
+     * row, so re-stage the same frame's slot from the record (the native
+     * `FUN_00036C70` reads after the machine's install). */
+    if (terminal && out.advanced) {
+      uint8_t old_id = rec->anim_id;
+      /* The native install uses the pre-expiry +0x3D frame plus the lean;
+       * do not add the already-applied advance a second time. */
+      rec->frame = prev_frame;
+      (void)fifa96_match_run_record_anim_successor_turn(rec, e->anim_turn);
+      if (rec->anim_id == old_id) rec->frame = (uint8_t)out.frame_index;
+      e->stage.anim_id = (int32_t)rec->anim_id;
+      if (fifa96_animation_row_lookup(match_run_anim_rows,
+                                      FIFA96_ANIM_ROW_COUNT,
+                                      (int32_t)rec->anim_id, &row) == FIFA96_OK)
+        e->bank_index = row.sprite_bank;
+      e->stage.frame = (int32_t)rec->frame;
+    } else if (!terminal && out.advanced && prev_frame >= row.last_frame) {
+      (void)fifa96_match_run_record_anim_successor(rec);
+      e->stage.anim_id = (int32_t)rec->anim_id;
+      if (fifa96_animation_row_lookup(match_run_anim_rows,
+                                      FIFA96_ANIM_ROW_COUNT,
+                                      (int32_t)rec->anim_id, &row) == FIFA96_OK)
+        e->bank_index = row.sprite_bank;
+      e->stage.frame = (int32_t)rec->frame;
+    }
+  }
+}
+
 static void match_run_scene_stage(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r = &mr->render;
   uint32_t slot = 0;
@@ -2180,7 +2278,8 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
    * carry lands in bit 4. The presenter's out-of-range sanitizer (0x5739D: a
    * frame >= the bank count draws frame 0 and clears the low nibble) is
    * applied here — the drawn-frame-equivalent site; natively it runs at draw
-   * time (L158.2). */
+   * time (L158.2). This composer runs once per granted 30 Hz frame from the
+   * frame body, so the ball roll and sprite timers share the native cadence. */
   if (mr->entities.ball.vel_x != 0 || mr->entities.ball.vel_z != 0) {
     uint8_t lo = (uint8_t)((r->ball_roll & 0x0Fu) + 1u);
     r->ball_roll = (uint8_t)((r->ball_roll & 0xF0u) | lo);
@@ -2191,89 +2290,8 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
     r->ball_roll &= 0xF0u;
 
   if (!r->frames) return;
-  for (uint32_t i = 0; i < r->entity_count; i++) {
-    struct fifa96_match_run_entity *e = &r->entities[i];
-    /* Slots 0..21 are the two teams' records; slot 22 is the ball (no +0x3D
-     * frame field), so the frame write-back targets the pool record. */
-    struct fifa96_match_entity *rec = NULL;
-    if (i < FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) {
-      rec = &mr->entities.team[i / FIFA96_MATCH_ENTITY_RECORDS]
-                 .records[i % FIFA96_MATCH_ENTITY_RECORDS];
-    }
-    if (e->stage.anim_id >= 0x6F) continue;   /* the resolver's signed id gate */
-    fifa96_anim_row row;
-    if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
-                                    (int32_t)e->stage.anim_id, &row) != FIFA96_OK)
-      continue;
-    e->bank_index = row.sprite_bank;
-    /* FU-161 §5.2 (T3): the aux-0x2B frame freeze — the arm zeroed the frame
-     * timer (`word[+0x32] = 0`, 0x6EA03) for this frame while the arc is
-     * airborne, so the frame holds (native: the timer never expires; the
-     * engine skips the advance). Consumption is take-once per staging. */
-    if (rec != NULL && rec->frame_freeze) {
-      rec->frame_freeze = 0;
-      e->anim_timer = 0;
-      continue;
-    }
-    fifa96_anim_frame record;
-    if (fifa96_animation_frame(r->frames, (int32_t)e->stage.frame, row.last_frame,
-                               &record) != FIFA96_OK)
-      continue;
-    /* FU172 §5 (Tier 2): terminal rows take the steering table's duration
-     * (the walk cadence); non-terminal rows keep the frame record duration. */
-    uint16_t duration = record.duration;
-    /* Live-only presentation gate: the tape/headless paths keep the prior
-     * terminal no-op so M1/M2 stay byte-identical. The live match uses the
-     * native walk-family selection and cadence. */
-    int terminal = mr->live_start && rec != NULL && (row.flags & 0x01u) != 0;
-    if (terminal) {
-      /* FU172 §5: terminal duration is table[speed*2 + 1] — no lean offset. */
-      int index = match_run_steering_index(rec, 0);
-      duration = match_run_steering_table(rec)[index].duration;
-    }
-    fifa96_anim_advance state;
-    state.timer = e->anim_timer;
-    state.delta = (uint16_t)mr->state.frame_delta;
-    state.frame_index = e->stage.frame;
-    state.turn = e->anim_turn;
-    uint8_t prev_frame = (uint8_t)e->stage.frame;
-    fifa96_anim_advance_out out;
-    if (fifa96_animation_advance(&state, duration, row.last_frame, &out) !=
-        FIFA96_OK)
-      continue;
-    e->anim_timer = state.timer;
-    e->stage.frame = out.frame_index;
-    if (rec) {
-      rec->frame = (uint8_t)out.frame_index;   /* OL-80 +0x3D */
-      /* FU-159 §5.2/§3.1 + FU172 §4 (Tier 2): terminal rows re-select the
-       * walk family at every timer expiry; non-terminal rows keep the
-       * `prev_frame >= last_frame` next_id chain. The install changes the
-       * row, so re-stage the same frame's slot from the record (the native
-       * `FUN_00036C70` reads after the machine's install). */
-      if (terminal && out.advanced) {
-        uint8_t old_id = rec->anim_id;
-        /* The native install uses the pre-expiry +0x3D frame plus the lean;
-         * do not add the already-applied advance a second time. */
-        rec->frame = prev_frame;
-        (void)fifa96_match_run_record_anim_successor_turn(rec, e->anim_turn);
-        if (rec->anim_id == old_id) rec->frame = (uint8_t)out.frame_index;
-        e->stage.anim_id = (int32_t)rec->anim_id;
-        if (fifa96_animation_row_lookup(match_run_anim_rows,
-                                        FIFA96_ANIM_ROW_COUNT,
-                                        (int32_t)rec->anim_id, &row) == FIFA96_OK)
-          e->bank_index = row.sprite_bank;
-        e->stage.frame = (int32_t)rec->frame;
-      } else if (!terminal && out.advanced && prev_frame >= row.last_frame) {
-        (void)fifa96_match_run_record_anim_successor(rec);
-        e->stage.anim_id = (int32_t)rec->anim_id;
-        if (fifa96_animation_row_lookup(match_run_anim_rows,
-                                        FIFA96_ANIM_ROW_COUNT,
-                                        (int32_t)rec->anim_id, &row) == FIFA96_OK)
-          e->bank_index = row.sprite_bank;
-        e->stage.frame = (int32_t)rec->frame;
-      }
-    }
-  }
+  for (uint32_t i = 0; i < r->entity_count; i++)
+    match_run_animate_entity(mr, i, (uint16_t)mr->state.frame_delta);
 }
 
 /* Stable slot identity: the lifecycle cancels by function pointer, so every
@@ -9484,6 +9502,14 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   int32_t staged_x[FIFA96_MATCH_RUN_RENDER_SLOTS];
   int32_t staged_y[FIFA96_MATCH_RUN_RENDER_SLOTS];
   int32_t angles[FIFA96_MATCH_RUN_RENDER_SLOTS];
+  /* Phase-84: the native 0xA2A10 view/position angle addend. The call site
+   * (0x571AA..0x571CA) feeds the camera-relative world pair `[0x543A8+0/+8]`
+   * (the pre-rotation `x`/`z`) into the 16-bit atan and adds the result to the
+   * staged record angle before the 0..7 direction fold. Without it the sprite
+   * direction is the record facing alone, which is only correct at one screen
+   * position (the walking/facing defect). Live-only: the M1/M2 tapes keep the
+   * recorded direction fold byte-exact. */
+  int32_t view_addend[FIFA96_MATCH_RUN_RENDER_SLOTS];
   uint8_t drawable[FIFA96_MATCH_RUN_RENDER_SLOTS];
   int32_t jitter_z[FIFA96_MATCH_RUN_RENDER_SLOTS * FIFA96_SCENE_POSITION_DWORDS];
   uint32_t list[FIFA96_MATCH_RUN_RENDER_SLOTS];
@@ -9498,6 +9524,7 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     rel.x = (int32_t)((uint32_t)slot.pos.x - (uint32_t)cam.x);
     rel.y = (int32_t)((uint32_t)slot.pos.y - (uint32_t)cam.y);
     rel.z = (int32_t)((uint32_t)slot.pos.z - (uint32_t)cam.z);
+    view_addend[i] = fifa96_match_run_view_addend(rel.x, rel.z);
     /* FU-89 §7: the jittered array adds `i%6 + 0x70` to y before rotation. */
     fifa96_projection_vec rel_jitter = rel;
     rel_jitter.y = (int32_t)((uint32_t)rel_jitter.y + (uint32_t)(0x70u + (i % 6u)));
@@ -9577,11 +9604,13 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     if (err != FIFA96_OK) return (int)err;
     if (!draw) continue;
 
-    /* FU-85 §2 direction: `(7 - (((angle - 0x1000) & 0xFFFF) >> 13)) & 7`. The
-     * original adds the unported 0xA2A10 view/position angle addend; that
-     * addend is an open leg, so the staged FU-84 angle alone drives it. */
-    int32_t direction =
-        (7 - (int32_t)((uint16_t)((uint32_t)angles[slot] - 0x1000u) >> 13)) & 7;
+    /* FU-85 §2 direction: `(7 - (((angle - 0x1000) & 0xFFFF) >> 13)) & 7`.
+     * Phase-84 ports the 0xA2A10 view/position addend: the 16-bit atan of the
+     * camera-relative world pair is added before the fold (0x571CA). */
+    int32_t dir_angle =
+        (int32_t)((uint32_t)angles[slot] - 0x1000u +
+                  (mr->live_start ? (uint32_t)view_addend[slot] : 0u));
+    int32_t direction = (7 - (int32_t)((uint16_t)dir_angle >> 13)) & 7;
     fifa96_render_frame frame;
     const uint32_t ball_slot =
         (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS);
@@ -10425,6 +10454,29 @@ static int match_run_kit_band(uint8_t *palette, int dst, int len, uint8_t index,
   return 1;
 }
 
+/* Live player appearance remap (phase-84). The native per-entity translation
+ * pool FUN_00047298 builds a 256-byte table per record: it maps the player
+ * sprite's appearance source indices through the PALsys frame-0 skin/hair
+ * ramps (the outfield template's computed destinations: 0x75/0x76/0x9C/0x9D
+ * -> 0xF7/0xF9/0xFD/0xC0, 0x8F/0x90 -> 0, 0xD7..0xDA -> 0 and 0xDB..0xE3 ->
+ * 0xF6..0xFE). The engine has no pool yet, so apply that appearance subset on
+ * top of the team remap: every kit body index keeps the live team translation,
+ * while the head/hands source indices now reach the raw PALsys skin/hair
+ * entries instead of the team kit colours (the green-skin defect). 0xFE is
+ * the derived pitch-line entry in the live palette, so the ramp's last step
+ * uses 0xFD. Live-only; M1/M2 never call this. */
+static void match_run_apply_player_remap(uint8_t remap[256]) {
+  static const uint8_t skin_src[6] = {0x75, 0x76, 0x8F, 0x90, 0x9C, 0x9D};
+  static const uint8_t skin_dst[6] = {0xF7, 0xF9, 0x00, 0x00, 0xFD, 0xC0};
+  for (int i = 0; i < 6; i++) remap[skin_src[i]] = skin_dst[i];
+  for (int i = 0; i < 4; i++) remap[0xD7 + i] = 0;
+  for (int i = 0; i < 9; i++) {
+    uint8_t dst = (uint8_t)(0xF6 + i);
+    if (dst == 0xFEu) dst = 0xFD;   /* the live pitch-line entry */
+    remap[0xDB + i] = dst;
+  }
+}
+
 static int match_run_stage_live_kit(struct fifa96_match_run *mr,
                                     struct fifa96_engine *eng) {
   uint8_t *bytes = NULL;
@@ -10570,6 +10622,11 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
   palette[FIFA96_PITCH_LINE_INDEX * 3] = 0xFF;
   palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] = 0xFF;
   palette[FIFA96_PITCH_LINE_INDEX * 3 + 2] = 0xFF;
+  /* Phase-84: apply the native appearance subset to both team translations.
+   * The kit redirects above stay intact; only the head/hands source indices
+   * move to the raw PALsys skin/hair entries. */
+  match_run_apply_player_remap(remap_team[0]);
+  match_run_apply_player_remap(remap_team[1]);
   /* Full success: commit the palette + remap atomically. */
   memcpy(r->palette, palette, sizeof r->palette);
   memcpy(r->remap_team, remap_team, sizeof r->remap_team);

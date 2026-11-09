@@ -2845,6 +2845,12 @@ uint8_t fifa96_match_run_goal_probe(struct fifa96_match_run *mr);
  * sprite_data); no partial canvas is written on validation failure. */
 int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *s);
 
+/* Phase-84: the native 0xA2A10 camera-relative view/position direction addend
+ * in the 16-bit circle (+z = 0x0000, +x = 0x4000, -z = 0x8000, -x = 0xC000).
+ * `rel_x`/`rel_z` are the pre-rotation camera-relative pair (the native
+ * `[0x543A8+0/+8]`). Pure; returns 0 when the angle helper rejects the input. */
+int32_t fifa96_match_run_view_addend(int32_t rel_x, int32_t rel_z);
+
 /* Stage the match sprite assets for rendering (M2 Task 2). Reads the two
  * caller-supplied ISO bank container paths through the run engine's mounted
  * asset table (`fifa96_asset_lookup` + `fifa96_cache_get`), decodes each to

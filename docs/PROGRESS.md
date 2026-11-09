@@ -4642,3 +4642,20 @@ close-out below).
   exact `41521559…`; screenshots `docs/screens/p83-live-ball-and-movement.png`
   and `docs/screens/p83-ball-crop.png`. Native possession staging, trail
   draws, class-3 integrator/director and 3dwpts/HUD art remain legs.
+
+- **Phase 84 live player skin/hair and camera-relative facing (2026-11-08).**
+  Live players had green/magenta faces and hands because the identity
+  translation drew the skin source indices through the PALteam kit colours.
+  The native per-record pool builder `FUN_00047298` maps those source indices
+  to the PALsys skin/hair ramps (`0x75/0x76/0x8F/0x90/0x9C/0x9D` and
+  `0xD7..0xE3`); the live team translation now carries that appearance subset
+  while every kit band keeps its staged colour. The sprites also did not turn
+  with the camera: `FUN_00057158` adds the `0xA2A10` camera-relative atan to
+  the staged angle before the direction fold, and the engine had left it as an
+  open leg. The live render now computes the addend from `slot.pos - camera`
+  with `fifa96_entity_angle` (the same 10-bit atan) scaled to the native
+  16-bit circle; non-live M1/M2 keep the recorded fold byte-exact.
+  `make check` **124/124**; M1 exact `09b726b7…`; M2 exact `41521559…`;
+  screenshot `docs/screens/p84-live-skin-and-facing.png`. The full per-player
+  palette pool, per-player skin/hair variation, vertical ball staging
+  (`0x7A490`) and the native kick pose remain legs.

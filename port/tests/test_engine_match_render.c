@@ -1354,6 +1354,19 @@ static void test_engine_match_step_renders(void) {
   drop_engine_fixture(on);
 }
 
+/* Phase-84: the native 0xA2A10 addend quadrants (capstone decode of the
+ * 0xA29F0 jump table: +z=0, +x=0x4000, -z=0x8000, -x=0xC000). */
+static void test_view_addend_cardinals(void) {
+  assert(fifa96_match_run_view_addend(1, 0) == 0x4000);
+  assert(fifa96_match_run_view_addend(0, 1) == 0x0000);
+  assert(fifa96_match_run_view_addend(-1, 0) == 0xC000);
+  assert(fifa96_match_run_view_addend(0, -1) == 0x8000);
+  assert(fifa96_match_run_view_addend(1, 1) == 0x2000);
+  assert(fifa96_match_run_view_addend(1, -1) == 0x6000);
+  assert(fifa96_match_run_view_addend(-1, 1) == 0xE000);
+  assert(fifa96_match_run_view_addend(-1, -1) == 0xA000);
+}
+
 /* ------------------------------------------------------------------------ *
  * FU-343 (P1)/Phase 80: the visible match — live_start gate, class-3 side
  * eye, pitch, formation and the per-team kit remap.
@@ -1688,6 +1701,21 @@ static void test_live_real_team_kits(void) {
          r->palette[230 * 3 + 2] >= 220);
   /* Team 0 socks use the green ramp (0,48,4) -> (0,192,16). */
   assert(r->palette[224 * 3] <= 40 && r->palette[224 * 3 + 1] >= 150);
+  /* Phase-84: the native appearance subset rides the team translation. The
+   * head/hands source indices reach the raw PALsys skin/hair entries, while
+   * the kit bands above stay untouched. */
+  for (int side = 0; side < 2; side++) {
+    assert(r->remap_team[side][0x75] == 0xF7);
+    assert(r->remap_team[side][0x76] == 0xF9);
+    assert(r->remap_team[side][0x8F] == 0x00);
+    assert(r->remap_team[side][0x9C] == 0xFD);
+    assert(r->remap_team[side][0xD7] == 0x00);
+    assert(r->remap_team[side][0xDB] == 0xF6);
+    assert(r->remap_team[side][0xE3] == 0xFD);   /* 0xFE is the line slot */
+  }
+  /* The skin destination is a brown ramp, not the green kit colour. */
+  assert(r->palette[0xF7 * 3] > r->palette[0xF7 * 3 + 1]);
+  assert(r->palette[0xF7 * 3 + 1] > r->palette[0xF7 * 3 + 2]);
 
   int shirt_diff = 0, shorts_diff = 0;
   for (int i = 0; i < 7; i++)
@@ -1707,6 +1735,7 @@ static void test_live_real_team_kits(void) {
 
   live_fixture_drop(&f);
 }
+
 
 /* ------------------------------------------------------------------------ *
  * OL-T11-7 (M2 full-gameplay P0.2): the match HUD (FU-148 §1/§6.1).
@@ -2820,6 +2849,7 @@ int main(void) {
   test_ball_row_dormant();
   test_engine_match_step_renders();
   test_live_start_gate_and_eye();
+  test_view_addend_cardinals();
   if (live_file_exists(LIVE_ISO_PATH)) {
     test_live_begin_formation_pitch_and_kit();
     test_live_matchup_formations();

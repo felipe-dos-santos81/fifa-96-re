@@ -11743,3 +11743,57 @@ with pivot `(width/2, height)`. There is no depth-scale cell on this path.
 offset are derived); full human/AI selection handling in row 04; class-3
 camera integrator/director (P10-L6); native 3dwpts stadium (P10-L2); HUD art
 (P10-L5).
+
+## Phase 84 — live player skin/hair and camera-relative facing (2026-11-08)
+
+**Symptom.** Live players had green/magenta faces and hands, and their sprites
+did not turn with the camera while running; the report grouped this with the
+walking/physics feel.
+
+**Root causes.**
+
+- The live player draw used the identity translation, so the sprite's skin
+  source indices (`0x75/0x76/0x8F/0x90/0x9C/0x9D`) drew the PALteam colours at
+  the same palette indices. The native per-record translation
+  `FUN_00047298` maps those source indices to the PALsys skin/hair entries.
+- `FUN_00057158` adds a camera-relative atan (`0xA2A10`) to the staged record
+  angle before the 0..7 direction fold. The engine left the addend as an open
+  leg, so the sprite direction was the record facing alone and was only correct
+  at one screen position.
+
+**Implementation [D].** Live-only (`live_start`); M1/M2 never set it.
+
+- `match_run_apply_player_remap` applies the outfield template's native
+  appearance subset to both team translations after the kit-band redirects:
+  `0x75/0x76/0x8F/0x90/0x9C/0x9D -> 0xF7/0xF9/0x00/0x00/0xFD/0xC0`,
+  `0xD7..0xDA -> 0`, `0xDB..0xE3 -> 0xF6..0xFD` (`0xFE` is the live marking
+  slot). The kit bands, shorts/socks redirects and marking slot are untouched.
+- `fifa96_match_run_render` computes `view_addend[slot]` from the
+  camera-relative pre-rotation pair (`slot.pos - camera`) with
+  `fifa96_entity_angle` (the native 10-bit `0xCD474` atan) scaled `<< 6`, and
+  adds it to the staged angle before the fold. The `0xA2A10` quadrant table was
+  decoded first-hand: `+x = 0x4000`, `+z = 0`, `-x = 0xC000`, `-z = 0x8000`.
+- The scene animation loop is factored into `match_run_animate_entity`; it
+  still runs once per granted 30 Hz frame from the frame body (no cadence
+  change).
+
+**Evidence/verification.** Ghidra `read_memory` of `0x106962`, `0x1068E4`,
+`0x106A1C`, `0x106B00`, `0x106B70`, `0x106C00`, `0x107080`, `0x1070D4`,
+`0x1070E4`; `disassemble_function 0x47298`; capstone decode of
+`0xA2A10..0xA2AD5` and the `0xA29F0` jump table; `FUN_00057158`
+`0x57187..0x571DF`. `test_engine_match_render` extends
+`test_live_real_team_kits` with the appearance remap and brown-skin assertions.
+`make check` **124/124**; M1 byte-exact `09b726b7…`; M2 byte-exact
+`41521559…`. Screenshot `docs/screens/p84-live-skin-and-facing.png` (native
+reference `docs/screens/p80-native-side.png`).
+
+**Errata.** Phase 80's summary and the Phase 82 legs list name the `0xA2A10`
+view-angle addend as open; this phase ports it for live rendering. The
+per-player pool, the native vertical ball staging (`0x7A490`) and the native
+row-07 kick pose remain open legs.
+
+**Legs.** Full `FUN_00047298` pool (runtime PCCD match-record pointers, the
+five-template pattern pass, the `FUN_0001CAEC(9/0xD)` settings gates);
+per-player skin/hair variation; native vertical ball staging `0x7A490` and
+row-05 `0x7F3A1..0x7F57B`; native kick pose/animation row; class-3 integrator
+(P10-L6); 3dwpts stadium (P10-L2); HUD art (P10-L5).
