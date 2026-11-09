@@ -64,7 +64,7 @@ static void test_slot_update_passes_raw_when_map_select(void) {
   assert(fifa96_control_slot_update(&slot, 0x5A, 0, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
   assert(slot.raw == 0x5A);
   assert(slot.prev_mapped == 0x5A);
-  assert(slot.pressed == 0x5A);
+  assert(slot.pressed == 0x50);   /* native 0x78999: button nibble only */
   assert(slot.released == 0);
   assert(slot.anim_a == 10);
   assert(slot.anim_b == 20);
@@ -106,16 +106,16 @@ static void test_slot_update_hold_machine(void) {
   fifa96_control_slot slot = fresh_slot();
   assert(fifa96_control_slot_update(&slot, 0x20, 0, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
   assert(fifa96_control_slot_update(&slot, 0x41, 0, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
-  assert(slot.pressed == 0x41);
+  assert(slot.pressed == 0x40);
   assert(slot.released == 0);
-  assert(slot.held == 0x41);
+  assert(slot.held == 0x40);
   assert(slot.held_prev == 0x20);
   assert(fifa96_control_slot_update(&slot, 0x01, 0, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
-  assert(slot.held == 0x01);
-  assert(slot.released == 0);
-  assert(fifa96_control_slot_update(&slot, 0x00, 0, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
   assert(slot.held == 0);
   assert(slot.released == 0x20);
+  assert(fifa96_control_slot_update(&slot, 0x00, 0, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
+  assert(slot.held == 0);
+  assert(slot.released == 0);
 }
 
 static void test_slot_update_hold_prev_reports_previous_buttons(void) {
@@ -129,14 +129,35 @@ static void test_slot_update_hold_prev_reports_previous_buttons(void) {
   assert(slot.released == 0x30);
 }
 
+static void test_slot_update_release_while_direction_held(void) {
+  /* The native button nibble is independent of the direction nibble. Releasing
+   * KICK while RIGHT stays down must report the release immediately; the
+   * pre-fix full-word hold test deferred it until the direction dropped. */
+  fifa96_control_slot slot = fresh_slot();
+  assert(fifa96_control_slot_update(&slot, 0x04, 5, NULL, anim_a_tbl, anim_b_tbl,
+                                    anim_c_tbl) == FIFA96_OK);
+  assert(slot.held == 0 && slot.counter == 0);   /* direction does not count */
+  assert(fifa96_control_slot_update(&slot, 0x14, 5, NULL, anim_a_tbl, anim_b_tbl,
+                                    anim_c_tbl) == FIFA96_OK);
+  assert(slot.pressed == 0x10 && slot.released == 0 && slot.held == 0);
+  assert(fifa96_control_slot_update(&slot, 0x04, 5, NULL, anim_a_tbl, anim_b_tbl,
+                                    anim_c_tbl) == FIFA96_OK);
+  assert(slot.pressed == 0 && slot.released == 0x10 && slot.held == 0);
+  assert(fifa96_control_slot_update(&slot, 0x00, 5, NULL, anim_a_tbl, anim_b_tbl,
+                                    anim_c_tbl) == FIFA96_OK);
+  assert(slot.released == 0 && slot.held == 0);
+}
+
 static void test_slot_update_counter_accumulates_and_resets(void) {
   fifa96_control_slot slot = fresh_slot();
-  assert(fifa96_control_slot_update(&slot, 0x01, 5, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
+  assert(fifa96_control_slot_update(&slot, 0x10, 5, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
   assert(slot.counter == 5);
-  assert(fifa96_control_slot_update(&slot, 0x01, 5, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
+  assert(fifa96_control_slot_update(&slot, 0x10, 5, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
   assert(slot.counter == 10);
   assert(fifa96_control_slot_update(&slot, 0x00, 5, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
-  assert(slot.counter == 0);
+  assert(slot.released == 0x10 && slot.counter == 10);
+  assert(fifa96_control_slot_update(&slot, 0x00, 5, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
+  assert(slot.released == 0 && slot.counter == 0);
 }
 
 static void test_slot_update_counter_not_reset_on_release(void) {
@@ -151,19 +172,19 @@ static void test_slot_update_counter_not_reset_on_release(void) {
 static void test_slot_update_counter_cap_and_wrap(void) {
   fifa96_control_slot slot = fresh_slot();
   slot.counter = 0xF9;
-  assert(fifa96_control_slot_update(&slot, 0x01, 0x10, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
+  assert(fifa96_control_slot_update(&slot, 0x10, 0x10, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
   assert(slot.counter == 0x09);
   slot.counter = 0xFA;
-  assert(fifa96_control_slot_update(&slot, 0x01, 5, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
+  assert(fifa96_control_slot_update(&slot, 0x10, 5, NULL, anim_a_tbl, anim_b_tbl, anim_c_tbl) == FIFA96_OK);
   assert(slot.counter == 0xFA);
 }
 
 static void test_slot_update_counter_adds_delta_low_byte(void) {
   fifa96_control_slot slot = fresh_slot();
-  assert(fifa96_control_slot_update(&slot, 0x01, (uint8_t)0x100, NULL, anim_a_tbl, anim_b_tbl,
+  assert(fifa96_control_slot_update(&slot, 0x10, (uint8_t)0x100, NULL, anim_a_tbl, anim_b_tbl,
                                     anim_c_tbl) == FIFA96_OK);
   assert(slot.counter == 0);
-  assert(fifa96_control_slot_update(&slot, 0x01, (uint8_t)0x1FF, NULL, anim_a_tbl, anim_b_tbl,
+  assert(fifa96_control_slot_update(&slot, 0x10, (uint8_t)0x1FF, NULL, anim_a_tbl, anim_b_tbl,
                                     anim_c_tbl) == FIFA96_OK);
   assert(slot.counter == 0xFF);
 }
@@ -331,6 +352,7 @@ int main(void) {
   test_slot_update_identity_map();
   test_slot_update_press_release();
   test_slot_update_hold_machine();
+  test_slot_update_release_while_direction_held();
   test_slot_update_hold_prev_reports_previous_buttons();
   test_slot_update_counter_accumulates_and_resets();
   test_slot_update_counter_not_reset_on_release();

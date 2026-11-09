@@ -509,3 +509,62 @@ change. Port write set: `port/src/fifa96_loader/fifa96_control.h`,
 (one library/test block). `make test`: 58/58 before, **59/59 after**;
 ASan+UBSan `test_control` clean. `data/game/FIFAPCCD96.iso` untouched;
 `data/fifa96.rep/**` churn not staged.
+
+## Errata: the button-nibble mask in §1.2 (2026-11-09)
+
+**§1.2's edge/hold pseudocode is superseded by the raw instruction stream.**
+The quoted lines:
+
+> `rising = (mapped ^ prev) & mapped ; pressed`
+> `falling= (mapped ^ prev) & prev ; released source`
+> `else if (mapped != 0): [slot+0xC] = mapped ; held = new state`
+> `if (mapped != 0): ... counter ...`
+
+omit the two masks at `0x78999` and `0x7899E`:
+
+```
+0x78995  MOV EAX,EDX
+0x78999  AND EAX,0xff0
+0x7899E  AND ECX,0xff0
+0x789AA  MOV ESI,EAX
+0x789AC  XOR ESI,ECX
+0x789AE  AND ESI,EAX        ; rising = (high ^ prev_high) & high
+0x789B0  MOV [EBX+4],SI     ; pressed = button nibble
+0x789BC  XOR ESI,ECX
+0x789C2  AND ESI,ECX        ; falling = (high ^ prev_high) & prev_high
+0x789E0  TEST EAX,EAX       ; high buttons, not the direction nibble
+0x789E4  MOV [EBX+0xc],AX   ; held = high
+0x789F2  TEST EAX,EAX       ; counter gate is high-only
+```
+
+`0x789BE` still writes the **full** `mapped` word to `[EBX+0x10]`; the low
+direction nibble remains in `prev_mapped` for the animation tables at
+`0x78A15..0x78A48`. The corrected state machine is:
+
+```
+high      = mapped & 0xFF0
+prev_high = prev & 0xFF0
+rising    = (high ^ prev_high) & high
+falling   = (high ^ prev_high) & prev_high
+[+4]      = rising
+[+6]      = 0
+[+0x10]   = mapped
+if (falling):
+   if ([+0xC] != 0): [+0xC] &= ~falling; if zero [+6] = [+0xE]
+   else if (high != 0): [+0xC] = high; [+0xE] = prev_high
+   else: [+6] = prev_high
+if (high != 0): counter += delta
+else if ([+6] == 0): counter = 0
+```
+
+Consequence and fix: the pre-errata test kept a held direction in the
+`+0xC` mask, so a KICK release while moving was stored as `held = direction`
+and only surfaced after the direction was released. The port now reports
+`released = 0x10` on the KICK-up frame itself; the live row scan installs
+code 7 on the same granted frame and the kick launch follows. The regression
+is `test_control.c::test_slot_update_release_while_direction_held`; the old
+counter tests that used a direction-only input are corrected to use a button
+nibble, matching `0x789F2`.
+
+Evidence: fresh `disassemble_function 0x78950` in the `fifa96` Ghidra
+project (`/FIFA96.EXE`) this slice.

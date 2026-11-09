@@ -128,12 +128,12 @@ static void test_direction_codes_and_animation(void) {
     grant_frame(&mr);
     assert(mr.slot.raw == cases[i].code);
     assert(mr.slot.prev_mapped == cases[i].code);
-    assert(mr.slot.pressed == cases[i].code);
+    assert(mr.slot.pressed == 0);   /* native 0x78999: button nibble only */
     assert(mr.slot.released == 0);
     assert(mr.slot.anim_a == cases[i].anim_a);
     assert(mr.slot.anim_b == cases[i].anim_b);
     assert(mr.slot.anim_c == cases[i].anim_c);
-    assert(mr.slot.counter == 2);   /* one update per frame, delta 2 */
+    assert(mr.slot.counter == 0);   /* direction does not count */
   }
 }
 
@@ -172,7 +172,7 @@ static void test_button_and_diagonal_codes(void) {
   assert(mr.input.edge[0] == 0x11);
   assert(mr.input.held == 0x11 && mr.input.fresh == 0x11);
   grant_frame(&mr);
-  assert(mr.slot.pressed == 0x11);
+  assert(mr.slot.pressed == 0x10);   /* native button nibble only */
   assert(mr.slot.anim_a == fu70_t1[0x1]);   /* 1 */
   assert(mr.slot.anim_b == fu70_t2[1]);     /* 1 */
   assert(mr.slot.anim_c == fu70_t3[1]);     /* 0 */
@@ -189,7 +189,7 @@ static void test_button_and_diagonal_codes(void) {
   assert(mr.input.edge[0] == 0x05);
   assert(mr.input.held == 0x05 && mr.input.fresh == 0x05);
   grant_frame(&mr);
-  assert(mr.slot.pressed == 0x05);
+  assert(mr.slot.pressed == 0);
   assert(mr.slot.anim_a == fu70_t1[0x5]);   /* 2 */
   assert(mr.slot.anim_b == fu70_t2[2]);     /* 1 */
   assert(mr.slot.anim_c == fu70_t3[2]);     /* 255 */
@@ -394,7 +394,7 @@ static void test_direction_release_reports_no_button(void) {
   fifa96_match_run_init(&mr);
   press_key(&mr, FIFA96_ENGINE_KEY_DOWN);   /* 0x02 */
   grant_frame(&mr);
-  assert(mr.slot.pressed == 0x02 && mr.slot.counter == 2);
+  assert(mr.slot.pressed == 0 && mr.slot.counter == 0);
   no_input(&mr);
   grant_frame(&mr);
   assert(mr.slot.pressed == 0 && mr.slot.held == 0);
@@ -413,7 +413,7 @@ static void test_map_select_zero_remaps_direction(void) {
   assert(mr.input.prev[0] == 0x04);          /* input model stays raw */
   assert(mr.slot.raw == 0x04);
   assert(mr.slot.prev_mapped == fu70_map[0x4]);   /* 0x06 */
-  assert(mr.slot.pressed == fu70_map[0x4]);
+  assert(mr.slot.pressed == 0);                   /* direction, no button */
   assert(mr.slot.anim_a == fu70_t1[0x6]);    /* 4 */
   assert(mr.slot.anim_b == fu70_t2[4]);      /* 255 */
   assert(mr.slot.anim_c == fu70_t3[4]);      /* 255 */
@@ -545,16 +545,16 @@ static void test_engine_step_polls_match_input(void) {
   /* Step 4: the 4th tick grants, one slot update with delta 2. */
   assert(fifa96_engine_step(f.engine) == 0);
   assert(mr.slot.raw == 0x04);
-  assert(mr.slot.pressed == 0x04);
-  assert(mr.slot.counter == 2);
+  assert(mr.slot.pressed == 0);    /* native 0x78999: button nibble only */
+  assert(mr.slot.counter == 0);    /* direction does not count */
   assert(mr.slot.anim_a == fu70_t1[0x4]);
 
   /* Steps 5-6: no grant; step 7 grants a second update (same sample). */
   assert(fifa96_engine_step(f.engine) == 0);
   assert(fifa96_engine_step(f.engine) == 0);
-  assert(mr.slot.counter == 2);
+  assert(mr.slot.counter == 0);
   assert(fifa96_engine_step(f.engine) == 0);
-  assert(mr.slot.counter == 4);
+  assert(mr.slot.counter == 0);
   assert(mr.slot.pressed == 0);    /* unchanged sample: no new edge */
 
   /* Steps 8-10: the tape runs out (release derived); the step-10 grant

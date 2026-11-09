@@ -4739,3 +4739,17 @@ close-out below).
   changes. New tests: `test_delta_fractional_step` and
   `test_delta_cursor_reset`. Full record:
   `port/spec/FU-349_mixer_delta_cursor_pacing.md`.
+
+- **Phase 89 control-slot button edges while moving (2026-11-09).** Kicking or
+  passing while a direction was held was deferred until the direction was
+  released. `FUN_00078950` masks the button nibble before the edge/hold
+  machine (`0x78999/0x7899E AND 0xFF0`), but the port stored the full mapped
+  word in `held`, so a direction-only input looked like a held button and a
+  KICK-up became `held = direction`; the release surfaced only on the later
+  direction-up. The slot update now splits `high = mapped & 0xFF0` from the
+  direction nibble used by the animation tables. A live probe confirms
+  `rel=0x10` on the same granted frame, row 7 installs, and the ball leaves
+  while RIGHT is still held. `make check` green; M1/M2 exact; no
+  simulation/render/census changes. New regression:
+  `test_slot_update_release_while_direction_held`. Full record:
+  `port/spec/FU70_control_slots.md` appended errata.

@@ -16,7 +16,8 @@ int fifa96_control_slot_update(fifa96_control_slot *slot, uint8_t input, uint8_t
                                const uint8_t map[16], const uint8_t anim_a[16],
                                const uint8_t anim_b[16], const uint8_t anim_c[16]) {
   uint16_t mapped;
-  uint16_t prev;
+  uint16_t high;
+  uint16_t prev_high;
   uint16_t rising;
   uint16_t falling;
   uint8_t direction;
@@ -29,9 +30,14 @@ int fifa96_control_slot_update(fifa96_control_slot *slot, uint8_t input, uint8_t
   } else {
     mapped = input;
   }
-  prev = slot->prev_mapped;
-  rising = (uint16_t)((mapped ^ prev) & mapped);
-  falling = (uint16_t)((mapped ^ prev) & prev);
+  /* Native 0x78999/0x7899E mask the button nibble before the edge/hold
+   * machine: `AND EAX,0xFF0` / `AND ECX,0xFF0` over mapped/prev. The direction
+   * nibble stays in `mapped` for the animation tables below, but a held
+   * direction must not suppress a button release. */
+  high = (uint16_t)(mapped & 0xFF0u);
+  prev_high = (uint16_t)(slot->prev_mapped & 0xFF0u);
+  rising = (uint16_t)((high ^ prev_high) & high);
+  falling = (uint16_t)((high ^ prev_high) & prev_high);
   slot->pressed = rising;
   slot->released = 0;
   slot->prev_mapped = mapped;
@@ -39,14 +45,14 @@ int fifa96_control_slot_update(fifa96_control_slot *slot, uint8_t input, uint8_t
     if (slot->held != 0) {
       slot->held = (uint16_t)(slot->held & ~falling);
       if (slot->held == 0) slot->released = slot->held_prev;
-    } else if (mapped != 0) {
-      slot->held = mapped;
-      slot->held_prev = (uint16_t)(prev & 0xFF0u);
+    } else if (high != 0) {
+      slot->held = high;
+      slot->held_prev = prev_high;
     } else {
-      slot->released = (uint16_t)(prev & 0xFF0u);
+      slot->released = prev_high;
     }
   }
-  if (mapped != 0) {
+  if (high != 0) {
     if (slot->counter < 0xFAu) slot->counter = (uint8_t)(slot->counter + delta);
   } else if (slot->released == 0) {
     slot->counter = 0;

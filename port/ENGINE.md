@@ -12012,3 +12012,32 @@ RED at the `(0,1)` case with the pre-fix `unit < decoded` predicate restored).
 The same windowed drive held 100 ticks/s with the clock tracking wall time; no
 step exceeded 50 ms. No score/phase/entity/ball/camera/render/census cell
 changes. Full record: `port/spec/FU-349_mixer_delta_cursor_pacing.md`.
+
+## Phase 89 — control-slot button edges while moving (2026-11-09)
+
+**Symptom.** Kicking or passing while a direction was held did not fire until
+the direction was released. A live `FIFA96_PLAYER_TRACE` probe showed the
+KICK-up frame (`in=0x04`, `rel=0x00`, `held=0x04`) deferred the `0x10`
+release; the slot only surfaced `rel=0x10` when RIGHT was finally dropped, at
+which point row 7 installed and the ball left.
+
+**Root cause.** `FUN_00078950` masks the button nibble before the edge/hold
+machine (`0x78999 AND EAX,0xFF0`, `0x7899E AND ECX,0xFF0`), so a held
+direction cannot enter `held`/`held_prev` or suppress a button release. The
+port kept the full mapped word in `held`/the counter gate, so a direction-only
+`mapped != 0` looked like a held button. The port's tests encoded that
+pre-errata behaviour.
+
+**Fix.** `fifa96_control_slot_update` computes `high = mapped & 0xFF0`,
+`prev_high = prev & 0xFF0`, uses those for `pressed`/`released`/`held`/
+`held_prev` and the counter, and still stores the full `mapped` in
+`prev_mapped` for the direction/animation tables. KICK-up while moving now
+reports `released = 0x10` on the same granted frame; row 7 installs and the
+kick launches. `FU70_control_slots.md` carries an appended errata quoting the
+missed masks.
+
+**Verification.** `make check` green; M1/M2 `cmp` exact. New regression:
+`test_control.c::test_slot_update_release_while_direction_held` (fails on the
+pre-fix full-word hold). Direction-only counter expectations corrected to the
+native high-nibble gate. No simulation/render/census cell changes. Full
+record: `port/spec/FU70_control_slots.md` errata.
