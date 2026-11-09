@@ -2149,14 +2149,13 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   if (mr->live_start) {
     if (r->render_eye_valid == 0u) match_run_render_eye_update(mr);
     fifa96_camera_handler_state *acs = &r->action_cam;
-    fifa96_camera_handler_out ac_out;
+    fifa96_camera_handler_out ac_out = {0};
     acs->track_x = r->render_focus_x;
     acs->track_y = r->view_focus_y;
     acs->track_z = r->render_focus_z;
     acs->pos_x = r->render_eye_x;
     acs->pos_y = r->render_eye_y;
     acs->pos_z = r->render_eye_z;
-    acs->ratio = r->view_ratio;
     acs->yaw = r->yaw;
     acs->pitch = r->pitch;
     if (fifa96_camera_behavior_action(

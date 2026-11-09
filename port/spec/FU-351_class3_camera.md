@@ -133,3 +133,40 @@ closed. `fifa96_camera_behavior_action` now calls
 `>>6`. `fifa96_camera` links `fifa96_projection` for the primitive. The
 camera geometry, tick and clamps are unchanged; `test_camera` and the live
 camera test still pass. `make check` **124/124**; M1/M2 `cmp` exact.
+
+## 7. Handler correction — Q16 slew and the two missing arms (2026-11-09)
+
+**Erratum (quoted).** §1.2 line 37 ("`yaw += (target_yaw - yaw) * tick /
+0x1E0000`") and §3 ("now implements the full body") were incomplete. A fresh
+186-instruction `disassemble_function 0x4DB38` gives:
+
+- `0x4DCCA..0x4DCF6` / `0x4DD2C..0x4DD58`: the slew rate is Q16
+  `floor(tick * 0x10000 / 30)` (yaw) or `/ 60` (pitch), built with
+  `SHL EAX,0x10` plus two `IDIV` remainder steps. The previous port divided
+  by `0x1E0000` before the Q16 multiply, so tick 8 produced zero and the
+  stored yaw/pitch never moved. The `SHL` is 32-bit: tick `0x3C0000` wraps
+  it to zero.
+- `0x4DBCA..0x4DBF3`: when the *old* eye is at/outside any clamp bound
+  (`|x| >= 0x420`, `|z| >= 0x810`), the native shifts `off_y >> 3` before
+  the position update.
+- `0x4DC82..0x4DC96`: the native recomputes the look-at from the clamped
+  eye before the slew; that second pitch is raw (not snapped). The
+  post-slew pitch snap still runs.
+- `0x4DD95..0x4DD9D`: the target-history copy
+  `camera+0x40/44/48 = +0x34/38/3C`. Ported as `hist_x/y/z`; no consumer
+  reads it yet.
+- `0x4DCF9`/`0x4DD5B` clear the high words of yaw/pitch. The port stores
+  the 16-bit values, so those clears are implicit; the separate `brake_*`
+  fields were removed.
+
+The true fixed point is `camera (-353,434,0)` at yaw `0xC000`, pitch
+`0x2000` (the exact 45-degree offset truncates to -354); replay is
+`(-424,505,0)`. §5 FU351-L4's copy is ported; only a downstream consumer
+remains absent.
+
+**Verification.** `test_camera` now pins the Q16 `+0x1111`/`-0x1111`
+moves, the 32-bit tick wrap, the old-eye `345`/`306` Y split, the replay
+`505`/`120` values, the fixed point, the target history and the post-slew
+`0xF618` snap. `test_engine_match_render` pins its identity view
+(yaw/pitch 0) after the live drive so the ball-art fixture is independent
+of the live camera. `make check` **124/124**; M1/M2 `cmp` exact.

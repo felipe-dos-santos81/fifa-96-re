@@ -257,7 +257,7 @@ typedef struct fifa96_camera_handler_state {
   int32_t ratio;                     /* +0x4C */
   int32_t yaw;                       /* +0x58 */
   int32_t pitch;                     /* +0x5C */
-  int32_t brake_lo, brake_hi;        /* +0x5A/+0x5E */
+  int32_t hist_x, hist_y, hist_z;    /* +0x40/+0x44/+0x48 (target history) */
 } fifa96_camera_handler_state;
 
 typedef struct fifa96_camera_handler_out {

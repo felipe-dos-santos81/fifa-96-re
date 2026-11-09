@@ -4796,3 +4796,16 @@ close-out below).
   instead of the entity sine table at `>>6`. The camera library links the
   projection primitive; geometry, tick and clamps are unchanged.
   `make check` green 124/124; M1/M2 `cmp` exact. Record: FU-351 §6.
+
+- **Phase 93 class-3 handler correction (2026-11-09).** The Phase-91 handler
+  was missing native arms and had a Q16 scale error. The slew rate is now
+  `floor(tick * 0x10000 / 30)`/`/ 60` (so tick 8 moves yaw by the native
+  `0x1111`); the old-eye `off_y >> 3` arm runs at the clamp boundary; the
+  look-at is recomputed from the clamped eye before the slew; and the
+  `+0x40/44/48` target history is copied. The separate `brake_*` fields were
+  removed because the 16-bit yaw/pitch stores already clear the native high
+  words. The true fixed point is `(-353,434,0)`; replay is `(-424,505,0)`.
+  `test_camera` pins the Q16 moves, the 32-bit wrap, the 345/306 Y split, the
+  replay 505/120 values, the fixed point and the history;
+  `test_engine_match_render` pins yaw/pitch 0 for its identity-view ball
+  fixture. `make check` green 124/124; M1/M2 `cmp` exact. Record: FU-351 §7.

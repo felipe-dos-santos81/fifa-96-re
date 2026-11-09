@@ -1825,7 +1825,8 @@ static void test_behavior_staged(void) {
 static void test_behavior_action(void) {
   /* FUN_0004DB38: the class-3 chase camera. The fixed point for a level
    * target is the 500-unit side offset: target (0,80,0), camera
-   * (-353,433,0), yaw 0xC000, pitch 0x2000. */
+   * (-353,434,0), yaw 0xC000, pitch 0x2000. The Y is 434 because the exact
+   * 45-degree offset truncates to -354. */
   fifa96_camera_handler_state st;
   fifa96_camera_handler_out out;
   memset(&st, 0, sizeof st);
@@ -1838,17 +1839,44 @@ static void test_behavior_action(void) {
   st.pos_z = 0;
   st.yaw = 0xC000;
   st.pitch = 0x2000;
-  st.brake_lo = 5;
-  st.brake_hi = 6;
   assert(fifa96_camera_behavior_action(&st, 1, 500, 8, &out) == FIFA96_OK);
   assert(out.speed == 500);
-  assert(st.pos_x >= -355 && st.pos_x <= -351);
-  assert(st.pos_y >= 430 && st.pos_y <= 436);
-  assert(st.pos_z >= -2 && st.pos_z <= 2);
+  assert(st.pos_x == -353);
+  assert(st.pos_y == 434);
+  assert(st.pos_z == 0);
   assert(st.yaw == 0xC000 && st.pitch == 0x2000);
-  assert(st.brake_lo == 0 && st.brake_hi == 0);
+  assert(st.hist_x == 0 && st.hist_y == 80 && st.hist_z == 0);
 
-  /* Replay is 100 units farther and uses the 120 Y floor. */
+  /* Q16 slew: a 0x4000 yaw error at tick 8 moves by the native 0x1111
+   * (0x4DCCA/0x4DD2C); the pre-fix tick/divisor form left it at zero. The
+   * pitch rate uses the 0x3C0000 divisor and moves 0x111 here too. */
+  memset(&st, 0, sizeof st);
+  st.track_x = -100;
+  st.yaw = 0;
+  st.pitch = 0;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 8, &out) == FIFA96_OK);
+  assert(st.yaw == 0x1111);
+  assert(st.pitch == 0x111);
+
+  /* The same rate on a negative 0x4000 yaw delta moves by -0x1111. */
+  memset(&st, 0, sizeof st);
+  st.track_x = 100;
+  st.yaw = 0;
+  st.pitch = 0x2000;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 8, &out) == FIFA96_OK);
+  assert(st.yaw == 0xEEEF);
+
+  /* The native slew shift is 32-bit: a tick that wraps it to zero leaves
+   * the stored angles unchanged. */
+  memset(&st, 0, sizeof st);
+  st.track_x = -100;
+  st.yaw = 0;
+  st.pitch = 0x2000;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 0x3C0000, &out) ==
+         FIFA96_OK);
+  assert(st.yaw == 0 && st.pitch == 0x2000);
+
+  /* Replay is 100 units farther; the exact fixed point is y=505. */
   memset(&st, 0, sizeof st);
   st.track_y = 80;
   st.pos_x = -353;
@@ -1857,8 +1885,14 @@ static void test_behavior_action(void) {
   st.pitch = 0x2000;
   assert(fifa96_camera_behavior_action(&st, 0, 500, 0, &out) == FIFA96_OK);
   assert(out.speed == 600);
-  assert(st.pos_x >= -428 && st.pos_x <= -420);
-  assert(st.pos_y >= 498 && st.pos_y <= 508);
+  assert(st.pos_x == -424);
+  assert(st.pos_y == 505);
+
+  /* Replay Y floor: a target below the eye still clamps at 120. */
+  memset(&st, 0, sizeof st);
+  st.track_y = -0x1000;
+  assert(fifa96_camera_behavior_action(&st, 0, 500, 0, &out) == FIFA96_OK);
+  assert(st.pos_y == 120);
 
   /* Position clamp: a target far along +x puts the camera at x=+0x420. */
   memset(&st, 0, sizeof st);
@@ -1867,12 +1901,28 @@ static void test_behavior_action(void) {
   assert(st.pos_x == 0x420 && st.pos_z == 0);
   assert(st.pos_y == 100);
 
-  /* Pitch snap: the (0x8000,0xF618) arm stores 0xF618 at full slew. */
+  /* Old-eye Y arm (0x4DBCA..0x4DBF3): the same target with the old X just
+   * inside the clamp stores 345; on the boundary the off_y >> 3 arm stores
+   * 306. */
   memset(&st, 0, sizeof st);
-  st.track_y = 0x2000;
-  st.track_z = -0x2000;
-  assert(fifa96_camera_behavior_action(&st, 1, 500, 0x3C0000, &out) ==
-         FIFA96_OK);
+  st.track_y = -623;
+  st.pos_x = 0x41F;
+  st.pos_y = 433;
+  st.yaw = 0xC000;
+  st.pitch = 0x2000;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 0, &out) == FIFA96_OK);
+  assert(st.pos_y == 345);
+  st.pos_x = 0x420;
+  st.pos_y = 433;
+  st.pos_z = 0;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 0, &out) == FIFA96_OK);
+  assert(st.pos_y == 306);
+
+  /* Post-slew pitch snap: (0x8000,0xF618) -> 0xF618. A zero tick keeps the
+   * 0x8001 stored pitch, and the snap runs after the slew. */
+  memset(&st, 0, sizeof st);
+  st.pitch = 0x8001;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 0, &out) == FIFA96_OK);
   assert(st.pitch == 0xF618);
 
   assert(fifa96_camera_behavior_action(NULL, 1, 0, 0, &out) ==

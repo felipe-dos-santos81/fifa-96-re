@@ -793,12 +793,14 @@ static void test_live_ball_art_is_opaque_and_fixed_size(void) {
   memset(eb0 + 16u, 0x00, 8u * 8u);
   drive_granted(&f.mr, 1);
   assert(f.mr.render.ball_roll == 0);
-  /* Keep the live draw selected but pin the render eye to the fixture's
-   * identity camera (the real live eye is the class-3 side envelope). */
+  /* Keep the live draw selected but pin the fixture's identity camera and
+   * orientation (the real live eye is the class-3 side camera). */
   f.mr.render.render_eye_valid = 1;
   f.mr.render.render_eye_x = 0;
   f.mr.render.render_eye_y = 0;
   f.mr.render.render_eye_z = 0;
+  f.mr.render.yaw = 0;
+  f.mr.render.pitch = 0;
   f.mr.render.camera.pos_x = 0;
   f.mr.render.camera.pos_y = 0;
   f.mr.render.camera.pos_z = 0;

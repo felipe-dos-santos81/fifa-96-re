@@ -12157,3 +12157,29 @@ table + 6-bit correction) instead of the entity sine table at `>>6`.
 `fifa96_camera` links `fifa96_projection` for the primitive. Geometry, tick
 and clamps are unchanged; the live and unit camera tests still pass.
 `make check` **124/124**; M1/M2 `cmp` exact. Record: FU-351 §6.
+
+## Phase 93 — class-3 handler correction (2026-11-09)
+
+Phase 91's "full body" claim was premature. The fresh 186-instruction
+`0x4DB38` listing adds three native arms and corrects the slew scale:
+
+- Q16 rate `floor(tick * 0x10000 / 30|60)` from the `SHL EAX,0x10` plus
+  remainder divisions. The old tick/divisor form made tick 8 a zero rate;
+  the 32-bit shift wraps tick `0x3C0000` to zero.
+- Old-eye `off_y >> 3` at `0x4DBCA..0x4DBF3`.
+- Post-clamp look-at at `0x4DC82..0x4DC96` (raw pitch, then the existing
+  post-slew snap).
+- Target-history copy at `0x4DD95..0x4DD9D` (`hist_x/y/z`; no consumer).
+
+The separate `brake_*` fields were removed: the native clears the high
+words of yaw/pitch, which the port's 16-bit stores already do. The true
+fixed point is `(-353,434,0)`; replay is `(-424,505,0)`. `test_camera`
+pins the Q16 moves, the 32-bit wrap, the Y split, the replay 505/120
+values, the fixed point and the history. `test_engine_match_render` pins
+yaw/pitch 0 for its identity-view ball fixture. `make check` **124/124**;
+M1/M2 `cmp` exact. Non-live tapes are unchanged. Record: FU-351 §7.
+
+**Errata (quoted).** Phase 91: "camera `(-353,+353,0)`" — the fixed point
+is `(-353,434,0)`. Phase 92: "geometry, tick and clamps are unchanged" —
+this phase corrects all three. Phase 91's FU351-L4 history copy is now
+ported; FU351-L1/L2/L5 remain open.

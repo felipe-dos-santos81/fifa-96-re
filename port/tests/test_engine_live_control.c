@@ -2741,7 +2741,7 @@ static void test_live_setpiece_timeout_falls_back(uint8_t phase) {
   drop_lc_fixture(&f);
 }
 
-/* FU-350: the live eye is the native class-3 chase (FUN_0004DB38). The target
+/* FU-351: the live eye is the native class-3 chase (FUN_0004DB38). The target
  * is the derived render focus; the position is clamped to the native
  * ±0x420/±0x810 box and the live Y floor 100. A far focus proves the native
  * clamp is active (the old derived envelope could only reach 0x3C0 there). */

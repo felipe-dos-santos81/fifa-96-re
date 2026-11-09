@@ -75,7 +75,7 @@ struct fifa96_match_matchup {
  * it remains the non-live/tape pose. The earlier P12 live path used the
  * native type-0 end preset (-100,488,1100); Phase 80 replaces it with the
  * class-3 side-camera seed below. */
-/* Phase 81 [D]/FU-350: the class-3 side-camera first-frame seed. The native
+/* Phase 81 [D]/FU-351: the class-3 side-camera first-frame seed. The native
  * FUN_0004DB38 handler now owns the live eye; this seed only gives the first
  * frame the side framing: x=-500, eye height focus 0x50 + 420 = 0x1F4 (500),
  * z tracks the focus, and the view looks across +x at yaw 0xC000, pitch
