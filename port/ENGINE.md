@@ -12100,3 +12100,51 @@ edited-line-up re-sort; FU350-L3 the full `FUN_00047298` 23-descriptor pool;
 FU350-L4 in-match order swaps (`FUN_00041494`/`FUN_0008CBB0`/
 `FUN_0008EAB8`/`FUN_0009343C`). Full record:
 `port/spec/FU-350_native_lineup_order.md`.
+
+## Phase 91 — native class-3 side camera (2026-11-09)
+
+**Outcome.** The live eye is now the native class-3 side camera
+(`FUN_0004DB38`), not the Phase-81 derived envelope. The windowed Friendly
+view is a 500-unit chase: the camera sits `(-353,+353,0)` from a level target
+at yaw `0xC000`/pitch `0x2000`, clamps its position to ±0x420/±0x810, keeps a
+live Y floor of 100 and follows the play with the native yaw/pitch slew. The
+player reads visibly larger and the side view tracks movement; the old
+derived envelope (653-unit offset) is now only the first-frame seed.
+
+**Native evidence.** Fresh `disassemble_function 0x4DB38` gives the full body:
+the live gate (`FUN_0006400C`), the 500/600 distance
+(`0x108B7C`, replay +100), the look-at yaw/pitch (`FUN_0004C7D0`/`77C`), the
+pitch snap `(0x2000,0x8000)->0x2000`/`(0x8000,0xF618)->0xF618`, the
+`X(pitch)*Y(-yaw)` offset (`FUN_0004C7F8`/`4C414`/`4C3B0`/`A2991`/`A2914`),
+the position clamps and Y ease, and the `FUN_00049388` tick slew
+(`0x1E0000`/`0x3C0000`). `0x108B98/9C` = 100/120 are the live/replay Y floors;
+`0x108B80[3]` maps class 3 to the handler. The fixed point for a level target
+is `target (0,80,0), camera (-353,433,0)`.
+
+**Implementation.** `fifa96_camera_behavior_action` in
+`port/src/fifa96_loader/fifa96_camera.c` now implements the full body, with
+the 16-bit angle scaling from the port's 0x400-circle
+`fifa96_entity_angle`/`fifa96_entity_sine`. `fifa96_camera_pose_args` carries
+`handler_tick`; the live path calls the handler at speed 500 with
+`frame_delta*4` (the native `[0x107300]` is 4x the 30 Hz delta). The target
+is the existing Phase-85 derived render focus; the phase-71 envelope seeds the
+first frame only. Non-live tapes never enter the handler.
+
+**Verification.** `make check` **124/124**; M1 `cmp` exact `09b726b7…`; M2
+`cmp` exact `41521559…`. `test_camera` pins the fixed point, the replay
+600/120 values, the `+0x420` clamp and the `0xF618` pitch snap.
+`test_engine_live_control` pins the live `+-0x420` clamp. Windowed Friendly
+screenshots: `docs/screens/p90-native-class3-kickoff.png` and
+`docs/screens/p90-native-class3-follow.png`.
+
+**Legs.** FU351-L1 native live target producer (`FUN_000505D0`/FU-71 pose and
+pan events); FU351-L2 camera-type/view-mode selection
+(`FUN_0004D7E8`/`0x14E57C`/options); FU351-L3 exact `FUN_000A1A60` 6-bit
+sine/cos interpolation (port table resolution); FU351-L4 class-3 target
+history copy (`+0x40/44/48`); FU351-L5 native pan/pose interaction with the
+class-3 target. Full record: `port/spec/FU-351_class3_camera.md`.
+
+**Errata (quoted).** Phase 86's class-3-camera claim and FU-348-L4
+("`FUN_0004DB38` and its helpers are mapped but not ported; the live eye is
+the derived envelope") are corrected for the handler and live eye. The native
+target producer and camera-type selection remain FU351-L1/L2.

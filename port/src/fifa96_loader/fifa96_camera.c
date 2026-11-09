@@ -580,19 +580,108 @@ int fifa96_camera_behavior_staged(fifa96_camera_handler_state *st,
   return FIFA96_OK;
 }
 
+/* The 16-bit angle form of FUN_000A2A10: the entity helper returns the
+ * 0x400-circle angle (0x100 = 90 deg), and the camera's 0x10000-circle angle
+ * is that value shifted by 0x40 (45 deg = 0x80 -> 0x2000). */
+static int32_t camera_atan16(int32_t x, int32_t z) {
+  int32_t angle = 0;
+  if (fifa96_entity_angle(x, z, &angle) != FIFA96_OK) angle = 0;
+  return (int32_t)(((uint32_t)angle * 0x40u) & 0xFFFFu);
+}
+
+static int32_t camera_sin16(int32_t angle) {
+  uint32_t u = (uint32_t)angle & 0xFFFFu;
+  return fifa96_entity_sine((int32_t)(u >> 6));
+}
+
+static int32_t camera_cos16(int32_t angle) {
+  return camera_sin16(angle + 0x4000);
+}
+
+static int32_t camera_mul16(int32_t a, int32_t b) {
+  return (int32_t)(((int64_t)a * (int64_t)b) >> 16);
+}
+
+/* FUN_0004DB38's pitch snap: (0x2000,0x8000) -> 0x2000 and
+ * (0x8000,0xF618) -> 0xF618. */
+static int32_t camera_action_pitch_clamp(int32_t pitch) {
+  if (pitch > 0x8000 && pitch < 0xF618) return 0xF618;
+  if (pitch < 0x8000 && pitch > 0x2000) return 0x2000;
+  return pitch;
+}
+
 int fifa96_camera_behavior_action(fifa96_camera_handler_state *st, int live,
-                                  int32_t speed, fifa96_camera_handler_out *out) {
+                                  int32_t speed, int32_t tick,
+                                  fifa96_camera_handler_out *out) {
+  int32_t dx, dy, dz, adx, adz, mn, horiz;
+  int32_t target_yaw, target_pitch, sin_y, cos_y, sin_p, cos_p;
+  int32_t off_x, off_y, off_z, new_y, factor, delta;
   if (!st || !out) return -FIFA96_ERR_INVALID;
   /* 0x4DB38: `if (FUN_0006400C() == 0) param_4 += 100;` (faster when not
-   * live); the staged pos x clamps +-0x420 and pos z +-0x810; the pitch
-   * clamps to [0x2000, 63000]; the brake words +0x5A/+0x5E are zeroed. The
-   * ball-angle slew (divisors 0x1E0000/0x3C0000) and the FUN_0004C7xx
-   * tracking stay leg 9. */
+   * live). The live Y floor is [0x108B98] = 100; replay uses
+   * [0x108B9C] = 120. */
   if (!live) speed += 100;
   out->speed = speed;
-  st->pos_x = camera_clamp_i32(st->pos_x, -0x420, 0x420);
-  st->pos_z = camera_clamp_i32(st->pos_z, -0x810, 0x810);
-  st->pitch = camera_clamp_i32(st->pitch, 0x2000, 63000);
+
+  /* FUN_0004C7D0/77C: the look-at yaw is -atan2(dx,dz); the pitch uses the
+   * native octagonal horizontal range |dx|+|dz|-min/2. */
+  dx = st->track_x - st->pos_x;
+  dy = st->track_y - st->pos_y;
+  dz = st->track_z - st->pos_z;
+  adx = camera_abs(dx);
+  adz = camera_abs(dz);
+  mn = adx < adz ? adx : adz;
+  horiz = adx + adz - (mn >> 1);
+  target_yaw = (int32_t)(0u - (uint32_t)camera_atan16(dx, dz)) & 0xFFFF;
+  target_pitch =
+      (int32_t)(0u - (uint32_t)camera_atan16(dy, horiz)) & 0xFFFF;
+  target_pitch = camera_action_pitch_clamp(target_pitch);
+
+  /* FUN_0004C7F8: X(pitch) * Y(-yaw) applied to the native vector
+   * {0,0,speed}. The resulting offset is (off_x, off_y, off_z); the camera
+   * is target - offset. */
+  sin_y = camera_sin16(target_yaw);
+  cos_y = camera_cos16(target_yaw);
+  sin_p = camera_sin16(target_pitch);
+  cos_p = camera_cos16(target_pitch);
+  off_x = (int32_t)(((int64_t)speed *
+                     camera_mul16(-cos_p, sin_y)) >> 16);
+  off_y = (int32_t)(((int64_t)speed * -sin_p) >> 16);
+  off_z = (int32_t)(((int64_t)speed *
+                     camera_mul16(cos_p, cos_y)) >> 16);
+
+  /* Position: x/z snap to target - offset and clamp; y eases down by 1/8
+   * when the new target is below the current Y, else snaps. */
+  new_y = st->track_y - off_y;
+  if (new_y < st->pos_y)
+    st->pos_y += (new_y - st->pos_y) >> 3;
+  else
+    st->pos_y = new_y;
+  st->pos_x = st->track_x - off_x;
+  st->pos_z = st->track_z - off_z;
+  if (st->pos_x < -0x420) st->pos_x = -0x420;
+  else if (st->pos_x > 0x420) st->pos_x = 0x420;
+  if (st->pos_z < -0x810) st->pos_z = -0x810;
+  else if (st->pos_z > 0x810) st->pos_z = 0x810;
+  if (st->pos_y < (live ? 100 : 120)) st->pos_y = (live ? 100 : 120);
+
+  /* Yaw/pitch slew: tick / 0x1E0000 (yaw), tick / 0x3C0000 (pitch), with the
+   * native +0x8000 rounding and the high word cleared. */
+  delta = (target_yaw - st->yaw) & 0xFFFF;
+  if (delta > 0x8000) delta -= 0x10000;
+  factor = tick > 0 ? (int32_t)(((int64_t)tick * 0x10000) / 0x1E0000) : 0;
+  st->yaw = (int32_t)(((uint32_t)st->yaw +
+                       (uint32_t)(int32_t)(((int64_t)delta * factor + 0x8000) >>
+                                           16)) &
+                      0xFFFFu);
+  delta = (target_pitch - st->pitch) & 0xFFFF;
+  if (delta > 0x8000) delta -= 0x10000;
+  factor = tick > 0 ? (int32_t)(((int64_t)tick * 0x10000) / 0x3C0000) : 0;
+  st->pitch = (int32_t)(((uint32_t)st->pitch +
+                         (uint32_t)(int32_t)(((int64_t)delta * factor + 0x8000) >>
+                                             16)) &
+                        0xFFFFu);
+  st->pitch = camera_action_pitch_clamp(st->pitch);
   st->brake_lo = 0;
   st->brake_hi = 0;
   return FIFA96_OK;
@@ -714,7 +803,9 @@ static int camera_pose_handler_arm(fifa96_camera *cam, int32_t *yaw, int32_t *pi
       rc = fifa96_camera_behavior_staged(st, args->handler_block, args->handler_rnd, out);
       break;
     case 3:
-      rc = fifa96_camera_behavior_action(st, args->handler_live, args->handler_speed, out);
+      rc = fifa96_camera_behavior_action(st, args->handler_live,
+                                         args->handler_speed,
+                                         args->handler_tick, out);
       break;
     default:
       return 0;

@@ -75,13 +75,12 @@ struct fifa96_match_matchup {
  * it remains the non-live/tape pose. The earlier P12 live path used the
  * native type-0 end preset (-100,488,1100); Phase 80 replaces it with the
  * class-3 side-camera seed below. */
-/* Phase 81 [D]: the class-3 side-camera envelope. The native handler clamps
- * the side pitch to the 0x2000 (45 degree) band and uses the 0x1F4 (500)
- * distance constant; the live seed carries that envelope: x=-500, eye height
- * focus 0x50 + 420 = 0x1F4 (500), z tracks the focus, and the view looks
- * across +x at yaw 0xC000. This is presentation framing, not a claim of the
- * class-3 output: the native position/yaw/pitch integrators remain an open
- * leg. The ratio stays the native camera 4608. */
+/* Phase 81 [D]/FU-350: the class-3 side-camera first-frame seed. The native
+ * FUN_0004DB38 handler now owns the live eye; this seed only gives the first
+ * frame the side framing: x=-500, eye height focus 0x50 + 420 = 0x1F4 (500),
+ * z tracks the focus, and the view looks across +x at yaw 0xC000, pitch
+ * 0x2000. The native handler then converges to its 500-unit chase fixed point.
+ * The ratio stays the native camera 4608. */
 #define FIFA96_MATCH_RUN_SIDE_X (-500)
 #define FIFA96_MATCH_RUN_SIDE_Y 420
 #define FIFA96_MATCH_RUN_SIDE_Z 0
@@ -470,6 +469,11 @@ struct fifa96_match_run_render {
    * cannot teleport the view. Cleared by reset_render's memset. */
   int32_t render_eye_x, render_eye_y, render_eye_z;
   uint8_t render_eye_valid;
+  /* Native class-3 side camera (FUN_0004DB38) live state. The position is
+   * the rendered eye; the target triple is the derived render focus; yaw and
+   * pitch are the camera's stored orientation (also fed to the projection).
+   * The derived envelope seeds the first frame only. */
+  fifa96_camera_handler_state action_cam;
   /* Phase 81 [D]: the live ball focus. The native FU-71 focus must stay
    * untouched for the ball machine/AI while a native pan is active; the side
    * presentation eye converges on this focus. `camera.pos_*` is staged from

@@ -282,7 +282,8 @@ int fifa96_camera_behavior_staged(fifa96_camera_handler_state *st,
                                   const fifa96_camera_handler_block *block,
                                   int32_t rnd, fifa96_camera_handler_out *out);
 int fifa96_camera_behavior_action(fifa96_camera_handler_state *st, int live,
-                                  int32_t speed, fifa96_camera_handler_out *out);
+                                  int32_t speed, int32_t tick,
+                                  fifa96_camera_handler_out *out);
 
 /* FU-152 §2.8 (P4): the six 0x108B64 behavior-block fields the handlers read,
  * first-hand `read_memory 0x10896C` (504 B): +0x00 target0, +0x04 target1,
@@ -322,6 +323,10 @@ typedef struct fifa96_camera_pose_args {
   int32_t handler_rnd;
   int32_t handler_live;
   int32_t handler_speed;
+  /* FUN_00049388()'s `[0x107300]` tick fed to the action handler's yaw/pitch
+   * slew. The native value is the 100 Hz elapsed time x12/5; the match body
+   * runs at 30 Hz, so the live caller passes frame_delta * 4. */
+  int32_t handler_tick;
 } fifa96_camera_pose_args;
 
 /* Write the six pose fields (FUN_000505D0's shared arm): camera

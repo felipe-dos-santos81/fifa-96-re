@@ -1823,28 +1823,62 @@ static void test_behavior_staged(void) {
 }
 
 static void test_behavior_action(void) {
-  /* FUN_0004DB38: `if (FUN_0006400C() == 0) param_4 += 100;`, pos x +-0x420,
-   * pos z +-0x810, pitch clamp [0x2000,63000], the brake words zeroed. */
+  /* FUN_0004DB38: the class-3 chase camera. The fixed point for a level
+   * target is the 500-unit side offset: target (0,80,0), camera
+   * (-353,433,0), yaw 0xC000, pitch 0x2000. */
   fifa96_camera_handler_state st;
   fifa96_camera_handler_out out;
   memset(&st, 0, sizeof st);
   memset(&out, 0, sizeof out);
-  st.pos_x = 0x500;
-  st.pos_z = -0x900;
-  st.pitch = 0x1000;
+  st.track_x = 0;
+  st.track_y = 80;
+  st.track_z = 0;
+  st.pos_x = -353;
+  st.pos_y = 433;
+  st.pos_z = 0;
+  st.yaw = 0xC000;
+  st.pitch = 0x2000;
   st.brake_lo = 5;
   st.brake_hi = 6;
-  assert(fifa96_camera_behavior_action(&st, 0, 500, &out) == FIFA96_OK);
-  assert(out.speed == 600);
-  assert(st.pos_x == 0x420 && st.pos_z == -0x810);
-  assert(st.pitch == 0x2000);
-  assert(st.brake_lo == 0 && st.brake_hi == 0);
-  st.pitch = 0x10000;
-  assert(fifa96_camera_behavior_action(&st, 1, 500, &out) == FIFA96_OK);
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 8, &out) == FIFA96_OK);
   assert(out.speed == 500);
-  assert(st.pitch == 63000);
-  assert(fifa96_camera_behavior_action(NULL, 1, 0, &out) == -FIFA96_ERR_INVALID);
-  assert(fifa96_camera_behavior_action(&st, 1, 0, NULL) == -FIFA96_ERR_INVALID);
+  assert(st.pos_x >= -355 && st.pos_x <= -351);
+  assert(st.pos_y >= 430 && st.pos_y <= 436);
+  assert(st.pos_z >= -2 && st.pos_z <= 2);
+  assert(st.yaw == 0xC000 && st.pitch == 0x2000);
+  assert(st.brake_lo == 0 && st.brake_hi == 0);
+
+  /* Replay is 100 units farther and uses the 120 Y floor. */
+  memset(&st, 0, sizeof st);
+  st.track_y = 80;
+  st.pos_x = -353;
+  st.pos_y = 433;
+  st.yaw = 0xC000;
+  st.pitch = 0x2000;
+  assert(fifa96_camera_behavior_action(&st, 0, 500, 0, &out) == FIFA96_OK);
+  assert(out.speed == 600);
+  assert(st.pos_x >= -428 && st.pos_x <= -420);
+  assert(st.pos_y >= 498 && st.pos_y <= 508);
+
+  /* Position clamp: a target far along +x puts the camera at x=+0x420. */
+  memset(&st, 0, sizeof st);
+  st.track_x = 0x2000;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 0, &out) == FIFA96_OK);
+  assert(st.pos_x == 0x420 && st.pos_z == 0);
+  assert(st.pos_y == 100);
+
+  /* Pitch snap: the (0x8000,0xF618) arm stores 0xF618 at full slew. */
+  memset(&st, 0, sizeof st);
+  st.track_y = 0x2000;
+  st.track_z = -0x2000;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, 0x3C0000, &out) ==
+         FIFA96_OK);
+  assert(st.pitch == 0xF618);
+
+  assert(fifa96_camera_behavior_action(NULL, 1, 0, 0, &out) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_behavior_action(&st, 1, 0, 0, NULL) ==
+         -FIFA96_ERR_INVALID);
 }
 
 static void test_pose_feed_default_handler_arm(void) {
@@ -1878,14 +1912,17 @@ static void test_pose_feed_default_handler_arm(void) {
   assert(yaw == 0 && pitch == 0x1620);
   assert(out.horizon_a == 0xE09 + 8 && out.horizon_b == 0xAA1 + 8);
 
-  /* selector 3 = the action handler (unsigned live flag + speed). */
+  /* selector 3 = the action handler (unsigned live flag + speed). With the
+   * camera at +0x500 and the target at the origin the class-3 geometry keeps
+   * the 500-unit distance along +x (z=0). */
   memset(&st, 0, sizeof st);
   args.selector = 3;
   args.handler_live = 0;
   args.handler_speed = 500;
+  args.handler_tick = 0;
   st.pos_x = 0x500;
   assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
-  assert(out.speed == 600 && cam.pos_x == 0x420);
+  assert(out.speed == 600 && cam.pos_x == 600 && cam.pos_z == 0);
 
   /* Without a staged handler state the default arm stays unported (0). */
   args.handler_state = NULL;

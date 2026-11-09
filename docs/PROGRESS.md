@@ -4771,3 +4771,21 @@ close-out below).
   Full record: `port/spec/FU-350_native_lineup_order.md`. Open legs: the
   competition card/injury replacement, front-end edited-lineup re-sort, the
   full `FUN_00047298` 23-descriptor pool, and the in-match order swaps.
+
+- **Phase 91 native class-3 side camera (2026-11-09).** The live eye is now the
+  native `FUN_0004DB38` class-3 side camera instead of the Phase-81 derived
+  envelope. The handler places the camera 500 units from the target along the
+  look-at yaw/pitch (`0x4C7D0`/`0x77C`/`0x7F8`), clamps the position to
+  ±0x420/±0x810 with a live Y floor of 100, eases Y down by 1/8, and slews the
+  stored yaw/pitch with the `0x49388` tick (`0x1E0000`/`0x3C0000`). The fixed
+  point for a level target is `(-353,+353,0)` at yaw `0xC000`/pitch `0x2000`;
+  replay uses 600 and a Y floor of 120. The live target is still the Phase-85
+  derived render focus, and the derived envelope is now the first-frame seed
+  only; non-live tapes are untouched. `test_camera` pins the handler geometry
+  and clamps; `test_engine_live_control` pins the live `±0x420` clamp.
+  `make check` green 124/124; M1/M2 `cmp` exact. Windowed Friendly screenshots:
+  `docs/screens/p90-native-class3-kickoff.png`,
+  `docs/screens/p90-native-class3-follow.png`. Full record:
+  `port/spec/FU-351_class3_camera.md`. Open legs: native live target producer
+  and camera-type/view-mode selection, exact `0xA1A60` sine interpolation, the
+  class-3 target-history copy, and the pan/pose interaction.

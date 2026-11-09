@@ -2011,15 +2011,14 @@ static void match_run_entity_drain(struct fifa96_match_run *mr) {
  * the engine's row-04/ball-receive producers may rebind it later). Derived
  * stand-in for the unported FU-310 camera place, not a native producer; the
  * native rig smoothing and the live orientation director stay open legs. */
-/* Phase 71 — the live render-eye stabilizer [D].
+/* Phase 71 — the live render-eye first-frame seed [D].
  *
- * The FU-71 focus cell is the simulation camera, but the rendered eye is the
- * class-3 side stand-in (focus + side offset). A native pan handoff hard-sets
- * the focus and the rendered eye jumps by the whole delta in one granted frame
- * (measured 376 x / 79 y / 248 z at the P14 smoke). The stabilizer keeps the
- * simulation cell exact and clamps the render-only eye to the native FU-71
- * bounds (`|x| <= 0x6C0`, `|z| <= 0xAB0`) with a 0x30-per-frame step. It is a
- * derived presentation stand-in, not a claim of the native director (P10-L6). */
+ * The FU-71 focus cell is the simulation camera; the rendered eye is the
+ * native class-3 side camera now owned by FUN_0004DB38. This seed gives the
+ * first live frame the side framing (focus + side offset) before the native
+ * handler takes over. It keeps the simulation cell exact and clamps the
+ * render-only eye to the native FU-71 bounds (`|x| <= 0x6C0`, `|z| <= 0xAB0`)
+ * with a 0x30 step. It is not a claim of the native director (P10-L6). */
 #define MATCH_RUN_RENDER_EYE_MAX_STEP 0x30
 #define MATCH_RUN_RENDER_EYE_SNAP 0x600
 #define MATCH_RUN_RENDER_EYE_BOUND_X 0x6C0
@@ -2076,6 +2075,12 @@ static void match_run_render_eye_update(struct fifa96_match_run *mr) {
   r->render_eye_y = match_run_render_eye_step(r->render_eye_y, ty);
   r->render_eye_z = match_run_render_eye_step(r->render_eye_z, tz);
 }
+
+/* FU-351: the class-3 side-camera constants. [0x108B7C] = 500 is the live
+ * chase distance; FUN_00049388 returns [0x107300] (the 100 Hz elapsed time
+ * x12/5), which is 4x the port's frame_delta at the 30 Hz grant. */
+#define MATCH_RUN_CLASS3_DISTANCE 500
+#define MATCH_RUN_CLASS3_TICK_SCALE 4
 
 static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   struct fifa96_camera *cam = &mr->render.camera;
@@ -2136,9 +2141,36 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   r->render_focus_x = render_x;
   r->render_focus_z = render_z;
   r->render_focus_valid = 1u;
-  /* Phase 71: converge the render-only eye before the pan/follow early return,
-   * so a native pan handoff is smoothed rather than teleported. */
-  match_run_render_eye_update(mr);
+  /* Native class-3 side camera (FUN_0004DB38). The target is the existing
+   * derived render focus; the geometry is the native 500-unit chase, with
+   * the position clamps ±0x420/±0x810 and the native yaw/pitch slew. The
+   * derived envelope seeds the first frame only. Non-live tapes keep the
+   * old camera path byte-exact. */
+  if (mr->live_start) {
+    if (r->render_eye_valid == 0u) match_run_render_eye_update(mr);
+    fifa96_camera_handler_state *acs = &r->action_cam;
+    fifa96_camera_handler_out ac_out;
+    acs->track_x = r->render_focus_x;
+    acs->track_y = r->view_focus_y;
+    acs->track_z = r->render_focus_z;
+    acs->pos_x = r->render_eye_x;
+    acs->pos_y = r->render_eye_y;
+    acs->pos_z = r->render_eye_z;
+    acs->ratio = r->view_ratio;
+    acs->yaw = r->yaw;
+    acs->pitch = r->pitch;
+    if (fifa96_camera_behavior_action(
+            acs, 1, MATCH_RUN_CLASS3_DISTANCE,
+            (int32_t)mr->state.frame_delta * MATCH_RUN_CLASS3_TICK_SCALE,
+            &ac_out) == FIFA96_OK) {
+      r->render_eye_x = acs->pos_x;
+      r->render_eye_y = acs->pos_y;
+      r->render_eye_z = acs->pos_z;
+      r->render_eye_valid = 1u;
+      r->yaw = acs->yaw;
+      r->pitch = acs->pitch;
+    }
+  }
   if ((cam->event_param != 0 || cam->speed != 0) &&
       mr->live_kick_active == 0u && mr->live_save_hold == 0u)
     return;   /* native pan active: keep the FU-71 focus frozen */

@@ -2741,46 +2741,38 @@ static void test_live_setpiece_timeout_falls_back(uint8_t phase) {
   drop_lc_fixture(&f);
 }
 
-/* Phase 71/81: the render-only eye moves at most 0x30 per granted frame and
- * converges on the clamped class-3 side pose; the simulation camera stays the
- * native FU-71 cell. */
-static void test_live_render_eye_stabilizer(void) {
+/* FU-350: the live eye is the native class-3 chase (FUN_0004DB38). The target
+ * is the derived render focus; the position is clamped to the native
+ * ±0x420/±0x810 box and the live Y floor 100. A far focus proves the native
+ * clamp is active (the old derived envelope could only reach 0x3C0 there). */
+static void test_live_native_class3_camera(void) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
-  fifa96_render_pos prev, cur, exact;
-  int32_t dx, dz;
   one_granted_frame(mr);
-  fifa96_match_run_render_eye(mr, &prev);
   assert(mr->render.render_eye_valid == 1u);
   assert(mr->render.view_focus_valid == 1u);
-  /* Jump the ball so the render-only focus must move; the eye is the bounded
-   * stabilizer and may move at most 0x30 per granted frame. */
-  mr->entities.ball.x += 0x400;
-  mr->entities.ball.z += 0x200;
+  assert(mr->render.render_focus_valid == 1u);
+  assert(mr->render.render_eye_x >= -0x420 &&
+         mr->render.render_eye_x <= 0x420);
+  assert(mr->render.render_eye_z >= -0x810 &&
+         mr->render.render_eye_z <= 0x810);
+  assert(mr->render.render_eye_y >= 100);
+  assert(mr->render.yaw == 0xC000 && mr->render.pitch == 0x2000);
+
+  /* Freeze the derived ball lead and push the focus outside the camera box;
+   * the native handler stores the clamp, not the derived focus+offset. */
+  mr->state.period = 4u;
+  mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.ball.x = 0x1000;
+  mr->entities.ball.z = 0;
   mr->entities.ball.vel_x = 0;
   mr->entities.ball.vel_z = 0;
   one_granted_frame(mr);
-  fifa96_match_run_render_eye(mr, &cur);
-  dx = cur.x - prev.x; if (dx < 0) dx = -dx;
-  dz = cur.z - prev.z; if (dz < 0) dz = -dz;
-  assert(dx <= 0x30 && dz <= 0x30);
-  /* Let the eye converge on the live pose. */
-  for (int i = 0; i < 120; i++) {
-    prev = cur;
-    one_granted_frame(mr);
-    fifa96_match_run_render_eye(mr, &cur);
-    dx = cur.x - prev.x; if (dx < 0) dx = -dx;
-    dz = cur.z - prev.z; if (dz < 0) dz = -dz;
-    assert(dx <= 0x30 && dz <= 0x30);
-  }
-  (void)exact;
-  /* The focus may pan while the eye converges; the observable claim is the
-   * per-frame bound plus the native FU-71 clamp, not a frozen target. */
-  assert(cur.x >= -0x6C0 + FIFA96_MATCH_RUN_SIDE_X);
-  assert(cur.x <= 0x6C0 + FIFA96_MATCH_RUN_SIDE_X);
-  assert(cur.z >= -0xAB0 + FIFA96_MATCH_RUN_SIDE_Z);
-  assert(cur.z <= 0xAB0 + FIFA96_MATCH_RUN_SIDE_Z);
   assert(mr->render.render_eye_valid == 1u);
+  assert(mr->render.render_eye_x == 0x420);
+  assert(mr->render.render_eye_z >= -0x810 &&
+         mr->render.render_eye_z <= 0x810);
+  assert(mr->render.render_eye_y >= 100);
   drop_lc_fixture(&f);
 }
 
@@ -3129,7 +3121,7 @@ int main(void) {
   test_live_setpiece_out_force_clears_taker();
   test_live_setpiece_timeout_falls_back(7u);
   test_live_setpiece_timeout_falls_back(6u);
-  test_live_render_eye_stabilizer();
+  test_live_native_class3_camera();
   test_live_follow_keeps_ball_during_pan();
   test_live_offball_shape_moves_team();
   test_live_support_run_moves_forward();
