@@ -2940,16 +2940,17 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
  * (install code 4 on the staged ball actor `[0x158730]` + the `0x79B58`
  * receiver timer on `[0x158734]`).
  *
- * Residual OL-63 legs (no derived consumer): the stage-0 target algebra
- * `0x7F3A1..0x7F57B` (reported as `out.tail`) and the `FUN_0007F7E0`
- * fallback (`out.fallback`); the `0x92820` sink (`out.sink`, OL-27), the
+ * Stage-0 target/release algebra: ported as
+ * `fifa96_action_carrier_tail_step` and bound for the live human carrier while
+ * a pad direction is held (FU348-L3 partial); the `FUN_0007F7E0` fallback
+ * (`out.fallback`) remains OL-63. The `0x92820` sink (`out.sink`, OL-27), the
  * unported `0x1577BE/C0/C2` camera-velocity zero (`out.camera_zero`) and the
  * `0x6E598` animation resolution (`out.anim`, OL-52) are presentation-side
  * requests. */
-/* Live-only carrier dribble [D]. The native stage-0 target algebra writes the
- * carrier's target from the dribble direction (0x7F3A1..0x7F57B); that algebra
- * is still OL-63, while the portable row-05 path copies the camera triple into
- * the record target. For the human carrier the camera copy makes the player
+/* Live-only carrier dribble fallback [D]. The native tail (bound above for the
+ * held-input human path) supplies the native target/release/camera values;
+ * this derived input target remains for idle/AI carriers and when the tail
+ * binding is inactive. For the human carrier the camera copy makes the player
  * immobile, so use the held input direction with a bounded pitch target. This
  * writes only the record target; the existing mover and ball pairing remain
  * authoritative. */
@@ -7953,7 +7954,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x04, fifa96_match_action_04,
      "FU-142 App. K.5/FU-137 §6.1 (Task 1/OL-70): row 04 ported (fifa96_outfield_row04_step, 0x7E7C8..0x7F141) over the pool; the carrier/ranked-pick/forced/chase installs 4/0x19/0xF/0xE/0xB/7/6/5 and the target/timer/team writes are bound; the 0x7CA54 input-row machine stays a separate unwired seam; unmodeled record/team bytes, track words and sinks OL-65/OL-67/OL-72; the +0x8E readers now unify on record.type (OL-83 closed)"},
     {0x05, fifa96_match_action_05,
-     "FU-139 §8/§5 + M2 phase-9 T2/OL-63: row 05 carrier machine ported (0x7F194..0x7F665 stages 0-3) + staging tail 0x7A8D1..0x7AA2F; wired: the 0x7F1FF [0x158724] claim + the 0x158728..0x15872F block, team-target bind, capped timer, camera target, stage-0 control/dir gates, the 0x7876C merge and stages 1-3 (snap/face/hand-off) over the pool; stage-0 tail 0x7F3A1..0x7F57B + FUN_0007F7E0 fallback stay OL-63 legs (named requests); sinks 0x92820/0x6E598 OL-27/OL-52"},
+     "FU-139 §8/§5 + M2 phase-9 T2/OL-63 + FU-348: row 05 carrier machine ported (0x7F194..0x7F665 stages 0-3) + staging tail 0x7A8D1..0x7AA2F; wired: the 0x7F1FF [0x158724] claim + the 0x158728..0x15872F block, team-target bind, capped timer, camera target, stage-0 control/dir gates, the 0x7876C merge and stages 1-3 (snap/face/hand-off) over the pool; stage-0 tail 0x7F3A1..0x7F57B ported as fifa96_action_carrier_tail_step and bound for the held-input live human carrier (FU348-L3 partial); FUN_0007F7E0 fallback, the sink bodies and the AI/idle binding remain OL-63 legs; sinks 0x92820/0x6E598 OL-27/OL-52"},
     {0x06, fifa96_match_action_06,
      "FU-139 §11 (Task 13/OL-30): row 06 ported (0x801B4..0x809EF pursuit machine; 0x8DCD4 metric + 0x8DD70 angle + 0x114E04 folds, RNG installs 8/9, carrier-gate install 4, 0x8DE8C/0x79CCC selections) over the pool; row-09 0x80A00 boundary; record bytes/lead/swap OL-69"},
     {0x07, fifa96_match_action_07,

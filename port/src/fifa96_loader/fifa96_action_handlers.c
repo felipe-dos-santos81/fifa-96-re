@@ -498,7 +498,8 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
         out->dir_speed = dir.speed;
         /* 0x7F386..0x7F57B: the dir-byte writes and the unported stage-0
          * target algebra (0x92820/0x71C94/0x79CCC/0x6DA64 and the record
-         * target writes, OL-63). */
+         * target writes; ported as fifa96_action_carrier_tail_step below,
+         * engine binding FU348-L3). */
         out->tail = 1;
       } else if (carrier->team_slot_pool != 0 && carrier->team_chosen == 0 &&
                  (carrier->team_search_gate != 0 || carrier->active != 0)) {

@@ -246,7 +246,8 @@ fifa96_err_t fifa96_action_possession_dribble_dir(uint8_t type8, int32_t distanc
  *     (`ball_height > 0x38`) takes the caller's `type_dir_*[type8]` with speed
  *     0x60 and the slot arm the caller's `slot_dir_*` with speed 0x30; both
  *     then run the `0x7F386` dir-byte writes and the unported
- *     `0x7F3A1..0x7F57B` target algebra (`tail`, OL-63). The team-gate path
+ *     `0x7F3A1..0x7F57B` target algebra (`tail`; ported as
+ *     `fifa96_action_carrier_tail_step`, engine binding FU348-L3). The team-gate path
  *     raises the `slot_merge` request (native FUN_0007876C at `0x7F356`): its
  *     continuation is the merge result (a slot -> the slot arm/tail, no slot ->
  *     the fallback path), so `tail` is not claimed here. The remaining path
@@ -264,10 +265,10 @@ fifa96_err_t fifa96_action_possession_dribble_dir(uint8_t type8, int32_t distanc
  *     `handoff` request (native install code 4 on the staged ball actor
  *     `[0x158730]` + FUN_00079B58 receiver timer on `[0x158734]`) only for the
  *     team target; stages > 3 return unchanged.
- * All other native side effects (the record target writes of the stage-0 tail,
- * the 0x92820/0x71C94/0x79CCC/0x6DA64/0x7F7E0 call bodies, the camera/record
- * globals) are unported requests or no-ops with the numbered legs above; the
- * row is therefore NOT wired (binding gate, plan Global Constraints). NULL
+ * The stage-0 target/release algebra is the separate tested helper
+ * `fifa96_action_carrier_tail_step` (below); its engine binding is FU348-L3.
+ * The 0x92820/0x79CCC/0x6DA64/0x7F7E0 call bodies and the remaining record
+ * globals are unported requests or no-ops with the numbered legs above. NULL
  * `state`/`carrier`/`out` -> -FIFA96_ERR_INVALID; NULL `type_dir_*` is invalid
  * only when the type arm is taken. */
 typedef struct fifa96_action_carrier {
@@ -315,7 +316,8 @@ typedef struct fifa96_action_carrier_out {
   int16_t dir_speed;      /* the stage-0 speed seed (0x60 type arm / 0x30
                            * slot arm; 0 when no dir resolved) */
   uint8_t fallback;       /* native FUN_0007F7E0 (unported, OL-63) */
-  uint8_t tail;           /* native stage-0 tail 0x7F3A1..0x7F57B (unported, OL-63) */
+  uint8_t tail;           /* native stage-0 tail 0x7F3A1..0x7F57B (ported helper;
+                           * engine binding FU348-L3) */
   uint8_t slot_merge;     /* native FUN_0007876C request (0x7F356) */
   uint8_t sink;           /* native FUN_00092820 request (OL-27) */
   uint8_t camera_zero;    /* native 0x1577BE/C0/C2 zero (stage 1) */
