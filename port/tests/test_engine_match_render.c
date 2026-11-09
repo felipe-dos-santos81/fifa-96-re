@@ -1577,8 +1577,10 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   /* Two teams' kit bands differ: the live stage overlays PALteam frame 0 over
    * the sprite body bands (team 0) and writes frame 2's shirt/shorts bands
    * into the free 230..245 slots (team 1, A7 §4). */
-  assert(r->remap_team[0][195] == 195 && r->remap_team[0][208] == 208);
-  assert(r->remap_team[1][195] == 230 && r->remap_team[1][203] == 238);
+  assert(r->remap_team[0][197] == 197 && r->remap_team[0][208] == 208);
+  /* Phase-85: 0xC3 (source 195) is the white collar, so the shorts identity
+   * starts at 0xC5 (197); the kit redirect still covers 195..203/208..214. */
+  assert(r->remap_team[1][197] == 232 && r->remap_team[1][203] == 238);
   assert(r->remap_team[1][208] == 239 && r->remap_team[1][214] == 245);
   int shorts_diff = 0, shirt_diff = 0;
   for (int i = 0; i < 9; i++)
@@ -1685,8 +1687,8 @@ static void test_live_real_team_kits(void) {
 
   /* Team 0 keeps the identity translation; team 1 redirects its shirt/shorts
    * bands into the free slots (A7 §4). */
-  assert(r->remap_team[0][195] == 195 && r->remap_team[0][208] == 208);
-  assert(r->remap_team[1][195] == 230 && r->remap_team[1][203] == 238);
+  assert(r->remap_team[0][197] == 197 && r->remap_team[0][208] == 208);
+  assert(r->remap_team[1][197] == 232 && r->remap_team[1][203] == 238);
   assert(r->remap_team[1][208] == 239 && r->remap_team[1][214] == 245);
 
   /* Brazil shirt ramp entry 0 = 6-bit (63,56,5) -> 8-bit (252,224,20). */
@@ -1701,21 +1703,33 @@ static void test_live_real_team_kits(void) {
          r->palette[230 * 3 + 2] >= 220);
   /* Team 0 socks use the green ramp (0,48,4) -> (0,192,16). */
   assert(r->palette[224 * 3] <= 40 && r->palette[224 * 3 + 1] >= 150);
-  /* Phase-84: the native appearance subset rides the team translation. The
-   * head/hands source indices reach the raw PALsys skin/hair entries, while
-   * the kit bands above stay untouched. */
+  /* Phase-85: the semantic appearance remap rides the team translation. The
+   * shirt/trim bands reach the selected kit ramp, the bare arms/legs reach the
+   * PALsys skin ramp, the hair reaches the staged dark ramp, and the sock band
+   * stays on the selected sock ramp. */
+  assert(r->remap_team[0][0x50] == 208);         /* home shirt sleeve */
+  assert(r->remap_team[1][0x50] == 239);         /* away shirt sleeve */
+  assert(r->remap_team[0][0x8F] == 213);         /* home shirt side panel */
+  assert(r->remap_team[1][0x8F] == 244);         /* away shirt side panel */
   for (int side = 0; side < 2; side++) {
-    assert(r->remap_team[side][0x75] == 0xF7);
-    assert(r->remap_team[side][0x76] == 0xF9);
-    assert(r->remap_team[side][0x8F] == 0x00);
-    assert(r->remap_team[side][0x9C] == 0xFD);
-    assert(r->remap_team[side][0xD7] == 0x00);
-    assert(r->remap_team[side][0xDB] == 0xF6);
-    assert(r->remap_team[side][0xE3] == 0xFD);   /* 0xFE is the line slot */
+    assert(r->remap_team[side][0x8F] == (side == 0 ? 213 : 244));
+    assert(r->remap_team[side][0x9C] == (side == 0 ? 212 : 243));
+    assert(r->remap_team[side][0xCC] == (side == 0 ? 208 : 239)); /* torso */
+    assert(r->remap_team[side][0x75] == 0xFA);   /* bare arm skin ramp */
+    assert(r->remap_team[side][0x8F] != 0x00);   /* not the old green-skin fix */
+    assert(r->remap_team[side][0xD7] == 0xD7);   /* hair ramp */
+    assert(r->remap_team[side][0xDB] == 0xF6);   /* face/leg skin ramp */
+    assert(r->remap_team[side][0xE0] == 0xFB);   /* face sub-band, not socks */
+    assert(r->remap_team[side][0xE3] == 0xF6);   /* 9-entry skin wrap */
+    assert(r->remap_team[side][0xC2] == FIFA96_PITCH_LINE_INDEX);
   }
-  /* The skin destination is a brown ramp, not the green kit colour. */
-  assert(r->palette[0xF7 * 3] > r->palette[0xF7 * 3 + 1]);
-  assert(r->palette[0xF7 * 3 + 1] > r->palette[0xF7 * 3 + 2]);
+  /* The skin destination is a brown ramp, not the green kit colour; the hair
+   * slots carry the PALsys dark ramp (red > green > blue). */
+  assert(r->palette[0xFA * 3] > r->palette[0xFA * 3 + 1]);
+  assert(r->palette[0xFA * 3 + 1] > r->palette[0xFA * 3 + 2]);
+  assert(r->palette[0xD7 * 3] > r->palette[0xD7 * 3 + 1]);
+  assert(r->palette[0xD7 * 3 + 1] > r->palette[0xD7 * 3 + 2]);
+  assert(r->palette[0xD7 * 3] > 80);
 
   int shirt_diff = 0, shorts_diff = 0;
   for (int i = 0; i < 7; i++)

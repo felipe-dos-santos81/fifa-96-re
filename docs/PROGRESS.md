@@ -4659,3 +4659,24 @@ close-out below).
   screenshot `docs/screens/p84-live-skin-and-facing.png`. The full per-player
   palette pool, per-player skin/hair variation, vertical ball staging
   (`0x7A490`) and the native kick pose remain legs.
+
+- **Phase 85 live kit/skin correction, pass reach and off-ball focus
+  (2026-11-09).** The Phase 84 appearance subset was using the wrong sprite
+  source bands: the staged PLAYART `walk.fsh` histogram puts `0x8F/0x90/0x9C/
+  0x9D` in the shirt side panels, not the skin, so the live kits still striped;
+  the face pixels use `0xE0..0xE3`, so leaving that sub-band on the sock
+  identity kept the green face. The team-1 kit redirect was also a source
+  rewrite rather than a value translation (the renderer looks a sprite byte up
+  once), so both teams rendered Brazil yellow. The live team translation now
+  maps the measured shirt/shorts/socks/skin/hair bands and composes the away
+  redirect over those values; the away team now renders white/black/green.
+  PASS/LONG_BALL flights use the normalised FU-73 pair direction projected to
+  `speed * 0x60` units instead of the old two-unit target, so a pass visibly
+  leaves the kicker. A new render-only focus blends halfway toward the
+  controlled record when the opponent owns the ball, keeping the human player
+  on canvas while the simulation camera stays ball-focused. `make check`
+  **124/124**; M1 exact `09b726b7…`; M2 exact `41521559…`; screenshots
+  `docs/screens/p85-live-kits-skin.png`, `docs/screens/p85-pass-flight.png`
+  and `docs/screens/p85-offball-focus.png`. The full per-player palette pool,
+  native vertical ball staging (`0x7A490`), the native kick pose and the
+  class-3 integrator remain legs.

@@ -466,11 +466,19 @@ struct fifa96_match_run_render {
    * cannot teleport the view. Cleared by reset_render's memset. */
   int32_t render_eye_x, render_eye_y, render_eye_z;
   uint8_t render_eye_valid;
-  /* Phase 81 [D]: the render-only ball focus. The native FU-71 focus must stay
+  /* Phase 81 [D]: the live ball focus. The native FU-71 focus must stay
    * untouched for the ball machine/AI while a native pan is active; the side
-   * presentation eye follows this ball focus instead. Live-only. */
+   * presentation eye converges on this focus. `camera.pos_*` is staged from
+   * it below. Live-only. */
   int32_t view_focus_x, view_focus_y, view_focus_z;
   uint8_t view_focus_valid;
+  /* Phase 85 [D]: a second, strictly render-only focus. When the opponent (or
+   * a loose ball) owns the play it blends halfway toward the human's selected
+   * record so the controlled player stays on canvas; the simulation camera
+   * and ball machine keep the ball `view_focus` above. Cleared by the render
+   * reset memset. */
+  int32_t render_focus_x, render_focus_z;
+  uint8_t render_focus_valid;
   /* FU-148 §4.2 (S4): the translation-pool seam. The native pool (FUN_00049138
    * -> FUN_00046F80) is a distinct allocation whose content producer is leg 11;
    * a caller may stage one by partitioning a buffer through

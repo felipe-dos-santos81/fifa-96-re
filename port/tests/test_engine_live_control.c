@@ -421,6 +421,42 @@ static void test_live_kick_release_runs_row07(void) {
   drop_lc_fixture(&f);
 }
 
+/* Phase-85: a PASS/LONG_BALL flight is projected far enough ahead to be a
+ * visible pass. The old fixed x2 mapping put the target two units from the
+ * kicker, so the derived flight arrived on its first step and the ball looked
+ * stuck. The pair's speed word now scales the reach. */
+static void test_live_pass_flight_travels(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  const int32_t taker = mr->entities.controlled;
+  struct fifa96_match_entity *e;
+  int32_t reach;
+  assert(taker >= 0 && taker < 11);
+  e = &mr->entities.team[0].records[taker];
+  mr->live_ai_tackle_cd = 120u;
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.ball.carrier = taker;
+  stage_ball(mr, e->pos_x, 0, e->pos_z);
+  /* Stage the FU-73 PASS pair the row-07 body would hand to the latch. */
+  mr->entities.ball.pair.actor = taker;
+  mr->entities.ball.pair.flags = 0x20u;
+  mr->entities.ball.pair.vector.x = 0x400;
+  mr->entities.ball.pair.vector.height = 0x200;
+  mr->entities.ball.pair.vector.z = 0x100;
+  mr->live_kick_pair_consumed = 0u;
+  one_granted_frame(mr);
+  assert(mr->live_kick_active == 1u);
+  assert((mr->entities.ball.pair.flags & 0x70u) == 0x20u);
+  reach = fifa96_entity_distance(mr->live_kick_target_x - e->pos_x,
+                                 mr->live_kick_target_z - e->pos_z);
+  assert(reach > 0x200);   /* two units was the broken stand-in */
+  assert(mr->live_kick_target_x >= -0x720 && mr->live_kick_target_x <= 0x720);
+  assert(mr->live_kick_target_z >= -0xB10 && mr->live_kick_target_z <= 0xB10);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
+  drop_lc_fixture(&f);
+}
+
 /* P13 live boundary armer/restart fallback: a ball over the touchline is a
  * throw-in even when its z is beyond the old 0xB20 classifier band, and the
  * bounded fallback returns to phase 2 instead of holding the goal-kick row. */
@@ -2754,6 +2790,9 @@ static void test_live_follow_keeps_ball_during_pan(void) {
   mr->entities.ball.z = -0x200;
   mr->entities.ball.vel_x = 0;
   mr->entities.ball.vel_z = 0;
+  /* Phase-85: keep the human side on the ball so the new opponent-focus blend
+   * is not the variable under test here (this test pins the pan gate). */
+  mr->entities.ball.carrier = mr->entities.controlled;
   one_granted_frame(mr);
   assert(mr->render.view_focus_valid == 1u);
   assert(mr->render.view_focus_x == 0x300);
@@ -3030,6 +3069,7 @@ int main(void) {
   test_live_goal_line_exit_restarts();
   test_live_inside_ball_never_restarts();
   test_live_kick_release_runs_row07();
+  test_live_pass_flight_travels();
   test_live_kick_flight_scores();
   test_live_kickoff_shot_scores();
   test_live_taker_guard_and_relatch();

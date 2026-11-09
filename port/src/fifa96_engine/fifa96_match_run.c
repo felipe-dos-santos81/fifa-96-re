@@ -2042,7 +2042,11 @@ static void match_run_render_eye_update(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r;
   if (!mr || !mr->live_start) return;
   r = &mr->render;
-  if (r->view_focus_valid) {
+  if (r->render_focus_valid) {
+    fx = r->render_focus_x;
+    fy = r->view_focus_y;
+    fz = r->render_focus_z;
+  } else if (r->view_focus_valid) {
     fx = r->view_focus_x;
     fy = r->view_focus_y;
     fz = r->view_focus_z;
@@ -2088,11 +2092,39 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   /* Phase 81 [D]: the presentation focus always follows the play. The native
    * class-3 director that would consume a pan is unported, so using the frozen
    * FU-71 focus for the eye let the ball leave the frame. Keep the simulation
-   * focus untouched below when a pan is active; only the render focus moves. */
-  r->view_focus_x = mr->entities.ball.x + lead_x;
+   * focus untouched below when a pan is active; only the render focus moves.
+   *
+   * Phase-85 [D]: when the opponent (or a loose ball) owns the play, the
+   * ball-only focus could leave the human's selected record off the canvas —
+   * the control follow had switched to the nearest own outfielder, but the
+   * camera kept staring at the opponent. Blend the render focus halfway
+   * toward the controlled record while the human side does not carry; the
+   * simulation focus below is unchanged. Live-only. */
+  int32_t focus_x = mr->entities.ball.x + lead_x;
+  int32_t focus_z = mr->entities.ball.z + lead_z;
+  int32_t render_x = focus_x;
+  int32_t render_z = focus_z;
+  if (mr->live_start && mr->entities.controlled >= 0) {
+    int32_t cid = mr->entities.controlled;
+    int32_t carrier = mr->entities.ball.carrier;
+    int human_owns = carrier >= 0 &&
+                     (carrier / (int32_t)FIFA96_MATCH_ENTITY_RECORDS) ==
+                         (cid / (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+    if (!human_owns) {
+      const struct fifa96_match_entity *ce =
+          &mr->entities.team[(uint32_t)cid / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)cid % FIFA96_MATCH_ENTITY_RECORDS];
+      render_x = (focus_x + ce->pos_x) / 2;
+      render_z = (focus_z + ce->pos_z) / 2;
+    }
+  }
+  r->view_focus_x = focus_x;
   r->view_focus_y = 0x50;
-  r->view_focus_z = mr->entities.ball.z + lead_z;
+  r->view_focus_z = focus_z;
   r->view_focus_valid = 1u;
+  r->render_focus_x = render_x;
+  r->render_focus_z = render_z;
+  r->render_focus_valid = 1u;
   /* Phase 71: converge the render-only eye before the pan/follow early return,
    * so a native pan handoff is smoothed rather than teleported. */
   match_run_render_eye_update(mr);
@@ -2920,13 +2952,13 @@ static int32_t match_run_live_control_switch_next(const struct fifa96_match_run 
  *     components (`FUN_000795A4` sine folds), used natively as local target
  *     offsets from the camera (`0x7AA68..`);
  *   - `pair.traj` is the loft word (capped at 0x460).
- * Derived mapping [D]: `target = kicker_pos + 2*(dir_x, dir_z)`, speed
+ * Derived mapping [D]: PASS/LONG_BALL project the speed-scaled pair direction
+ * to `speed * 0x60` units ahead of the kicker, speed
  * `clamp(|vector.x| >> 6, 8, 16)`, bounded to 300 frames. No per-code arm,
  * loft arc, receive hand-off or out-of-play rule is claimed as native; the
  * flight consumer only steers the existing ball machine. */
 #define MATCH_RUN_LIVE_FLIGHT_FRAMES 300u
 #define MATCH_RUN_LIVE_FLIGHT_GOAL_FRAMES 600u
-#define MATCH_RUN_LIVE_FLIGHT_SCALE 2
 #define MATCH_RUN_LIVE_FLIGHT_SPEED_MIN 8
 #define MATCH_RUN_LIVE_FLIGHT_SPEED_MAX 16
 
@@ -3249,10 +3281,25 @@ static void match_run_live_kick_latch(struct fifa96_match_run *mr) {
     mr->live_kick_target_z =
         mr->entities.team[team8].side == 0u ? 0xB30 : -0xB30;
   } else {
-    mr->live_kick_target_x =
-        e->pos_x + dir_x * MATCH_RUN_LIVE_FLIGHT_SCALE;
-    mr->live_kick_target_z =
-        e->pos_z + dir_z * MATCH_RUN_LIVE_FLIGHT_SCALE;
+    /* PASS/LONG_BALL (the FU-73 pair's own direction): the native vector is
+     * speed-scaled, so normalise it and project it to a visible pass reach.
+     * The old fixed x2 scale put the target two units away, which made the
+     * derived flight arrive on the next frame (a pass looked like a stuck
+     * ball). The reach grows with the staged speed word; the pitch clamp is
+     * the native mover bound. */
+    int32_t ax = dir_x < 0 ? -dir_x : dir_x;
+    int32_t az = dir_z < 0 ? -dir_z : dir_z;
+    int32_t norm = ax > az ? ax : az;
+    if (norm < 1) norm = 1;
+    int32_t reach = speed * 0x60;
+    int32_t tx = e->pos_x + (dir_x * reach) / norm;
+    int32_t tz = e->pos_z + (dir_z * reach) / norm;
+    if (tx > 0x720) tx = 0x720;
+    else if (tx < -0x720) tx = -0x720;
+    if (tz > 0xB10) tz = 0xB10;
+    else if (tz < -0xB10) tz = -0xB10;
+    mr->live_kick_target_x = tx;
+    mr->live_kick_target_z = tz;
   }
   mr->live_kick_speed = (int16_t)speed;
   mr->live_kick_frames =
@@ -10454,27 +10501,81 @@ static int match_run_kit_band(uint8_t *palette, int dst, int len, uint8_t index,
   return 1;
 }
 
-/* Live player appearance remap (phase-84). The native per-entity translation
- * pool FUN_00047298 builds a 256-byte table per record: it maps the player
- * sprite's appearance source indices through the PALsys frame-0 skin/hair
- * ramps (the outfield template's computed destinations: 0x75/0x76/0x9C/0x9D
- * -> 0xF7/0xF9/0xFD/0xC0, 0x8F/0x90 -> 0, 0xD7..0xDA -> 0 and 0xDB..0xE3 ->
- * 0xF6..0xFE). The engine has no pool yet, so apply that appearance subset on
- * top of the team remap: every kit body index keeps the live team translation,
- * while the head/hands source indices now reach the raw PALsys skin/hair
- * entries instead of the team kit colours (the green-skin defect). 0xFE is
- * the derived pitch-line entry in the live palette, so the ramp's last step
- * uses 0xFD. Live-only; M1/M2 never call this. */
-static void match_run_apply_player_remap(uint8_t remap[256]) {
-  static const uint8_t skin_src[6] = {0x75, 0x76, 0x8F, 0x90, 0x9C, 0x9D};
-  static const uint8_t skin_dst[6] = {0xF7, 0xF9, 0x00, 0x00, 0xFD, 0xC0};
-  for (int i = 0; i < 6; i++) remap[skin_src[i]] = skin_dst[i];
-  for (int i = 0; i < 4; i++) remap[0xD7 + i] = 0;
-  for (int i = 0; i < 9; i++) {
-    uint8_t dst = (uint8_t)(0xF6 + i);
-    if (dst == 0xFEu) dst = 0xFD;   /* the live pitch-line entry */
-    remap[0xDB + i] = dst;
+/* Live player appearance remap (phase-84; source-band model corrected phase-85).
+ *
+ * The native per-entity translation pool FUN_00047298 builds one 256-byte table
+ * per record from a 0x8E-byte appearance template and the per-player skin/hair
+ * classes. The engine has no pool yet, so the live path uses a labelled [D]
+ * semantic stand-in derived from the actual PLAYART `walk.fsh` source bytes:
+ *
+ *   source band(s)              body part        destination
+ *   0x50..0x65, 0x8A..0x9D,     shirt/sleeves/   the selected shirt band
+ *   0xCC..0xCF                  torso            208..214
+ *   0xC5..0xCB                  shorts           identity 197..203 (the
+ *                                                  selected shorts band
+ *                                                  195..203)
+ *   0x66..0x70, 0x9E..0xA8      sock trim        selected sock band 224..229
+ *   0xE4..0xE5                  boot/sock tip    identity 228..229
+ *   0x71..0x89, 0xDB..0xE3      arms/legs/face   PALsys skin ramp 0xF6..0xFD
+ *   0xD7..0xDA                  hair             PALsys dark ramp copied into
+ *                                                  the 0xD7..0xDA slots
+ *   0xC2..0xC4                  collar/trim      the white line slot 0xFE
+ *   0x4E                        eye              black 0x00
+ *
+ * The earlier phase-84 subset treated 0x75/0x76/0x8F/0x90/0x9C/0x9D as skin;
+ * the walk-bank histogram shows those indices belong to the shirt/trim bands,
+ * which is why the live kits still striped. The old 0xD7..0xDA -> 0 mapping
+ * also turned the hair black and lost the hair ramp. This model keeps the kit
+ * redirects intact (team 1's 195..203/208..214 redirects still apply), so the
+ * same table serves both teams. Live-only; M1/M2 never call this. */
+static void match_run_remap_band(uint8_t remap[256], int src_lo, int src_hi,
+                                 int dst_lo, int dst_len) {
+  if (dst_len <= 0) return;
+  for (int src = src_lo; src <= src_hi; src++)
+    remap[src] = (uint8_t)(dst_lo + ((src - src_lo) % dst_len));
+}
+
+/* Compose the away-team kit redirect over an already-built appearance table.
+ * The renderer performs one table lookup, so mapping source 0x50 -> 208 is not
+ * enough: for team 1 every value that lands in the home 195..203/208..214 kit
+ * bands must be translated to the away 230..238/239..245 bands. Applying the
+ * redirect to the source indices alone (the earlier shape) left the semantic
+ * shirt bands pointing at the home palette, which is why both teams rendered
+ * in Brazil's yellow. */
+static void match_run_apply_away_kit_redirect(uint8_t remap[256]) {
+  for (int i = 0; i < 256; i++) {
+    uint8_t v = remap[i];
+    if (v >= 195 && v <= 203)
+      remap[i] = (uint8_t)(230 + (v - 195));
+    else if (v >= 208 && v <= 214)
+      remap[i] = (uint8_t)(239 + (v - 208));
   }
+}
+
+static void match_run_apply_player_remap(uint8_t remap[256]) {
+  /* Shirt: sleeves/shoulders, side panels and the torso mirror the selected
+   * shirt ramp. 0xD0..0xD6 already identity-map onto 208..214. */
+  match_run_remap_band(remap, 0x50, 0x65, 208, 7);
+  match_run_remap_band(remap, 0x8A, 0x9D, 208, 7);
+  match_run_remap_band(remap, 0xCC, 0xCF, 208, 7);
+  /* Sock trim bands -> the selected sock ramp; 0xE0..0xE5 is already the
+   * selected sock band via identity. */
+  match_run_remap_band(remap, 0x66, 0x70, 224, 6);
+  match_run_remap_band(remap, 0x9E, 0xA8, 224, 6);
+  /* Bare arms/legs/face -> the PALsys skin ramp above the live kit bands
+   * (0xF6..0xFD; 0xFE stays the white line slot). The native per-player
+   * override is the 9-entry 0xDB..0xE3 skin ramp; the face/head pixels use
+   * 0xE0..0xE3, which is why leaving that sub-band on the sock identity made
+   * the face green. 0xE4/0xE5 stay on the sock/boot band. */
+  match_run_remap_band(remap, 0x71, 0x89, 0xF6, 8);
+  match_run_remap_band(remap, 0xDB, 0xE3, 0xF6, 8);
+  /* Hair: the native 4-entry hair ramp, staged into 0xD7..0xDA by the live
+   * palette build below. */
+  match_run_remap_band(remap, 0xD7, 0xDA, 0xD7, 4);
+  /* Collar/neck trim (the walk-bank's white cuff band) -> the live white slot;
+   * a single eye pixel -> black. */
+  for (int i = 0xC2; i <= 0xC4; i++) remap[i] = FIFA96_PITCH_LINE_INDEX;
+  remap[0x4E] = 0x00;
 }
 
 static int match_run_stage_live_kit(struct fifa96_match_run *mr,
@@ -10569,6 +10670,12 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
     remap_team[0][i] = (uint8_t)(i == 0 ? 0xFF : i);
     remap_team[1][i] = (uint8_t)(i == 0 ? 0xFF : i);
   }
+  /* Phase-85: apply the semantic appearance table to the identity first; the
+   * team-1 kit redirect below must then rewrite the 195..203/208..214
+   * destinations (applying this after the redirect silently re-pointed team
+   * 1's shirt back at team 0's palette band). */
+  match_run_apply_player_remap(remap_team[0]);
+  match_run_apply_player_remap(remap_team[1]);
   for (int i = 30; i <= 229; i++) {
     if (kit_frames[0][i * 3] == MATCH_RUN_KIT_MAGENTA_R &&
         kit_frames[0][i * 3 + 1] == MATCH_RUN_KIT_MAGENTA_G &&
@@ -10578,6 +10685,7 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
     palette[i * 3 + 1] = (uint8_t)(kit_frames[0][i * 3 + 1] << 2);
     palette[i * 3 + 2] = (uint8_t)(kit_frames[0][i * 3 + 2] << 2);
   }
+  int away_kit_redirect = 0;
   if (mr->matchup_active && mr->matchup.kit_ready) {
     /* P6: the selected kit-0 triples drive the measured bank-0 sprite bands
      * (A7 §4): home shirt 208..214, shorts 195..203, socks 224..229; away
@@ -10592,41 +10700,40 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
     (void)match_run_kit_band(palette, 224, 6, home[2], kit_frames, kit_ok);
     int shirt_ok = match_run_kit_band(palette, 239, 7, away[0], kit_frames, kit_ok);
     int shorts_ok = match_run_kit_band(palette, 230, 9, away[1], kit_frames, kit_ok);
-    if (shirt_ok && shorts_ok) {
-      for (int i = 195; i <= 203; i++)
-        remap_team[1][i] = (uint8_t)(230 + (i - 195));
-      for (int i = 208; i <= 214; i++)
-        remap_team[1][i] = (uint8_t)(239 + (i - 208));
-    }
+    away_kit_redirect = shirt_ok && shorts_ok;
   } else {
     /* No PCCD identity (synthetic/no-ISO fixtures): keep the pre-P6 derived
      * fallback — team 1's shirt/shorts bands copy PALteam frame 2 into the
      * free slots and the translation redirects them (A7 §4). */
     for (int i = 195; i <= 203; i++) {
       int dst = 230 + (i - 195);
-      remap_team[1][i] = (uint8_t)dst;
       palette[dst * 3] = (uint8_t)(kit_frames[2][i * 3] << 2);
       palette[dst * 3 + 1] = (uint8_t)(kit_frames[2][i * 3 + 1] << 2);
       palette[dst * 3 + 2] = (uint8_t)(kit_frames[2][i * 3 + 2] << 2);
     }
     for (int i = 208; i <= 214; i++) {
       int dst = 239 + (i - 208);
-      remap_team[1][i] = (uint8_t)dst;
       palette[dst * 3] = (uint8_t)(kit_frames[2][i * 3] << 2);
       palette[dst * 3 + 1] = (uint8_t)(kit_frames[2][i * 3 + 1] << 2);
       palette[dst * 3 + 2] = (uint8_t)(kit_frames[2][i * 3 + 2] << 2);
     }
+    away_kit_redirect = 1;
+  }
+  if (away_kit_redirect) match_run_apply_away_kit_redirect(remap_team[1]);
+  /* Phase-85: the native hair ramp (PALsys frame-0 0xF0..0xF3) is staged into
+   * the 0xD7..0xDA slots. The kit overlay above would otherwise leave the
+   * PALteam yellow ramp there; no staged PLAYART/ball sprite uses 0xD7..0xDA
+   * (the ball is 0xBB..0xC1), so the four slots are free for the hair remap. */
+  for (int i = 0; i < 4; i++) {
+    palette[(0xD7 + i) * 3] = (uint8_t)(sys0[(0xF0 + i) * 3] << 2);
+    palette[(0xD7 + i) * 3 + 1] = (uint8_t)(sys0[(0xF0 + i) * 3 + 1] << 2);
+    palette[(0xD7 + i) * 3 + 2] = (uint8_t)(sys0[(0xF0 + i) * 3 + 2] << 2);
   }
   /* The v1 marking index: no PALsys/PALteam entry is white, so dedicate the
    * unused 0xFE slot (no PLAYART frame uses > 229, A7 §4). */
   palette[FIFA96_PITCH_LINE_INDEX * 3] = 0xFF;
   palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] = 0xFF;
   palette[FIFA96_PITCH_LINE_INDEX * 3 + 2] = 0xFF;
-  /* Phase-84: apply the native appearance subset to both team translations.
-   * The kit redirects above stay intact; only the head/hands source indices
-   * move to the raw PALsys skin/hair entries. */
-  match_run_apply_player_remap(remap_team[0]);
-  match_run_apply_player_remap(remap_team[1]);
   /* Full success: commit the palette + remap atomically. */
   memcpy(r->palette, palette, sizeof r->palette);
   memcpy(r->remap_team, remap_team, sizeof r->remap_team);

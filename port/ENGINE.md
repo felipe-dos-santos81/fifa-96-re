@@ -11797,3 +11797,71 @@ five-template pattern pass, the `FUN_0001CAEC(9/0xD)` settings gates);
 per-player skin/hair variation; native vertical ball staging `0x7A490` and
 row-05 `0x7F3A1..0x7F57B`; native kick pose/animation row; class-3 integrator
 (P10-L6); 3dwpts stadium (P10-L2); HUD art (P10-L5).
+
+## Phase 85 — live kit/skin correction, pass reach and off-ball focus (2026-11-09)
+
+**Symptom.** The live match still showed striped shirts and both teams in
+Brazil yellow, the away team's white kit never appeared, a PASS stayed at the
+kicker's feet, and the controlled player went off-canvas whenever the opponent
+had the ball.
+
+**Errata (Phase 84 appearance source model).** Phase 84's "head/hands" list is
+quoted here and corrected: `0x75/0x76/0x8F/0x90/0x9C/0x9D` are **not** skin
+indices. The staged PLAYART `walk.fsh` frame histogram puts `0x75/0x76` in the
+bare-arm skin band `0x71..0x89` and `0x8F/0x90/0x9C/0x9D` in the shirt side
+panel band `0x8A..0x9D`; mapping the latter to the skin ramp produced the
+stripes. The native skin ramp is the 9-entry `0xDB..0xE3` group
+(`DAT_001070E4`); the 4-entry `0xD7..0xDA` group is hair (`DAT_001070D4`). The
+face pixels use `0xE0..0xE3`, so leaving that sub-band on the sock identity
+made the face green.
+
+**Errata (Phase 84/earlier team-1 translation).** The renderer performs one
+table lookup per sprite byte. Setting `remap[208] = 239` redirects **source**
+208 only; mapping source `0x50` to the value 208 did not redirect it, so both
+teams used the home palette. The away redirect is now composed over the
+appearance table (`195..203 -> 230..238`, `208..214 -> 239..245`) after the
+semantic mapping, not as a direct source rewrite.
+
+**Implementation [D].** Live-only (`live_start`); M1/M2 never set it.
+
+- `match_run_apply_player_remap` maps the measured source bands: shirt
+  `0x50..0x65/0x8A..0x9D/0xCC..0xCF -> 208..214`, sock trim
+  `0x66..0x70/0x9E..0xA8 -> 224..229`, skin `0x71..0x89/0xDB..0xE3 ->
+  0xF6..0xFD`, hair `0xD7..0xDA -> 0xD7..0xDA`, collar `0xC2..0xC4 -> 0xFE`,
+  eye `0x4E -> 0x00`. The shorts identity (`0xC5..0xCB`) and the sock/boot
+  identity (`0xE0..0xE5`) stay on their selected bands.
+- The live palette copies the PALsys dark ramp into `0xD7..0xDA` for the hair
+  remap (the kit overlay would otherwise leave PALteam yellow there).
+- `match_run_apply_away_kit_redirect` composes the away bands over every
+  appearance value after the semantic table; the direct source rewrite is
+  removed.
+- PASS/LONG_BALL flights normalise the FU-73 pair direction and project it to
+  `speed * 0x60` units (clamped to `±0x720/±0xB10`). The old fixed x2 target
+  was reached on the first step, so a pass looked stuck. KICK keeps the P9
+  goal-mouth aim.
+- `render.render_focus_*` is a new render-only focus for
+  `match_run_render_eye_update`: when the human side does not carry, it blends
+  halfway toward the controlled record so the selected player stays on
+  canvas. `view_focus_*` and `camera.pos_*` remain the ball focus for the ball
+  machine/keeper/armer, so shot balance is unchanged.
+
+**Evidence/verification.** PLAYART entry 1 `walk.fsh` frame histogram
+(`0x4E/0x50..0x65/0x66..0x70/0x71..0x89/0x8A..0x9D/0x9E..0xA8/0xC2..0xC4/
+0xC5..0xCB/0xCC..0xD6/0xD7..0xDA/0xDB..0xE3/0xE0..0xE5/0xFF`); Ghidra
+`read_memory 0x106962`, `0x1068E4`, `0x1070D4`, `0x1070E4`;
+`disassemble_function 0x47298`. `test_engine_match_render` extends
+`test_live_real_team_kits` with the home/away composed shirt mappings and the
+skin/hair/collar bands. `test_engine_live_control` adds
+`test_live_pass_flight_travels` and keeps the pan-gate test human-on-ball.
+`make check` **124/124**; M1 byte-exact `09b726b7…`; M2 byte-exact
+`41521559…` (both `cmp`-verified). Screenshots:
+`docs/screens/p85-live-kits-skin.png`, `docs/screens/p85-pass-flight.png` and
+`docs/screens/p85-offball-focus.png` (the last shows the controlled Brazil
+record and the German ball carrier in the same frame; native reference
+`docs/screens/p80-native-side.png`).
+
+**Legs.** Full `FUN_00047298` per-player pool and per-player skin/hair
+variation; native vertical ball staging `0x7A490` / row-05
+`0x7F3A1..0x7F57B`; native kick pose (row 07 installs no `0x6E598`; the
+ball-pairing tail's `out.anim` consumer is OL-52); class-3 integrator
+(P10-L6); 3dwpts stadium (P10-L2); HUD art (P10-L5).
