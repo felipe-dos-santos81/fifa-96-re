@@ -3094,6 +3094,62 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
     mr->entities.ball.pos_dir_x = (int8_t)out.dir_x;
     mr->entities.ball.pos_dir_z = (int8_t)out.dir_z;
   }
+  if (out.tail != 0) {
+    /* FU-348 §4: the stage-0 target/release/camera algebra
+     * `0x7F3A1..0x7F57B`. The non-live tapes keep the historical state
+     * byte-exact; live play consumes the native target, the 0x15872D release
+     * countdown and the 0x71C94 event. */
+    fifa96_action_carrier_tail_in tin;
+    fifa96_action_carrier_tail_out tout;
+    memset(&tin, 0, sizeof tin);
+    tin.camera_x = mr->render.camera.pos_x;
+    tin.camera_y = mr->render.camera.pos_y;
+    tin.camera_z = mr->render.camera.pos_z;
+    tin.camera_speed = (int16_t)mr->render.camera.speed;
+    tin.camera_span = mr->render.camera.ramp_divisor;
+    tin.pos_x = e->pos_x;
+    tin.pos_y = e->pos_y;
+    tin.pos_z = e->pos_z;
+    tin.lane = e->lane_x;
+    tin.word_6d = e->lane_z;
+    tin.word_6f = e->cam_dz6f;
+    tin.bound = e->bound;
+    tin.speed71 = e->speed71;
+    tin.speed_seed = out.dir_speed;
+    tin.dir_x = (int8_t)out.dir_x;
+    tin.dir_z = (int8_t)out.dir_z;
+    tin.type_dir_x = match_kick_dir_x[e->type & 31u];
+    tin.type_dir_z = match_kick_dir_z[e->type & 31u];
+    tin.has_slot = e->has_slot;
+    tin.parity = mr->pass_parity;
+    rc = fifa96_action_carrier_tail_step(&tin, &tout);
+    if (rc != FIFA96_OK) return rc;
+    /* FU348-L3 partial binding: the native tail drives the human-controlled
+     * carrier while a pad direction is held. Idle and AI carriers keep the
+     * previous live glue until the tail-camera interaction is measured (the
+     * opponent-claim fixture pins that path). The helper itself is the full
+     * tested algebra. */
+    if (mr->live_start && mr->input_state[0] != 0 && out.dirs != 0 &&
+        id == mr->slot.entity && mr->entities.ball.carrier == id) {
+      if (tout.target_changed != 0) {
+        r->target_x = tout.target_x;
+        r->target_y = tout.target_y;
+        r->target_z = tout.target_z;
+      }
+      if (tout.release_written != 0)
+        mr->entities.ball.pos_release = tout.release;
+      if (tout.event != 0) {
+        int ev = fifa96_camera_event_set(&mr->render.camera, tout.event_x,
+                                         tout.event_z, tout.event_height, 0);
+        if (ev < 0) return ev;
+        if (ev == FIFA96_OK) {
+          (void)fifa96_camera_event_dir(&mr->render.camera, e->has_slot,
+                                        e->dir_x, e->dir_z);
+          (void)fifa96_camera_set_tracked(&mr->render.camera, id);
+        }
+      }
+    }
+  }
   if (out.slot_merge != 0) r->helper_request = 1;   /* 0x7F356 */
   if (out.snap != 0) {                   /* 0x7F5F1 (0x79B1C) */
     r->target_x = r->pos_x;

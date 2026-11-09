@@ -11960,8 +11960,13 @@ not invent gravity/bounce for the native ball record.
 `speed = word[+0x71] + cameraY`, `0x71C94` event with
 `{distance, step_x, step_z}`, release `has_slot ? 4 : distance >> 2` plus
 `word[0x1577F8]`, clamp `0x3C`, `0x157A4F` parity arm). FU251-L2 is resolved:
-the overlapping `[ESP+0x0a] >> 0x12` is exactly `distance >> 2`. The engine
-still reports `out.tail`; the target/event binding is FU348-L3.
+the overlapping `[ESP+0x0a] >> 0x12` is exactly `distance >> 2`; FU251's
+target-x label is corrected by the alias rule (`dword[+0x6B]>>16` is word
+`+0x6D`, while `+0x6B` is the seed/gate lane). The helper is
+`fifa96_action_carrier_tail_step`; `fifa96_match_action_05` binds it for the
+live human carrier while a pad direction is held (target, `ball.pos_release`,
+`0x71C94` event + tracked). Idle/AI carriers, the sink bodies and the full
+parity arm remain FU348-L3.
 
 **Class-3 camera.** `FUN_0004DB38` remains the mapped but unported side-camera
 integrator (`0x4C7D0/0x4C77C/0x4C7F8/0x49388` helpers); the live eye is the
@@ -11971,6 +11976,8 @@ rendered ball record.
 
 **Verification.** `make check` **124/124**; M1 `cmp` exact `09b726b7…`; M2
 `cmp` exact `41521559…`; census unchanged 78/78 ported, 58/80 naturally wired.
-New test: `test_engine_match_render.c::test_live_substitution_rebuilds_remap`
-(RED on the pre-fix tree at the incoming skin-class assert). Full record:
+New tests: `test_engine_match_render.c::test_live_substitution_rebuilds_remap`
+(RED on the pre-fix tree at the incoming skin-class assert) and the
+`test_action_possession` tail fixtures. Windowed smoke:
+`docs/screens/p87-live-tail-possession.png`. Full record:
 `port/spec/FU-348_substitution_remap_and_ball_legs.md`.

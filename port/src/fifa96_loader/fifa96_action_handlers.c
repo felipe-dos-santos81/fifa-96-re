@@ -495,6 +495,7 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
         out->dirs = 1;
         out->dir_x = (uint8_t)dir.dir_x;
         out->dir_z = (uint8_t)dir.dir_z;
+        out->dir_speed = dir.speed;
         /* 0x7F386..0x7F57B: the dir-byte writes and the unported stage-0
          * target algebra (0x92820/0x71C94/0x79CCC/0x6DA64 and the record
          * target writes, OL-63). */
@@ -574,6 +575,97 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
     /* 0x7F261..0x7F267: CMP AL,3 / JA -> 0x7F65C return. */
     return FIFA96_OK;
   }
+}
+
+/* FU-348 §4: the row-05 stage-0 tail `0x7F3A1..0x7F57B` (first-hand
+ * `disassemble_bytes 0x7F360`, 544 B). The native frame locals are
+ * `{distance at +0x0c, step_x at +0x0e, step_z at +0x10}`; the
+ * `[ESP+0x0a]>>0x12` release seed is exactly `distance >> 2`. The native
+ * 0x92820/0x79CCC/0x6DA64 calls are reported, not executed (OL-27/FU251-L5..L7).
+ * NULL in/out -> -FIFA96_ERR_INVALID. */
+fifa96_err_t fifa96_action_carrier_tail_step(
+    const fifa96_action_carrier_tail_in *in,
+    fifa96_action_carrier_tail_out *out) {
+  int16_t speed;
+  int16_t dir_x;
+  int16_t dir_z;
+  int16_t step_x;
+  int16_t step_z;
+  int32_t distance;
+  int32_t release;
+  if (!in || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  /* 0x7F24E..0x7F258: the prologue's camera-triple copy is the default
+   * target; the tail only overrides the x/z words. */
+  out->target_x = in->camera_x;
+  out->target_y = in->camera_y;
+  out->target_z = in->camera_z;
+  dir_x = in->dir_x;
+  dir_z = in->dir_z;
+  if (dir_x == 0 && dir_z == 0) {
+    /* 0x7F3A9..0x7F3C5: lane > 0x20 seeds the camera triple, else the record
+     * triple. */
+    if (in->lane > 0x20) {
+      out->target_x = in->camera_x;
+      out->target_y = in->camera_y;
+      out->target_z = in->camera_z;
+    } else {
+      out->target_x = in->pos_x;
+      out->target_y = in->pos_y;
+      out->target_z = in->pos_z;
+    }
+    out->target_changed = 1;
+    /* 0x7F3CD..0x7F3DA: a camera speed at or below the record speed exits
+     * after the target seed. */
+    if ((int16_t)in->camera_speed <= in->speed71) return FIFA96_OK;
+    /* 0x7F3E0..0x7F3F7: speed = word[+0x71] << 2 (low word), dirs = type dirs. */
+    speed = (int16_t)((uint16_t)in->speed71 << 2);
+    dir_x = in->type_dir_x;
+    dir_z = in->type_dir_z;
+  } else {
+    /* 0x7F3FC: the caller's stage-0 speed seed (0x60/0x30). */
+    speed = in->speed_seed;
+  }
+  /* 0x7F3FC..0x7F40E: speed += (int16)word[0x157750]; zero exits. */
+  speed = (int16_t)(speed + (int16_t)in->camera_y);
+  if (speed == 0) return FIFA96_OK;
+  /* 0x7F414..0x7F467: the type-dir target override and its gates. The
+   * target-x addend is `dword[+0x6B] >> 16` = word +0x6D (the AGENTS alias
+   * rule), not the +0x6B lane used by the seed/gates. */
+  if (dir_x == in->type_dir_x && dir_z == in->type_dir_z) {
+    out->target_x = in->camera_x + (int32_t)in->word_6d;
+    out->target_y = in->camera_y;
+    out->target_z = in->camera_z + (int32_t)in->word_6f;
+    out->target_changed = 1;
+    if (in->lane > 0x28) return FIFA96_OK;
+    if (in->lane > in->bound) return FIFA96_OK;
+    if (dir_x != 0 && dir_z != 0) {
+      int16_t scaled = (int16_t)((uint16_t)in->speed71 << 3);
+      speed = (int16_t)(speed +
+                        (int16_t)(((int32_t)scaled * 0xB5) >> 8));
+    }
+  }
+  /* 0x7F48E..0x7F4AC: the event vector's low words. */
+  step_x = (int16_t)((int32_t)speed * dir_x);
+  step_z = (int16_t)((int32_t)speed * dir_z);
+  distance = fifa96_entity_distance((int32_t)step_x, (int32_t)step_z);
+  /* 0x7F4CB: FUN_00092820(rec, 0x26) request. */
+  out->sink26 = 1;
+  /* 0x7F4D0..0x7F4E7: the 0x71C94 event. */
+  out->event = 1;
+  out->event_x = step_x;
+  out->event_z = step_z;
+  out->event_height = (int16_t)in->camera_y > 0x10 ? 1 : 0;
+  /* 0x7F4EC..0x7F51D: release = has_slot ? 4 : distance >> 2; cameraY != 0
+   * adds word[0x1577F8]; clamp 0x3C. */
+  release = in->has_slot != 0 ? 4 : (distance >> 2);
+  if (in->camera_y != 0) release += (int16_t)in->camera_span;
+  if (release > 0x3C) release = 0x3C;
+  out->release = (uint8_t)release;
+  out->release_written = 1;
+  /* 0x7F522..0x7F569: the parity arm is a caller sink (0x79CCC/0x6DA64). */
+  if (in->parity != 0) out->parity_gate = 1;
+  return FIFA96_OK;
 }
 
 fifa96_err_t fifa96_action_receive_step(fifa96_action_receive *state,

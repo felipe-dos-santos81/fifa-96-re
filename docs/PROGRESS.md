@@ -4715,8 +4715,11 @@ close-out below).
   per-frame producer — `FUN_0008C24C` forces it to 0 and `FUN_0008BAF0` only
   reads it. Native vertical ball physics is therefore closed as not-native;
   no gravity/bounce model was added. The row-05 tail release/target/camera
-  algebra is now fully specified (`FU-348` §4), and the class-3 camera
-  integrator remains the prerequisite for replacing the derived carried-ball
-  glue. `make check` **124/124**; M1 exact `09b726b7…`; M2 exact
-  `41521559…`; census unchanged. Full record:
+  algebra is now a pure, tested helper (`fifa96_action_carrier_tail_step`,
+  `FU-348` §4) and is bound for the live human carrier while a pad direction
+  is held (target, release countdown and the `0x71C94` event); idle/AI carriers
+  and the sink bodies remain legs. The class-3 camera integrator remains the
+  prerequisite for replacing the derived carried-ball glue. `make check`
+  **124/124**; M1 exact `09b726b7…`; M2 exact `41521559…`; census unchanged;
+  windowed smoke `docs/screens/p87-live-tail-possession.png`. Full record:
   `port/spec/FU-348_substitution_remap_and_ball_legs.md`.

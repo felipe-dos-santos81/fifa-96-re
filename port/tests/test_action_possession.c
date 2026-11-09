@@ -726,6 +726,150 @@ static void test_carrier_stage2_and_stage3(void) {
   assert(out.stage == 4 && out.sink == 0 && out.snap == 0);
 }
 
+/* FU-348 §4: the row-05 stage-0 tail `0x7F3A1..0x7F57B`. The native block
+ * vector is {distance, dx, dz}; the tail settles the target, builds the 0x71C94
+ * event and writes the release countdown. */
+static fifa96_action_carrier_tail_in carrier_tail_base(void) {
+  fifa96_action_carrier_tail_in in;
+  memset(&in, 0, sizeof in);
+  in.camera_x = 0x100;
+  in.camera_y = 0x50;
+  in.camera_z = 0x200;
+  in.camera_speed = 0x20;
+  in.camera_span = 0x30;
+  in.pos_x = 0x1000;
+  in.pos_y = 0;
+  in.pos_z = 0x2000;
+  in.lane = 0x21;
+  in.word_6d = 0x15;
+  in.word_6f = 0x30;
+  in.bound = 0x40;
+  in.speed71 = 0x10;
+  in.speed_seed = 0x60;
+  in.type_dir_x = 1;
+  in.type_dir_z = 0;
+  return in;
+}
+
+static void test_carrier_tail_zero_dirs_camera_seed(void) {
+  fifa96_action_carrier_tail_in in = carrier_tail_base();
+  fifa96_action_carrier_tail_out out;
+  /* Both dirs zero, lane > 0x20: the camera triple is the seed; a camera
+   * speed above word[+0x71] re-seeds speed = 0x10 << 2 and the type dirs. */
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.target_changed == 1);
+  assert(out.target_x == 0x100 + 0x15);
+  assert(out.target_y == 0x50);
+  assert(out.target_z == 0x200 + 0x30);
+  assert(out.event == 1 && out.event_x == 0x90 && out.event_z == 0);
+  assert(out.event_height == 1);
+  assert(out.sink26 == 1);
+  /* release = distance >> 2 (0x90 >> 2 = 0x24) + ramp span 0x30 = 0x54,
+   * clamped to 0x3C. */
+  assert(out.release == 0x3C && out.release_written == 1);
+  assert(out.parity_gate == 0);
+
+  /* lane <= 0x20 seeds the record triple; camera speed <= speed71 exits after
+   * the seed (no event/release). */
+  in.lane = 0x20;
+  in.camera_speed = 0x10;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.target_x == in.pos_x && out.target_y == in.pos_y &&
+         out.target_z == in.pos_z);
+  assert(out.event == 0 && out.release_written == 0 && out.sink26 == 0);
+  in.camera_speed = 0x11;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.event == 1);
+  assert(out.target_x == 0x100 + 0x15 && out.target_z == 0x230);
+}
+
+static void test_carrier_tail_type_override_and_gates(void) {
+  fifa96_action_carrier_tail_in in = carrier_tail_base();
+  fifa96_action_carrier_tail_out out;
+
+  /* Non-matching dirs leave the prologue camera triple; the event still runs. */
+  in.dir_x = 1;
+  in.dir_z = 1;
+  in.speed_seed = 0x30;
+  in.camera_y = 0;
+  in.camera_span = 0;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.target_changed == 0);
+  assert(out.target_x == in.camera_x && out.target_z == in.camera_z);
+  assert(out.event == 1 && out.event_height == 0);
+  assert(out.event_x == 0x30 && out.event_z == 0x30);
+
+  /* Matching type dirs write camera + lane/word[+0x6F], then the lane gates. */
+  in.dir_x = 1;
+  in.dir_z = 0;
+  in.lane = 0x29;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.target_x == 0x100 + 0x15);
+  assert(out.target_z == 0x200 + 0x30);
+  assert(out.event == 0);   /* lane > 0x28 returns after the target write */
+
+  in.lane = 0x28;
+  in.bound = 0x10;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.target_changed == 1 && out.event == 0);   /* lane > bound */
+
+  in.bound = 0x30;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.event == 1);
+  assert(out.event_x == 0x30 && out.event_z == 0);
+
+  /* The both-dir nonzero speed add only runs on the matching type dirs. */
+  in.type_dir_x = 1;
+  in.type_dir_z = 1;
+  in.dir_x = 1;
+  in.dir_z = 1;
+  in.lane = 0x20;
+  in.bound = 0x30;
+  in.speed71 = 0x10;
+  in.speed_seed = 0x30;
+  in.camera_y = 0x50;
+  in.camera_span = 0;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  /* speed = 0x30 + 0x50 + ((0x10 << 3) * 0xB5 >> 8) = 0xDA. */
+  assert(out.event_x == 0xDA && out.event_z == 0xDA);
+
+  /* speed + cameraY == 0 exits before the event. */
+  in.speed_seed = (int16_t)-0x50;
+  in.camera_y = 0x50;
+  in.dir_x = 1;
+  in.dir_z = 0;
+  in.type_dir_x = 1;
+  in.type_dir_z = 0;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.event == 0 && out.release_written == 0);
+}
+
+static void test_carrier_tail_release_and_parity(void) {
+  fifa96_action_carrier_tail_in in = carrier_tail_base();
+  fifa96_action_carrier_tail_out out;
+  /* Slot release = 4; the camera-Y span add is skipped at cameraY 0. */
+  in.dir_x = 1;
+  in.dir_z = 0;
+  in.speed_seed = 0x30;
+  in.camera_y = 0;
+  in.camera_span = 0x30;
+  in.has_slot = 1;
+  in.parity = 1;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.release == 4 && out.release_written == 1);
+  assert(out.parity_gate == 1 && out.sink26 == 1);
+
+  /* No slot: distance 0x30 >> 2 = 0xC, plus the span at cameraY != 0. */
+  in.has_slot = 0;
+  in.camera_y = 0x50;
+  assert(fifa96_action_carrier_tail_step(&in, &out) == FIFA96_OK);
+  assert(out.release == 0x30 + 0x0C);   /* 0x3C exactly (no clamp) */
+  assert(out.parity_gate == 1);
+
+  assert(fifa96_action_carrier_tail_step(NULL, &out) == ACTION_INVALID);
+  assert(fifa96_action_carrier_tail_step(&in, NULL) == ACTION_INVALID);
+}
+
 static void test_duel_split(void) {
   uint8_t own = 0;
   uint8_t opp = 0;
@@ -938,6 +1082,9 @@ int main(void) {
   test_carrier_stage0_gates();
   test_carrier_stage1();
   test_carrier_stage2_and_stage3();
+  test_carrier_tail_zero_dirs_camera_seed();
+  test_carrier_tail_type_override_and_gates();
+  test_carrier_tail_release_and_parity();
   puts("test_action_possession: all assertions passed");
   return 0;
 }

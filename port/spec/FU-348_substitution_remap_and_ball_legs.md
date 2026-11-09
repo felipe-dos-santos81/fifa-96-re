@@ -167,11 +167,20 @@ Entry from the dir-byte writes (`0x7F386`/`0x7F397`): `[0x15872A]=dir_x`,
    (int16)word[0x157750])` (camera Y). If zero, return.
 3. **Type-dir target override** (`0x7F414..0x7F467`): if `dir_x ==
    type_dir_x` and `dir_z == type_dir_z`, write
-   `+0x4D = [0x15774C] + (int16)(dword[+0x6B] >> 16)` and
-   `+0x55 = [0x157754] + (int16)(dword[+0x6D] >> 16)`; `+0x51` keeps the
-   camera Y copy. If `(int16)word[+0x6B] > 0x28`, return. If `word[+0x6B] >
-   word[+0x77]`, return. If both dirs are nonzero, add
+   `+0x4D = [0x15774C] + (int16)(dword[+0x6B] >> 16)` **= camera_x +
+   word[+0x6D]** and `+0x55 = [0x157754] + (int16)(dword[+0x6D] >> 16)` **=
+   camera_z + word[+0x6F]**; `+0x51` keeps the camera Y copy. If
+   `(int16)word[+0x6B] > 0x28`, return. If `word[+0x6B] > word[+0x77]`,
+   return. If both dirs are nonzero, add
    `(int16)((int16)(word[+0x71] << 3) * 0xB5 >> 8)` to speed.
+
+**Erratum to FU251 §2.** FU251 renders the first target-x expression as
+`+ (int32)word[+0x6B]`; the fresh bytes `0x7F42A MOV EDX,dword[EBP+0x6B];
+0x7F432 SAR EDX,0x10` read the **word at +0x6D**, not the +0x6B lane (the
+AGENTS.md `dword[x]>>16` alias rule). The +0x6B lane is used only by the
+both-dirs-zero seed (`0x7F3A9 dword[+0x69]>>16`) and the two lane gates
+(`0x7F44A dword[+0x69]>>16`, `0x7F459 word[+0x6B]`). The helper therefore
+takes both `lane` (+0x6B) and `word_6d` (+0x6D).
 4. **Event vector** (`0x7F48E..0x7F4E7`): `step_x = (int16)(speed * dir_x)`,
    `step_z = (int16)(speed * dir_z)`; `distance = 0x8DC68(step_x, step_z)`;
    store `distance` in the event vector; `FUN_00092820(rec, 0x26)`;
@@ -187,11 +196,34 @@ Entry from the dir-byte writes (`0x7F386`/`0x7F397`): `[0x15872A]=dir_x`,
 
 The target-write side is the native "settle the dribble target and arm the
 release" arm; the `0x71C94` call is the camera event (not a ball record write).
-The engine currently reports the arm as `out.tail` only and does not consume
-these target/release/event outputs; the next slice can bind the target triple
-and the `0x71C94` event with this shape. The `0x92820(0x26)`, `0x79CCC`,
-`0x6DA64` and `0x157A4F` bodies stay numbered requests (OL-27,
-FU251-L5..L7).
+The `0x92820(0x26)`, `0x79CCC`, `0x6DA64` and `0x157A4F` bodies stay numbered
+requests (OL-27, FU251-L5..L7).
+
+### 4.1 Engine binding (partial, live human carrier)
+
+`fifa96_action_carrier_tail_step` implements the whole algebra above as a pure
+helper (NULL in/out -> `-FIFA96_ERR_INVALID`). `test_action_possession` pins the
+zero-dir camera/record seed and early-out, the type-dir target override and
+lane gates, the both-dir speed add (`0x10 << 3` × `0xB5 >> 8`), the speed-zero
+exit, the `has_slot ? 4 : distance >> 2` release plus the `0x1577F8` span, the
+`0x3C` clamp and the parity request.
+
+`fifa96_match_action_05` fills the helper from the live record (`e->lane_x`,
+`e->lane_z` (word +0x6D), `cam_dz6f`, `bound`, `speed71`), the camera
+(`pos_*`, `speed`, `ramp_divisor`), the arm's resolved dirs/speed and the
+`match_kick_dir_x/z` table. The side effects are applied only when **all** of these hold:
+
+```
+live_start && input_state[0] != 0 && out.dirs != 0 &&
+id == slot.entity && ball.carrier == id
+```
+
+so the non-live M1/M2 tapes stay byte-exact, and idle/AI carriers keep the
+previous live glue until the tail/camera interaction is measured (the
+`test_live_opponent_presses_and_claims` fixture pins that path). On the bound
+path the helper writes the target triple, `ball.pos_release` and the `0x71C94`
+event (then `0x71D27` tracked = the record). This is a partial binding of
+FU348-L3, not a claim that the full row is live for every carrier.
 
 **Erratum to FU251 L2.** FU251 §6 L2 left the `[ESP+0x0a] >> 0x12` counter
 seed unresolved. The fresh layout resolves it: the dword at `[ESP+0x0a]` is
@@ -240,8 +272,13 @@ formula.
 **Verification.** `make check` **124/124**; M1 `cmp` exact
 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd`; M2
 `cmp` exact `41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`.
-The census is unchanged (78/78 ported; 58/80 wired). The new test is
-ISO-gated like the rest of `test_engine_match_render`'s live cases.
+The census is unchanged (78/78 ported; 58/80 wired). The remap test is
+ISO-gated like the rest of `test_engine_match_render`'s live cases; the tail
+tests are pure `test_action_possession` cases. The windowed smoke (Friendly,
+Brazil vs Germany) reaches the match, keeps the ball visible at the carrier's
+feet and advances through possession: `docs/screens/p87-live-tail-possession.png`.
+The earlier observed fast match clock in that smoke is a separate pacing
+question, not part of this slice.
 
 **Open legs.**
 
@@ -253,10 +290,10 @@ ISO-gated like the rest of `test_engine_match_render`'s live cases.
   kit/skin/hair projection; the native 23-descriptor pool, the
   `FUN_0001CAEC(9/0xD)` gates and the bench/descriptor provenance remain
   open (Phase-86 legs).
-* **FU348-L3 — row-05 tail binding.** The target triple, `0x71C94` event,
-  release countdown and parity arm are now fully specified; the engine still
-  reports `out.tail` only. The `0x92820(0x26)`/`0x79CCC`/`0x6DA64` bodies are
-  OL-27/FU251-L5..L7.
+* **FU348-L3 — row-05 tail binding.** The helper is fully ported and tested;
+  the engine binding is the live human-carrier/held-pad path only (§4.1).
+  Idle/AI carriers, the `0x92820(0x26)`/`0x79CCC`/`0x6DA64` bodies and the
+  full `0x157A4F` parity arm remain open (OL-27/FU251-L5..L7).
 * **FU348-L4 — class-3 camera integrator.** `FUN_0004DB38` and its
   `0x4C7D0/77C/7F8/49388` helpers are mapped but not ported; the live eye is
   the derived envelope. This is the prerequisite for replacing the carried-ball

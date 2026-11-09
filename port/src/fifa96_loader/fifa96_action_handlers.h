@@ -312,6 +312,8 @@ typedef struct fifa96_action_carrier_out {
   uint8_t dirs;           /* native 0x5872A/B dir bytes live */
   uint8_t dir_x;          /* native [0x5872A] */
   uint8_t dir_z;          /* native [0x5872B] */
+  int16_t dir_speed;      /* the stage-0 speed seed (0x60 type arm / 0x30
+                           * slot arm; 0 when no dir resolved) */
   uint8_t fallback;       /* native FUN_0007F7E0 (unported, OL-63) */
   uint8_t tail;           /* native stage-0 tail 0x7F3A1..0x7F57B (unported, OL-63) */
   uint8_t slot_merge;     /* native FUN_0007876C request (0x7F356) */
@@ -330,6 +332,45 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
                                        const int8_t *type_dir_x,
                                        const int8_t *type_dir_z,
                                        fifa96_action_carrier_out *out);
+
+/* FU-348 §4: the row-05 stage-0 tail `0x7F3A1..0x7F57B` as a pure helper.
+ * The native block vector is `{distance, dx, dz}` (0x158738/3A/3C); the tail
+ * settles the record target `+0x4D/+0x51/+0x55`, builds the `0x71C94` camera
+ * event `{distance, speed*dir_x, speed*dir_z}`, and writes the release
+ * countdown `0x15872D`. All inputs are the exact native words the tail reads;
+ * the caller owns the `0x92820`/`0x79CCC`/`0x6DA64` sinks (requests only). */
+typedef struct fifa96_action_carrier_tail_in {
+  int32_t camera_x, camera_y, camera_z; /* 0x15774C/50/54 */
+  int16_t camera_speed;   /* word[0x1577BE] */
+  int16_t camera_span;    /* word[0x1577F8] */
+  int32_t pos_x, pos_y, pos_z; /* record +0x59/+0x5D/+0x61 */
+  int16_t lane;           /* word[+0x6B] (the dword[+0x69] high word) */
+  int16_t word_6d;        /* word[+0x6D] (the dword[+0x6B] high word) */
+  int16_t word_6f;        /* word[+0x6F] (the dword[+0x6D] high word) */
+  int16_t bound;          /* word[+0x77] */
+  int16_t speed71;        /* word[+0x71] */
+  int16_t speed_seed;     /* 0x60/0x30 when a dir arm resolved, else 0 */
+  int8_t dir_x, dir_z;    /* the resolved dribble dirs */
+  int8_t type_dir_x, type_dir_z; /* 0x10F334/0x10F33C[type8] */
+  uint8_t has_slot;       /* +0x20 != 0 */
+  uint8_t parity;         /* [0x157A4F] */
+} fifa96_action_carrier_tail_in;
+
+typedef struct fifa96_action_carrier_tail_out {
+  int32_t target_x, target_y, target_z; /* the +0x4D/+0x51/+0x55 writes */
+  uint8_t target_changed; /* the both-dirs-zero seed or type-dir override ran */
+  uint8_t event;          /* the native 0x71C94 call ran */
+  int16_t event_x, event_z; /* the vector's dx/dz words (speed * dir) */
+  int16_t event_height;   /* the native (int16)word[0x157750] > 0x10 flag */
+  uint8_t release;        /* the 0x15872D byte */
+  uint8_t release_written;
+  uint8_t sink26;         /* native FUN_00092820(rec,0x26) request */
+  uint8_t parity_gate;    /* native [0x157A4F] arm reached */
+} fifa96_action_carrier_tail_out;
+
+fifa96_err_t fifa96_action_carrier_tail_step(
+    const fifa96_action_carrier_tail_in *in,
+    fifa96_action_carrier_tail_out *out);
 
 typedef struct fifa96_action_receive {
   int32_t timer89;
