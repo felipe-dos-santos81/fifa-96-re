@@ -71,6 +71,13 @@ static void test_bad_input(void) {
   assert(fifa96_pccd_parse(buf, sizeof buf, &db) == FIFA96_ERR_TRUNCATED);
   assert(fifa96_pccd_team(NULL, 0, 0, NULL) == FIFA96_ERR_INVALID);
   assert(fifa96_pccd_player(NULL, 0, NULL) == FIFA96_ERR_INVALID);
+  uint32_t roster[FIFA96_PCCD_ROSTER_COUNT] = {0};
+  int8_t key[FIFA96_PCCD_ROSTER_COUNT] = {0};
+  uint8_t order[FIFA96_PCCD_ROSTER_COUNT];
+  assert(fifa96_pccd_lineup_order(NULL, roster, key, order) ==
+         FIFA96_ERR_INVALID);
+  assert(fifa96_pccd_lineup_order(&(struct fifa96_pccd_db){0}, roster, key,
+                                  order) == FIFA96_ERR_INVALID);
 }
 
 static void test_retail_pcdb(void) {
@@ -104,12 +111,45 @@ static void test_retail_pcdb(void) {
   assert(team.print[0] == 'D' && team.print[1] == 'D');
   assert(team.roster[0] == 2047u && team.roster[15] == 106u);
 
+  /* Native team-header +0x35 keys and the FUN_00012010 order. The first 11
+   * entries are the starting line-up in pitch-record order. */
+  static const int8_t bra_key[FIFA96_PCCD_ROSTER_COUNT] = {
+      0x29, 0x14, 0x18, 0x21, -1, -1, 0x17, -1,
+      -1, 0x22, 0x2B, -1, 0x15, 0x1F, 0x00, 0x1E};
+  for (uint32_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++)
+    assert(team.order_key[i] == bra_key[i]);
+  static const uint8_t bra_order[FIFA96_PCCD_ROSTER_COUNT] = {
+      14, 1, 12, 6, 2, 15, 13, 3, 9, 0, 10, 4, 7, 11, 8, 5};
+  uint8_t order[FIFA96_PCCD_ROSTER_COUNT];
+  assert(fifa96_pccd_lineup_order(&db, team.roster, team.order_key, order) ==
+         FIFA96_OK);
+  for (uint32_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++)
+    assert(order[i] == bra_order[i]);
+  struct fifa96_pccd_player sort_probe;
+  assert(fifa96_pccd_player(&db, team.roster[0], &sort_probe) == FIFA96_OK);
+  assert(sort_probe.sort_key == 15);   /* PCCD +0x0B, native slot +0xC */
+
   assert(fifa96_pccd_team(&db, 4, 28, &team) == FIFA96_OK);
   assert(team.record == 0x20u && team.id == 47u);
   assert(strcmp(team.name_short, "Italy") == 0);
   assert(team.formation == 2u);
   assert(team.kit[0][0] == 3u && team.kit[0][1] == 30u && team.kit[0][2] == 3u);
   assert(team.roster[0] == 806u && team.roster[15] == 168u);
+
+  /* Germany (mode-4 index 21): the same native order pass with the authored
+   * 442 keys. */
+  assert(fifa96_pccd_team(&db, 4, 21, &team) == FIFA96_OK);
+  static const int8_t ger_key[FIFA96_PCCD_ROSTER_COUNT] = {
+      0x18, -1, 0x22, 0x1F, -1, 0x00, 0x29, 0x14,
+      -1, 0x17, 0x21, 0x2B, 0x1E, 0x15, -1, -1};
+  for (uint32_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++)
+    assert(team.order_key[i] == ger_key[i]);
+  static const uint8_t ger_order[FIFA96_PCCD_ROSTER_COUNT] = {
+      5, 7, 13, 9, 0, 12, 3, 10, 2, 6, 11, 8, 4, 15, 1, 14};
+  assert(fifa96_pccd_lineup_order(&db, team.roster, team.order_key, order) ==
+         FIFA96_OK);
+  for (uint32_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++)
+    assert(order[i] == ger_order[i]);
 
   struct fifa96_pccd_player player;
   assert(fifa96_pccd_player(&db, 2047, &player) == FIFA96_OK);

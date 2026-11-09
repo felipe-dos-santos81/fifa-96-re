@@ -270,6 +270,22 @@ static void test_bridge_hands_off_appearance(void) {
   assert(mr->roster_skin_code[0][0] == '4');
   assert(mr->roster_hair_code[1][0] == '0');
   assert(mr->roster_skin_code[1][0] == '2');
+  /* FUN_00012010 order for the 442 teams: the first 11 pitch records are the
+   * authored header-key order, and pitch records read the player's appearance
+   * digits from that roster slot (FUN_0004C00C/FUN_0004C098). */
+  assert(mr->roster_order_ok[0] == 1 && mr->roster_order_ok[1] == 1);
+  static const uint8_t bra_start[FIFA96_MATCH_ENTITY_RECORDS] = {
+      14, 1, 12, 6, 2, 15, 13, 3, 9, 0, 10};
+  static const uint8_t ger_start[FIFA96_MATCH_ENTITY_RECORDS] = {
+      5, 7, 13, 9, 0, 12, 3, 10, 2, 6, 11};
+  for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++) {
+    assert(mr->sub_lineup[0][pitch] == bra_start[pitch]);
+    assert(mr->sub_lineup[1][pitch] == ger_start[pitch]);
+  }
+  assert(mr->roster_hair_code[0][14] == '1');   /* Taffarel */
+  assert(mr->roster_skin_code[0][14] == '2');
+  assert(mr->roster_hair_code[1][13] == '0');   /* Schulz, pitch 2 */
+  assert(mr->roster_skin_code[1][13] == '1');
   assert(fifa96_match_run_end(mr) == 0);
   drop_fixture(f);
 }

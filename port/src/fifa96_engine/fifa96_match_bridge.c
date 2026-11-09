@@ -97,6 +97,17 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
             mr->roster_skin_code[side][slot] = skin_code;
           }
         }
+        /* Native FUN_00012010 desired order: the first 11 slots are the
+         * starting line-up (the pitch-record -> roster binding). */
+        uint8_t order[FIFA96_PCCD_ROSTER_COUNT];
+        if (fifa96_team_data_lineup_order(&eng->team_data,
+                                          eng->frontend.team_id[side],
+                                          order) == 0) {
+          memcpy(mr->roster_order[side], order, sizeof order);
+          mr->roster_order_ok[side] = 1;
+        } else {
+          mr->roster_order_ok[side] = 0;
+        }
       }
     }
   }

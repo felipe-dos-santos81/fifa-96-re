@@ -1505,11 +1505,13 @@ struct fifa96_match_run {
   uint8_t sub_used[2];
   char sub_notice[40];
   uint16_t sub_notice_ticks;
-  /* P15 derived pause-substitution selection [D]. `roster_pos`/`roster_rating`
-   * are the PCCD +0x09/+0x1B bytes; `sub_lineup[side][pitch]` maps the 11
-   * pitch records to roster slots (0xFF = unassigned); `sub_bench_avail` is
-   * the bit mask of roster slots still on the bench. The menu is live-only and
-   * cleared by init/begin/end/resume. */
+  /* Pause-substitution selection. `roster_pos`/`roster_rating` are the PCCD
+   * +0x09/+0x1B bytes; `sub_lineup[side][pitch]` maps the 11 pitch records to
+   * roster slots (0xFF = unassigned); `sub_bench_avail` is the bit mask of
+   * roster slots still on the bench. With real PCCD data `sub_lineup` is the
+   * native FUN_00012010 order (`roster_order`); the role/rating builder is the
+   * derived fallback for no-PCCD fixtures. The menu is live-only and cleared
+   * by init/begin/end/resume. */
   char roster_pos[2][FIFA96_PCCD_ROSTER_COUNT];
   uint8_t roster_rating[2][FIFA96_PCCD_ROSTER_COUNT];
   /* Native per-player appearance digits from the PCCD player record (+0x1C
@@ -1517,6 +1519,13 @@ struct fifa96_match_run {
    * the 0..3 hair/skin classes at remap-build time. */
   uint8_t roster_hair_code[2][FIFA96_PCCD_ROSTER_COUNT];
   uint8_t roster_skin_code[2][FIFA96_PCCD_ROSTER_COUNT];
+  /* Native desired-order matrix (FUN_00012010 / 0x14C360) as roster-slot
+   * indices: [side][0..10] are pitch records 0..10 and [11..15] the bench.
+   * The bridge fills this from the PCCD team-header +0x35 keys. When
+   * `roster_order_ok[side]` is 0 (synthetic fixtures, no PCCD data) the
+   * derived role/rating builder below supplies `sub_lineup` instead. */
+  uint8_t roster_order[2][FIFA96_PCCD_ROSTER_COUNT];
+  uint8_t roster_order_ok[2];
   uint8_t sub_lineup[2][FIFA96_MATCH_ENTITY_RECORDS];
   uint16_t sub_bench_avail[2];
   uint8_t sub_lineup_ready;

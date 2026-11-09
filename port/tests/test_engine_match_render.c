@@ -1815,6 +1815,48 @@ static void test_live_real_team_kits(void) {
   live_fixture_drop(&f);
 }
 
+/* Native FUN_00012010 order -> appearance. Brazil's first 11 in pitch-record
+ * order are 14,1,12,6,2,15,13,3,9,0,10; Germany's are
+ * 5,7,13,9,0,12,3,10,2,6,11. The Germany case changes the visible skin class:
+ * native pitch 2 is Schulz (skin '1' -> class 3 base 0xDB) and pitch 4 is
+ * Buchwald (skin '2' -> class 1 base 0xED); the derived rating order swaps
+ * those two players. */
+static void test_live_native_order_appearance(void) {
+  struct live_fixture f;
+  live_fixture_make(&f);
+  struct fifa96_match_run *mr = &f.mr;
+  struct fifa96_match_run_render *r = &mr->render;
+  static const uint8_t bra_order[FIFA96_MATCH_ENTITY_RECORDS] = {
+      14, 1, 12, 6, 2, 15, 13, 3, 9, 0, 10};
+  static const uint8_t ger_order[FIFA96_MATCH_ENTITY_RECORDS] = {
+      5, 7, 13, 9, 0, 12, 3, 10, 2, 6, 11};
+  for (uint32_t pitch = 0; pitch < FIFA96_MATCH_ENTITY_RECORDS; pitch++) {
+    mr->sub_lineup[0][pitch] = bra_order[pitch];
+    mr->sub_lineup[1][pitch] = ger_order[pitch];
+  }
+  mr->roster_hair_code[0][14] = '1';
+  mr->roster_skin_code[0][14] = '2';
+  mr->roster_hair_code[0][1] = '2';
+  mr->roster_hair_code[1][13] = '0';
+  mr->roster_skin_code[1][13] = '1';
+  mr->roster_hair_code[1][0] = '0';
+  mr->roster_skin_code[1][0] = '2';
+  assert(fifa96_match_run_stage_pitch(mr, f.engine) == 0);
+  /* Brazil: Taffarel hair class 2 (0xF0 ramp), skin class 1 (0xED base);
+   * Branco hair class 1 (0xEB ramp). */
+  assert(r->remap_entity[0][0][0xD7] == 0xF0);
+  assert(r->remap_entity[0][0][0xDB] == 0xED);
+  assert(r->remap_entity[0][0][0x75] == 0xF1);
+  assert(r->remap_entity[0][1][0xD7] == 0xEB);
+  assert(r->remap_entity[0][1][0xDB] == 0xF6);
+  /* Germany: pitch 2 Schulz (skin class 3, 0xDB base); pitch 4 Buchwald
+   * (skin class 1, 0xED base). Both hair '0' -> class 3 ramp 0xD7. */
+  assert(r->remap_entity[1][2][0xD7] == 0xD7);
+  assert(r->remap_entity[1][2][0xDB] == 0xDB);
+  assert(r->remap_entity[1][4][0xD7] == 0xD7);
+  assert(r->remap_entity[1][4][0xDB] == 0xED);
+  live_fixture_drop(&f);
+}
 
 /* ------------------------------------------------------------------------ *
  * OL-T11-7 (M2 full-gameplay P0.2): the match HUD (FU-148 §1/§6.1).
@@ -2934,6 +2976,7 @@ int main(void) {
     test_live_matchup_formations();
     test_live_real_team_kits();
     test_live_substitution_rebuilds_remap();
+    test_live_native_order_appearance();
   } else {
     puts("test_engine_match_render: no ISO, live pitch case skipped");
   }

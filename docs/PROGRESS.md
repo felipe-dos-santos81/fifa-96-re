@@ -4753,3 +4753,21 @@ close-out below).
   simulation/render/census changes. New regression:
   `test_slot_update_release_while_direction_held`. Full record:
   `port/spec/FU70_control_slots.md` appended errata.
+
+- **Phase 90 native line-up order and appearance mapping (2026-11-09).** The
+  match-start pitch-record -> roster map is now the native 16-slot desired
+  order (`0x14C360` / `FUN_00012010`) instead of the derived role/rating
+  pick. `FUN_000103D0` pins the slot fields: PCCD `+0x09` is the position and
+  PCCD `+0x0B` is the signed sort key (slot `+0xC`), while the appearance
+  pair remains PCCD `+0x1C/+0x1D` -> slot `+0x1D/+0x1E`. `FUN_00011F0C`
+  reads the team-header `+0x35` keys, `FUN_00011E48` applies the position and
+  `+0x0C` tie-break, and `FUN_00012010`'s companion swaps are the
+  competition card/injury pass. The port now builds the same order from the
+  PCCD team header, validates it as a permutation, and uses its first 11 for
+  `sub_lineup`; no-PCCD fixtures keep the old fallback. Brazil and Germany
+  retail orders are pinned in `test_engine_pccd`/`test_engine_team_data`,
+  the bridge and skin-remap composition in `test_engine_match_bridge`/
+  `test_engine_match_render`. `make check` green 124/124; M1/M2 `cmp` exact.
+  Full record: `port/spec/FU-350_native_lineup_order.md`. Open legs: the
+  competition card/injury replacement, front-end edited-lineup re-sort, the
+  full `FUN_00047298` 23-descriptor pool, and the in-match order swaps.

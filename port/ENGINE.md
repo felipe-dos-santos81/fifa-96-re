@@ -12041,3 +12041,62 @@ missed masks.
 pre-fix full-word hold). Direction-only counter expectations corrected to the
 native high-nibble gate. No simulation/render/census cell changes. Full
 record: `port/spec/FU70_control_slots.md` errata.
+
+## Phase 90 — native line-up order and appearance mapping (2026-11-09)
+
+**Outcome.** The match-start pitch-record -> roster-slot map is the native
+16-slot desired order (`0x14C360` / `FUN_00012010`), not the derived
+role/rating pick. Brazil's first 11 now render Taffarel, Branco, Santos,
+Jorginho, Cafu, Zinho, Silva, Dunga, Rai, Bebeto, Romario; Germany's render
+Illgner, Kohler, Schulz, Matthaus, Buchwald, Sammer, Hassler, Muller,
+Effenberg, Klinsmann, Riedle. Because `FUN_0004C00C`/`FUN_0004C098` read the
+hair/skin digits from that same order entry, the visible skin/hair assignment
+follows automatically. Synthetic/no-PCCD fixtures keep the derived fallback,
+so the M1/M2 tapes are unchanged.
+
+**Root cause.** `FUN_0008C758` binds `rec+4 = 0x157BD2[side][rec+0x8D]`; the
+port's `rec+0x8D` analog is `entity.active` (record index 0..10). The port
+had no `0x14C360` producer, so `sub_lineup` was built by role/rating. That
+selects a different player for several pitch records (the clearest visible
+case is Germany: the derived order puts Buchwald on pitch 2 and Schulz on
+pitch 4; the native order reverses them, changing skin class 2 vs 1).
+
+**Native evidence.** The slot decoder `FUN_000103D0` maps PCCD `+0x09` to
+slot `+0x09` (position) and PCCD `+0x0B` to slot `+0x0C` (the sort key), not
+the overall rating at `+0x1B`; the appearance pair remains slot `+0x1D/+0x1E`
+= PCCD `+0x1C/+0x1D`. `FUN_00011F0C` reads the signed team-header key as
+`*(int *)(header + 0x32 + slot) >> 24` = `header[0x35 + slot]`; `FUN_00011E48`
+selects by `slot+9` and the signed `slot+0xC`; the `0x10010` fallback is
+`GDDDDMMMMFF` followed by five `-1` entries. `FUN_00012010`'s companion-byte
+swaps are the competition card/injury replacement pass (`FUN_00035A1C` clears
+and populates `0x14C3A0`); with no event records they are no-ops. Retail
+Brazil/Germany keys and full 16-slot orders are pinned in FU-350 §3.
+
+**Implementation.** `fifa96_pccd_team` exposes `order_key[16]` (`+0x35`);
+`fifa96_pccd_player` exposes `sort_key` (`+0x0B`). The new
+`fifa96_pccd_lineup_order` implements the primary pass with `int8_t` keys
+(the `0xFF` sentinel must stay signed on this target), and
+`fifa96_team_data_lineup_order` resolves it through the 44-team map. The
+bridge fills `mr->roster_order[side]` / `roster_order_ok[side]`;
+`fifa96_match_run_sub_rebuild` validates the permutation, assigns its first
+11 to `sub_lineup`, and otherwise falls back to the role/rating builder.
+
+**Verification.** `make check` **124/124**. M1 `cmp` exact
+`09b726b7…`; M2 `cmp` exact `41521559…`. New coverage: Brazil/Germany keys
+and full orders (`test_engine_pccd`), LANG handoff (`test_engine_team_data`),
+native/fallback branch and permutation rejection (`test_engine_live_control`),
+bridge integration (`test_engine_match_bridge`), and the native order ->
+skin-remap composition (`test_engine_match_render`, Germany pitches 2/4).
+
+**Errata (quoted).** Phase 86 legs: "The native lineup matrix `0x14C360` is
+unported (the pitch -> roster map is derived...)" — the producer and the
+default pitch -> roster map are now ported; the full `FUN_00047298` pool
+remains. Phase 87: "The native `0x14C360` desired-order producer ... remain
+legs" — the producer is ported; the in-match order swaps are not.
+
+**Legs.** FU350-L1 competition card/injury companion swap
+(`FUN_00035A1C` + the two `FUN_00012010` swap passes); FU350-L2 front-end
+edited-line-up re-sort; FU350-L3 the full `FUN_00047298` 23-descriptor pool;
+FU350-L4 in-match order swaps (`FUN_00041494`/`FUN_0008CBB0`/
+`FUN_0008EAB8`/`FUN_0009343C`). Full record:
+`port/spec/FU-350_native_lineup_order.md`.

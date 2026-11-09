@@ -77,6 +77,11 @@ struct fifa96_pccd_team {
   uint8_t formation;          /* +0x12 formation id 0..4 */
   uint8_t kit[4][3];          /* +0x25/+0x28/+0x2B/+0x2E shirt/shorts/socks */
   uint8_t print[4];           /* +0x31 number colours (ASCII 'A'..'Y') */
+  /* +0x35..+0x44: the 16 native line-up keys. FUN_00011F0C reads each as
+   * `*(int *)(header + 0x32 + slot) >> 24` = `header[0x35 + slot]`. The
+   * value is signed; -1 means "no key" (the native sort then falls back to
+   * the position order). */
+  int8_t order_key[FIFA96_PCCD_ROSTER_COUNT];
   int8_t ai[4];               /* +0x1E signed AI bounds */
   uint32_t roster[FIFA96_PCCD_ROSTER_COUNT];  /* +0x49 player record indices */
 };
@@ -89,6 +94,10 @@ struct fifa96_pccd_player {
   char position;              /* +0x09 ASCII 'G'/'D'/'M'/'F' */
   uint8_t rating;             /* +0x1B overall (measured; see the erratum) */
   uint8_t skills[17];         /* +0x0A..+0x1A */
+  /* +0x0B, the native line-up tie-break key: FUN_00011E48 compares the
+   * signed byte at slot +0xC, which the native decoder fills from PCCD
+   * +0x0B (the second byte of the 17-byte skills block above). */
+  int8_t sort_key;
   /* Native player-record appearance digit codes. FUN_0004C00C reads the
    * hair digit at +0x1D and FUN_0004C098 the skin digit at +0x1E of the
    * runtime player descriptor; the PCCD record carries the same pair at
@@ -120,6 +129,30 @@ fifa96_err_t fifa96_pccd_team(const struct fifa96_pccd_db *db, uint32_t mode,
  * `db->bytes`. */
 fifa96_err_t fifa96_pccd_player(const struct fifa96_pccd_db *db, uint32_t index,
                                 struct fifa96_pccd_player *player);
+
+/* Native FUN_00012010 desired-order pass over one team's 16 roster slots.
+ *
+ * The primary key is the signed team-header byte at +0x35 (`order_key`).
+ * Each step picks the unused slot with the lowest key; -1 is skipped. When
+ * no keyed slot remains, the fallback position order
+ * G D D D D M M M M F F -1 -1 -1 -1 -1 selects the unused slot whose PCCD
+ * position (+0x09) matches; -1 matches any position. Ties use the signed
+ * PCCD +0x0B byte (`sort_key`), lowest first, and the first slot wins on
+ * equality (the native `FUN_00011E48` strict `<` scan).
+ *
+ * `order[0..10]` is the starting line-up in pitch-record order and
+ * `order[11..15]` the bench. The native companion-array swaps at the end of
+ * FUN_00012010 are the competition card/injury replacement pass
+ * (`FUN_00035A1C` clears/sets 0x14C3A0 before the sort); they are not part of
+ * the default friendly order and are left to that leg.
+ *
+ * Returns FIFA96_OK, FIFA96_ERR_INVALID (NULL), or a negated player-record
+ * lookup error. */
+fifa96_err_t fifa96_pccd_lineup_order(
+    const struct fifa96_pccd_db *db,
+    const uint32_t roster[FIFA96_PCCD_ROSTER_COUNT],
+    const int8_t order_key[FIFA96_PCCD_ROSTER_COUNT],
+    uint8_t order[FIFA96_PCCD_ROSTER_COUNT]);
 
 /* Number of dword slots in `mode`'s table, or 0 for a NULL db / bad mode. */
 uint32_t fifa96_pccd_mode_slots(const struct fifa96_pccd_db *db, uint32_t mode);

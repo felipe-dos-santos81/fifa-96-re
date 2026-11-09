@@ -3056,6 +3056,38 @@ static void test_live_pause_substitutions(void) {
   drop_lc_fixture(&f);
 }
 
+/* The native PCCD order branch: roster_order[0..10] is used verbatim and the
+ * remaining five slots are the bench. A duplicate slot is not a permutation,
+ * so the builder must fall back to the derived map. */
+static void test_live_sub_native_order(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  uint8_t side = (uint8_t)(mr->phase_machine.side_controlled & 1u);
+  static const uint8_t order[FIFA96_PCCD_ROSTER_COUNT] = {
+      14, 1, 12, 6, 2, 15, 13, 3, 9, 0, 10, 4, 7, 11, 8, 5};
+  for (int s = 0; s < 2; s++) {
+    memcpy(mr->roster_order[s], order, sizeof order);
+    mr->roster_order_ok[s] = 1;
+  }
+  assert(fifa96_match_run_sub_rebuild(mr) == 1);
+  for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++)
+    assert(mr->sub_lineup[side][pitch] == order[pitch]);
+  uint16_t bench = 0;
+  for (int i = (int)FIFA96_MATCH_ENTITY_RECORDS;
+       i < (int)FIFA96_PCCD_ROSTER_COUNT; i++)
+    bench |= (uint16_t)(1u << order[i]);
+  assert(mr->sub_bench_avail[side] == bench);
+
+  mr->roster_order[side][0] = 0;
+  mr->roster_order[side][1] = 0;
+  memset(mr->roster_pos[side], 0, sizeof mr->roster_pos[side]);
+  memset(mr->roster_rating[side], 0, sizeof mr->roster_rating[side]);
+  assert(fifa96_match_run_sub_rebuild(mr) == 1);
+  for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++)
+    assert(mr->sub_lineup[side][pitch] == pitch);
+  drop_lc_fixture(&f);
+}
+
 /* No PCCD positions/ratings: the identity map keeps the menu usable. */
 static void test_live_sub_identity_fallback(void) {
   struct lc_fixture f = make_lc_fixture();
@@ -3103,6 +3135,7 @@ int main(void) {
   test_live_support_run_moves_forward();
   test_live_support_run_hysteresis_and_reset();
   test_live_pause_substitutions();
+  test_live_sub_native_order();
   test_live_sub_identity_fallback();
   test_live_defender_blocks_both_sides();
   test_live_shot_block_mouth_edge();

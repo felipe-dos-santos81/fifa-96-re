@@ -4559,6 +4559,8 @@ static void match_run_sub_roster_reset(struct fifa96_match_run *mr) {
   memset(mr->roster_rating, 0, sizeof mr->roster_rating);
   memset(mr->roster_hair_code, '0', sizeof mr->roster_hair_code);
   memset(mr->roster_skin_code, '4', sizeof mr->roster_skin_code);
+  memset(mr->roster_order, 0, sizeof mr->roster_order);
+  memset(mr->roster_order_ok, 0, sizeof mr->roster_order_ok);
   memset(mr->sub_lineup, 0xFF, sizeof mr->sub_lineup);
   memset(mr->sub_bench_avail, 0, sizeof mr->sub_bench_avail);
   mr->sub_lineup_ready = 0;
@@ -7870,84 +7872,113 @@ int fifa96_match_run_set_paused(struct fifa96_match_run *mr, int paused) {
   return 0;
 }
 
-/* P15 [D]: the derived pitch-record -> roster-slot map. The native lineup is
- * a 16-slot desired order (0x14C360 / FUN_00012010) that the port does not
- * own; this builder walks the native 0x11033A role layout and selects, for
- * each pitch record in block order, the highest-rated unused player with the
- * block's position, then the highest-rated unused non-GK, then any unused
- * player. The map is immutable after the first substitution (the native
- * desired-order swap is P15-L3); a substitution still rebuilds the derived
- * per-pitch appearance remap from the updated map (FU-348). */
+/* Pitch-record -> roster-slot map. With retail PCCD data the bridge supplies
+ * the native 16-slot desired order (0x14C360 / FUN_00012010) in
+ * `roster_order`; the first 11 entries are the starting line-up, exactly the
+ * `FUN_0008C758` binding `rec+4 = 0x157BD2[side][rec+0x8D]`.
+ *
+ * The derived fallback (no PCCD data / direct begin fixtures) walks the native
+ * 0x11033A role layout and selects, for each pitch record in block order, the
+ * highest-rated unused player with the block's position, then the
+ * highest-rated unused non-GK, then any unused player. The map is immutable
+ * after the first substitution; a substitution still rebuilds the per-pitch
+ * appearance remap from the updated map (FU-348). */
 int fifa96_match_run_sub_rebuild(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   if (mr->sub_used[0] != 0 || mr->sub_used[1] != 0) return 0;
 
   for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
     uint8_t used[FIFA96_PCCD_ROSTER_COUNT];
-    uint8_t pitch_role[FIFA96_MATCH_ENTITY_RECORDS];
-    uint8_t order[FIFA96_MATCH_ENTITY_RECORDS];
-    uint8_t seen[FIFA96_MATCH_ENTITY_RECORDS];
-    int order_count = 0;
     memset(used, 0, sizeof used);
-    memset(pitch_role, 0, sizeof pitch_role);
-    memset(order, 0, sizeof order);
-    memset(seen, 0, sizeof seen);
     memset(mr->sub_lineup[side], 0xFF, sizeof mr->sub_lineup[side]);
 
-    uint8_t id = mr->formation[side] <= 4u ? mr->formation[side] : 0u;
-    fifa96_match_formation_block blocks[4];
-    int block_count = fifa96_match_formation_layout(id, blocks);
-    if (block_count < 0) {
-      memset(blocks, 0, sizeof blocks);
-      block_count = 0;
-    }
-    for (int b = 0; b < block_count; b++) {
-      unsigned count = blocks[b].count > 5u ? 5u : blocks[b].count;
-      char role = blocks[b].role == 0u ? 'G'
-                  : blocks[b].role == 1u ? 'D'
-                  : blocks[b].role == 2u ? 'M'
-                                         : 'F';
-      for (unsigned s = 0; s < count; s++) {
-        uint8_t pitch = blocks[b].slots[s];
-        if (pitch >= FIFA96_MATCH_ENTITY_RECORDS || seen[pitch]) continue;
-        seen[pitch] = 1;
-        pitch_role[pitch] = (uint8_t)role;
-        order[order_count++] = pitch;
+    /* The bridge supplies the native FUN_00012010 order when retail PCCD data
+     * is present. Validate it as a permutation before trusting it; a direct
+     * begin fixture or malformed handoff falls back to the derived builder. */
+    int native = mr->roster_order_ok[side] != 0;
+    if (native) {
+      uint8_t seen_roster[FIFA96_PCCD_ROSTER_COUNT] = {0};
+      for (uint32_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++) {
+        uint8_t roster = mr->roster_order[side][i];
+        if (roster >= FIFA96_PCCD_ROSTER_COUNT || seen_roster[roster]) {
+          native = 0;
+          break;
+        }
+        seen_roster[roster] = 1;
       }
     }
-    for (uint8_t pitch = 0; pitch < FIFA96_MATCH_ENTITY_RECORDS; pitch++)
-      if (!seen[pitch]) order[order_count++] = pitch;
+    if (native) {
+      /* Native FUN_0008C758: current order[pitch] is the roster descriptor
+       * for pitch record `pitch`. */
+      for (uint8_t pitch = 0; pitch < FIFA96_MATCH_ENTITY_RECORDS; pitch++) {
+        uint8_t roster = mr->roster_order[side][pitch];
+        mr->sub_lineup[side][pitch] = roster;
+        used[roster] = 1;
+      }
+    } else {
+      uint8_t pitch_role[FIFA96_MATCH_ENTITY_RECORDS];
+      uint8_t order[FIFA96_MATCH_ENTITY_RECORDS];
+      uint8_t seen[FIFA96_MATCH_ENTITY_RECORDS];
+      int order_count = 0;
+      memset(pitch_role, 0, sizeof pitch_role);
+      memset(order, 0, sizeof order);
+      memset(seen, 0, sizeof seen);
 
-    for (int i = 0; i < order_count; i++) {
-      uint8_t pitch = order[i];
-      char role = (char)pitch_role[pitch];
-      int best = -1;
-      int best_rating = -1;
-      int best_non_gk = -1;
-      int best_non_gk_rating = -1;
-      int best_any = -1;
-      int best_any_rating = -1;
-      for (uint8_t r = 0; r < FIFA96_PCCD_ROSTER_COUNT; r++) {
-        if (used[r]) continue;
-        int rating = mr->roster_rating[side][r];
-        if (rating > best_non_gk_rating && mr->roster_pos[side][r] != 'G') {
-          best_non_gk_rating = rating;
-          best_non_gk = r;
-        }
-        if (rating > best_any_rating) {
-          best_any_rating = rating;
-          best_any = r;
-        }
-        if (role != '\0' && mr->roster_pos[side][r] == role &&
-            rating > best_rating) {
-          best_rating = rating;
-          best = r;
+      uint8_t id = mr->formation[side] <= 4u ? mr->formation[side] : 0u;
+      fifa96_match_formation_block blocks[4];
+      int block_count = fifa96_match_formation_layout(id, blocks);
+      if (block_count < 0) {
+        memset(blocks, 0, sizeof blocks);
+        block_count = 0;
+      }
+      for (int b = 0; b < block_count; b++) {
+        unsigned count = blocks[b].count > 5u ? 5u : blocks[b].count;
+        char role = blocks[b].role == 0u ? 'G'
+                    : blocks[b].role == 1u ? 'D'
+                    : blocks[b].role == 2u ? 'M'
+                                           : 'F';
+        for (unsigned s = 0; s < count; s++) {
+          uint8_t pitch = blocks[b].slots[s];
+          if (pitch >= FIFA96_MATCH_ENTITY_RECORDS || seen[pitch]) continue;
+          seen[pitch] = 1;
+          pitch_role[pitch] = (uint8_t)role;
+          order[order_count++] = pitch;
         }
       }
-      if (best < 0) best = best_non_gk >= 0 ? best_non_gk : best_any;
-      if (best < 0) break;
-      mr->sub_lineup[side][pitch] = (uint8_t)best;
-      used[best] = 1;
+      for (uint8_t pitch = 0; pitch < FIFA96_MATCH_ENTITY_RECORDS; pitch++)
+        if (!seen[pitch]) order[order_count++] = pitch;
+
+      for (int i = 0; i < order_count; i++) {
+        uint8_t pitch = order[i];
+        char role = (char)pitch_role[pitch];
+        int best = -1;
+        int best_rating = -1;
+        int best_non_gk = -1;
+        int best_non_gk_rating = -1;
+        int best_any = -1;
+        int best_any_rating = -1;
+        for (uint8_t r = 0; r < FIFA96_PCCD_ROSTER_COUNT; r++) {
+          if (used[r]) continue;
+          int rating = mr->roster_rating[side][r];
+          if (rating > best_non_gk_rating && mr->roster_pos[side][r] != 'G') {
+            best_non_gk_rating = rating;
+            best_non_gk = r;
+          }
+          if (rating > best_any_rating) {
+            best_any_rating = rating;
+            best_any = r;
+          }
+          if (role != '\0' && mr->roster_pos[side][r] == role &&
+              rating > best_rating) {
+            best_rating = rating;
+            best = r;
+          }
+        }
+        if (best < 0) best = best_non_gk >= 0 ? best_non_gk : best_any;
+        if (best < 0) break;
+        mr->sub_lineup[side][pitch] = (uint8_t)best;
+        used[best] = 1;
+      }
     }
     uint16_t bench = 0;
     for (uint8_t r = 0; r < FIFA96_PCCD_ROSTER_COUNT; r++)

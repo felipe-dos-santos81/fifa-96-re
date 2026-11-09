@@ -166,6 +166,8 @@ fifa96_err_t fifa96_pccd_team(const struct fifa96_pccd_db *db, uint32_t mode,
     for (uint32_t c = 0; c < 3; c++)
       team->kit[k][c] = p[0x25 + k * 3u + c];
   memcpy(team->print, p + 0x31, sizeof team->print);
+  for (uint32_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++)
+    team->order_key[i] = (int8_t)p[0x35 + i];
   for (uint32_t i = 0; i < 4; i++) team->ai[i] = (int8_t)p[0x1E + i];
   for (uint32_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++)
     team->roster[i] = pccd_rd32(p + FIFA96_PCCD_TEAM_FIXED_SIZE + i * 4u);
@@ -187,8 +189,72 @@ fifa96_err_t fifa96_pccd_player(const struct fifa96_pccd_db *db, uint32_t index,
   player->byte8 = p[0x08];
   player->position = (char)p[0x09];
   memcpy(player->skills, p + 0x0A, sizeof player->skills);
+  player->sort_key = (int8_t)p[0x0B];
   player->rating = p[0x1B];
   player->hair_code = p[0x1C];
   player->skin_code = p[0x1D];
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_pccd_lineup_order(
+    const struct fifa96_pccd_db *db,
+    const uint32_t roster[FIFA96_PCCD_ROSTER_COUNT],
+    const int8_t order_key[FIFA96_PCCD_ROSTER_COUNT],
+    uint8_t order[FIFA96_PCCD_ROSTER_COUNT]) {
+  if (!db || !db->bytes || !roster || !order_key || !order)
+    return FIFA96_ERR_INVALID;
+  int8_t position[FIFA96_PCCD_ROSTER_COUNT];
+  int8_t sort_key[FIFA96_PCCD_ROSTER_COUNT];
+  for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++) {
+    struct fifa96_pccd_player player;
+    fifa96_err_t err = fifa96_pccd_player(db, roster[slot], &player);
+    if (err != FIFA96_OK) return err;
+    position[slot] = (int8_t)player.position;
+    sort_key[slot] = player.sort_key;
+  }
+  /* The native `FUN_00012010` fallback template at 0x10010. -1 is
+   * "any position"; it must stay signed (a plain `char` is unsigned on
+   * some targets and would turn 0xFF into 255). */
+  static const int8_t fallback[FIFA96_PCCD_ROSTER_COUNT] = {
+      'G', 'D', 'D', 'D', 'D', 'M', 'M', 'M', 'M', 'F', 'F',
+      -1, -1, -1, -1, -1};
+  uint8_t used[FIFA96_PCCD_ROSTER_COUNT] = {0};
+  for (uint32_t i = 0; i < FIFA96_PCCD_ROSTER_COUNT; i++) {
+    int best = -1;
+    int best_key = 128;
+    for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++) {
+      if (used[slot]) continue;
+      int key = order_key[slot];
+      if (key != -1 && key < best_key) {
+        best_key = key;
+        best = (int)slot;
+      }
+    }
+    if (best < 0) {
+      int8_t key = fallback[i];
+      best_key = 128;
+      for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++) {
+        if (used[slot]) continue;
+        if (key != -1 && position[slot] != key) continue;
+        if (best < 0 || sort_key[slot] < best_key) {
+          best = (int)slot;
+          best_key = sort_key[slot];
+        }
+      }
+    }
+    if (best < 0) {
+      /* Malformed roster (no slot matches the position): the native
+       * FUN_00011E48 falls back to the first unused slot. */
+      for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++) {
+        if (!used[slot]) {
+          best = (int)slot;
+          break;
+        }
+      }
+    }
+    if (best < 0) return FIFA96_ERR_NOT_FOUND;
+    order[i] = (uint8_t)best;
+    used[best] = 1;
+  }
   return FIFA96_OK;
 }

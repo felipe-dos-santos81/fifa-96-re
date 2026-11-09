@@ -169,6 +169,7 @@ int fifa96_team_data_lookup(const struct fifa96_team_data *td, uint32_t lang_id,
   identity->formation = team.formation;
   memcpy(identity->kit, team.kit, sizeof identity->kit);
   memcpy(identity->print, team.print, sizeof identity->print);
+  memcpy(identity->order_key, team.order_key, sizeof identity->order_key);
   memcpy(identity->roster, team.roster, sizeof identity->roster);
   return 0;
 }
@@ -226,6 +227,20 @@ int fifa96_team_data_appearance(const struct fifa96_team_data *td,
   *hair_code = player.hair_code;
   *skin_code = player.skin_code;
   return 0;
+}
+
+int fifa96_team_data_lineup_order(
+    const struct fifa96_team_data *td, uint32_t lang_id,
+    uint8_t order[FIFA96_PCCD_ROSTER_COUNT]) {
+  if (!td || !order) return -FIFA96_ERR_INVALID;
+  if (!td->ready) return -FIFA96_ERR_STATE;
+
+  struct fifa96_team_identity identity;
+  int rc = fifa96_team_data_lookup(td, lang_id, &identity);
+  if (rc != 0) return rc;
+  fifa96_err_t err = fifa96_pccd_lineup_order(&td->db, identity.roster,
+                                              identity.order_key, order);
+  return err == FIFA96_OK ? 0 : -(int)err;
 }
 
 int fifa96_team_data_roster_full(const struct fifa96_team_data *td,

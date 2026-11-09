@@ -43,6 +43,7 @@ struct fifa96_team_identity {
   uint8_t formation;         /* record +0x12 */
   uint8_t kit[4][3];         /* record +0x25..+0x30 */
   uint8_t print[4];          /* record +0x31..+0x34 */
+  int8_t order_key[FIFA96_PCCD_ROSTER_COUNT]; /* record +0x35..+0x44 */
   uint32_t roster[FIFA96_PCCD_ROSTER_COUNT];  /* record +0x49.. */
 };
 
@@ -105,6 +106,17 @@ int fifa96_team_data_roster_full(const struct fifa96_team_data *td,
 int fifa96_team_data_appearance(const struct fifa96_team_data *td,
                                 uint32_t lang_id, uint8_t slot,
                                 uint8_t *hair_code, uint8_t *skin_code);
+
+/* Native FUN_00012010 desired-order pass over `lang_id`'s 16 roster slots.
+ * `order[0..10]` is the starting line-up in pitch-record order and
+ * `order[11..15]` the bench; each value is a roster slot 0..15. Uses the
+ * team-header +0x35 keys and the PCCD +0x09/+0x0B tie-break. Returns 0,
+ * -FIFA96_ERR_INVALID (NULL), -FIFA96_ERR_STATE (not initialised),
+ * -FIFA96_ERR_NOT_FOUND (lang_id not exposed or a roster player is missing),
+ * or another negated PCCD error. */
+int fifa96_team_data_lineup_order(const struct fifa96_team_data *td,
+                                  uint32_t lang_id,
+                                  uint8_t order[FIFA96_PCCD_ROSTER_COUNT]);
 
 /* The 44-entry map's mode-4 index for a LANG id, or -1 when the id is not one
  * of the exposed teams. Pure: works without an initialised team data. */
