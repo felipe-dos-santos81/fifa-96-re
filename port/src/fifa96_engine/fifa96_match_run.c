@@ -2452,6 +2452,10 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   for (int team = 0; team < 2; team++)
     for (int i = 0; i < 256; i++)
       r->remap_team[team][i] = (uint8_t)(i == 0 ? 0xFF : i);
+  /* The live ball's own translation: the retail `ball.fsh` paints its outline
+   * with palette index 0 and its background with 0xFF. Keep 0 opaque (the
+   * span writer still treats a remapped 0xFF as transparent). */
+  for (int i = 0; i < 256; i++) r->ball_remap[i] = (uint8_t)i;
   r->team_remap_ready = 0;
   /* FU-343 (P4): the live HUD colour defaults. The fallback body index is the
    * staging-measured near-white (30); the shade table is a monotone halving
@@ -2817,6 +2821,9 @@ static void match_run_live_control_seed(struct fifa96_match_run *mr) {
  *    caller; the transient kick code 7 is never overwritten).
  */
 #define MATCH_RUN_LIVE_CONTROL_RANGE 0x400
+/* The live possession glue only follows a ball already at the carrier's feet;
+ * a stale/far manual staging is left to the loose ball machine. */
+#define MATCH_RUN_LIVE_CARRIER_GLUE_RANGE 0x80
 /* P13 live ball-boundary/restart constants (the derived live armer). */
 #define MATCH_RUN_LIVE_TOUCHLINE_X 0x7E0
 #define MATCH_RUN_LIVE_GOALLINE_Z 0xC1E
@@ -7230,6 +7237,45 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
     b->machine_ran = 1;
     return;
   }
+  /* Live possession glue [D]. The native ball staging/possession algebra
+   * (`0x7A490`, the row-05 `0x7F3A1..0x7F57B` target block) is unported, so
+   * the FU-8BAF0 machine only had its loose camera-relative target and a
+   * carried ball stayed behind the player. Pin the ball to the carrier's feet
+   * (plus the last pad direction, the derived dribble offset) while possession
+   * is live; the contact range keeps a stale far carrier from teleporting it.
+   * A kick clears the carrier before this runs, so flight/restart behaviour is
+   * unchanged. Live-only: the M1/M2 tapes never set live_start. The save-hold
+   * block above returns first, so a keeper pin is never moved. */
+  if (mr->live_start && mr->state.phase == 2u && mr->live_kick_active == 0u) {
+    int32_t carrier = b->carrier;
+    if (carrier >= 0 &&
+        carrier < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+      struct fifa96_match_entity *c =
+          &mr->entities.team[(uint32_t)carrier / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)carrier % FIFA96_MATCH_ENTITY_RECORDS];
+      int32_t dx = c->pos_x - b->x;
+      int32_t dz = c->pos_z - b->z;
+      if (c->active != 0u && c->skip_98 == 0u && c->skip_9a == 0u &&
+          fifa96_entity_distance(dx, dz) <= MATCH_RUN_LIVE_CARRIER_GLUE_RANGE) {
+        int32_t ox = (int32_t)c->dir_x * 0x20;
+        int32_t oz = (int32_t)c->dir_z * 0x20;
+        b->x = c->pos_x + ox;
+        b->z = c->pos_z + oz;
+        b->y = 0;
+        b->target_x = b->x;
+        b->target_y = 0;
+        b->target_z = b->z;
+        b->vel_x = c->vel_x;
+        b->vel_z = c->vel_z;
+        b->speed = c->speed71;
+        b->metric = 0;
+        b->metric_dx = 0;
+        b->metric_dz = 0;
+        b->machine_ran = 1;
+        return;
+      }
+    }
+  }
   /* P7 / FU-345: the live kick flight override (derived; see
    * match_run_live_kick_latch). Non-live runs never set live_start. */
   if (mr->live_start) live_flight = match_run_live_kick_flight_step(mr, b);
@@ -9537,7 +9583,9 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     int32_t direction =
         (7 - (int32_t)((uint16_t)((uint32_t)angles[slot] - 0x1000u) >> 13)) & 7;
     fifa96_render_frame frame;
-    if (slot == (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) &&
+    const uint32_t ball_slot =
+        (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS);
+    if (slot == ball_slot &&
         r->ball_bank != FIFA96_MATCH_RUN_BALL_BANK_NONE &&
         r->ball_bank < r->bank_count) {
       /* FU-158 §6/§8.3 (phase-13 T2): the ball slot's dedicated draw
@@ -9575,18 +9623,33 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     int32_t scale = (int32_t)(((int64_t)(int32_t)size_base * 0x5D1) >> 16);
     int32_t x = (int32_t)((int64_t)slots[slot].clean.x >> 16);
     int32_t y = (int32_t)((int64_t)slots[slot].clean.y >> 16);
+    /* The native ball presenter FUN_000572E8 blits the 16x16 `ball.fsh` frame
+     * 1:1 (FUN_00057278 sets the pivot to width/2, height; there is no
+     * depth-scale term), unlike the entity walk's FU-85 depth scale. Using
+     * the slot scale made the ball balloon as it approached the camera. Live
+     * only: the M1/M2 tapes keep the recorded entity scale. */
+    int32_t draw_scale = scale;
+    if (slot == ball_slot && mr->live_start) {
+      draw_scale = 0x10000;
+      sprite.pivot_x = (uint16_t)(sprite.width >> 1);
+      sprite.pivot_y = sprite.height;
+    }
     /* FU-343 (P1): the live per-team kit translation (A7 §4). Only the 22
      * player slots select it; the ball (slot 22) and every HUD/overlay pass
-     * keep the current `remap`. Non-live keeps `remap` for every slot. */
+     * keep the current `remap`. Non-live keeps `remap` for every slot. The
+     * live ball selects its own identity map (index 0 is its opaque outline,
+     * not the player sprites' colour key). */
     const uint8_t *sprite_remap = r->remap;
-    if (mr->live_start && r->team_remap_ready &&
-        slot < (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    if (slot == ball_slot && mr->live_start)
+      sprite_remap = r->ball_remap;
+    else if (mr->live_start && r->team_remap_ready &&
+             slot < (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
       sprite_remap = r->remap_team[slot / FIFA96_MATCH_ENTITY_RECORDS];
     /* The native projection already sizes players for the sideline rig; the
      * P10 2.5x live upscale was only compensation for the removed behind-goal
      * camera. Keep the native scale for every slot. */
-    int rc = match_run_draw_sprite(s, &sprite, sprite_remap, x, y, scale, frame.mirrored,
-                                   &clip);
+    int rc = match_run_draw_sprite(s, &sprite, sprite_remap, x, y, draw_scale,
+                                   frame.mirrored, &clip);
     if (rc != 0) return rc;
     /* FU-85 §2 second pass: composite animator classes resolve an overlay
      * frame (out2) and the original blits it with a second FUN_00057080 call
@@ -9598,8 +9661,8 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
       if (fifa96_sprite_frame_parse(&sprite_bank,
                                     (uint32_t)(frame.overlay - r->sprite_data),
                                     &overlay) == FIFA96_OK) {
-        rc = match_run_draw_sprite(s, &overlay, sprite_remap, x, y, scale, frame.mirrored,
-                                   &clip);
+        rc = match_run_draw_sprite(s, &overlay, sprite_remap, x, y, draw_scale,
+                                   frame.mirrored, &clip);
         if (rc != 0) return rc;
       }
     }

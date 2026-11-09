@@ -4624,3 +4624,21 @@ close-out below).
   read as grounded. `make check` **124/124**; M1/M2 exact; screenshot
   `docs/screens/p82-live-walk-shadows.png`. The `+0x7F` lean producer, full
   appearance machine, class-3 integrator and native 3dwpts art remain legs.
+
+- **Phase 83 live ball art, possession follow and off-ball pad movement
+  (2026-11-08).** The windowed ball was transparent and oversized because the
+  generic FU-85 remap keyed out palette index 0 (the retail `ball.fsh` black
+  outline), and because the live draw used the entity depth scale and centred
+  pivot instead of the native 1:1 bottom-centre blit (`FUN_00057278`;
+  `[0x109000]` = 22 is a near cull, not a scale — FU-158 L158.5 errata).
+  Players could not be moved off the ball because the outfield machine forces
+  the controlled record into row 04, whose native user arm builds a camera
+  target; the engine now gives the live bound slot the native `pos + dir*0x80`
+  pad target and dispatches the ported row-03 body with a held direction while
+  keeping the shared table NULL and the census unchanged. A live-only
+  possession glue pins a carried ball to the carrier's feet (plus the pad
+  dribble offset) for the unported `0x7A490` staging, so dribbling no longer
+  leaves the ball behind. `make check` **124/124**; M1 exact `09b726b7…`; M2
+  exact `41521559…`; screenshots `docs/screens/p83-live-ball-and-movement.png`
+  and `docs/screens/p83-ball-crop.png`. Native possession staging, trail
+  draws, class-3 integrator/director and 3dwpts/HUD art remain legs.

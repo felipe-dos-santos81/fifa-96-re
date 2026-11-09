@@ -377,3 +377,21 @@ coding (fresh `disassemble_bytes`/`read_memory`/`fifa96_play` this task).
   (`[0x109A78]`/bit 0x40). **New L158.5**: the ball presenter's own blit scale
   `[0x109000]` and the `FUN_00057278` screen-pair source (the port draws
   through the slot's FU-85 projection).
+
+## 10. Errata (Phase 83, 2026-11-08)
+
+The §6/§8.3 phrase “the presenter's own scale cell `[0x109000]`” is corrected:
+`[0x109000]` is **not** a scale. `FUN_000572E8` reads it at
+`0x5736a..0x5737c` as the near-distance gate
+`2 * [0x109000] <= depth`, and `read_memory 0x109000` is `16 00 00 00` = 22.
+The actual presenter blit is 1:1: `FUN_00057278` rewrites the frame pivot to
+`pivot_x = dword[frame+2] >> 17` (width/2 when `second_offset == 0`) and
+`pivot_y = word[frame+6]` (height), then calls `FUN_0009B664` with no scale
+term.
+
+The live port now uses that 1:1 scale and bottom-centre pivot, and selects an
+identity ball remap so palette index 0 remains the opaque `ball.fsh` outline
+(the generic FU-85 remap keys index 0 out). These changes are live-only, so
+M1/M2 remain byte-exact. The physical asset observation stands: eight 16x16
+frames with index 0 outline and 0xFF background. L158.3 (trail/secondary
+draws) remains open.

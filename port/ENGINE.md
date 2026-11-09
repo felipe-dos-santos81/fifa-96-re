@@ -11668,3 +11668,78 @@ exact; M2 exact after keeping the legacy wrapper path. Screenshot:
 FUN_0006FE84/FUN_0006E518 appearance machine (FU172-L2); walk-row cadence is
 live-derived; native 3dwpts stadium/goal-net (P10-L2); class-3 camera
 integrator/director still open.
+
+## Phase 83 — live ball art, possession follow and off-ball pad movement (2026-11-08)
+
+**Symptom.** The windowed match drew a large, see-through ball that grew as it
+neared the camera, and a human controlled player who was not the carrier could
+not be moved with the arrows; after a dribble the ball stayed at the old spot
+instead of following the player.
+
+**Root causes.**
+
+- The retail `ball.fsh` bank uses palette index 0 for its opaque black outline
+  and 0xFF for the transparent background. The generic FU-85 remap keys index 0
+  out (`0 -> 0xFF`), so the live draw punched green pitch through every outline
+  pixel. The synthetic/ISO fixtures pin the bank; the committed Phase 83 8x
+  crop shows the restored opaque outline (the before run showed the green
+  holes).
+- `FUN_00057278` blits the ball frame 1:1 after rewriting the pivot to
+  `(width/2, height)`. The `2 * [0x109000] <= depth` test in `FUN_000572E8` is
+  a near-distance cull (`read_memory 0x109000` = 22), not a depth scale. The
+  port was running slot 22 through the FU-85 entity scale with the parsed
+  centred pivot, so the ball ballooned toward the camera and floated.
+- The outfield forced action installs row 04 on the controlled team target when
+  the ball is loose. The native row-04 user gate (`0x7E9F6..0x7EA16`) sends the
+  controlled record to the camera target (`0x7EB95`); the slot-dir step
+  `pos + dir*0x80` is the AI/non-self path (`0x7EBF8..0x7EC13`). With the
+  engine's single `entities.controlled` mapping the human took the camera
+  branch, so the pad never reached the mover. Row 0x03 (the native hold/move
+  body) is ported but its shared action-table slot is NULL because wiring it
+  moved the M2 tape at frame 29.
+- `FUN_0008BAF0` is the loose ball machine. The native possession staging
+  (`0x7A490`, row-05 `0x7F3A1..0x7F57B`) is unported, so a carried ball had no
+  follow at all.
+
+**Implementation [D].** Live-only (`live_start`); M1/M2 never set it.
+
+- New `render.ball_remap[256]` identity translation, selected only by the live
+  ball slot. The generic player remap still keys index 0.
+- Live ball draw uses scale `0x10000` and `pivot = (width/2, height)`, matching
+  the native 1:1 bottom-centre blit. Non-live keeps the FU-85 scale/pivot.
+- Row 04 live pad override: the bound FU-70 slot's held direction builds the
+  native `pos + dir*0x80` target through `fifa96_action_move_target`; no held
+  direction keeps the row's own chase target.
+- `fifa96_match_dispatch_action` dispatches the ported row-03 body for the live
+  bound slot with a held direction. The shared action table stays NULL, so the
+  port census and README title are unchanged.
+- Ball-machine possession glue: a valid carrier within 0x80 of the ball in
+  phase 2, with no live flight, pins the ball to the carrier's feet plus
+  `dir * 0x20` and copies the carrier velocity/speed for the roll cadence. The
+  save-hold block runs first, so a keeper pin is never moved; a far/stale
+  carrier is left to the loose machine.
+
+**Evidence/verification.** Ghidra `disassemble_function`/`disassemble_bytes`
+`0x57278`, `0x572E8` (`0x5736a..0x5737c`), `0x7E9B0..0x7EA31`,
+`0x7EBF8..0x7EC13`; `read_memory 0x109000`; retail `ball.fsh` census via
+`fifa96_play sprite port/tests/golden/gameart0.pvi --name ball.fsh`.
+`test_engine_match_render` adds
+`test_live_ball_art_is_opaque_and_fixed_size`;
+`test_engine_live_control` adds `test_live_offball_slot_player_moves` (live
+row-03 dispatch + row-04 pad movement, non-live row 03 remains
+`-FIFA96_ERR_UNSUPPORTED`) and tightens the carrier dribble distance to
+±0x40. `make check` **124/124**; M1 byte-exact `09b726b7…`; M2 byte-exact
+`41521559…` (both `cmp`-verified). Screenshots:
+`docs/screens/p83-live-ball-and-movement.png` and
+`docs/screens/p83-ball-crop.png`.
+
+**Errata (FU-158 L158.5).** The prior “presenter's own blit scale cell
+`[0x109000]`” wording is corrected: `[0x109000]` = 22 is the near cull
+(`2*22 <= depth`), and the native presenter blits the 16x16 ball frame 1:1
+with pivot `(width/2, height)`. There is no depth-scale cell on this path.
+
+**Legs.** Native trail/secondary draws (L158.3); exact possession staging
+`0x7A490` and row-05 target algebra `0x7F3A1..0x7F57B` (the glue and dribble
+offset are derived); full human/AI selection handling in row 04; class-3
+camera integrator/director (P10-L6); native 3dwpts stadium (P10-L2); HUD art
+(P10-L5).

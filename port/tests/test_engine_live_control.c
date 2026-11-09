@@ -34,6 +34,7 @@
 
 #include "fifa96_engine/fifa96_engine.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
+#include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
 
@@ -264,6 +265,15 @@ static void test_live_carrier_dribbles_with_ball(void) {
   assert(id > 0 && id < 11);
   e = &mr->entities.team[0].records[id];
   assert(mr->entities.ball.carrier == id);
+  /* The no-ISO fixture has no formation seed around the kickoff ball; place
+   * the taker on it, the live bootstrap's documented intent, so this test
+   * exercises the possession glue rather than the missing `.fmt` placement. */
+  stage_ball(mr, e->pos_x, 0, e->pos_z);
+  mr->entities.ball.carrier = id;
+  /* No-ISO fixture: the opponent formation is not seeded, so a neighbour can
+   * sit unrealistically close to the kickoff spot. Suppress the derived AI
+   * tackle for this dribble-only case (contact has its own tests). */
+  mr->live_ai_tackle_cd = 120u;
   x0 = e->pos_x;
   z0 = e->pos_z;
   {
@@ -278,8 +288,93 @@ static void test_live_carrier_dribbles_with_ball(void) {
   bx = mr->entities.ball.x - e->pos_x;
   bz = mr->entities.ball.z - e->pos_z;
   assert(fifa96_entity_distance(bx, bz) <= 0x400);
+  /* The carried ball follows the player (the live possession glue for the
+   * unported native 0x7A490 staging): it must not stay at the kickoff spot. */
+  assert(bx >= -0x40 && bx <= 0x40);
+  assert(bz >= -0x40 && bz <= 0x40);
   assert(mr->score[0] == 0u && mr->score[1] == 0u);
   assert(mr->state.phase == 2u);
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  drop_lc_fixture(&f);
+}
+
+/* Live off-ball movement: after the human releases the ball, the controlled
+ * record's action code is 3 (the native hold/clamp row). The shared action
+ * table keeps row 03 NULL so the M2 tape stays byte-identical, but the live
+ * windowed path must dispatch the ported body for the bound slot record —
+ * otherwise the human can only kick and never chase. */
+static void test_live_offball_slot_player_moves(void) {
+  struct fifa96_match_run probe;
+  memset(&probe, 0, sizeof probe);
+  fifa96_match_run_init(&probe);
+  assert(fifa96_match_dispatch_action(&probe, 3u) == -FIFA96_ERR_UNSUPPORTED);
+
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  int32_t id = mr->entities.controlled;
+  assert(id > 0 && id < 11);
+  struct fifa96_match_entity *e = &mr->entities.team[0].records[id];
+  int32_t x0, z0;
+  /* Clear the opening touch and make the ball loose. The hold keeps the
+   * derived nearest-claim from re-installing carrier state 5. */
+  mr->live_kickoff_touch = 0u;
+  mr->live_control_taker = FIFA96_MATCH_ENTITY_NONE;
+  mr->live_kick_active = 0u;
+  mr->live_kick_hold = 120u;
+  mr->live_save_hold = 0u;
+  mr->ball_settle_active = 0u;
+  mr->act.id = 0u;
+  mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *r = &mr->entities.team[t].records[i];
+      r->pos_x = 0x600;
+      r->pos_z = 0x600;
+      r->target_x = r->pos_x;
+      r->target_z = r->pos_z;
+    }
+  }
+  e->pos_x = 0;
+  e->pos_z = 0;
+  e->target_x = 0;
+  e->target_z = 0;
+  e->code = 3u;
+  e->stage92 = 0u;
+  e->timer89 = 0;
+  e->has_slot = 1u;
+  mr->slot.entity = id;
+  mr->entities.controlled = id;
+  mr->entities.team[0].target = id;
+  mr->entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[0].intercept = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[0].chosen = FIFA96_MATCH_ENTITY_NONE;
+  /* Direct live row-03 dispatch: the slot branch uses the pad octant to build
+   * pos + dir*0x80 (the native 0x79C20 step). */
+  mr->record.entity_id = id;
+  mr->record.pos_x = 0;
+  mr->record.pos_z = 0;
+  mr->record.target_x = 0;
+  mr->record.target_z = 0;
+  mr->record.has_slot = 1u;
+  mr->record.dir_x = 1;
+  mr->record.dir_z = 0;
+  assert(fifa96_match_dispatch_action(mr, 3u) == FIFA96_OK);
+  assert(mr->record.target_x == 0x80);
+  assert(mr->record.target_z == 0);
+  stage_ball(mr, 0, 0, 0);
+  x0 = e->pos_x;
+  z0 = e->pos_z;
+  {
+    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+    assert(fifa96_match_run_input(mr, &up, 1) == 0);
+  }
+  for (int i = 0; i < 8; i++) one_granted_frame(mr);
+  assert(e->code == 3u || e->code == 4u);
+  assert(e->pos_x > x0);
+  assert(e->target_x > x0);
+  assert(e->pos_z == z0);
+  assert(mr->state.phase == 2u);
+  assert(mr->score[0] == 0u && mr->score[1] == 0u);
   assert(fifa96_match_run_input(mr, NULL, 0) == 0);
   drop_lc_fixture(&f);
 }
@@ -293,6 +388,10 @@ static void test_live_kick_release_runs_row07(void) {
   int32_t bx0, bz0;
   int16_t vx0, vz0;
   assert(taker >= 0);
+  /* The no-ISO fixture has no opponent formation, so the glued kickoff ball
+   * can sit next to a synthetic neighbour; keep the derived AI tackle out of
+   * this kick-only case (contact has its own tests). */
+  mr->live_ai_tackle_cd = 120u;
   /* A couple of live frames so the frame chain has run once. */
   one_granted_frame(mr);
   assert(mr->entities.team[0].records[taker].code == 5u);
@@ -2719,6 +2818,9 @@ static void stage_live_support_fixture(struct fifa96_match_run *mr) {
   mr->live_save_hold = 0u;
   mr->ball_settle_active = 0u;
   mr->act.id = 0u;
+  /* No-ISO opponent formation: keep the derived AI tackle out of this
+   * shape/support slice (contact has its own tests). */
+  mr->live_ai_tackle_cd = 120u;
   mr->formation[0] = 1;   /* 4-4-2 */
   mr->entities.team[0].side = 0;
   mr->entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
@@ -2923,6 +3025,7 @@ static void test_live_sub_identity_fallback(void) {
 int main(void) {
   test_live_begin_seeds_kickoff_carrier();
   test_live_carrier_dribbles_with_ball();
+  test_live_offball_slot_player_moves();
   test_live_touchline_exit_throw_in();
   test_live_goal_line_exit_restarts();
   test_live_inside_ball_never_restarts();

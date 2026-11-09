@@ -751,6 +751,67 @@ static void test_ball_slot_draws_ball_bank_frame(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* Live ball art (the windowed gameplay path): the retail ball.fsh uses palette
+ * index 0 for its black outline and 0xFF for the transparent background. The
+ * generic FU-85 remap treats index 0 as the colour key, which punches holes
+ * through the ball; the native presenter FUN_000572E8 blits the frame 1:1 with
+ * a bottom-centre pivot (FUN_00057278 rewrites pivot_x = width/2,
+ * pivot_y = height). This pins all three live properties. */
+static void test_live_ball_art_is_opaque_and_fixed_size(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &f.mr.entities.team[t].records[i];
+      e->pos_x = 0;
+      e->pos_y = 0;
+      e->pos_z = -0x1000;   /* behind the camera: culled */
+      e->target_x = 0;
+      e->target_y = 0;
+      e->target_z = -0x1000;
+      e->skip_9a = 1;
+    }
+  }
+  f.mr.entities.ball.x = 0;
+  f.mr.entities.ball.y = 0;
+  f.mr.entities.ball.z = 0x200;
+  f.mr.entities.ball.target_x = 0;   /* park the machine (target := record) */
+  f.mr.entities.ball.target_y = 0;
+  f.mr.entities.ball.target_z = 0x200;
+  f.mr.entities.ball.vel_x = 0;
+  f.mr.entities.ball.vel_z = 0;
+  f.mr.entities.ball.speed = 0;
+  f.mr.state.phase = 0;              /* no phase-2 lead */
+  f.mr.live_start = 1;
+  f.mr.render.ball_bank = 4;
+  f.mr.render.ball_roll = 0;
+  f.mr.render.background = 0x11;
+
+  /* Frame 0 paints every pixel with palette index 0 (the retail black
+   * outline). The generic remap would drop all of it as transparent. */
+  uint8_t *eb0 = f.blob + SCENE_BALL_OFF;
+  memset(eb0 + 16u, 0x00, 8u * 8u);
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.ball_roll == 0);
+  /* Keep the live draw selected but pin the render eye to the fixture's
+   * identity camera (the real live eye is the class-3 side envelope). */
+  f.mr.render.render_eye_valid = 1;
+  f.mr.render.render_eye_x = 0;
+  f.mr.render.render_eye_y = 0;
+  f.mr.render.render_eye_z = 0;
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  /* 8x8 at the native 1:1 scale, bottom-anchored at the projected (160,120):
+   * x 156..163, y 112..119. Index 0 must be opaque. */
+  assert(f.s->indexed[116 * 320 + 160] == 0x00);
+  /* The live ball no longer uses the FU-85 depth scale: a point one pixel
+   * outside the 8-pixel width stays background. */
+  assert(f.s->indexed[116 * 320 + 155] == 0x11);
+  fifa96_surface_destroy(f.s);
+}
+
 /* phase-13 T2 (FU-158 §4.3/§8.2): the composer roll byte. The native 0x36F4F
  * arm advances `[0x155C4E]`'s low nibble +1 per composer frame while the
  * camera rate words are non-zero (the L158.2 stand-in here is ball motion);
@@ -2725,6 +2786,7 @@ int main(void) {
   test_ball_record_draws_ball_slot();
   test_ball_machine_moves_ball_slot_pixels();
   test_ball_slot_draws_ball_bank_frame();
+  test_live_ball_art_is_opaque_and_fixed_size();
   test_ball_roll_advances_with_ball_motion();
   test_entity_animates_over_frames();
   test_live_anim_inputs_drive_bank_row();

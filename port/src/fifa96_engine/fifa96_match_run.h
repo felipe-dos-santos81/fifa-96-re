@@ -510,6 +510,12 @@ struct fifa96_match_run_render {
    * keeps `remap`, so M1/M2 stay byte-identical. `team_remap_ready` is set by
    * fifa96_match_run_stage_pitch. */
   uint8_t remap_team[2][256];
+  /* Live ball art translation. The retail GAMEART0 `ball.fsh` uses palette
+   * index 0 for the black outline and 0xFF for transparency; the generic
+   * FU-85 remap keys index 0 out (a 16-bit sprite convention), which punched
+   * holes through the ball. This identity map is selected only by the live
+   * ball draw so M1/M2 keep their byte-exact tapes. */
+  uint8_t ball_remap[256];
   int team_remap_ready;
   /* FU-343 (P1): the visible-match pitch (A1). Staged through the engine asset
    * table by fifa96_match_run_stage_pitch and drawn only when live_start. */

@@ -2814,6 +2814,24 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
     r->target_y = out.target_y;
     r->target_z = out.target_z;
   }
+  /* Live pad priority [D]: the outfield machine forces the controlled team
+   * target into the row-04 chase body whenever the ball is loose. Row 04's
+   * native user arm builds the camera-chase target (0x7EB95) for the
+   * controlled record, so a held direction never reached the mover and the
+   * human could only kick. Give the bound FU-70 slot the same slot-dir step
+   * the native 0x79C20 call uses (pos + dir*0x80, clamped) while an arrow is
+   * held. No direction keeps the row's own chase target. Live-only, so the
+   * M1/M2 tapes are untouched. */
+  if (mr->live_start && mr->slot.entity == id && r->has_slot != 0 &&
+      (r->dir_x != 0 || r->dir_z != 0)) {
+    fifa96_action_vec3 tgt;
+    if (fifa96_action_move_target(r->pos_x, r->pos_z, r->dir_x, r->dir_z,
+                                  &tgt) == FIFA96_OK) {
+      r->target_x = tgt.x;
+      r->target_y = 0;
+      r->target_z = tgt.z;
+    }
+  }
   if (out.team_target_set != 0) {
     mr->entities.team[team].target =
         out.team_target_index == FIFA96_OUTFIELD_ROW04_NONE
@@ -8235,7 +8253,16 @@ int fifa96_match_dispatch_action(struct fifa96_match_run *mr, uint8_t code) {
   int rc;
   if (mr == NULL) return -FIFA96_ERR_INVALID;
   if (code >= FIFA96_MATCH_ACTION_ROWS) return -FIFA96_ERR_NOT_FOUND;
-  rc = fifa96_match_dispatch_row(mr, &fifa96_match_action_table[code]);
+  /* Live-only row 03 dispatch for the bound human slot. The shared table keeps
+   * 0x03 NULL so M1/M2 stay byte-exact; the windowed path needs the ported
+   * hold/clamp body so the pad can move a player who is not the carrier. */
+  if (code == 0x03u && mr->live_start &&
+      mr->slot.entity != FIFA96_MATCH_ENTITY_NONE &&
+      mr->slot.entity == mr->record.entity_id &&
+      (mr->record.dir_x != 0 || mr->record.dir_z != 0))
+    rc = fifa96_match_action_03(mr);
+  else
+    rc = fifa96_match_dispatch_row(mr, &fifa96_match_action_table[code]);
   /* Task 15 / M2-B: record which wired rows actually dispatched OK during a
    * replay (the acceptance tape's wired-row assertion set). Bookkeeping only;
    * all 45 codes fit in the 64-bit mask. */
