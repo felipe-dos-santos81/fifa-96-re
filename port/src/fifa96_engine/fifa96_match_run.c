@@ -2098,8 +2098,10 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
    * ball-only focus could leave the human's selected record off the canvas —
    * the control follow had switched to the nearest own outfielder, but the
    * camera kept staring at the opponent. Blend the render focus halfway
-   * toward the controlled record while the human side does not carry; the
-   * simulation focus below is unchanged. Live-only. */
+   * toward the controlled record while the human side does not carry; when
+   * the pair is more than 0x600 apart the midpoint is still off-canvas, so the
+   * far case focuses the controlled record directly. The simulation focus
+   * below is unchanged. Live-only. */
   int32_t focus_x = mr->entities.ball.x + lead_x;
   int32_t focus_z = mr->entities.ball.z + lead_z;
   int32_t render_x = focus_x;
@@ -2114,8 +2116,17 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
       const struct fifa96_match_entity *ce =
           &mr->entities.team[(uint32_t)cid / FIFA96_MATCH_ENTITY_RECORDS]
                .records[(uint32_t)cid % FIFA96_MATCH_ENTITY_RECORDS];
-      render_x = (focus_x + ce->pos_x) / 2;
-      render_z = (focus_z + ce->pos_z) / 2;
+      int32_t dx = ce->pos_x - focus_x;
+      int32_t dz = ce->pos_z - focus_z;
+      if (fifa96_entity_distance(dx, dz) > 0x600) {
+        /* Too far apart for a midpoint: keep the human's selected record on
+         * canvas and let the camera bring the ball back as it is chased. */
+        render_x = ce->pos_x;
+        render_z = ce->pos_z;
+      } else {
+        render_x = (focus_x + ce->pos_x) / 2;
+        render_z = (focus_z + ce->pos_z) / 2;
+      }
     }
   }
   r->view_focus_x = focus_x;

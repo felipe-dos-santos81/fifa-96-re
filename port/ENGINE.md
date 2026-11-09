@@ -11839,11 +11839,17 @@ semantic mapping, not as a direct source rewrite.
   `speed * 0x60` units (clamped to `±0x720/±0xB10`). The old fixed x2 target
   was reached on the first step, so a pass looked stuck. KICK keeps the P9
   goal-mouth aim.
+- Live kicks now apply the ball-pairing tail's computed animation row
+  (`out.anim`) on the kicker (`FUN_0007A490` `0x7AA0E..0x7AA2B` ->
+  `FUN_0006E598`). The native kick/shoot/header rows (6/7/8/9/0x14/0x1B) now
+  play instead of the kicker staying on its locomotion row. Non-live M2 keeps
+  the recorded animation state exact.
 - `render.render_focus_*` is a new render-only focus for
   `match_run_render_eye_update`: when the human side does not carry, it blends
   halfway toward the controlled record so the selected player stays on
-  canvas. `view_focus_*` and `camera.pos_*` remain the ball focus for the ball
-  machine/keeper/armer, so shot balance is unchanged.
+  canvas; when the pair is more than 0x600 apart the far case focuses the
+  controlled record directly. `view_focus_*` and `camera.pos_*` remain the
+  ball focus for the ball machine/keeper/armer, so shot balance is unchanged.
 
 **Evidence/verification.** PLAYART entry 1 `walk.fsh` frame histogram
 (`0x4E/0x50..0x65/0x66..0x70/0x71..0x89/0x8A..0x9D/0x9E..0xA8/0xC2..0xC4/
@@ -11855,13 +11861,13 @@ skin/hair/collar bands. `test_engine_live_control` adds
 `test_live_pass_flight_travels` and keeps the pan-gate test human-on-ball.
 `make check` **124/124**; M1 byte-exact `09b726b7…`; M2 byte-exact
 `41521559…` (both `cmp`-verified). Screenshots:
-`docs/screens/p85-live-kits-skin.png`, `docs/screens/p85-pass-flight.png` and
-`docs/screens/p85-offball-focus.png` (the last shows the controlled Brazil
-record and the German ball carrier in the same frame; native reference
-`docs/screens/p80-native-side.png`).
+`docs/screens/p85-live-kits-skin.png`, `docs/screens/p85-pass-flight.png`,
+`docs/screens/p85-kick-pose.png` and `docs/screens/p85-offball-focus.png`
+(the last shows the controlled Brazil record and the German ball carrier in
+the same frame; native reference `docs/screens/p80-native-side.png`).
 
 **Legs.** Full `FUN_00047298` per-player pool and per-player skin/hair
 variation; native vertical ball staging `0x7A490` / row-05
-`0x7F3A1..0x7F57B`; native kick pose (row 07 installs no `0x6E598`; the
-ball-pairing tail's `out.anim` consumer is OL-52); class-3 integrator
-(P10-L6); 3dwpts stadium (P10-L2); HUD art (P10-L5).
+`0x7F3A1..0x7F57B`; the ball-pair stage tail's `sub_code` row provenance
+(OL-52) and the full per-code target algebra (`0x7AA3C..0x7AE2F`, OL-62);
+class-3 integrator (P10-L6); 3dwpts stadium (P10-L2); HUD art (P10-L5).

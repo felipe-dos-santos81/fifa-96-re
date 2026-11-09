@@ -1221,6 +1221,27 @@ static int match_kick_run(struct fifa96_match_run *mr, const fifa96_action_kick 
   rc = fifa96_ball_kick_target(&mr->entities.ball.pair, &a, &slot, input, &ctx,
                                &mr->rng, mode, out);
   if (rc != FIFA96_OK) return rc;
+  /* Phase-85 native tail: `FUN_0007A490` calls `FUN_0006E598(rec, sub_code,
+   * type8)` at `0x7AA0E..0x7AA2B`; the port already computes the resolved row
+   * in `out->anim` but no consumer applied it, so the live kicker kept its
+   * locomotion row. Apply it on the actor for live runs only (the non-live M2
+   * tape keeps the recorded animation state byte-exact). The row table's
+   * active kick entries resolve to 6/7/8/9/0x14/0x1B (kick/shoot/header
+   * banks). */
+  if (mr->live_start && out->anim != 0) {
+    int32_t kid = mr->record.entity_id;
+    if (kid >= 0 &&
+        kid < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+      struct fifa96_match_entity *k =
+          &mr->entities.team[(uint32_t)kid / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)kid % FIFA96_MATCH_ENTITY_RECORDS];
+      if (fifa96_match_run_record_anim_install(mr, k, (int32_t)out->anim, 0) ==
+          FIFA96_OK) {
+        mr->record.anim_id = k->anim_id;
+        mr->record.frame = k->frame;
+      }
+    }
+  }
   /* P8 / FU-346: a real staged kick request is a new launch pair. Clear the
    * consumed marker so an identical repeat (same actor/vector/flags) can latch
    * again; the marker otherwise keeps the stale FU-73 word from relaunching

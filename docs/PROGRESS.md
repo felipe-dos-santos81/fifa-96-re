@@ -4672,11 +4672,15 @@ close-out below).
   redirect over those values; the away team now renders white/black/green.
   PASS/LONG_BALL flights use the normalised FU-73 pair direction projected to
   `speed * 0x60` units instead of the old two-unit target, so a pass visibly
-  leaves the kicker. A new render-only focus blends halfway toward the
-  controlled record when the opponent owns the ball, keeping the human player
-  on canvas while the simulation camera stays ball-focused. `make check`
-  **124/124**; M1 exact `09b726b7…`; M2 exact `41521559…`; screenshots
-  `docs/screens/p85-live-kits-skin.png`, `docs/screens/p85-pass-flight.png`
-  and `docs/screens/p85-offball-focus.png`. The full per-player palette pool,
-  native vertical ball staging (`0x7A490`), the native kick pose and the
-  class-3 integrator remain legs.
+  leaves the kicker. The ball-pairing tail's computed animation row
+  (`out.anim`, `FUN_0007A490` -> `FUN_0006E598`) is now applied on the kicker
+  for live runs, so the native kick/shoot/header pose plays instead of the
+  locomotion row. A new render-only focus blends halfway toward the controlled
+  record when the opponent owns the ball, and focuses it directly when the
+  pair is more than 0x600 apart, keeping the human player on canvas while the
+  simulation camera stays ball-focused. `make check` **124/124**; M1 exact
+  `09b726b7…`; M2 exact `41521559…`; screenshots
+  `docs/screens/p85-live-kits-skin.png`, `docs/screens/p85-pass-flight.png`,
+  `docs/screens/p85-kick-pose.png` and `docs/screens/p85-offball-focus.png`.
+  The full per-player palette pool, native vertical ball staging (`0x7A490`),
+  the OL-52 `sub_code` row provenance and the class-3 integrator remain legs.

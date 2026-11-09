@@ -83,9 +83,15 @@ All live-only (`live_start`); M1/M2 never set it.
   appearance values; it runs after the semantic table and before commit.
 - The PASS/LONG_BALL flight target uses the normalised pair direction and the
   speed-scaled reach; the KICK goal-mouth aim is unchanged.
+- The ball-pairing tail's resolved animation row (`out.anim`) is applied on
+  the kicker for live runs (`FUN_0007A490` `0x7AA0E..0x7AA2B` ->
+  `FUN_0006E598`), so the kick/shoot/header rows play. Non-live M2 keeps the
+  recorded animation state exact.
 - `render.render_focus_*` is a new render-only focus used by
-  `match_run_render_eye_update`; `view_focus_*` and `camera.pos_*` remain the
-  ball focus for the ball machine, keeper and armer.
+  `match_run_render_eye_update`; it blends halfway toward the controlled
+  record when the opponent owns the play, or focuses the controlled record
+  directly when the pair is more than 0x600 apart. `view_focus_*` and
+  `camera.pos_*` remain the ball focus for the ball machine, keeper and armer.
 
 ## Verification
 
@@ -95,6 +101,9 @@ All live-only (`live_start`); M1/M2 never set it.
 - `test_engine_live_control::test_live_pass_flight_travels` stages a PASS pair
   and asserts the target is more than 0x200 units away and inside the pitch
   bounds (the old fixed x2 target would fail).
+- The live kick-render path now consumes the ball-pair `out.anim` row; the
+  native row-07 body itself still installs no pose, so the kick animation is
+  the staged ball tail's row, not an invented row.
 - `test_engine_live_control::test_live_follow_keeps_ball_during_pan` keeps the
   human side on the ball so the pan-gate assertion is still the variable under
   test.
@@ -102,7 +111,8 @@ All live-only (`live_start`); M1/M2 never set it.
 - M1 `cmp` exact `09b726b7…`; M2 `cmp` exact `41521559…`.
 - Live release screenshots: `docs/screens/p85-live-kits-skin.png` (Brazil
   yellow/blue/green, brown skin, dark hair; Germany white/black/green),
-  `docs/screens/p85-pass-flight.png` (the passed ball ahead of the kicker) and
+  `docs/screens/p85-pass-flight.png` (the passed ball ahead of the kicker),
+  `docs/screens/p85-kick-pose.png` (the native kick row playing) and
   `docs/screens/p85-offball-focus.png` (the controlled Brazil record and the
   German ball carrier in the same frame). Native reference:
   `docs/screens/p80-native-side.png`.
@@ -115,8 +125,9 @@ All live-only (`live_start`); M1/M2 never set it.
   team, so all players in a team share the same skin/hair ramp.
 - Native vertical ball staging `0x7A490` and the row-05 target algebra
   `0x7F3A1..0x7F57B`; the live flight remains ground-plane only.
-- Native kick pose/animation row: the row-07 body installs no `0x6E598` row,
-  and the ball-pairing tail's `out.anim` consumer is OL-52.
+- Ball-pair stage-tail `sub_code` row provenance (OL-52) and the full per-code
+  target algebra (`0x7AA3C..0x7AE2F`, OL-62). The live consumer of the computed
+  `out.anim` row is wired; the native row-07 body itself still installs no pose.
 - Full class-3 camera integrator/director (P10-L6); the off-ball focus blend
-  is a derived presentation stand-in.
+  and far-case focus are derived presentation stand-ins.
 - Native 3dwpts stadium (P10-L2) and HUD art (P10-L5).
