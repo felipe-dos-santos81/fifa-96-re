@@ -171,6 +171,16 @@ int fifa96_mixer_set_sound_state(struct fifa96_mixer *m, int state) {
   return FIFA96_OK;
 }
 
+/* FU-39 lazy-delta cursor guard. `decoded` is the count of units already
+ * decoded, i.e. the index of the NEXT unit. A reset is needed only when the
+ * new cursor falls before the last decoded unit (a true backward jump, such as
+ * a loop wrap). A cursor still on the last decoded unit is the normal
+ * fractional-step hold: the cached sample is reused and the chain is not
+ * replayed. The subtraction form is overflow-safe for every uint32 cursor. */
+int fifa96_mixer_delta_cursor_reset(uint32_t unit, uint32_t decoded) {
+  return decoded != 0u && unit < decoded - 1u;
+}
+
 void fifa96_mixer_render(struct fifa96_mixer *m, int16_t *out, size_t frames) {
   if (!m || (!out && frames)) return;
   for (size_t f = 0; f < frames; f++) {
@@ -201,8 +211,13 @@ void fifa96_mixer_render(struct fifa96_mixer *m, int16_t *out, size_t frames) {
         /* FU-39 §3/§4.2: decode lazily up to the cursor unit; the state chain
          * lives in the voice and is re-initialized from the stored block
          * header on a backwards cursor (loop wrap). The bank mono arm has no
-         * header and wraps with zero state (FU-39 §2.2). */
-        if (unit < ch->delta_pos) {
+         * header and wraps with zero state (FU-39 §2.2). `delta_pos` is the
+         * NEXT unit to decode, so a cursor parked on the last decoded unit is
+         * the ordinary fractional-step hold, not a backward jump. Treating it
+         * as a reset replayed the whole chain from unit 0 on every held frame
+         * (the 16 kHz crowd resample holds a unit ~27% of frames), which made
+         * the mixer O(n^2) and stretched the live match clock. */
+        if (fifa96_mixer_delta_cursor_reset(unit, ch->delta_pos)) {
           if (ch->delta_hdr) {
             uint32_t cnt = 0;
             fifa96_eacs_delta_header(ch->delta_hdr, 0x14u, &ch->delta_state, &cnt);

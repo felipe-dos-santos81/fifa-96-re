@@ -11981,3 +11981,34 @@ New tests: `test_engine_match_render.c::test_live_substitution_rebuilds_remap`
 `test_action_possession` tail fixtures. Windowed smoke:
 `docs/screens/p87-live-tail-possession.png`. Full record:
 `port/spec/FU-348_substitution_remap_and_ball_legs.md`.
+
+## Phase 88 — adaptive-delta mixer cursor pacing (2026-11-09)
+
+**Symptom.** Windowed live play dropped simulation time in episodes: the match
+clock and granted frames lagged the 100 Hz PIT counter across goal/restart
+phases (measured 5 s → 16 s of clock over ~14 s of wall time). The step
+profiler put the stall in `fifa96_match_audio_step` (110–145 ms per step);
+render was 9 ms and the match frame body stayed below 5 ms. The mixer decoded
+~2.0 million adaptive-delta units for a 441-frame (20 ms) chunk.
+
+**Root cause.** `delta_pos` is the next unit to decode, but the reset test
+`unit < delta_pos` treated the ordinary fractional-step hold
+(`unit + 1 == delta_pos`) as a backward jump. At the CHN_GEN1 crowd's
+0.7256-unit step, ~27% of output frames hold a unit; each hold replayed the
+whole delta chain from unit 0, making the 6.1 s loop O(n²) and overrunning the
+engine's 100 ms catch-up cap.
+
+**Fix.** `fifa96_mixer_delta_cursor_reset(unit, decoded)` returns 1 only when
+`decoded != 0 && unit < decoded - 1`; same-unit holds reuse the cached sample
+and keep the chain. Native `0xB832D` wraps only when `loop_end - cursor < step`
+(`0xB834C DIV [ESI+0x2c]`, `0xB834F CMP EAX,0`, then `[ESI+0x14] = [ESI+0x1c]`,
+`[ESI+0x18] = 0`), and `0xB8610` decodes from the current cursor
+(`0xB86B6 ADD [ESI+0x38],EAX`); neither replays from zero for a held frame.
+
+**Verification.** `make check` green; M1/M2 `cmp` exact. New tests:
+`test_mixer.c::test_delta_fractional_step` (step-0.5 held samples and
+`delta_pos`) and `test_mixer.c::test_delta_cursor_reset` (predicate boundary;
+RED at the `(0,1)` case with the pre-fix `unit < decoded` predicate restored).
+The same windowed drive held 100 ticks/s with the clock tracking wall time; no
+step exceeded 50 ms. No score/phase/entity/ball/camera/render/census cell
+changes. Full record: `port/spec/FU-349_mixer_delta_cursor_pacing.md`.

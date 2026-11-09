@@ -4723,3 +4723,19 @@ close-out below).
   **124/124**; M1 exact `09b726b7…`; M2 exact `41521559…`; census unchanged;
   windowed smoke `docs/screens/p87-live-tail-possession.png`. Full record:
   `port/spec/FU-348_substitution_remap_and_ball_legs.md`.
+
+- **Phase 88 adaptive-delta mixer cursor pacing (2026-11-09).** Windowed live
+  play was losing simulation time in episodes (the clock lagged the 100 Hz
+  counter across goal/restart phases). Step profiling attributed 110–145 ms per
+  step to `fifa96_match_audio_step`; the mixer was decoding ~2 million
+  adaptive-delta units for a 20 ms audio chunk. `delta_pos` stores the next
+  unit, but the reset test `unit < delta_pos` treated a same-unit
+  fractional-step hold as a backward jump, replaying the delta chain from zero
+  on ~27% of the 16 kHz crowd resample's output frames (O(n²)). The reset is
+  now `decoded != 0 && unit < decoded - 1`, matching the native `0xB832D` wrap
+  boundary (`remaining < step`) and `0xB8610` cursor decode. The same windowed
+  drive holds 100 ticks/s with the clock tracking wall time; no step exceeded
+  50 ms. `make check` green; M1/M2 exact; no simulation, render or census cell
+  changes. New tests: `test_delta_fractional_step` and
+  `test_delta_cursor_reset`. Full record:
+  `port/spec/FU-349_mixer_delta_cursor_pacing.md`.

@@ -134,6 +134,13 @@ void fifa96_mixer_stop(struct fifa96_mixer *m, int voice);
 /* 1 if voice is armed, else 0 (FUN_000b817b); out-of-range -> 0. */
 int fifa96_mixer_voice_active(const struct fifa96_mixer *m, int voice);
 
+/* FU-39 lazy-delta cursor guard. `decoded` is the next unit index (units
+ * already decoded). Returns 1 only for a true backward cursor jump, e.g. a
+ * loop wrap; a cursor parked on the last decoded unit is a fractional-step
+ * hold and returns 0. The render path uses this to decide whether the delta
+ * state chain must be re-initialized before decoding forward. */
+int fifa96_mixer_delta_cursor_reset(uint32_t unit, uint32_t decoded);
+
 // Mix every active voice into `frames` interleaved 16-bit stereo frames
 // (out[2*i] = L, out[2*i+1] = R), like FUN_000b7f62 + converter 0xB9E53:
 // 32-bit accumulate per reader sample, then clamp to +/-32767 (the converter

@@ -227,6 +227,46 @@ static void test_delta_stereo_bank_mix(void) {
          -(int)FIFA96_ERR_TRUNCATED);
 }
 
+static void test_delta_fractional_step(void) {
+  /* The 16 kHz -> 22.05 kHz resample holds a source unit on ~27% of output
+   * frames. The hold must reuse the cached delta sample, not reset and replay
+   * the chain from unit 0 (the pre-fix O(n^2) path). Data 12 34 56 from the
+   * bank-stereo fixture decodes to (1,3),(5,10),(13,24); at volume 64 the
+   * reader's SAR 7 yields (0,1),(2,5),(6,12). */
+  uint8_t buf[0x20 + 3];
+  hdr(buf, 2, 2, 2, -1, 0, 0);
+  put32le(buf + 0x0C, 3);
+  buf[0x20] = 0x12; buf[0x21] = 0x34; buf[0x22] = 0x56;
+  struct fifa96_eacs_info info;
+  assert(fifa96_eacs_parse(buf, sizeof buf, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO && info.delta_units == 3);
+
+  struct fifa96_mixer m;
+  fifa96_mixer_init(&m);
+  assert(fifa96_mixer_start(&m, 3, &info, buf, sizeof buf, 64, (uint64_t)1 << 31) == 0);
+  int16_t out[12] = {0};
+  fifa96_mixer_render(&m, out, 6);
+  /* step 0.5: units 0,0,1,1,2,2; each held unit repeats its sample. */
+  const int16_t want[12] = {0, 1, 0, 1, 2, 5, 2, 5, 6, 12, 6, 12};
+  for (int i = 0; i < 12; i++) assert(out[i] == want[i]);
+  assert(m.voices[3].delta_pos == 3);
+  assert(m.voices[3].pos == ((uint64_t)3 << 32));
+}
+
+static void test_delta_cursor_reset(void) {
+  /* `decoded` names the next unit. The same-unit fractional hold is not a
+   * backward jump; only a cursor before the last decoded unit resets. */
+  assert(fifa96_mixer_delta_cursor_reset(0, 0) == 0);   /* fresh voice */
+  assert(fifa96_mixer_delta_cursor_reset(10, 0) == 0);  /* forward from fresh */
+  assert(fifa96_mixer_delta_cursor_reset(0, 1) == 0);   /* hold unit 0 */
+  assert(fifa96_mixer_delta_cursor_reset(1, 2) == 0);   /* hold unit 1 */
+  assert(fifa96_mixer_delta_cursor_reset(2, 3) == 0);   /* hold unit 2 */
+  assert(fifa96_mixer_delta_cursor_reset(3, 3) == 0);   /* forward */
+  assert(fifa96_mixer_delta_cursor_reset(1, 3) == 1);   /* back one unit */
+  assert(fifa96_mixer_delta_cursor_reset(0, 2) == 1);   /* loop wrap */
+  assert(fifa96_mixer_delta_cursor_reset(0, 0xFFFFFFFFu) == 1);
+}
+
 static void test_clamp_sum(void) {
   /* Two full-scale voices on top of each other: 32-bit accumulate, then the
    * 0xB9E53 converter clamps to +/-32767 (not -32768). */
@@ -594,6 +634,8 @@ int main(void) {
   test_delta_stereo_mix();
   test_delta_mono_mix();
   test_delta_stereo_bank_mix();
+  test_delta_fractional_step();
+  test_delta_cursor_reset();
   test_clamp_sum();
   test_end_of_data_silence();
   test_loop_wrap();
