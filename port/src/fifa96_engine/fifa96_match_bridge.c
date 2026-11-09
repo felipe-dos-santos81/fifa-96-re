@@ -41,6 +41,7 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
     memset(&matchup, 0, sizeof matchup);
     for (uint32_t side = 0; side < 2; side++) {
       matchup.formation[side] = eng->frontend.formation[side];
+      matchup.team_id[side] = eng->frontend.team_id[side];
       memcpy(matchup.kit[side], eng->frontend.kit[side], sizeof matchup.kit[side]);
     }
     matchup.kit_ready = (uint8_t)(eng->frontend.pccd_ready[0] &&
@@ -83,6 +84,18 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
           mr->roster_number[side][slot] = numbers[slot];
           mr->roster_pos[side][slot] = positions[slot];
           mr->roster_rating[side][slot] = ratings[slot];
+        }
+        for (int slot = 0; slot < count && slot < (int)FIFA96_PCCD_ROSTER_COUNT;
+             slot++) {
+          uint8_t hair_code = '4';
+          uint8_t skin_code = '4';
+          if (fifa96_team_data_appearance(&eng->team_data,
+                                          eng->frontend.team_id[side],
+                                          (uint8_t)slot, &hair_code,
+                                          &skin_code) == 0) {
+            mr->roster_hair_code[side][slot] = hair_code;
+            mr->roster_skin_code[side][slot] = skin_code;
+          }
         }
       }
     }

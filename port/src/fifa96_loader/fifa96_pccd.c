@@ -188,5 +188,7 @@ fifa96_err_t fifa96_pccd_player(const struct fifa96_pccd_db *db, uint32_t index,
   player->position = (char)p[0x09];
   memcpy(player->skills, p + 0x0A, sizeof player->skills);
   player->rating = p[0x1B];
+  player->hair_code = p[0x1C];
+  player->skin_code = p[0x1D];
   return FIFA96_OK;
 }

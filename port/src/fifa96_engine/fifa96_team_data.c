@@ -209,6 +209,25 @@ int fifa96_team_data_player(const struct fifa96_team_data *td, uint32_t lang_id,
   return team_data_player_at(td, &identity, slot, name, cap, number, NULL, NULL);
 }
 
+int fifa96_team_data_appearance(const struct fifa96_team_data *td,
+                                uint32_t lang_id, uint8_t slot,
+                                uint8_t *hair_code, uint8_t *skin_code) {
+  if (!td || !hair_code || !skin_code || slot >= FIFA96_PCCD_ROSTER_COUNT)
+    return -FIFA96_ERR_INVALID;
+  if (!td->ready) return -FIFA96_ERR_STATE;
+
+  struct fifa96_team_identity identity;
+  int rc = fifa96_team_data_lookup(td, lang_id, &identity);
+  if (rc != 0) return rc;
+  struct fifa96_pccd_player player;
+  fifa96_err_t err =
+      fifa96_pccd_player(&td->db, identity.roster[slot], &player);
+  if (err != FIFA96_OK) return -(int)err;
+  *hair_code = player.hair_code;
+  *skin_code = player.skin_code;
+  return 0;
+}
+
 int fifa96_team_data_roster_full(const struct fifa96_team_data *td,
                                  uint32_t lang_id, char names[16][24],
                                  uint8_t numbers[16], char positions[16],

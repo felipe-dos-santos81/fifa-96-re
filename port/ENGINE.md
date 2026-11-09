@@ -11871,3 +11871,59 @@ variation; native vertical ball staging `0x7A490` / row-05
 `0x7F3A1..0x7F57B`; the ball-pair stage tail's `sub_code` row provenance
 (OL-52) and the full per-code target algebra (`0x7AA3C..0x7AE2F`, OL-62);
 class-3 integrator (P10-L6); 3dwpts stadium (P10-L2); HUD art (P10-L5).
+
+## Phase 86 — native per-player appearance and visible dribble ball (2026-11-09)
+
+**Symptom.** Every player in a team shared one skin/hair ramp, the kit overlay
+sat on palette `0xE0..0xE5` and overwrote the native skin shades, and a carried
+ball disappeared inside the sprite whenever the pad was neutral.
+
+**Errata (Phase 85 palette/kits).** Phase 85 says the sock band is
+`224..229` and the skin ramp is `0xF6..0xFD`, with a hair ramp copied into
+`0xD7..0xDA`. That was the engine stand-in, not the native layout: the native
+`FUN_00047298` kit-band table at `0x106B70` uses destinations `37, 48, 59,
+70, 81, 92` (len 0xB) and `101` (len 9), and the palette at `0xDB..0xFD` is
+the four native skin ramps. Overlaying PALteam over `0x1E..0xE5` corrupted the
+skin shades and forced all players onto `0xF6`.
+
+**Native evidence.** `FUN_0004C00C` (`0x4C00C`) maps the PCCD hair digit
+(`+0x1D` at the runtime descriptor, `+0x1C` in the PCCD record) to class
+`0x30->3, 0x31->2, 0x34->0, else 1`; `FUN_0004C098` (`0x4C098`) maps the skin
+digit (`+0x1E`/`+0x1D`) to `0x30/0x32->1, 0x31->3, 0x33->2, 0x34->0`, else the
+hair class (`3` stays `3`, else `0`). Fresh `read_memory`:
+`0x1070D4` hair ramps `{0,0,0,0}`, `{EB,EC,FC,FD}`, `{F0,F1,F2,F3}`,
+`{D7,D8,D9,DA}`; `0x1070E4` skin bases `F6, ED, E4, DB`; `0x106B70` kit
+destinations `37,48,59,70,81,92,101`. Retail PCCD samples: Brazil slot 0
+hair `'2'`/skin `'4'`, Germany slot 0 hair `'0'`/skin `'2'`.
+
+**Implementation [D].** Live-only (`live_start`); M1/M2 never set it.
+
+- `fifa96_pccd_player` exposes `hair_code`/`skin_code` from record
+  `+0x1C/+0x1D`; `fifa96_team_data_appearance` resolves one roster slot.
+- The bridge stores the Team Select LANG ids in `matchup.team_id[]`, fills
+  `roster_hair_code`/`roster_skin_code`, and builds the derived `sub_lineup`
+  pitch -> roster map.
+- `match_run_stage_live_kit` writes the six native kit bands at `37/48/59`
+  and `70/81/92`; it no longer overlays PALteam over the skin range. It builds
+  `remap_team` (default skin 0/hair 3) and `remap_entity[side][pitch]` with
+  the player's native classes. The live sprite draw selects
+  `remap_entity[side][pitch]`; the ball and HUD keep their maps.
+- The neutral-pad possession glue now offsets the ball along the carrier's
+  facing octant (`fifa96_match_dir_x/z[type] * 0x20`) instead of leaving it at
+  the sprite centre.
+
+**Verification.** `make check` **124/124**; M1 `cmp` exact `09b726b7…`; M2
+`cmp` exact `41521559…`. `test_engine_team_data` pins the PCCD digits;
+`test_engine_match_bridge` pins the id/roster handoff;
+`test_engine_match_render` pins the six native kit destinations, the native
+skin ramps and the per-pitch composition; `test_engine_live_control` pins the
+neutral-pad ball offset. Screenshots:
+`docs/screens/p86-live-appearance.png` (real windowed Brazil/Germany match),
+`docs/screens/p86-live-dribble.png` and `docs/screens/p86-kick-pose.png`.
+
+**Legs.** The native lineup matrix `0x14C360` is unported (the pitch -> roster
+map is derived, and a substitution does not rebuild `remap_entity` yet); the
+full `FUN_00047298` template pass and `FUN_0001CAEC(9/0xD)` gates remain open;
+native possession staging `0x7A490`, row-05 target algebra
+`0x7F3A1..0x7F57B`, native vertical ball staging, the ball-pair OL-52/OL-62
+row provenance and the class-3 camera integrator remain open legs.

@@ -240,12 +240,47 @@ static void test_bridge_stages_render_with_iso(void) {
   drop_fixture(f);
 }
 
+/* P6/Phase-86: the Team Select handout carries the two LANG ids into the run
+ * and the post-begin PCCD handoff fills the per-player appearance digits. */
+static void test_bridge_hands_off_appearance(void) {
+  if (!bridge_file_exists(BRIDGE_ISO_PATH)) {
+    fprintf(stderr, "SKIP bridge appearance case (no %s)\n", BRIDGE_ISO_PATH);
+    return;
+  }
+  struct fixture f = make_fixture(NULL, 0, BRIDGE_ISO_PATH);
+  f.engine->frontend.team_selected = 1;
+  f.engine->frontend.team_id[0] = 0x023u;   /* Brazil */
+  f.engine->frontend.team_id[1] = 0x088u;   /* Germany */
+  f.engine->frontend.formation[0] = 1;
+  f.engine->frontend.formation[1] = 1;
+  const uint8_t brazil[3] = {26, 4, 7};
+  const uint8_t germany[3] = {30, 33, 21};
+  memcpy(f.engine->frontend.kit[0][0], brazil, sizeof brazil);
+  memcpy(f.engine->frontend.kit[1][0], germany, sizeof germany);
+  f.engine->frontend.pccd_ready[0] = 1;
+  f.engine->frontend.pccd_ready[1] = 1;
+
+  drive_to_match_start(f.engine);
+  assert(fifa96_match_bridge_from_frontend(&f.engine->match_run, f.engine) == 0);
+  struct fifa96_match_run *mr = &f.engine->match_run;
+  assert(mr->matchup_active == 1);
+  assert(mr->matchup.team_id[0] == 0x023u && mr->matchup.team_id[1] == 0x088u);
+  /* PCCD player-record +0x1C/+0x1D: Brazil slot 0 '2'/'4', Germany '0'/'2'. */
+  assert(mr->roster_hair_code[0][0] == '2');
+  assert(mr->roster_skin_code[0][0] == '4');
+  assert(mr->roster_hair_code[1][0] == '0');
+  assert(mr->roster_skin_code[1][0] == '2');
+  assert(fifa96_match_run_end(mr) == 0);
+  drop_fixture(f);
+}
+
 int main(void) {
   test_fresh_frontend_not_startable();
   test_frontend_confirm_is_not_startable();
   test_bridge_starts_and_rebegins();
   test_engine_step_wires_bridge();
   test_bridge_stages_render_with_iso();
+  test_bridge_hands_off_appearance();
   puts("test_engine_match_bridge OK");
   return 0;
 }

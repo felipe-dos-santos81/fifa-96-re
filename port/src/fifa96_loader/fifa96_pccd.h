@@ -89,6 +89,13 @@ struct fifa96_pccd_player {
   char position;              /* +0x09 ASCII 'G'/'D'/'M'/'F' */
   uint8_t rating;             /* +0x1B overall (measured; see the erratum) */
   uint8_t skills[17];         /* +0x0A..+0x1A */
+  /* Native player-record appearance digit codes. FUN_0004C00C reads the
+   * hair digit at +0x1D and FUN_0004C098 the skin digit at +0x1E of the
+   * runtime player descriptor; the PCCD record carries the same pair at
+   * +0x1C/+0x1D (the runtime descriptor base is one byte below the PCCD
+   * record in the native lineup matrix). Values are ASCII '0'..'4'. */
+  uint8_t hair_code;          /* PCCD +0x1C */
+  uint8_t skin_code;          /* PCCD +0x1D */
 };
 
 /* Validate `bytes` as a PCDB image. Returns FIFA96_OK with `db` filled, or

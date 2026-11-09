@@ -4684,3 +4684,19 @@ close-out below).
   `docs/screens/p85-kick-pose.png` and `docs/screens/p85-offball-focus.png`.
   The full per-player palette pool, native vertical ball staging (`0x7A490`),
   the OL-52 `sub_code` row provenance and the class-3 integrator remain legs.
+
+- **Phase 86 per-player appearance and visible dribble ball (2026-11-09).**
+  Every player previously shared one skin/hair ramp per team, and the PALteam
+  kit overlay wrote over the native skin palette at `0xE0..0xE5`. The native
+  `FUN_0004C00C`/`FUN_0004C098` classers and the `0x1070D4`/`0x1070E4` ramps
+  are now applied per pitch record from the PCCD player digits (`+0x1C/+0x1D`)
+  through the derived `sub_lineup` map, with the kit colours moved to the
+  native low bands `37/48/59` and `70/81/92` (`0x106B70`). Brazil now renders
+  its dark skin ramp and Germany its light/tan classes instead of one shared
+  ramp. A neutral-pad carry also keeps the ball in front of the carrier's
+  facing octant, so the sprite no longer hides it. `make check` **124/124**;
+  M1 exact `09b726b7…`; M2 exact `41521559…`; screenshots
+  `docs/screens/p86-live-appearance.png`, `p86-live-dribble.png` and
+  `p86-kick-pose.png`. The native lineup matrix, the full `FUN_00047298`
+  template pass, native possession staging (`0x7A490`) and vertical ball
+  staging remain legs.

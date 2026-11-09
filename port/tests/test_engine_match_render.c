@@ -1574,32 +1574,39 @@ static void test_live_begin_formation_pitch_and_kit(void) {
   /* The kickoff frame visibly contains both teams (checked in the committed
    * p10g-match-view screenshot); the pixel test above pins the axis fix. */
 
-  /* Two teams' kit bands differ: the live stage overlays PALteam frame 0 over
-   * the sprite body bands (team 0) and writes frame 2's shirt/shorts bands
-   * into the free 230..245 slots (team 1, A7 §4). */
-  assert(r->remap_team[0][197] == 197 && r->remap_team[0][208] == 208);
-  /* Phase-85: 0xC3 (source 195) is the white collar, so the shorts identity
-   * starts at 0xC5 (197); the kit redirect still covers 195..203/208..214. */
-  assert(r->remap_team[1][197] == 232 && r->remap_team[1][203] == 238);
-  assert(r->remap_team[1][208] == 239 && r->remap_team[1][214] == 245);
-  int shorts_diff = 0, shirt_diff = 0;
+  /* Phase-86: the native kit-band destinations (FUN_00047298's 0x106B70
+   * table) are the low palette slots 37/48/59 (home shirt/shorts/socks) and
+   * 70/81/92 (away). The semantic player remap points each kit source band at
+   * its team's slots; the skin/hair ramps at 0xDB..0xFD stay native. */
+  assert(r->remap_team[0][0x50] == 37);
+  assert(r->remap_team[1][0x50] == 70);
+  assert(r->remap_team[0][0xC5] == 48 && r->remap_team[0][0xCB] == 54);
+  assert(r->remap_team[1][0xC5] == 81 && r->remap_team[1][0xCB] == 87);
+  assert(r->remap_team[0][0x66] == 59);
+  assert(r->remap_team[1][0x66] == 92);
+  /* The default table carries skin class 0 (base 0xF6) and hair class 3. */
+  assert(r->remap_team[0][0x75] == 0xFA);
+  assert(r->remap_team[1][0x75] == 0xFA);
+  assert(r->remap_team[0][0xD7] == 0xD7);
+  assert(r->remap_team[0][0xC2] == FIFA96_PITCH_LINE_INDEX);
+  int shorts_diff = 0, shirt_diff = 0, socks_diff = 0;
   for (int i = 0; i < 9; i++)
     for (int c = 0; c < 3; c++)
-      shorts_diff += abs((int)r->palette[(230 + i) * 3 + c] -
-                         (int)r->palette[(195 + i) * 3 + c]);
+      shorts_diff += abs((int)r->palette[(81 + i) * 3 + c] -
+                         (int)r->palette[(48 + i) * 3 + c]);
   for (int i = 0; i < 7; i++)
     for (int c = 0; c < 3; c++)
-      shirt_diff += abs((int)r->palette[(239 + i) * 3 + c] -
-                        (int)r->palette[(208 + i) * 3 + c]);
-  assert(shorts_diff > 0 && shirt_diff > 0);
-  /* The kit bands are no longer the PALsys magenta (A7 §4). */
-  int kit_pixels = 0;
-  for (int i = 195; i <= 214; i++) {
-    if (!(r->palette[i * 3] == 0xE0 && r->palette[i * 3 + 1] == 0x44 &&
-          r->palette[i * 3 + 2] == 0xA0))
-      kit_pixels++;
-  }
-  assert(kit_pixels > 0);
+      shirt_diff += abs((int)r->palette[(70 + i) * 3 + c] -
+                        (int)r->palette[(37 + i) * 3 + c]);
+  for (int i = 0; i < 6; i++)
+    for (int c = 0; c < 3; c++)
+      socks_diff += abs((int)r->palette[(92 + i) * 3 + c] -
+                        (int)r->palette[(59 + i) * 3 + c]);
+  assert(shorts_diff > 0 && shirt_diff > 0 && socks_diff > 0);
+  /* The native skin ramps survive the kit stage (0xDB..0xFD). */
+  assert(r->palette[0xF6 * 3] == 100 && r->palette[0xF6 * 3 + 1] == 72 &&
+         r->palette[0xF6 * 3 + 2] == 40);
+  assert(r->palette[0xDB * 3] == 252 && r->palette[0xDB * 3 + 1] == 212);
   /* The v1 marking slot is white. */
   assert(r->palette[0xFE * 3] == 0xFF && r->palette[0xFE * 3 + 1] == 0xFF &&
          r->palette[0xFE * 3 + 2] == 0xFF);
@@ -1685,48 +1692,44 @@ static void test_live_real_team_kits(void) {
   assert(f.mr.matchup_active == 1 && f.mr.matchup.kit_ready == 1);
   assert(f.mr.render.team_remap_ready == 1);
 
-  /* Team 0 keeps the identity translation; team 1 redirects its shirt/shorts
-   * bands into the free slots (A7 §4). */
-  assert(r->remap_team[0][197] == 197 && r->remap_team[0][208] == 208);
-  assert(r->remap_team[1][197] == 232 && r->remap_team[1][203] == 238);
-  assert(r->remap_team[1][208] == 239 && r->remap_team[1][214] == 245);
-
-  /* Brazil shirt ramp entry 0 = 6-bit (63,56,5) -> 8-bit (252,224,20). */
-  assert(r->palette[208 * 3] >= 240 && r->palette[208 * 3 + 1] >= 200 &&
-         r->palette[208 * 3 + 2] <= 40);
-  /* Italy shirt ramp entry 0 = (4,13,61) -> (16,52,244). */
-  assert(r->palette[239 * 3] <= 40 && r->palette[239 * 3 + 2] >= 200);
-  /* Brazil shorts ramp entry 0 = (17,4,39) -> (68,16,156). */
-  assert(r->palette[195 * 3] <= 100 && r->palette[195 * 3 + 2] >= 120);
-  /* Italy shorts ramp entry 0 = (61,59,63) -> (244,236,252). */
-  assert(r->palette[230 * 3] >= 220 && r->palette[230 * 3 + 1] >= 220 &&
-         r->palette[230 * 3 + 2] >= 220);
-  /* Team 0 socks use the green ramp (0,48,4) -> (0,192,16). */
-  assert(r->palette[224 * 3] <= 40 && r->palette[224 * 3 + 1] >= 150);
-  /* Phase-85: the semantic appearance remap rides the team translation. The
-   * shirt/trim bands reach the selected kit ramp, the bare arms/legs reach the
-   * PALsys skin ramp, the hair reaches the staged dark ramp, and the sock band
-   * stays on the selected sock ramp. */
-  assert(r->remap_team[0][0x50] == 208);         /* home shirt sleeve */
-  assert(r->remap_team[1][0x50] == 239);         /* away shirt sleeve */
-  assert(r->remap_team[0][0x8F] == 213);         /* home shirt side panel */
-  assert(r->remap_team[1][0x8F] == 244);         /* away shirt side panel */
+  /* Phase-86: the native kit destinations are 37/48/59 (home) and 70/81/92
+   * (away); both teams use their own slots, so there is no redirect. */
+  assert(r->remap_team[0][0x50] == 37);          /* home shirt sleeve */
+  assert(r->remap_team[1][0x50] == 70);          /* away shirt sleeve */
+  assert(r->remap_team[0][0x8F] == 42);          /* home shirt side panel */
+  assert(r->remap_team[1][0x8F] == 75);          /* away shirt side panel */
+  assert(r->remap_team[0][0x9C] == 41);
+  assert(r->remap_team[1][0x9C] == 74);
+  assert(r->remap_team[0][0xCC] == 37 && r->remap_team[1][0xCC] == 70);
+  assert(r->remap_team[0][0xD6] == 40 && r->remap_team[1][0xD6] == 73);
+  assert(r->remap_team[0][0xC5] == 48 && r->remap_team[1][0xC5] == 81);
+  assert(r->remap_team[0][0x66] == 59 && r->remap_team[1][0x66] == 92);
   for (int side = 0; side < 2; side++) {
-    assert(r->remap_team[side][0x8F] == (side == 0 ? 213 : 244));
-    assert(r->remap_team[side][0x9C] == (side == 0 ? 212 : 243));
-    assert(r->remap_team[side][0xCC] == (side == 0 ? 208 : 239)); /* torso */
-    assert(r->remap_team[side][0x75] == 0xFA);   /* bare arm skin ramp */
-    assert(r->remap_team[side][0x8F] != 0x00);   /* not the old green-skin fix */
-    assert(r->remap_team[side][0xD7] == 0xD7);   /* hair ramp */
-    assert(r->remap_team[side][0xDB] == 0xF6);   /* face/leg skin ramp */
-    assert(r->remap_team[side][0xE0] == 0xFB);   /* face sub-band, not socks */
+    assert(r->remap_team[side][0x75] == 0xFA);   /* default skin class 0 */
+    assert(r->remap_team[side][0xD7] == 0xD7);   /* default hair class 3 */
+    assert(r->remap_team[side][0xDB] == 0xF6);
+    assert(r->remap_team[side][0xE0] == 0xFB);
     assert(r->remap_team[side][0xE3] == 0xF6);   /* 9-entry skin wrap */
     assert(r->remap_team[side][0xC2] == FIFA96_PITCH_LINE_INDEX);
   }
-  /* The skin destination is a brown ramp, not the green kit colour; the hair
-   * slots carry the PALsys dark ramp (red > green > blue). */
+  /* Brazil shirt ramp entry 0 = 6-bit (63,56,5) -> 8-bit (252,224,20). */
+  assert(r->palette[37 * 3] >= 240 && r->palette[37 * 3 + 1] >= 200 &&
+         r->palette[37 * 3 + 2] <= 40);
+  /* Italy shirt ramp entry 0 = (4,13,61) -> (16,52,244). */
+  assert(r->palette[70 * 3] <= 40 && r->palette[70 * 3 + 2] >= 200);
+  /* Brazil shorts ramp entry 0 = (17,4,39) -> (68,16,156). */
+  assert(r->palette[48 * 3] <= 100 && r->palette[48 * 3 + 2] >= 120);
+  /* Italy shorts ramp entry 0 = (61,59,63) -> (244,236,252). */
+  assert(r->palette[81 * 3] >= 220 && r->palette[81 * 3 + 1] >= 220 &&
+         r->palette[81 * 3 + 2] >= 220);
+  /* Brazil socks use the green ramp (0,48,4) -> (0,192,16). */
+  assert(r->palette[59 * 3] <= 40 && r->palette[59 * 3 + 1] >= 150);
+  /* The native skin ramps survive at 0xDB..0xFD and are brown/tan. */
   assert(r->palette[0xFA * 3] > r->palette[0xFA * 3 + 1]);
   assert(r->palette[0xFA * 3 + 1] > r->palette[0xFA * 3 + 2]);
+  assert(r->palette[0xDB * 3] > r->palette[0xDB * 3 + 1]);
+  assert(r->palette[0xDB * 3 + 1] > r->palette[0xDB * 3 + 2]);
+  /* The 0xD7..0xDA hair class-3 ramp is the native brown ramp. */
   assert(r->palette[0xD7 * 3] > r->palette[0xD7 * 3 + 1]);
   assert(r->palette[0xD7 * 3 + 1] > r->palette[0xD7 * 3 + 2]);
   assert(r->palette[0xD7 * 3] > 80);
@@ -1734,13 +1737,29 @@ static void test_live_real_team_kits(void) {
   int shirt_diff = 0, shorts_diff = 0;
   for (int i = 0; i < 7; i++)
     for (int c = 0; c < 3; c++)
-      shirt_diff += abs((int)r->palette[(208 + i) * 3 + c] -
-                        (int)r->palette[(239 + i) * 3 + c]);
+      shirt_diff += abs((int)r->palette[(37 + i) * 3 + c] -
+                        (int)r->palette[(70 + i) * 3 + c]);
   for (int i = 0; i < 9; i++)
     for (int c = 0; c < 3; c++)
-      shorts_diff += abs((int)r->palette[(195 + i) * 3 + c] -
-                         (int)r->palette[(230 + i) * 3 + c]);
+      shorts_diff += abs((int)r->palette[(48 + i) * 3 + c] -
+                         (int)r->palette[(81 + i) * 3 + c]);
   assert(shirt_diff > 0 && shorts_diff > 0);
+
+  /* Per-pitch tables: the default is class 0 / hair 3, and a staged roster
+   * mapping composes the player's own classes (skin '3' -> class 2 base 0xE4,
+   * hair '0' -> class 3). Re-stage after setting the mapping. */
+  assert(memcmp(r->remap_entity[0][1], r->remap_team[0], 256) == 0);
+  f.mr.sub_lineup[0][1] = 0;
+  f.mr.roster_skin_code[0][0] = '3';
+  f.mr.roster_hair_code[0][0] = '4';
+  assert(fifa96_match_run_stage_pitch(&f.mr, f.engine) == 0);
+  assert(r->remap_entity[0][1][0xDB] == 0xE4);
+  assert(r->remap_entity[0][1][0x75] == 0xE8);
+  assert(r->remap_entity[0][1][0xD7] == 0x00);   /* hair class 0 */
+  assert(r->remap_entity[0][2][0xDB] == 0xF6);   /* unassigned -> default */
+  assert(r->remap_entity[0][2][0xD7] == 0xD7);
+  assert(r->palette[0xE4 * 3] > r->palette[0xE4 * 3 + 1]);
+  assert(r->palette[0xE4 * 3 + 1] > r->palette[0xE4 * 3 + 2]);
   /* The marking slot stays pure white and the HUD scan selects it. */
   assert(r->palette[FIFA96_PITCH_LINE_INDEX * 3] == 0xFF &&
          r->palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] == 0xFF &&

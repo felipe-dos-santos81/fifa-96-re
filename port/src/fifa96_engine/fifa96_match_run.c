@@ -4557,6 +4557,8 @@ static void match_run_sub_roster_reset(struct fifa96_match_run *mr) {
   if (!mr) return;
   memset(mr->roster_pos, 0, sizeof mr->roster_pos);
   memset(mr->roster_rating, 0, sizeof mr->roster_rating);
+  memset(mr->roster_hair_code, '0', sizeof mr->roster_hair_code);
+  memset(mr->roster_skin_code, '4', sizeof mr->roster_skin_code);
   memset(mr->sub_lineup, 0xFF, sizeof mr->sub_lineup);
   memset(mr->sub_bench_avail, 0, sizeof mr->sub_bench_avail);
   mr->sub_lineup_ready = 0;
@@ -7335,6 +7337,15 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
           fifa96_entity_distance(dx, dz) <= MATCH_RUN_LIVE_CARRIER_GLUE_RANGE) {
         int32_t ox = (int32_t)c->dir_x * 0x20;
         int32_t oz = (int32_t)c->dir_z * 0x20;
+        /* Phase-86: when the pad direction is neutral the carrier still faces
+         * an octant; keep the ball in front of that facing instead of pinning
+         * it inside the sprite (the derived stand-in for the unported native
+         * 0x7A490 possession staging). */
+        if (ox == 0 && oz == 0) {
+          uint32_t oct = (uint32_t)c->type & 7u;
+          ox = (int32_t)fifa96_match_dir_x[oct] * 0x20;
+          oz = (int32_t)fifa96_match_dir_z[oct] * 0x20;
+        }
         b->x = c->pos_x + ox;
         b->z = c->pos_z + oz;
         b->y = 0;
@@ -9731,7 +9742,8 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
       sprite_remap = r->ball_remap;
     else if (mr->live_start && r->team_remap_ready &&
              slot < (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
-      sprite_remap = r->remap_team[slot / FIFA96_MATCH_ENTITY_RECORDS];
+      sprite_remap = r->remap_entity[slot / FIFA96_MATCH_ENTITY_RECORDS]
+                                    [slot % FIFA96_MATCH_ENTITY_RECORDS];
     /* The native projection already sizes players for the sideline rig; the
      * P10 2.5x live upscale was only compensation for the removed behind-goal
      * camera. Keep the native scale for every slot. */
@@ -10462,18 +10474,13 @@ out_cache:
   return rc;
 }
 
-/* FU-343 (P1): the live kit palette/remap stage (A7 §4). PALteam.fsh frame 0
- * is the real sprite-band palette (the PALsys frame-2 base leaves the body
- * indices magenta); frame 2 is the second team's band palette. The live base
- * is PALsys **frame 0** — the measured full match palette whose Fplain grass
- * indices 1..29 are green (frame 2 is magenta there, and a full PALteam base
- * turns the pitch cyan). The overlay therefore starts at 30 (the Fplain tile
- * only uses 1..29) and covers the sprite body bands; team 1's shirt/shorts
- * bands move to the free 230..245 slots. */
+/* FU-343 (P1) / Phase-86: the live kit palette/remap stage. PALteam.fsh
+ * frame 0/2/4 supply the team colour ramps; the live base is PALsys
+ * **frame 0**, whose Fplain grass indices 1..29 are green (frame 2 is magenta
+ * there). Phase-86 writes the kit ramps into the native low destinations
+ * 37/48/59 (home) and 70/81/92 (away) from FUN_00047298's 0x106B70 table and
+ * leaves the native skin/hair ramps at 0xDB..0xFD intact. */
 #define MATCH_RUN_KIT_BANK "PALteam.fsh"
-#define MATCH_RUN_KIT_MAGENTA_R 4u
-#define MATCH_RUN_KIT_MAGENTA_G 63u
-#define MATCH_RUN_KIT_MAGENTA_B 56u
 
 static int match_run_palette_frame(const uint8_t *bank, size_t bank_len, uint32_t frame,
                                    uint8_t rgb6[768]) {
@@ -10512,33 +10519,85 @@ static int match_run_kit_band(uint8_t *palette, int dst, int len, uint8_t index,
   return 1;
 }
 
-/* Live player appearance remap (phase-84; source-band model corrected phase-85).
+/* Fallback kit band: copy an already-6-bit PALteam frame band from its old
+ * engine destination (the pre-P6 208/195/224 layout) into the native low
+ * destination used by the new player remap. */
+static void match_run_copy_kit_band(uint8_t palette[768], int dst, int len,
+                                    const uint8_t src[768], int src_base) {
+  for (int i = 0; i < len; i++) {
+    palette[(dst + i) * 3] = (uint8_t)(src[(src_base + i) * 3] << 2);
+    palette[(dst + i) * 3 + 1] = (uint8_t)(src[(src_base + i) * 3 + 1] << 2);
+    palette[(dst + i) * 3 + 2] = (uint8_t)(src[(src_base + i) * 3 + 2] << 2);
+  }
+}
+
+/* Live player appearance remap (phase-86; source bands phase-85, destinations
+ * now the native kit bands).
  *
- * The native per-entity translation pool FUN_00047298 builds one 256-byte table
- * per record from a 0x8E-byte appearance template and the per-player skin/hair
- * classes. The engine has no pool yet, so the live path uses a labelled [D]
- * semantic stand-in derived from the actual PLAYART `walk.fsh` source bytes:
+ * The native per-entity translation pool FUN_00047298 (0x47298) builds one
+ * 256-byte table per record from a 0x8E-byte appearance template plus the
+ * per-player skin/hair classes. Its kit-band table at 0x106B70 is
+ * {destination, length, source-group} x 6: destinations 37, 48, 59, 70, 81,
+ * 92 (len 0xB) and 101 (len 9). Those low palette slots are the match kit
+ * colours; the native palette leaves the skin/hair ramps at 0xDB..0xFD
+ * untouched. The engine previously overlaid PALteam over 0x1E..0xE5 and moved
+ * the kit bands to 195..229, which corrupted the skin ramps at 0xE0..0xE5 and
+ * forced every player onto one ramp. This builder uses the native low band
+ * destinations and composes the player's own skin/hair classes.
  *
- *   source band(s)              body part        destination
- *   0x50..0x65, 0x8A..0x9D,     shirt/sleeves/   the selected shirt band
- *   0xCC..0xCF                  torso            208..214
- *   0xC5..0xCB                  shorts           identity 197..203 (the
- *                                                  selected shorts band
- *                                                  195..203)
- *   0x66..0x70, 0x9E..0xA8      sock trim        selected sock band 224..229
- *   0xE4..0xE5                  boot/sock tip    identity 228..229
- *   0x71..0x89, 0xDB..0xE3      arms/legs/face   PALsys skin ramp 0xF6..0xFD
- *   0xD7..0xDA                  hair             PALsys dark ramp copied into
- *                                                  the 0xD7..0xDA slots
- *   0xC2..0xC4                  collar/trim      the white line slot 0xFE
- *   0x4E                        eye              black 0x00
+ * Source bands (PLAYART `walk.fsh`, phase-85 histogram):
+ *   0x50..0x65, 0x8A..0x9D, 0xCC..0xD6   shirt/sleeves/torso -> shirt band
+ *   0xC5..0xCB                            shorts             -> shorts band
+ *   0x66..0x70, 0x9E..0xA8, 0xE4..0xE5    sock trim/boot     -> sock band
+ *   0x71..0x89, 0xDB..0xE3                arms/legs/face     -> skin ramp
+ *   0xD7..0xDA                            hair               -> hair ramp
+ *   0xC2..0xC4                            collar/trim        -> white 0xFE
+ *   0x4E                                  eye                -> black 0x00
  *
- * The earlier phase-84 subset treated 0x75/0x76/0x8F/0x90/0x9C/0x9D as skin;
- * the walk-bank histogram shows those indices belong to the shirt/trim bands,
- * which is why the live kits still striped. The old 0xD7..0xDA -> 0 mapping
- * also turned the hair black and lost the hair ramp. This model keeps the kit
- * redirects intact (team 1's 195..203/208..214 redirects still apply), so the
- * same table serves both teams. Live-only; M1/M2 never call this. */
+ * The native skin table DAT_001070E4 gives four 9-entry ramps whose bases are
+ * 0xF6, 0xED, 0xE4, 0xDB (skin classes 0..3). The native hair table
+ * DAT_001070D4 gives the four 4-entry ramps below (FUN_0004C00C classes
+ * 0..3). The last skin entry would be 0xFE (the engine's white line slot), so
+ * the ninth source index wraps to the eighth shade; the sprite face/legs use
+ * the first eight entries.
+ *
+ * Live-only; M1/M2 never call this. */
+#define MATCH_RUN_KIT_SHIRT_HOME 37
+#define MATCH_RUN_KIT_SHORTS_HOME 48
+#define MATCH_RUN_KIT_SOCKS_HOME 59
+#define MATCH_RUN_KIT_SHIRT_AWAY 70
+#define MATCH_RUN_KIT_SHORTS_AWAY 81
+#define MATCH_RUN_KIT_SOCKS_AWAY 92
+#define MATCH_RUN_KIT_SHIRT_LEN 7
+#define MATCH_RUN_KIT_SHORTS_LEN 9
+#define MATCH_RUN_KIT_SOCKS_LEN 6
+
+static const uint8_t match_run_hair_ramps[4][4] = {
+  { 0x00, 0x00, 0x00, 0x00 },   /* class 0: black */
+  { 0xEB, 0xEC, 0xFC, 0xFD },   /* class 1 */
+  { 0xF0, 0xF1, 0xF2, 0xF3 },   /* class 2: brown */
+  { 0xD7, 0xD8, 0xD9, 0xDA },   /* class 3: dark brown */
+};
+static const uint8_t match_run_skin_bases[4] = { 0xF6, 0xED, 0xE4, 0xDB };
+
+/* FUN_0004C00C (0x4C00C): PCCD hair digit -> native class. */
+static uint8_t match_run_hair_class(uint8_t code) {
+  if (code == '0') return 3;
+  if (code == '1') return 2;
+  if (code == '4') return 0;
+  return 1;
+}
+
+/* FUN_0004C098 (0x4C098): PCCD skin digit -> native class. The undecoded
+ * digit falls back to the hair class (3 stays 3, everything else 0). */
+static uint8_t match_run_skin_class(uint8_t code, uint8_t hair_class) {
+  if (code == '0' || code == '2') return 1;
+  if (code == '1') return 3;
+  if (code == '3') return 2;
+  if (code == '4') return 0;
+  return hair_class == 3u ? 3u : 0u;
+}
+
 static void match_run_remap_band(uint8_t remap[256], int src_lo, int src_hi,
                                  int dst_lo, int dst_len) {
   if (dst_len <= 0) return;
@@ -10546,45 +10605,38 @@ static void match_run_remap_band(uint8_t remap[256], int src_lo, int src_hi,
     remap[src] = (uint8_t)(dst_lo + ((src - src_lo) % dst_len));
 }
 
-/* Compose the away-team kit redirect over an already-built appearance table.
- * The renderer performs one table lookup, so mapping source 0x50 -> 208 is not
- * enough: for team 1 every value that lands in the home 195..203/208..214 kit
- * bands must be translated to the away 230..238/239..245 bands. Applying the
- * redirect to the source indices alone (the earlier shape) left the semantic
- * shirt bands pointing at the home palette, which is why both teams rendered
- * in Brazil's yellow. */
-static void match_run_apply_away_kit_redirect(uint8_t remap[256]) {
-  for (int i = 0; i < 256; i++) {
-    uint8_t v = remap[i];
-    if (v >= 195 && v <= 203)
-      remap[i] = (uint8_t)(230 + (v - 195));
-    else if (v >= 208 && v <= 214)
-      remap[i] = (uint8_t)(239 + (v - 208));
+static void match_run_apply_player_remap(uint8_t remap[256],
+                                         int shirt, int shorts, int socks,
+                                         uint8_t skin_class,
+                                         uint8_t hair_class) {
+  if (skin_class > 3u) skin_class = 0u;
+  if (hair_class > 3u) hair_class = 3u;
+  /* Shirt: sleeves/shoulders, side panels and torso. */
+  match_run_remap_band(remap, 0x50, 0x65, shirt, MATCH_RUN_KIT_SHIRT_LEN);
+  match_run_remap_band(remap, 0x8A, 0x9D, shirt, MATCH_RUN_KIT_SHIRT_LEN);
+  match_run_remap_band(remap, 0xCC, 0xD6, shirt, MATCH_RUN_KIT_SHIRT_LEN);
+  /* Shorts (0xC5..0xCB; 0xC2..0xC4 is the collar). */
+  match_run_remap_band(remap, 0xC5, 0xCB, shorts, MATCH_RUN_KIT_SHORTS_LEN);
+  /* Sock trim and boot/sock tip -> the selected sock ramp. */
+  match_run_remap_band(remap, 0x66, 0x70, socks, MATCH_RUN_KIT_SOCKS_LEN);
+  match_run_remap_band(remap, 0x9E, 0xA8, socks, MATCH_RUN_KIT_SOCKS_LEN);
+  /* 0xE4/0xE5 are the boot pixels; the native template does not route them
+   * through the sock band. Black keeps them neutral without inventing a kit
+   * colour the source bank does not carry. */
+  remap[0xE4] = 0x00;
+  remap[0xE5] = 0x00;
+  /* Bare arms/legs/face -> this player's native skin ramp. */
+  {
+    int base = match_run_skin_bases[skin_class];
+    for (int src = 0x71; src <= 0x89; src++)
+      remap[src] = (uint8_t)(base + ((src - 0x71) % 8));
+    for (int src = 0xDB; src <= 0xE3; src++)
+      remap[src] = (uint8_t)(base + ((src - 0xDB) % 8));
   }
-}
-
-static void match_run_apply_player_remap(uint8_t remap[256]) {
-  /* Shirt: sleeves/shoulders, side panels and the torso mirror the selected
-   * shirt ramp. 0xD0..0xD6 already identity-map onto 208..214. */
-  match_run_remap_band(remap, 0x50, 0x65, 208, 7);
-  match_run_remap_band(remap, 0x8A, 0x9D, 208, 7);
-  match_run_remap_band(remap, 0xCC, 0xCF, 208, 7);
-  /* Sock trim bands -> the selected sock ramp; 0xE0..0xE5 is already the
-   * selected sock band via identity. */
-  match_run_remap_band(remap, 0x66, 0x70, 224, 6);
-  match_run_remap_band(remap, 0x9E, 0xA8, 224, 6);
-  /* Bare arms/legs/face -> the PALsys skin ramp above the live kit bands
-   * (0xF6..0xFD; 0xFE stays the white line slot). The native per-player
-   * override is the 9-entry 0xDB..0xE3 skin ramp; the face/head pixels use
-   * 0xE0..0xE3, which is why leaving that sub-band on the sock identity made
-   * the face green. 0xE4/0xE5 stay on the sock/boot band. */
-  match_run_remap_band(remap, 0x71, 0x89, 0xF6, 8);
-  match_run_remap_band(remap, 0xDB, 0xE3, 0xF6, 8);
-  /* Hair: the native 4-entry hair ramp, staged into 0xD7..0xDA by the live
-   * palette build below. */
-  match_run_remap_band(remap, 0xD7, 0xDA, 0xD7, 4);
-  /* Collar/neck trim (the walk-bank's white cuff band) -> the live white slot;
-   * a single eye pixel -> black. */
+  /* Hair: this player's native 4-entry ramp. */
+  for (int i = 0; i < 4; i++)
+    remap[0xD7 + i] = match_run_hair_ramps[hair_class][i];
+  /* Collar/neck trim -> the live white slot; eye -> black. */
   for (int i = 0xC2; i <= 0xC4; i++) remap[i] = FIFA96_PITCH_LINE_INDEX;
   remap[0x4E] = 0x00;
 }
@@ -10605,6 +10657,7 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
    * half-installed live palette behind. */
   uint8_t palette[768];
   uint8_t remap_team[2][256];
+  uint8_t remap_entity[2][FIFA96_MATCH_ENTITY_RECORDS][256];
   int have_team = 0;
   int have_sys = 0;
   struct fifa96_match_run_render *r = &mr->render;
@@ -10675,79 +10728,85 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
     palette[i * 3 + 2] = (uint8_t)(pal6[i * 3 + 2] << 2);
   }
 
-  /* Team 0: keep the identity translation and overlay the real sprite-band
-   * colours over the PALsys base (skip the Fplain tile indices 1..29). */
-  for (int i = 0; i < 256; i++) {
-    remap_team[0][i] = (uint8_t)(i == 0 ? 0xFF : i);
-    remap_team[1][i] = (uint8_t)(i == 0 ? 0xFF : i);
+  /* Phase-86: the native kit-band destinations (0x106B70) are the low slots
+   * 37/48/59 (home shirt/shorts/socks) and 70/81/92 (away). Build the default
+   * team table with skin class 0 / hair class 3 (the phase-85 look) and then
+   * one table per pitch record with that player's native classes. */
+  for (int side = 0; side < 2; side++) {
+    int shirt = side == 0 ? MATCH_RUN_KIT_SHIRT_HOME : MATCH_RUN_KIT_SHIRT_AWAY;
+    int shorts = side == 0 ? MATCH_RUN_KIT_SHORTS_HOME : MATCH_RUN_KIT_SHORTS_AWAY;
+    int socks = side == 0 ? MATCH_RUN_KIT_SOCKS_HOME : MATCH_RUN_KIT_SOCKS_AWAY;
+    for (int i = 0; i < 256; i++)
+      remap_team[side][i] = (uint8_t)(i == 0 ? 0xFF : i);
+    match_run_apply_player_remap(remap_team[side], shirt, shorts, socks, 0, 3);
+    for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++) {
+      uint8_t *rm = remap_entity[side][pitch];
+      memcpy(rm, remap_team[side], 256);
+      uint8_t hair_code = '0';
+      uint8_t skin_code = '4';
+      uint8_t roster = mr->sub_lineup[side][pitch];
+      if (roster < FIFA96_PCCD_ROSTER_COUNT) {
+        hair_code = mr->roster_hair_code[side][roster];
+        skin_code = mr->roster_skin_code[side][roster];
+      }
+      uint8_t hair_class = match_run_hair_class(hair_code);
+      uint8_t skin_class = match_run_skin_class(skin_code, hair_class);
+      match_run_apply_player_remap(rm, shirt, shorts, socks, skin_class,
+                                   hair_class);
+    }
   }
-  /* Phase-85: apply the semantic appearance table to the identity first; the
-   * team-1 kit redirect below must then rewrite the 195..203/208..214
-   * destinations (applying this after the redirect silently re-pointed team
-   * 1's shirt back at team 0's palette band). */
-  match_run_apply_player_remap(remap_team[0]);
-  match_run_apply_player_remap(remap_team[1]);
-  for (int i = 30; i <= 229; i++) {
-    if (kit_frames[0][i * 3] == MATCH_RUN_KIT_MAGENTA_R &&
-        kit_frames[0][i * 3 + 1] == MATCH_RUN_KIT_MAGENTA_G &&
-        kit_frames[0][i * 3 + 2] == MATCH_RUN_KIT_MAGENTA_B)
-      continue;
-    palette[i * 3] = (uint8_t)(kit_frames[0][i * 3] << 2);
-    palette[i * 3 + 1] = (uint8_t)(kit_frames[0][i * 3 + 1] << 2);
-    palette[i * 3 + 2] = (uint8_t)(kit_frames[0][i * 3 + 2] << 2);
-  }
-  int away_kit_redirect = 0;
   if (mr->matchup_active && mr->matchup.kit_ready) {
-    /* P6: the selected kit-0 triples drive the measured bank-0 sprite bands
-     * (A7 §4): home shirt 208..214, shorts 195..203, socks 224..229; away
-     * shirt/shorts use the free 239..245/230..238 slots and the per-team
-     * translation; socks stay shared. Each colour index selects PALteam frame
-     * 2*(idx/16) and ramp idx%16 (the native FUN_0004808C mapping). Brazil
-     * kit 0 (26,4,7) = yellow/blue/green; Italy (3,30,3) = blue/white/blue. */
+    /* P6: the selected kit triples select PALteam frame 2*(idx/16) and ramp
+     * idx%16 (the native FUN_0004808C mapping). Brazil kit 0 (26,4,7) =
+     * yellow/blue/green; Germany (30,33,21) = white/black/green. */
     const uint8_t *home = mr->matchup.kit[0][0];
     const uint8_t *away = mr->matchup.kit[1][0];
-    (void)match_run_kit_band(palette, 208, 7, home[0], kit_frames, kit_ok);
-    (void)match_run_kit_band(palette, 195, 9, home[1], kit_frames, kit_ok);
-    (void)match_run_kit_band(palette, 224, 6, home[2], kit_frames, kit_ok);
-    int shirt_ok = match_run_kit_band(palette, 239, 7, away[0], kit_frames, kit_ok);
-    int shorts_ok = match_run_kit_band(palette, 230, 9, away[1], kit_frames, kit_ok);
-    away_kit_redirect = shirt_ok && shorts_ok;
+    (void)match_run_kit_band(palette, MATCH_RUN_KIT_SHIRT_HOME,
+                             MATCH_RUN_KIT_SHIRT_LEN, home[0], kit_frames, kit_ok);
+    (void)match_run_kit_band(palette, MATCH_RUN_KIT_SHORTS_HOME,
+                             MATCH_RUN_KIT_SHORTS_LEN, home[1], kit_frames, kit_ok);
+    (void)match_run_kit_band(palette, MATCH_RUN_KIT_SOCKS_HOME,
+                             MATCH_RUN_KIT_SOCKS_LEN, home[2], kit_frames, kit_ok);
+    (void)match_run_kit_band(palette, MATCH_RUN_KIT_SHIRT_AWAY,
+                             MATCH_RUN_KIT_SHIRT_LEN, away[0], kit_frames, kit_ok);
+    (void)match_run_kit_band(palette, MATCH_RUN_KIT_SHORTS_AWAY,
+                             MATCH_RUN_KIT_SHORTS_LEN, away[1], kit_frames, kit_ok);
+    (void)match_run_kit_band(palette, MATCH_RUN_KIT_SOCKS_AWAY,
+                             MATCH_RUN_KIT_SOCKS_LEN, away[2], kit_frames, kit_ok);
   } else {
     /* No PCCD identity (synthetic/no-ISO fixtures): keep the pre-P6 derived
-     * fallback — team 1's shirt/shorts bands copy PALteam frame 2 into the
-     * free slots and the translation redirects them (A7 §4). */
-    for (int i = 195; i <= 203; i++) {
-      int dst = 230 + (i - 195);
-      palette[dst * 3] = (uint8_t)(kit_frames[2][i * 3] << 2);
-      palette[dst * 3 + 1] = (uint8_t)(kit_frames[2][i * 3 + 1] << 2);
-      palette[dst * 3 + 2] = (uint8_t)(kit_frames[2][i * 3 + 2] << 2);
-    }
-    for (int i = 208; i <= 214; i++) {
-      int dst = 239 + (i - 208);
-      palette[dst * 3] = (uint8_t)(kit_frames[2][i * 3] << 2);
-      palette[dst * 3 + 1] = (uint8_t)(kit_frames[2][i * 3 + 1] << 2);
-      palette[dst * 3 + 2] = (uint8_t)(kit_frames[2][i * 3 + 2] << 2);
-    }
-    away_kit_redirect = 1;
+     * fallback. The old engine bands were home 208/195/224 and away 208/195/
+     * 224 from PALteam frame 2; copy them into the native destinations. */
+    match_run_copy_kit_band(palette, MATCH_RUN_KIT_SHIRT_HOME,
+                            MATCH_RUN_KIT_SHIRT_LEN, kit_frames[0], 208);
+    match_run_copy_kit_band(palette, MATCH_RUN_KIT_SHORTS_HOME,
+                            MATCH_RUN_KIT_SHORTS_LEN, kit_frames[0], 195);
+    match_run_copy_kit_band(palette, MATCH_RUN_KIT_SOCKS_HOME,
+                            MATCH_RUN_KIT_SOCKS_LEN, kit_frames[0], 224);
+    match_run_copy_kit_band(palette, MATCH_RUN_KIT_SHIRT_AWAY,
+                            MATCH_RUN_KIT_SHIRT_LEN, kit_frames[2], 208);
+    match_run_copy_kit_band(palette, MATCH_RUN_KIT_SHORTS_AWAY,
+                            MATCH_RUN_KIT_SHORTS_LEN, kit_frames[2], 195);
+    match_run_copy_kit_band(palette, MATCH_RUN_KIT_SOCKS_AWAY,
+                            MATCH_RUN_KIT_SOCKS_LEN, kit_frames[2], 224);
   }
-  if (away_kit_redirect) match_run_apply_away_kit_redirect(remap_team[1]);
-  /* Phase-85: the native hair ramp (PALsys frame-0 0xF0..0xF3) is staged into
-   * the 0xD7..0xDA slots. The kit overlay above would otherwise leave the
-   * PALteam yellow ramp there; no staged PLAYART/ball sprite uses 0xD7..0xDA
-   * (the ball is 0xBB..0xC1), so the four slots are free for the hair remap. */
+  /* Phase-85: the native hair class-3 ramp (PALsys frame-0 0xF0..0xF3) is
+   * staged into the 0xD7..0xDA slots. The kit overlay no longer touches the
+   * 0xDB..0xFD skin ramps, so classes 0..3 read the PALsys colours directly. */
   for (int i = 0; i < 4; i++) {
     palette[(0xD7 + i) * 3] = (uint8_t)(sys0[(0xF0 + i) * 3] << 2);
     palette[(0xD7 + i) * 3 + 1] = (uint8_t)(sys0[(0xF0 + i) * 3 + 1] << 2);
     palette[(0xD7 + i) * 3 + 2] = (uint8_t)(sys0[(0xF0 + i) * 3 + 2] << 2);
   }
-  /* The v1 marking index: no PALsys/PALteam entry is white, so dedicate the
-   * unused 0xFE slot (no PLAYART frame uses > 229, A7 §4). */
+  /* The v1 marking index stays white; 0xFE is also the native skin class-0
+   * ninth entry, which the remap wraps to the eighth shade. */
   palette[FIFA96_PITCH_LINE_INDEX * 3] = 0xFF;
   palette[FIFA96_PITCH_LINE_INDEX * 3 + 1] = 0xFF;
   palette[FIFA96_PITCH_LINE_INDEX * 3 + 2] = 0xFF;
   /* Full success: commit the palette + remap atomically. */
   memcpy(r->palette, palette, sizeof r->palette);
   memcpy(r->remap_team, remap_team, sizeof r->remap_team);
+  memcpy(r->remap_entity, remap_entity, sizeof r->remap_entity);
   r->team_remap_ready = 1;
   /* FU-343 (P4): the final live palette is now installed; derive the HUD body
    * and 0xFE shade from it (the stage-time PALsys frame-2 values are stale). */

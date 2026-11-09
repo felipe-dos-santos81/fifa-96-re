@@ -98,6 +98,14 @@ int fifa96_team_data_roster_full(const struct fifa96_team_data *td,
                                  uint8_t numbers[16], char positions[16],
                                  uint8_t ratings[16], int *count);
 
+/* Native per-player appearance digits for one roster slot: the PCCD
+ * player-record bytes +0x1C (hair) / +0x1D (skin). Both are ASCII '0'..'4'
+ * on retail data; an absent player is reported as '0'. Returns the same
+ * errors as `fifa96_team_data_player`. */
+int fifa96_team_data_appearance(const struct fifa96_team_data *td,
+                                uint32_t lang_id, uint8_t slot,
+                                uint8_t *hair_code, uint8_t *skin_code);
+
 /* The 44-entry map's mode-4 index for a LANG id, or -1 when the id is not one
  * of the exposed teams. Pure: works without an initialised team data. */
 int fifa96_team_data_lang_index(uint32_t lang_id);

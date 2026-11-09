@@ -62,6 +62,10 @@ struct fifa96_match_matchup {
   uint8_t formation[2];
   uint8_t kit[2][4][3];
   uint8_t kit_ready;
+  /* P6 Team Select handout: the LANG000 ids whose PCCD rosters supply the
+   * per-player appearance digits. 0 = unknown (the pre-P6 fixture path keeps
+   * the derived single-ramp fallback). */
+  uint32_t team_id[2];
 };
 
 /* Match presentation slots: FU-85 §4 stages 23 entities (11 + 11 + ball) into
@@ -518,6 +522,12 @@ struct fifa96_match_run_render {
    * keeps `remap`, so M1/M2 stay byte-identical. `team_remap_ready` is set by
    * fifa96_match_run_stage_pitch. */
   uint8_t remap_team[2][256];
+  /* Phase-86 [D]: the per-pitch-record appearance tables. Each is the team
+   * kit table with that player's native hair/skin classes composed over the
+   * 0xD7..0xE3 source bands. The roster slot comes from `sub_lineup` (the
+   * native 0x14C360 lineup matrix is unported); sprite draws select this
+   * table for the live 22 player slots. */
+  uint8_t remap_entity[2][FIFA96_MATCH_ENTITY_RECORDS][256];
   /* Live ball art translation. The retail GAMEART0 `ball.fsh` uses palette
    * index 0 for the black outline and 0xFF for transparency; the generic
    * FU-85 remap keys index 0 out (a 16-bit sprite convention), which punched
@@ -1502,6 +1512,11 @@ struct fifa96_match_run {
    * cleared by init/begin/end/resume. */
   char roster_pos[2][FIFA96_PCCD_ROSTER_COUNT];
   uint8_t roster_rating[2][FIFA96_PCCD_ROSTER_COUNT];
+  /* Native per-player appearance digits from the PCCD player record (+0x1C
+   * hair, +0x1D skin; ASCII '0'..'4'). FUN_0004C00C/FUN_0004C098 map them to
+   * the 0..3 hair/skin classes at remap-build time. */
+  uint8_t roster_hair_code[2][FIFA96_PCCD_ROSTER_COUNT];
+  uint8_t roster_skin_code[2][FIFA96_PCCD_ROSTER_COUNT];
   uint8_t sub_lineup[2][FIFA96_MATCH_ENTITY_RECORDS];
   uint16_t sub_bench_avail[2];
   uint8_t sub_lineup_ready;

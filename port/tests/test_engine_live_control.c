@@ -30,6 +30,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "fifa96_engine/fifa96_engine.h"
@@ -292,9 +293,16 @@ static void test_live_carrier_dribbles_with_ball(void) {
    * unported native 0x7A490 staging): it must not stay at the kickoff spot. */
   assert(bx >= -0x40 && bx <= 0x40);
   assert(bz >= -0x40 && bz <= 0x40);
+  /* Phase-86: a neutral pad direction must still keep the ball in front of the
+   * carrier's facing octant; the old glue pinned it at (0,0) and the sprite
+   * covered it. The fallback offset is one 0x20 step, not a teleport. */
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  one_granted_frame(mr);
+  bx = mr->entities.ball.x - e->pos_x;
+  bz = mr->entities.ball.z - e->pos_z;
+  assert((bx != 0 || bz != 0) && abs(bx) <= 0x20 && abs(bz) <= 0x20);
   assert(mr->score[0] == 0u && mr->score[1] == 0u);
   assert(mr->state.phase == 2u);
-  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
   drop_lc_fixture(&f);
 }
 

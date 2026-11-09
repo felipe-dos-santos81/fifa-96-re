@@ -110,6 +110,19 @@ static void test_retail_identity(void) {
                                       &count) == 0);
   assert(count == 16);
 
+  /* Phase-86: the native appearance digits live at PCCD player-record
+   * +0x1C (hair) / +0x1D (skin). Brazil slot 0 = '2'/'4'; Germany slot 0 =
+   * '0'/'2' (the runtime descriptor reads the same pair at +0x1D/+0x1E). */
+  uint8_t hair_code = 0;
+  uint8_t skin_code = 0;
+  assert(fifa96_team_data_appearance(&td, 0x023u, 0, &hair_code, &skin_code) == 0);
+  assert(hair_code == '2' && skin_code == '4');
+  assert(fifa96_team_data_appearance(&td, 0x088u, 0, &hair_code, &skin_code) == 0);
+  assert(hair_code == '0' && skin_code == '2');
+  assert(fifa96_team_data_appearance(&td, 0x023u, FIFA96_PCCD_ROSTER_COUNT,
+                                     &hair_code, &skin_code) ==
+         -FIFA96_ERR_INVALID);
+
   assert(fifa96_team_data_lookup(&td, 0x0A6u, &identity) == 0);
   assert(identity.pccd_index == 28u);
   assert(identity.pccd_record == 0x20u);
