@@ -303,13 +303,20 @@ calls the slide twice:
 plus variant*0x20; the first records read `{150,150,1000,3800}`,
 `{900,1900,900,3750}`, `{600,2400,1500,1500}`).
 
-**Not wired yet.** `fifa96_camera_handler_block` does not carry `+0x18`,
-`+0x28` or the `+0x50` C record, and the handler's yaw/pitch arms
-(`FUN_0004DF34` / `FUN_0004E05C`) are still open; wiring only x/z would move
-the eye without the native orientation. The next L2b slice extends the block
-model, wires both slide calls, ports the orientation arms, and then selects
-the live class from the native preset (`FUN_0004CE34` / `FUN_0004B308`).
+**Wired.** `fifa96_camera_handler_block` and the six-row behavior table now
+carry `+0x10`, `+0x18`, `+0x28` and the `+0x50` C record
+(`c0..c3`); `fifa96_camera_behavior_steady` runs the z slide then the x slide
+(the sign-adjusted target offset), with the pose feed's `handler_tick` as the
+native `FUN_00049388` tick. The slides consume `hist_x`/`hist_z`, so the
+class-3 target-history copy now has a wired consumer (L4 closed). The
+handler's yaw/pitch arms (`FUN_0004DF34` / `FUN_0004E05C`) and the class-3
+snap remain the quoted clamp level. The live class is still 3, so this has
+no open-play effect yet; the next L2c slice ports the orientation arms and
+selects the live class from the native preset (`FUN_0004CE34` /
+`FUN_0004B308`).
 
 **Verification.** `test_camera::test_camera_slide` pins the ramp factors and
-the inside/outside, mode-gate, low/high-clamp and history-offset branches.
-`make check` **124/124**; M1/M2 `cmp` exact.
+the inside/outside, mode-gate, low/high-clamp and history-offset branches;
+`test_camera::test_behavior_steady_slides` pins both handler calls (x 10,
+z 67 at tick 8 for block 0) and the z mode-1 history gate; the behavior-table
+test pins the six new rows. `make check` **124/124**; M1/M2 `cmp` exact.

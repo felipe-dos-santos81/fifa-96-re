@@ -4841,3 +4841,15 @@ close-out below).
   still open. `test_camera` pins the ramp, modes, clamps and outside branch.
   `make check` green 124/124; M1/M2 `cmp` exact. Next: extend the block and
   wire the handler, then the native preset/class selection.
+
+- **Phase 96 class-0 slides wired (2026-11-09).** The behavior block and the
+  six-row table now carry the native `+0x10/+0x18/+0x28` cells and the `+0x50`
+  C record; `fifa96_camera_behavior_steady` runs the z and x
+  `fifa96_camera_slide` calls (the z mode/bounds class swap and the x
+  sign-adjusted history offset) with the pose feed's `handler_tick`. The
+  class-3 target history is now consumed (L4 closed). The yaw/pitch arms
+  (`FUN_0004DF34`/`FUN_0004E05C`) and the class-3 snap remain the quoted
+  clamp level, and the live class is still 3, so open play is unchanged.
+  `test_camera` pins the block-0 x=10/z=67 result, the z history gate and the
+  table rows. `make check` green 124/124; M1/M2 `cmp` exact. Next: L2c
+  orientation arms + native preset/class selection.

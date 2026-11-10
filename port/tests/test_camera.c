@@ -1731,24 +1731,24 @@ static void test_behavior_steady(void) {
   block.yaw_hi = 100;
   st.yaw = 0;
   st.pitch = 0x2000;
-  assert(fifa96_camera_behavior_steady(&st, &block, 0x40, &out) == FIFA96_OK);
+  assert(fifa96_camera_behavior_steady(&st, &block, 0x40, 0, &out) == FIFA96_OK);
   assert(st.yaw == 0);
   assert(st.pitch == 0x1620);
   assert(out.horizon_a == 0xE09 + 8 && out.horizon_b == 0xAA1 + 8);
   st.yaw = -500;
-  assert(fifa96_camera_behavior_steady(&st, &block, 0, &out) == FIFA96_OK);
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 0, &out) == FIFA96_OK);
   assert(st.yaw == -100 && out.horizon_a == 0xE09);
   st.yaw = 500;
-  assert(fifa96_camera_behavior_steady(&st, &block, 0, &out) == FIFA96_OK);
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 0, &out) == FIFA96_OK);
   assert(st.yaw == 100);
   st.pitch = -0x2000;
-  assert(fifa96_camera_behavior_steady(&st, &block, 0, &out) == FIFA96_OK);
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 0, &out) == FIFA96_OK);
   assert(st.pitch == -0x1620);
-  assert(fifa96_camera_behavior_steady(NULL, &block, 0, &out) ==
+  assert(fifa96_camera_behavior_steady(NULL, &block, 0, 0, &out) ==
          -FIFA96_ERR_INVALID);
-  assert(fifa96_camera_behavior_steady(&st, NULL, 0, &out) ==
+  assert(fifa96_camera_behavior_steady(&st, NULL, 0, 0, &out) ==
          -FIFA96_ERR_INVALID);
-  assert(fifa96_camera_behavior_steady(&st, &block, 0, NULL) ==
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 0, NULL) ==
          -FIFA96_ERR_INVALID);
 }
 
@@ -2136,18 +2136,34 @@ static void test_replay_select(void) {
 
 static void test_behavior_table(void) {
   /* First-hand 0x10896C (504 B) rows {target0, target1, class, field3(+0xC),
-   * const30, const34}: classes {3,1,3,3,1,3}; the +0xC class-gate cells are
-   * {0,0,0xA7F8,0,0,0xA21C} so blocks 2/5 take FUN_0004EC9C's class-3 arm
-   * (0x4000..0xC000) and 0/1/3/4 the class-4 arm; every +0x34 is zero
-   * (handler 1's yaw target is the bare track z). */
+   * +0x10, +0x18, +0x28, const30, const34, C record(+0x50)}: classes
+   * {3,1,3,3,1,3}; the +0xC class-gate cells are {0,0,0xA7F8,0,0,0xA21C} so
+   * blocks 2/5 take FUN_0004EC9C's class-3 arm (0x4000..0xC000) and 0/1/3/4
+   * the class-4 arm; every +0x34 is zero (handler 1's yaw target is the bare
+   * track z). */
   assert(FIFA96_CAMERA_BEHAVIOR_BLOCKS == 6);
   const int32_t classes[6] = {3, 1, 3, 3, 1, 3};
   const int32_t gate[6] = {0, 0, 0xA7F8, 0, 0, 0xA21C};
+  const int32_t c10[6] = {0xC8, 0x4B0, 0, 0xC8, 0x4B0, 0};
+  const int32_t c18[6] = {0x578, 0, 0x578, 0x578, 0, 0x578};
+  const int32_t c28[6] = {8, 0x20, 8, 8, 0x20, 8};
+  const int32_t c_rec[6][4] = {
+      {150, 150, 1000, 3800}, {600, 2400, 1500, 1500},
+      {900, 1900, 900, 3750}, {150, 150, 1000, 3800},
+      {600, 2400, 1500, 1500}, {900, 1900, 900, 3750},
+  };
   for (int i = 0; i < 6; i++) {
     assert(fifa96_camera_behavior_blocks[i].class_of == classes[i]);
     assert(fifa96_camera_behavior_blocks[i].field3 == gate[i]);
     assert(fifa96_camera_behavior_blocks[i].const34 == 0);
     assert(fifa96_camera_behavior_blocks[i].target0 == 0x340);
+    assert(fifa96_camera_behavior_blocks[i].const10 == c10[i]);
+    assert(fifa96_camera_behavior_blocks[i].const18 == c18[i]);
+    assert(fifa96_camera_behavior_blocks[i].const28 == c28[i]);
+    assert(fifa96_camera_behavior_blocks[i].c0 == c_rec[i][0]);
+    assert(fifa96_camera_behavior_blocks[i].c1 == c_rec[i][1]);
+    assert(fifa96_camera_behavior_blocks[i].c2 == c_rec[i][2]);
+    assert(fifa96_camera_behavior_blocks[i].c3 == c_rec[i][3]);
   }
   assert(fifa96_camera_behavior_blocks[0].target1 == 0xFA0);
   assert(fifa96_camera_behavior_blocks[0].const30 == 0xEA6);
@@ -2244,6 +2260,39 @@ static void test_camera_slide(void) {
   assert(fifa96_camera_slide(0, 1000, 0, 2, -150, 150, 900, 8, 8) == 7);
 }
 
+static void test_behavior_steady_slides(void) {
+  /* FUN_0004E834's two FUN_0004D698 calls. Block 0 (type 0) carries
+   * +0x10=0xC8, +0x18=0x578, +0x28=8, C record {150,150,1000,3800}. */
+  fifa96_camera_handler_state st;
+  fifa96_camera_handler_block block;
+  fifa96_camera_handler_out out;
+  memset(&st, 0, sizeof st);
+  memset(&block, 0, sizeof block);
+  memset(&out, 0, sizeof out);
+  block.class_of = 3;
+  block.const10 = 0xC8;
+  block.const18 = 0x578;
+  block.const28 = 8;
+  block.c0 = 150;
+  block.c1 = 150;
+  block.c2 = 1000;
+  block.c3 = 3800;
+
+  st.track_x = 1000;
+  st.track_z = 0;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 8, &out) == FIFA96_OK);
+  assert(st.pos_x == 10);
+  assert(st.pos_z == 67);
+
+  /* The z mode-1 history gate: target -1600, history -1200 gives a positive
+   * direction and a negative step; the native returns the old cell. */
+  st.pos_z = 500;
+  st.track_z = -1000;
+  st.hist_z = -1200;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 8, &out) == FIFA96_OK);
+  assert(st.pos_z == 500);
+}
+
 int main(void) {
   test_init_fields();
   test_init_invalid();
@@ -2325,6 +2374,7 @@ int main(void) {
   test_camera_type_mapping();
   test_behavior_table();
   test_behavior_steady();
+  test_behavior_steady_slides();
   test_focus_clamp();
   test_camera_slide();
   test_behavior_sidetrack();

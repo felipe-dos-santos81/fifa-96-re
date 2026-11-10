@@ -575,12 +575,12 @@ static int32_t camera_clamp_i32(int32_t value, int32_t lo, int32_t hi) {
  * class-gate dword, +0x30/+0x34 constants). */
 const fifa96_camera_behavior_table_entry
     fifa96_camera_behavior_blocks[FIFA96_CAMERA_BEHAVIOR_BLOCKS] = {
-        {0x340, 0xFA0, 3, 0, 0xEA6, 0},        /* 0x10896C */
-        {0x340, 0x1200, 1, 0, 0x578, 0},       /* 0x1089C0 */
-        {0x340, 0xD48, 3, 0xA7F8, 0x1130, 0},  /* 0x108A14 */
-        {0x340, 0xFA0, 3, 0, 0xEA6, 0},        /* 0x108A68 */
-        {0x340, 0x1200, 1, 0, 0x578, 0},       /* 0x108ABC */
-        {0x340, 0xD48, 3, 0xA21C, 0x1130, 0},  /* 0x108B10 */
+        {0x340, 0xFA0, 3, 0, 0xC8, 0x578, 8, 0xEA6, 0, 150, 150, 1000, 3800},
+        {0x340, 0x1200, 1, 0, 0x4B0, 0, 0x20, 0x578, 0, 600, 2400, 1500, 1500},
+        {0x340, 0xD48, 3, 0xA7F8, 0, 0x578, 8, 0x1130, 0, 900, 1900, 900, 3750},
+        {0x340, 0xFA0, 3, 0, 0xC8, 0x578, 8, 0xEA6, 0, 150, 150, 1000, 3800},
+        {0x340, 0x1200, 1, 0, 0x4B0, 0, 0x20, 0x578, 0, 600, 2400, 1500, 1500},
+        {0x340, 0xD48, 3, 0xA21C, 0, 0x578, 8, 0x1130, 0, 900, 1900, 900, 3750},
 };
 
 int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
@@ -608,12 +608,37 @@ int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
 
 int fifa96_camera_behavior_steady(fifa96_camera_handler_state *st,
                                   const fifa96_camera_handler_block *block,
-                                  int32_t rnd, fifa96_camera_handler_out *out) {
+                                  int32_t rnd, int32_t tick,
+                                  fifa96_camera_handler_out *out) {
+  int32_t mode, lo, hi, hist_off, tx, atx, x_off;
   if (!st || !block || !out) return -FIFA96_ERR_INVALID;
-  /* 0x4E834: the yaw accumulator clamps into the sub-record bounds; the
-   * pitch target clamps +-0x1620; the horizon jitter is rnd>>3 + 0xE09/0xAA1
-   * (DAT_0014E4D8/D4). The class-4/else fold, the roll FUN_0004DF34, the
-   * class-3 snap FUN_0004C7D0 and the +0x18/+0x10 lerps stay leg 9. */
+  /* 0x4E834: the two FUN_0004D698 slides run before the orientation arms.
+   * The z mode/bounds swap by the behavior class; the x call is mode 2 with
+   * the sign-adjusted target offset. The yaw/pitch arms (FUN_0004DF34 /
+   * FUN_0004E05C) and the class-3 snap stay the next leg. */
+  if (block->class_of == 4) {
+    mode = -1;
+    lo = -block->c2;
+    hi = block->c3;
+    hist_off = block->const18;
+  } else {
+    mode = 1;
+    lo = -block->c3;
+    hi = block->c2;
+    hist_off = -block->const18;
+  }
+  st->pos_z = fifa96_camera_slide(st->pos_z, st->track_z, st->hist_z, mode,
+                                  lo, hi, hist_off, block->const28, tick);
+
+  tx = st->track_x;
+  atx = camera_abs(tx);
+  if (atx < block->const10) x_off = tx;
+  else x_off = tx >= 0 ? -block->const10 : block->const10;
+  st->pos_x = fifa96_camera_slide(st->pos_x, tx, st->hist_x, 2, -block->c0,
+                                  block->c1, x_off, block->const28, tick);
+
+  /* The orientation arms remain the quoted clamp level until FUN_0004DF34 /
+   * FUN_0004E05C land. */
   st->yaw = camera_clamp_i32(st->yaw, block->yaw_lo, block->yaw_hi);
   st->pitch = camera_clamp_i32(st->pitch, -0x1620, 0x1620);
   out->horizon_a = (rnd >> 3) + 0xE09;
@@ -889,7 +914,8 @@ static int camera_pose_handler_arm(fifa96_camera *cam, int32_t *yaw, int32_t *pi
   switch (args->selector) {
     case 0:
       if (!args->handler_block) return 0;
-      rc = fifa96_camera_behavior_steady(st, args->handler_block, args->handler_rnd, out);
+      rc = fifa96_camera_behavior_steady(st, args->handler_block, args->handler_rnd,
+                                         args->handler_tick, out);
       break;
     case 1:
       if (!args->handler_block) return 0;
