@@ -475,3 +475,62 @@ native horizon, and the y/ratio eases.
   (`fifa96_camera_view_select`) is ported, but class 1/2
   (`FUN_0004E3A8`/`FUN_0004EC9C`) are still partial; selecting them now would
   replace one stand-in with another.
+
+## 13. FU351-L2c class-1/class-2 body completion (2026-11-10)
+
+**Evidence.** Fresh `decompile_function`/`disassemble_function` for
+`0x4E3A8` (363 instructions) and `0x4EC9C` (425), plus `0x4E248` (136),
+`0x4E05C` (153), `0x4D698` (130), `0x4D668` (22), `0x4C77C` (43),
+`0x4C7D0` (19), `0xA1A60` (32), `0xA2AD8` (4), `0xA2AEE` (5) and
+`0xCE3B0` (40). `read_memory 0x10896C` (504 B) and the three `+0x50`
+sub-records `0x1085AC/0x10862C/0x1085EC`.
+
+**Landed.** The two handlers are now the full native bodies:
+
+- **`FUN_0004E3A8` sidetrack.** Pan step `FUN_0004E248`, the `+-block+0x3C`
+  clamp and the camera-relative `+-0xB10` band; the yaw point x is
+  `(offset - pan) * track_x / offset` (32-bit product before the IDIV) with
+  the class-2 `+0x68` / else `-0x68` bias and point z `track_z + pan`;
+  `FUN_0004DF34` yaw; the four `0x4E4A0..0x4E60E` snap arms (gated by
+  `track_x < -0x360` for class 1 / `< 0x360` otherwise, point z
+  `pos_z +- 0x4B0` with only the outer side clamped); the `block[0]` horizon
+  `0xE3B/0xAD3`; the class-2/else pitch-target split clamped `+-0xE40`; the
+  `FUN_0004E05C` pitch point `(target, |target|/32, track_z)`; the x slide
+  (class 2: mode 1, `lo=C[0]`, `hi=C[1]`, `hist_offset=-sub+0x10`; else:
+  mode -1, `lo=-C[1]`, `hi=-C[0]`, `hist_offset=+sub+0x10`); the z slide
+  (mode 2, `-C[2]..C[3]`, `hist_offset=cell18`); the rate-8 y/ratio eases
+  and the history copy. It does **not** touch `track_y` except through the
+  pitch arm's native `camera+0x38 = 0`.
+- **`FUN_0004EC9C` staged.** `FUN_000A1A60` is
+  `fifa96_projection_sincos(field3)`: the native `CE3B0` fold plus the
+  `(id&0x3F)*0x6487E` correction. The cos arm lands in `block+0x10`, the
+  sin arm in sub-record `+0x18`, both via
+  `abs((sub+0x14 * value + 0x8000) >> 16)`. Then the pan step, `cell1c =
+  step`, `cell18 += step` clamped `[sub+0x18, sub+0x1C]`, the `block[3]`
+  class gate (stored in `block+0x08`), the z slide (class 3: `-C[2]..C[3]`,
+  class 4: `-C[3]..C[2]`), the x slide split at `block[3] < 0x8000` (below:
+  `C[0]..C[1]`; at/above: `-C[1]..-C[0]`), the yaw step, the four
+  `0x4EEF2..0x4F00E` snap arms (point `(+-0x720,+-0xB10)`, 0x2000/0xA000
+  band, half ratio, class 3/4 sign swap), the `0xE3B/0xAD3` horizon, the
+  class-3/4 pitch target from `track_z` clamped `+-0x1620`, the
+  `(track_x,0,target)` pitch point, the rate-8 eases and the history copy.
+- **Model.** `fifa96_camera_handler_block` gains the sub-record `+0x10/+0x14`
+  cells (`sub10/sub14`); the six table rows carry
+  `{sub10,sub14} = {0,0}, {0x437,0x720}, {0,0x5DC}` for rows 0/3, 1/4, 2/5.
+  The handlers take a mutable block copy; `fifa96_camera_pitch_target_a/b`
+  and the two snap helpers are exported for the native branch tests.
+  `camera_pose_handler_arm` now feeds `handler_tick` to both bodies (the old
+  `rnd` feed was wrong: both horizons come from `block[0]`).
+
+**Verification.** `make check` **124/124**; M1
+`09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` and M2
+`41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`
+byte-exact (295,089 B). `test_camera` pins the pan decay/clamp/band, both
+x-slide bound mappings and sub-record offset signs, the z cell, the class
+gate and A1A60 scale, the two pitch-target formulas, and all eight snap
+arms.
+
+**Remaining legs.** `FU351-L2c-1` (computed-call register leftovers) and
+`FU351-L2c-2` (`[0x107DD4] == 1` replay pitch arm) are unchanged.
+`FU351-L2c-3` is now only the live wiring: the bodies are complete, but the
+live camera still selects class 3 until the resolver is connected.

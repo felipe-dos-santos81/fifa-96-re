@@ -4955,8 +4955,14 @@ the build also produces the windowed `fifa96` target (`make game`).
     The class-0 steady body is complete: the FUN_0004E248 pan step, the
     FUN_0004D698 slides (strict inside block rate / outside rate 8), FUN_0004DF34
     yaw, the 0x4E9A2 yaw snap, FUN_0004E05C pitch, the y/ratio eases and the
-    history copy are ported (FU-351 §12). The class-1/2 bodies stay leg 9;
-    the live class is still 3.
+    history copy are ported (FU-351 §12). The class-1 sidetrack and class-2
+    staged bodies are complete too: FUN_0004E3A8's projected yaw point,
+    four snap arms, class-2/else pitch target and reversed x-slide bounds;
+    FUN_0004EC9C's FUN_000A1A60 sin/cos scale, stored class gate, pan-cell
+    clamp, x/z slide split, four snap arms and ±0x1620 pitch target; the
+    +0x50 sub-record +0x10/+0x14 cells are in the block model (FU-351 §13).
+    The live class is still 3 until the resolver is wired; the computed-call
+    register-leftover and [0x107DD4] replay-pitch arms remain legs.
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

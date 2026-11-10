@@ -242,9 +242,10 @@ int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
  * +0x24 const24, +0x28 const28, +0x30 const30 (native dword 0xC), +0x34
  * const34 (dword 0xD), +0x38 const38, +0x3C const3c, +0x40 const40, the +0xC
  * dword (`field3` = native `param_2[3]`, the FUN_0004EC9C class-gate cell),
- * and the +0x50 C record (`c0..c3`, `sub18`, `sub1c`). The steady body mutates
- * +0x18/+0x1C/+0x34/+0x38; those four cells live in the caller's mutable
- * `cell18/cell1c/pan/pan_step`. */
+ * and the +0x50 sub-record (`c0..c3`, `sub10`, `sub14`, `sub18`, `sub1c`).
+ * Handlers 0 and 2 mutate +0x18/+0x1C/+0x34/+0x38; handler 2 also writes
+ * +0x08/+0x10 and the sub-record +0x18. Those cells live in the caller's
+ * mutable copy, never in the const table row. */
 typedef struct fifa96_camera_handler_block {
   int32_t class_of;   /* +0x08 */
   int32_t target0;    /* +0x00 */
@@ -262,10 +263,12 @@ typedef struct fifa96_camera_handler_block {
   int32_t const40;    /* +0x40 (the FUN_0004E248 pan rate) */
   int32_t field3;     /* the dword at +0xC (block[3], class-gate cell) */
   int32_t c0, c1, c2, c3; /* +0x50 record: x lo/hi, z lo/hi */
+  int32_t sub10;      /* the +0x50 record +0x10 (x history offset) */
+  int32_t sub14;      /* the +0x50 record +0x14 (FUN_0004A1A60 scale) */
   int32_t sub18, sub1c;   /* +0x50 record +0x18/+0x1C (the +0x18 clamp) */
   /* The native block is writable state. These four cells are the ones the
-   * steady handler mutates; a caller must pass a mutable copy of the table
-   * row, not the const `fifa96_camera_behavior_blocks` image. */
+   * handlers mutate; a caller must pass a mutable copy of the table row, not
+   * the const `fifa96_camera_behavior_blocks` image. */
   int32_t cell18;     /* +0x18 (mutated by the pan step) */
   int32_t cell1c;     /* +0x1C (the last pan step) */
   int32_t pan;        /* +0x34 (mutated by the pan step) */
@@ -368,6 +371,38 @@ int32_t fifa96_camera_steady_pan_step(int32_t axis_a, int32_t axis_b,
 int32_t fifa96_camera_yaw_snap(int32_t class_of, int32_t pos_x, int32_t pos_z,
                                int32_t track_z, int32_t yaw, int32_t ratio);
 
+/* FU-351 §13: the 0x4E3A8/0x4EC9C pitch-target split. `track` is
+ * `camera+0x34` for the sidetrack class-2 arm and `camera+0x3C` for the
+ * staged class-3 arm; `horizon_a/b` are the two `(block[0] * -0xB/-0xD)>>3`
+ * values. Both return the unclamped native dword:
+ *
+ *   a (class 2/3): track < 0 -> track - ((track>>1) + b);
+ *                  else       -> track - (b + ((a-b)*track*0x23)>>16)
+ *   b (other/4):   track <= 0 -> b + track + (((a-b)*-track*0x23)>>16);
+ *                  else        -> (b + track) - (track>>1)
+ *
+ * The low 32 bits of the first product are used before the 0x23 multiply;
+ * the `+0x8000 >>16` is the native SHRD rounding. */
+int32_t fifa96_camera_pitch_target_a(int32_t track, int32_t horizon_a,
+                                     int32_t horizon_b);
+int32_t fifa96_camera_pitch_target_b(int32_t track, int32_t horizon_a,
+                                     int32_t horizon_b);
+
+/* FU-351 §13: the two handler snap arms, pure state transforms.
+ *
+ * `fifa96_camera_sidetrack_snap` (0x4E3A8 0x4E4A0..0x4E60E) is gated by
+ * `track_x` (`< -0x360` for class 1, `< 0x360` otherwise), points at
+ * `(+-0x720, pos_z +- 0x4B0)` (only the outer z side is clamped), and tests
+ * the four `yaw`/ratio combinations against 0x4000..0xC000.
+ *
+ * `fifa96_camera_staged_snap` (0x4EC9C 0x4EEF2..0x4F00E) points at
+ * `(+-0x720, +-0xB10)`, splits at the 0x2000..0xA000 band and uses the half
+ * ratio; class 3 and class 4 swap the ratio sign. */
+void fifa96_camera_sidetrack_snap(fifa96_camera_handler_state *st,
+                                  const fifa96_camera_handler_block *block);
+void fifa96_camera_staged_snap(fifa96_camera_handler_state *st,
+                               int32_t class_of);
+
 /* FU-351-L2: the native view preset/class resolver. `FUN_0004B308` maps the
  * mode byte `[0x157A4A] >> 24`, the options camera cell `[0x14C2F6]` and the
  * `[0x15B680]` selector to a preset:
@@ -408,11 +443,11 @@ int fifa96_camera_behavior_steady(fifa96_camera_handler_state *st,
                                   int32_t tick,
                                   fifa96_camera_handler_out *out);
 int fifa96_camera_behavior_sidetrack(fifa96_camera_handler_state *st,
-                                     const fifa96_camera_handler_block *block,
-                                     int32_t rnd, fifa96_camera_handler_out *out);
+                                     fifa96_camera_handler_block *block,
+                                     int32_t tick, fifa96_camera_handler_out *out);
 int fifa96_camera_behavior_staged(fifa96_camera_handler_state *st,
-                                  const fifa96_camera_handler_block *block,
-                                  int32_t rnd, fifa96_camera_handler_out *out);
+                                  fifa96_camera_handler_block *block,
+                                  int32_t tick, fifa96_camera_handler_out *out);
 int fifa96_camera_behavior_action(fifa96_camera_handler_state *st, int live,
                                   int32_t speed, int32_t tick,
                                   fifa96_camera_handler_out *out);
@@ -423,7 +458,8 @@ int fifa96_camera_behavior_action(fifa96_camera_handler_state *st, int live,
  * +0x20 const20, +0x24 const24, +0x28 const28, +0x30 const30 (dword 0xC),
  * +0x34 const34 (dword 0xD), +0x38 const38, +0x3C const3c, +0x40 const40,
  * the +0xC dword (`field3` = native `param_2[3]`, the FUN_0004EC9C class-gate
- * cell), and the +0x50 C record (`c0..c3`, `sub18`, `sub1c`). Observed classes
+ * cell), and the +0x50 record (`c0..c3`, `sub10`, `sub14`, `sub18`, `sub1c`).
+ * Observed classes
  * {3,1,3,3,1,3}; the +0xC cells are {0,0,0xA7F8,0,0,0xA21C}, so blocks 2/5
  * take FUN_0004EC9C's class-3 arm (0x4000..0xC000) and blocks 0/1/3/4 the
  * class-4 arm; every +0x34 is 0 (handler 1's yaw target is the bare staged
@@ -446,6 +482,7 @@ typedef struct fifa96_camera_behavior_table_entry {
   int32_t const3c;   /* +0x3C pan limit */
   int32_t const40;   /* +0x40 pan rate */
   int32_t c0, c1, c2, c3; /* +0x50 record: x lo/hi, z lo/hi */
+  int32_t sub10, sub14;   /* +0x50 record +0x10/+0x14 */
   int32_t sub18, sub1c;   /* +0x50 record +0x18/+0x1C */
   int32_t cell18, cell1c, pan, pan_step; /* native writable block state */
 } fifa96_camera_behavior_table_entry;
@@ -463,18 +500,17 @@ typedef struct fifa96_camera_pose_args {
   int mirror;           /* FUN_0004B818: 1 - side (caller-staged) */
   /* FU-152 §2.8 (P4): the default-arm handler call `(&0x108B80)[selector]`.
    * A caller stages the camera-record subset + behavior block; NULL keeps the
-   * unported default (returns 0). `handler_rnd` feeds the sidetrack/staged
-   * horizon arms; the steady arm now reads the native `block[0]` products.
-   * `handler_live`/`handler_speed` feed the action handler's
-   * `FUN_0006400C` arm. */
+   * unported default (returns 0). The steady/sidetrack/staged horizon arms
+   * read the native `block[0]` products; all three handlers use
+   * `handler_tick` for FUN_0004E248/D668/DF34/E05C. `handler_live`/
+   * `handler_speed` feed the action handler's `FUN_0006400C` arm. */
   fifa96_camera_handler_state *handler_state;
   fifa96_camera_handler_block *handler_block;
   fifa96_camera_handler_out *handler_out;
-  int32_t handler_rnd;
   int32_t handler_live;
   int32_t handler_speed;
-  /* FUN_00049388()'s `[0x107300]` tick fed to the action handler's yaw/pitch
-   * slew and the steady handler's x/z slides. The native value is the 100 Hz
+  /* FUN_00049388()'s `[0x107300]` tick fed to the handler integrators and
+   * the action handler's yaw/pitch slew. The native value is the 100 Hz
    * elapsed time x12/5; the match body runs at 30 Hz, so the live caller
    * passes frame_delta * 4. */
   int32_t handler_tick;

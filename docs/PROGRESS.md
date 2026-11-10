@@ -4901,3 +4901,21 @@ close-out below).
   `[0x107DD4]` replay pitch floor/point (FU351-L2c-2), and the live class 1/2
   bodies that still block native class selection (FU351-L2c-3). Record:
   FU-351 §12.
+
+- **Phase 100 class-1/class-2 camera bodies (2026-11-10).** The two handlers
+  behind the remaining native view classes are complete. `FUN_0004E3A8`
+  (sidetrack) now runs the projected yaw point with the class-2/else ±0x68
+  bias, the four `0x4E4A0..0x4E60E` snap arms, the class-2/else pitch target,
+  the `(target,|target|/32,track_z)` pitch point, both x-slide bound mappings
+  and the z-cell offset. `FUN_0004EC9C` (staged) now runs the
+  `FUN_000A1A60`/`0xCE3B0` sin/cos scale into `block+0x10` and sub-record
+  `+0x18`, the pan-cell clamp, the stored `block[3]` class gate, the z/x
+  slide split, the four `0x4EEF2..0x4F00E` snap arms and the ±0x1620 pitch
+  target. The block model gained the sub-record `+0x10/+0x14` cells; the
+  handler dispatch now feeds the native tick instead of the old `rnd`
+  argument. `test_camera` pins the pan decay/clamp/band, the slide bounds and
+  sub-record offset signs, the A1A60 scale, both pitch-target formulas and all
+  eight snap arms. `make check` green 124/124; M1/M2 `cmp` exact. The live
+  camera is still class 3: the bodies are complete, but wiring
+  `fifa96_camera_view_select` is the next slice (FU351-L2c-3). Record:
+  FU-351 §13.
