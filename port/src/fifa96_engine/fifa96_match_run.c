@@ -11342,6 +11342,7 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     if (rc != 0) return rc;
     mr->ref_speech = phase == 6u ? 0x23u : 0x2Au;
     mr->global_5882a = 0;                          /* 0x8955F */
+    mr->render.camera_target.source = 0;           /* 0x895B8 / 0x895F2 */
   }
   match_run_ball_settle_clear(mr);     /* Phase 70: the release is consumed */
   mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
@@ -11354,6 +11355,25 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     mr->act.timer = 0;
   }
   return 1;
+}
+
+/* The `0x36200(2)` target for the phase-0x18/0x19 entities: the native
+ * stores a record pointer in [0x157AA3], so the engine resolves the entity
+ * id to its pool record triple. */
+static void match_run_camera_source2_entity(struct fifa96_match_run *mr,
+                                            int32_t id) {
+  uint32_t team, index;
+  const struct fifa96_match_entity *e;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return;
+  team = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  index = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  e = &mr->entities.team[team].records[index];
+  mr->render.camera_target.source = 2;
+  mr->render.camera_target.record[0] = e->pos_x;
+  mr->render.camera_target.record[1] = e->pos_y;
+  mr->render.camera_target.record[2] = e->pos_z;
 }
 
 /* FU-183 §5/§6 rank 2 (phase-16 T1): the phase-0x18 / act-2 row body — the
@@ -11371,6 +11391,11 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
 int fifa96_match_action_phase_18(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);
+  /* 0x892D7..0x892F9: contact kind 3 selects rec_first, else rec_second;
+   * [0x157AA3] = that record and 0x36200(2). */
+  match_run_camera_source2_entity(
+      mr, mr->referee.contact_kind == 3u ? mr->referee.rec_first
+                                         : mr->referee.rec_second);
   (void)match_run_ref_step_restart(mr);
   return FIFA96_OK;
 }
@@ -11392,6 +11417,8 @@ int fifa96_match_action_phase_19(struct fifa96_match_run *mr) {
   struct fifa96_ref_sequence_out out;
   int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
+  /* 0x89FA9..0x89FC3: [0x157AA3] = rec_first and 0x36200(2). */
+  match_run_camera_source2_entity(mr, mr->referee.rec_first);
   mr->referee.stage = mr->act.stage;               /* the act slot is the authority */
   mr->referee.timer = (uint16_t)mr->act.timer;
   mr->referee.delta = mr->state.frame_delta;
@@ -11442,11 +11469,16 @@ int fifa96_match_action_phase_20(struct fifa96_match_run *mr) {
     mr->act.stage = 2u;
     return FIFA96_OK;
   }
-  /* stage 2 terminal (0x8B7F6): clear the act slot, then situation 1 (BX=0). */
+  /* stage 2 terminal (0x8B7F6): clear the act slot, then situation 1 (BX=0),
+   * then 0x36200(0) at 0x8B864. */
   mr->act.id = 0;
   mr->act.stage = 0;
   mr->act.timer = 0;
-  return (int)fifa96_match_run_situation(mr, 1u);
+  {
+    int rc = (int)fifa96_match_run_situation(mr, 1u);
+    mr->render.camera_target.source = 0;
+    return rc;
+  }
 }
 
 /* FU-193 §2/§6.1 (M2 phase-17 T4) + FU-203 (M2 phase-18 T4): the phase-0x17 /

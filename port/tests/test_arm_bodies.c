@@ -670,6 +670,7 @@ static void test_arm_29_stage0_nearest_self_rng_odd(void) {
   assert(rec.target.x == 0x11 && rec.target.z == 0x33);
   assert(rec.vel_x == 0 && rec.vel_z == 0);
   assert(rec.install == 0);
+  assert(rec.target_source == 2);            /* 0x875B1 0x36200(2) */
 }
 
 /* The even RNG draw picks 0x46; flag44 != 0 makes the stage-1 chase branch
@@ -695,6 +696,7 @@ static void test_arm_29_stage0_nearest_self_rng_even_reselect(void) {
   assert(rec.chase == 1);
   assert(rec.anim_sel == 0x46);
   assert(rec.stage92 == 1);
+  assert(rec.target_source == 2);            /* 0x875B1 0x36200(2) */
 }
 
 /* The nearest record is another record: no chase, no RNG/anim; stage 1 runs in

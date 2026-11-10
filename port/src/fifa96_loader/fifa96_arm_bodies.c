@@ -469,11 +469,10 @@ fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec) {
         (int16_t)rec->ball_pos.x, (int16_t)rec->ball_pos.z, &best_distance);
     if (best == -FIFA96_ERR_INVALID) return -FIFA96_ERR_INVALID;
     if (best == (int)rec->team_index) {
-      /* 0x875A7: [0x157AA3] = [nearest+0], an unmodeled cross-record global
-       * (OL-55). 0x875AC..0x875B1: the 0x36200 stub with native EAX = 2
-       * (the derived no-op drops the store, OL-51). 0x875B6..0x875CD:
+      /* 0x875A7: [0x157AA3] = [nearest+0] (the team-base store, OL-55).
+       * 0x875AC..0x875B1: the 0x36200(2) camera source. 0x875B6..0x875CD:
        * sync + [0x10F36C] = rec. */
-      (void)fifa96_arm_stub_36200();
+      rec->target_source = 2;
       fifa96_arm_29_sync(rec);
       rec->chase = 1;
       {

@@ -331,10 +331,19 @@ static void test_tick_timer_and_completion(void) {
 static void test_phase_18_registered(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
+  mr.referee.contact_kind = 1;          /* non-3 selects rec_second */
+  mr.referee.rec_second = 13;           /* team 1 / record 2 */
+  mr.entities.team[1].records[2].pos_x = 0x123;
+  mr.entities.team[1].records[2].pos_y = 0x45;
+  mr.entities.team[1].records[2].pos_z = -0x678;
   assert(fifa96_match_phase_table[0x18].fn == fifa96_match_action_phase_18);
   assert(fifa96_match_dispatch_phase(&mr, 0x18) == FIFA96_OK);
   assert(mr.state.phase == 0x0Au);      /* the stage-0 hand-off write */
   assert(mr.ref_restart_stage == 1u);
+  assert(mr.render.camera_target.source == 2);   /* 0x892F9 */
+  assert(mr.render.camera_target.record[0] == 0x123);
+  assert(mr.render.camera_target.record[1] == 0x45);
+  assert(mr.render.camera_target.record[2] == -0x678);
   assert(fifa96_match_dispatch_phase(NULL, 0x18) == -FIFA96_ERR_INVALID);
 }
 
@@ -356,6 +365,7 @@ static void test_phase_18_act_owns_handoff(void) {
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 7u);                  /* the FK default decision */
   assert(mr.act.id == 0 && mr.act.stage == 0 && mr.act.timer == 0);
+  assert(mr.render.camera_target.source == 0);   /* 0x895F2 terminal reset */
 }
 
 /* The genuinely-live producer (the census claim): situation 9 (the referee
@@ -381,11 +391,19 @@ static void test_phase_18_producer_live_via_sit9(void) {
 static void test_phase_19_registered(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
+  mr.referee.rec_first = 13;            /* team 1 / record 2 */
+  mr.entities.team[1].records[2].pos_x = 0x234;
+  mr.entities.team[1].records[2].pos_y = 0x56;
+  mr.entities.team[1].records[2].pos_z = -0x789;
   assert(fifa96_match_phase_table[0x19].fn == fifa96_match_action_phase_19);
   assert(fifa96_match_dispatch_phase(&mr, 0x19) == FIFA96_OK);
   assert(mr.referee.stage == 1u);        /* stage 0 ran: install 0x16 + phase 0xF */
   assert(mr.act.stage == 1u);
   assert(mr.state.phase == 0x0Fu);
+  assert(mr.render.camera_target.source == 2);   /* 0x89FC3 */
+  assert(mr.render.camera_target.record[0] == 0x234);
+  assert(mr.render.camera_target.record[1] == 0x56);
+  assert(mr.render.camera_target.record[2] == -0x789);
   assert(fifa96_match_dispatch_phase(NULL, 0x19) == -FIFA96_ERR_INVALID);
 }
 
@@ -420,6 +438,12 @@ static void test_phase_20_body_direct(void) {
   assert(mr.entities.team[1].records[0].code == 0x24u);
   assert(mr.entities.team[1].records[10].code == 0x24u);
   assert(mr.act.stage == 1u);                             /* 0x8B7BB */
+  /* Stage 2's situation-1 re-dispatch is followed by 0x36200(0) at 0x8B864. */
+  mr.act.stage = 2u;
+  mr.act.timer = 0;
+  mr.render.camera_target.source = 2;
+  assert(fifa96_match_dispatch_phase(&mr, 0x20) == FIFA96_OK);
+  assert(mr.render.camera_target.source == 0);
   assert(fifa96_match_action_phase_20(NULL) == -FIFA96_ERR_INVALID);
 }
 

@@ -5063,3 +5063,17 @@ close-out below).
   (FU-142f/OL-48) and row-0x17 stays non-live (FU-201). `test_camera` pins
   the selector cases; `make check` green 124/124; M1/M2 byte-exact. Record:
   FU-351 §21.
+
+- **Phase 109 `0x36200` writer audit and live source-2 wiring (2026-11-10).**
+  The full 26-site `0x36200` audit is in FU-351 §22. Rows 0x14 and 0x25,
+  phases 0x18/0x19, the restart terminal and the phase-0x20 stage-2 terminal
+  now write their native target source and record triple: row 0x14 current
+  record, row 0x25 team record-0 (`[rec]`), phase 0x18
+  `contact_kind==3 ? rec_first : rec_second`, phase 0x19 `rec_first`, and
+  the source-0 focus resets at `0x895B8`/`0x895F2`/`0x8B864`. Row 29's body
+  now records its `0x875B1` source-2 write, though its entry stays unwired
+  (FU-142f/OL-48). The remaining source-2 site is the unported set-piece
+  staging `0x83937`; the keeper source-0 sub-bodies stay with their owners.
+  `test_engine_match_handlers`, `test_engine_match_act` and
+  `test_arm_bodies` pin the new targets. `make check` green 124/124; M1/M2
+  byte-exact. Record: FU-351 §22.

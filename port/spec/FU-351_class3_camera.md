@@ -959,3 +959,55 @@ side-1 maximum and the NULL cases. `make check` **124/124**; M1
 **Remaining.** The source-4 live producer needs the `0x515A6` replay
 camera state machine plus the `0x15A998/9E` activity table. Neither is
 part of the camera-pose spine; the selector body is ready for them.
+
+## 22. FU351-L2j `0x36200` writer audit (2026-11-10)
+
+`FUN_00036200` is exactly `MOV [0x105FC4],EAX; RET` (`0x36200..0x36205`).
+Fresh `get_xrefs_to 0x36200` = **26** call sites. The source value is the
+preceding `EAX`; `0` restores the focus, `2` the current/selected record,
+`3` the ball slot. The live ported bodies now write their exact source:
+
+| Site | Owner | Source | Status |
+| --- | --- | --- | --- |
+| `0x8BC43` | `FUN_0008BAF0` phase 0xC | 3 | wired (`render.camera_target.source = 3`) |
+| `0x86A71` | row 2A pre-dispatch | 2 | wired, current record |
+| `0x86B7E` | row 2A arm 2 | 2 | wired, current record |
+| `0x87154` | row 28 arm 0 | 2 | wired, team record-0 |
+| `0x8787F` | row 0x14 head | 2 | wired, current record |
+| `0x88101` | row 0x25 head | 2 | wired, team record-0 (`[rec]`) |
+| `0x892F9` | phase 0x18 head | 2 | wired, `contact_kind==3 ? rec_first : rec_second` |
+| `0x89FC3` | phase 0x19 head | 2 | wired, `rec_first` |
+| `0x895B8`/`0x895F2` | restart terminal | 0 | wired, focus reset |
+| `0x8B864` | phase 0x20 stage 2 | 0 | wired after the situation-1 dispatch |
+| `0x8BA97` | `FUN_0008B9CC` extra-time setup | 3 | setup site not separately ported; the phase-0xC source-3 writer covers the engine period-end path |
+| `0x875B1` | row 29 stage 0 | 2 | body writes `target_source = 2`; entry is unwired (FU-142f/OL-48) |
+| `0x83937` | `FUN_00083428` set-piece staging | 2 | body unported (L266-4) |
+| `0x4B204`/`0x4B283` | `FUN_0004B100` init | 0 | reset default |
+| `0x4C35B` | `FUN_0004C324` | 0 | reset default |
+| `0x744D6`/`0x744E8` | `FUN_000744D4` | 0 | reset default |
+| `0x75125`/`0x75165` | keeper body | 0 | unported keeper sub-bodies |
+| `0x757E0`/`0x75805`/`0x75841` | keeper body | 0 | unported keeper sub-bodies |
+| `0x8339B` | `FUN_000832A8` | 0 | unported set-piece staging |
+| `0x92E36` | `FUN_00092E2C` | 0 | reset default |
+
+**Landed.** Rows 0x14/0x25, phases 0x18/0x19, the restart terminal and the
+phase-0x20 terminal write their native source and target triple. The row-0x25
+target is the team record-0 base (`[0x157AA3] = [rec]`), matching row 28;
+phase 0x18 uses `contact_kind == 3 ? rec_first : rec_second`; phase 0x19 uses
+`rec_first`. The source-0 resets restore the focus after the restart and after
+the phase-0x20 situation-1 re-dispatch.
+
+**Verification.** `test_engine_match_handlers` pins the row-0x14 current
+record and the row-0x25 team record-0 target. `test_engine_match_act` pins
+the phase-0x18 rec_second, phase-0x19 rec_first, the restart focus reset and
+the phase-0x20 stage-2 reset. `test_arm_bodies` pins the row-29
+`target_source = 2` body write. `make check` **124/124**; M1/M2 byte-exact
+(non-live tapes never read `camera_target`).
+
+**Remaining.** The source-2 write inside the unported set-piece staging
+(`0x83937`) and the source-0 keeper sub-body writes stay with their owner
+bodies; row 29's source-2 store is on the unwired row-29 entry. The
+`0x8BA97` extra-time-setup source-3 site inside `FUN_0008B9CC` is not
+separately ported (the engine's derived period-end chooser writes the
+phase-0xC source 3 instead). The source-4 replay producer remains FU-351
+§21.

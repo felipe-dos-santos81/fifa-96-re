@@ -6356,9 +6356,13 @@ static int fifa96_match_action_14(struct fifa96_match_run *mr) {
   uint8_t stage;
   if (e == NULL) return -FIFA96_ERR_INVALID;
   /* head `0x87854..0x8787F`: timer89 += (zero-extended) delta; the
-   * `[0x157AA3] = rec` write and the `0x974F0`/`0x36200` sinks are legs
-   * (FU184-L4). */
+   * `[0x157AA3] = rec` write and the `0x36200(2)` camera target. The
+   * `0x974F0` sound sink stays a leg (FU184-L4). */
   r->timer89 += (uint16_t)r->delta;                 /* 0x8785C */
+  mr->render.camera_target.source = 2;               /* 0x87874..0x8787F */
+  mr->render.camera_target.record[0] = r->pos_x;
+  mr->render.camera_target.record[1] = r->pos_y;
+  mr->render.camera_target.record[2] = r->pos_z;
   stage = r->stage92;
   if (stage == 0u) {                                /* 0x878A1 */
     fifa96_action_vec3 base;
@@ -7662,11 +7666,20 @@ int fifa96_match_action_25(struct fifa96_match_run *mr) {
   e = match_sp_entity(mr, NULL, NULL);
   if (e == NULL) return -FIFA96_ERR_INVALID;
   /* head `0x880D4..0x88101`: timer89 += (zero-extended) delta; the
-   * `0x974F0(0x9C4)` sound, `[0x157AA3] = [rec]` (team) and `0x36200(2)`
-   * camera sinks are legs (FU243-L4). The active `0x88106..0x881D2` block
-   * (target := [team+0x59] + the radius-0xC0 `0x114E04` fold, then the
-   * `0x8DCD4` metric + `0x79C50` face) is FU243-L4 (no team base position). */
+   * `0x974F0(0x9C4)` sound stays a leg (FU243-L4). `[0x157AA3] = [rec]`
+   * is the record's team base, so the `0x36200(2)` camera target is the
+   * team record-0 triple. The active `0x88106..0x881D2` block (target :=
+   * [team+0x59] + the radius-0xC0 `0x114E04` fold, then the `0x8DCD4`
+   * metric + `0x79C50` face) is FU243-L4 (no team base position). */
   r->timer89 += (uint16_t)r->delta;                 /* 0x880DC..0x880E9 */
+  if (e->team < FIFA96_MATCH_ENTITY_TEAMS) {
+    const struct fifa96_match_entity *base =
+        &mr->entities.team[e->team].records[0];
+    mr->render.camera_target.source = 2;             /* 0x880F4..0x88101 */
+    mr->render.camera_target.record[0] = base->pos_x;
+    mr->render.camera_target.record[1] = base->pos_y;
+    mr->render.camera_target.record[2] = base->pos_z;
+  }
   stage = r->stage92;
   if (stage > 6u) return FIFA96_OK;                 /* 0x881D8 JA 0x886A9 */
   if (stage == 0u) {                                /* arm 0 (0x881ED) */

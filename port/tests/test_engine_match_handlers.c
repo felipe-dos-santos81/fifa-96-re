@@ -1173,7 +1173,15 @@ static void test_action_25_counted_refutation(void) {
   assert(strstr(row->evidence, "REFUTED") != NULL);
   assert(strstr(row->evidence, "0x8D7AD") != NULL);
   assert(action_expect[0x25] == FIFA96_OK);
+  f.mr.record.entity_id = 13;                 /* team 1 / record 2 */
+  f.mr.entities.team[1].records[0].pos_x = 0x321;
+  f.mr.entities.team[1].records[0].pos_y = 0x54;
+  f.mr.entities.team[1].records[0].pos_z = -0x765;
   assert(fifa96_match_dispatch_action(&f.mr, 0x25) == FIFA96_OK);
+  assert(f.mr.render.camera_target.source == 2);   /* 0x88101 */
+  assert(f.mr.render.camera_target.record[0] == 0x321);
+  assert(f.mr.render.camera_target.record[1] == 0x54);
+  assert(f.mr.render.camera_target.record[2] == -0x765);
   drop_fixture(&f);
 }
 
@@ -5969,6 +5977,10 @@ static void test_action_14_runs_body(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x14) == FIFA96_OK);
   assert(f.mr.record.timer89 == 5);
   assert(f.mr.record.stage92 == 0);
+  assert(f.mr.render.camera_target.source == 2);     /* 0x8787F */
+  assert(f.mr.render.camera_target.record[0] == 0x100);
+  assert(f.mr.render.camera_target.record[1] == 0x40);
+  assert(f.mr.render.camera_target.record[2] == 0x200);
 
   /* recompute the expected scatter from the run RNG (the same eight draws). */
   rng_copy = f.mr.rng;
