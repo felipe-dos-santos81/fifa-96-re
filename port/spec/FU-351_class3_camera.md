@@ -983,7 +983,7 @@ preceding `EAX`; `0` restores the focus, `2` the current/selected record,
 | `0x8B864` | phase 0x20 stage 2 | 0 | wired after the situation-1 dispatch |
 | `0x8BA97` | `FUN_0008B9CC` extra-time setup | 3 | wired through the chooser `camera_source` on the tied-score/no-probe arm |
 | `0x875B1` | row 29 stage 0 | 2 | body writes `target_source = 2`; entry is unwired (FU-142f/OL-48) |
-| `0x83937` | `FUN_00083428` set-piece staging | 2 | body unported (L266-4) |
+| `0x83937` | `FUN_00083428` slot 0x20 receiver cut | 2 | wired on the second 0x20 edge; the other machine branches stay legs |
 | `0x4B204`/`0x4B283` | `FUN_0004B100` init | 0 | reset default |
 | `0x4C35B` | `FUN_0004C324` | 0 | reset default |
 | `0x744D6`/`0x744E8` | `FUN_000744D4` | 0 | reset default |
@@ -1006,15 +1006,18 @@ bit 0x10 focus resets. `test_engine_match_act`
 pins the phase-0x18 rec_second, phase-0x19 rec_first, the restart focus
 reset and the phase-0x20 stage-2 reset. `test_phase_drivers` pins the
 `0x8BA97` source-3 `camera_source` on the tied-score/no-probe arm.
-`test_arm_bodies` pins the row-29 `target_source = 2` body write. `make
-check` **124/124**; M1/M2 byte-exact (non-live tapes never read
-`camera_target`).
+`test_engine_match_handlers` also pins the row-0x10 second-0x20-edge
+receiver cut (`0x83937` source 2). `test_arm_bodies` pins the row-29
+`target_source = 2` body write. `test_outfield` pins the
+`fifa96_sp_target_triple`/`fifa96_sp_pick_receiver` helpers. `make check`
+**124/124**; M1/M2 byte-exact (non-live tapes never read `camera_target`).
 
-**Remaining.** The source-2 write inside the unported input-driven set-piece
-machine (`0x83937`, `FUN_00083428`) stays with its owner body; row 29's
-source-2 store is on the unwired row-29 entry. The source-4 replay target
-writer is FU-351 §23; its non-goal `FUN_0008ED40` activity updates and the
-`0x515A6`/`0x3BB1C` replay UI trigger remain.
+**Remaining.** The `0x83937` camera branch is wired, but the rest of
+`FUN_00083428` (the `0x158780` sub-index timers, the delivery-code returns
+1/6/3/4/5/2 and the `FUN_000786A0`/`FUN_0004C374`/`FUN_000361A4` sinks)
+stays a leg. Row 29's source-2 store is on the unwired row-29 entry. The
+source-4 replay target writer is FU-351 §23; its non-goal `FUN_0008ED40`
+activity updates and the `0x515A6`/`0x3BB1C` replay UI trigger remain.
 
 ## 23. FU351-L2k source-4 replay target writer (2026-11-10)
 

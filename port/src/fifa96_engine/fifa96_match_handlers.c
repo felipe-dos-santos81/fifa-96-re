@@ -1687,11 +1687,46 @@ static void match_sp_snap(struct fifa96_match_run_record *r) {
  * two cells the row stages observe are modelled. */
 static void match_sp_setup_832a8(struct fifa96_match_run *mr,
                                  struct fifa96_match_run_record *r) {
+  uint32_t team;
   mr->sp_flag_158784 = 0;
   r->timer89 = 0;
+  if (r->entity_id >= 0) team = (uint32_t)r->entity_id / FIFA96_MATCH_ENTITY_RECORDS;
+  else team = FIFA96_MATCH_ENTITY_TEAMS;
+  if (team < FIFA96_MATCH_ENTITY_TEAMS) {
+    const struct fifa96_match_team *t = &mr->entities.team[team];
+    fifa96_sp_receiver_candidate cand[FIFA96_MATCH_ENTITY_RECORDS];
+    int32_t goal[3] = {mr->goal_snap_x, mr->goal_snap_y, mr->goal_snap_z};
+    int32_t focus[3] = {mr->render.camera.pos_x, mr->render.camera.pos_y,
+                        mr->render.camera.pos_z};
+    int32_t chosen = t->chosen >= 0
+                         ? t->chosen % (int32_t)FIFA96_MATCH_ENTITY_RECORDS
+                         : -1;
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      const struct fifa96_match_entity *e = &t->records[i];
+      cand[i].x = (int16_t)e->pos_x;
+      cand[i].z = (int16_t)e->pos_z;
+      cand[i].has_slot = e->has_slot;
+      cand[i].skip_98 = e->skip_98;
+      cand[i].skip_9a = e->skip_9a;
+    }
+    /* 0x832C3/0x832EB: the FUN_00083164 triple seeds the 0x15879C staging
+     * copy; 0x83305/0x8330A picks the receiver with FUN_0008DB6C. */
+    fifa96_sp_target_triple(mr->phase_machine.state, goal, focus,
+                            r->pos_x, r->pos_z, t->side,
+                            mr->entities.ball.x, mr->entities.ball.z,
+                            mr->sp_triple_15879c);
+    mr->sp_recv_1587ac = fifa96_sp_pick_receiver(
+        cand, FIFA96_MATCH_ENTITY_RECORDS, r->active, chosen,
+        t->search_gate, (int16_t)mr->sp_triple_15879c[0],
+        (int16_t)mr->sp_triple_15879c[2], 0);
+    /* 0x8336C/0x83388 latch the staging word; the b6/b7 tail is the row's
+     * param_2 byte, which the derived call sites do not carry. */
+    mr->sp_b0_1587b0 = 1;
+    mr->sp_b6_1587b6 = 0;
+    mr->sp_b7_1587b7 = 0;
+  }
   /* 0x83332/0x8339B: the no-slot arm's 0x36200(0) restores the focus. The
-   * slot arm's 0x361B0 pan request and the full 0x1587xx staging block stay
-   * with the FUN_000832A8 owner leg. */
+   * slot arm's 0x361B0 pan request stays with the FUN_000832A8 owner leg. */
   if (r->has_slot == 0u) mr->render.camera_target.source = 0;
 }
 
@@ -1703,8 +1738,55 @@ static void match_sp_setup_832a8(struct fifa96_match_run *mr,
  * `FUN_00083428` machine. The derived completion applies the same timer gate
  * plus draw so an armed row still resolves; the RNG width is the engine's
  * 16-bit draw (native 32-bit, cadence leg). */
+static int match_sp_receiver_cut(struct fifa96_match_run *mr,
+                                 struct fifa96_match_run_record *r) {
+  uint32_t team;
+  uint32_t pick;
+  const struct fifa96_match_team *t;
+  fifa96_sp_receiver_candidate cand[FIFA96_MATCH_ENTITY_RECORDS];
+  int32_t chosen;
+  if (r->has_slot == 0u) return 0;
+  if ((mr->slot.released & 0x20u) == 0u) return 0;
+  if ((mr->slot.prev_mapped & 0x0Fu) != 0u) return 0;
+  if (mr->sp_b6_1587b6 == 0u && mr->sp_b7_1587b7 == 0u) {
+    /* 0x83428's first 0x20 edge stages the 0x15879C triple and latches b6. */
+    mr->sp_b6_1587b6 = 1;
+    return 1;
+  }
+  if (r->entity_id < 0) return 0;
+  team = (uint32_t)r->entity_id / FIFA96_MATCH_ENTITY_RECORDS;
+  if (team >= FIFA96_MATCH_ENTITY_TEAMS) return 0;
+  t = &mr->entities.team[team];
+  chosen = t->chosen >= 0
+               ? t->chosen % (int32_t)FIFA96_MATCH_ENTITY_RECORDS
+               : -1;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &t->records[i];
+    cand[i].x = (int16_t)e->pos_x;
+    cand[i].z = (int16_t)e->pos_z;
+    cand[i].has_slot = e->has_slot;
+    cand[i].skip_98 = e->skip_98;
+    cand[i].skip_9a = e->skip_9a;
+  }
+  int32_t picked = fifa96_sp_pick_receiver(
+      cand, FIFA96_MATCH_ENTITY_RECORDS, r->active, chosen, t->search_gate,
+      (int16_t)mr->sp_triple_15879c[0], (int16_t)mr->sp_triple_15879c[2], 0);
+  if (picked < 0 || t->records[picked].has_slot != 0u) return 1;
+  pick = (uint32_t)picked;
+  mr->sp_recv_1587ac = (int32_t)pick;
+  mr->sp_b0_1587b0 = 0;
+  mr->sp_b6_1587b6 = 0;
+  /* 0x83937: [0x157AA3] = the re-picked receiver and 0x36200(2). */
+  mr->render.camera_target.source = 2;
+  mr->render.camera_target.record[0] = t->records[pick].pos_x;
+  mr->render.camera_target.record[1] = t->records[pick].pos_y;
+  mr->render.camera_target.record[2] = t->records[pick].pos_z;
+  return 1;
+}
+
 static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
   uint16_t draw = 0;
+  if (match_sp_receiver_cut(mr, &mr->record)) return 0;
   if (mr->record.timer89 <= 0x78) return 0;
   if (fifa96_rng_step(&mr->rng, &draw) != 0) return 0;
   mr->sp_delivery = (uint8_t)((draw % span) < 3u ? 3u : 7u);

@@ -5095,3 +5095,17 @@ close-out below).
   trigger remain legs. `test_engine_match_render` pins the `0,1,0` and
   `0,1,1` ring choices, the arm/exit and the score-event append. `make
   check` green 124/124; M1/M2 byte-exact. Record: FU-351 §23.
+
+- **Phase 111 set-piece receiver cut and helper port (2026-11-10).**
+  `fifa96_sp_target_triple` (`FUN_00083164`) and
+  `fifa96_sp_pick_receiver` (`FUN_0008DB6C` + `FUN_0008DC68` metric +
+  `FUN_000A1860` Shell-sort tie) are ported in `fifa96_outfield.c` with
+  `test_outfield` coverage. `match_sp_setup_832a8` now fills the
+  `0x157A77`/`0x15879C` triple and the picked receiver, and the
+  `FUN_00083428` receiver-cut branch is wired: the first `released & 0x20`
+  edge latches `[0x1587B6]`, the second re-picks and stages `0x83937`
+  source 2 with the receiver position. The rest of the delivery/timer
+  machine (returns 1/6/3/4/5/2 and the `0x786A0`/`0x4C374`/`0x361A4`
+  sinks) remains the L266-4 leg. `test_engine_match_handlers` pins the
+  two-edge cut. `make check` green 124/124; M1/M2 byte-exact. Record:
+  FU-351 §22, FU-275 §3.

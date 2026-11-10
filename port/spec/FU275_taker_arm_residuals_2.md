@@ -531,3 +531,18 @@ A fixture that stages Layer 1 is a fake.
 - No re-pin demanded: the live `0x11` path is already wired/tape-pinned; the
   producer work for rows 0x10/0x12/0x13 (scanner throw-in, FU-150 foul
   adjudicator) is outside this slice's owner set.
+
+## 3. Implementation note (2026-11-10)
+
+L266-2 and L266-3 are ported as `fifa96_sp_target_triple` and
+`fifa96_sp_pick_receiver` in `fifa96_outfield.c` (tests in `test_outfield`):
+the four `FUN_00083164` branches, the six `FUN_0008DB6C` filters, the
+`FUN_0008DC68` metric and the `FUN_000A1860` Shell-sort tie order.
+
+`match_sp_setup_832a8` now fills the `0x157A77`/`0x15879C` staging triple
+and the picked receiver. The `FUN_00083428` receiver-cut branch is wired:
+the first `released & 0x20` edge latches `[0x1587B6]`, the second re-picks
+through `fifa96_sp_pick_receiver` and stages `0x36200(2)` with the receiver
+position. The other machine branches (the `0x158780` sub-index timers, the
+delivery-code returns 1/6/3/4/5/2 and the `0x786A0`/`0x4C374`/`0x361A4`
+sinks) remain the L266-4 legs.

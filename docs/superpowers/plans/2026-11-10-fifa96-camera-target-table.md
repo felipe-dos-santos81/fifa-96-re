@@ -34,6 +34,8 @@ and the replay sound leg with exact native evidence.
     phase-0x18/0x19/restart/phase-0x20 writes (FU-351 §22).
 12. Wire the source-4 replay target writer from the engine roster order and
     goal ring (FU-351 §23).
+13. Port the set-piece target-triple/receiver helpers and the `0x83937`
+    receiver-cut branch (FU-275 §3).
 
 ## Remaining
 

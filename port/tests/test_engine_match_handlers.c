@@ -416,6 +416,48 @@ static void test_action_10_runs_throw_in_body(void) {
   drop_fixture(&f);
 }
 
+static void test_action_10_receiver_cut(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &f.mr.entities.team[0].records[i];
+    e->active = 1;
+    e->pos_x = (int32_t)(i * 0x100);
+    e->pos_z = 0;
+    e->has_slot = 0;
+    e->skip_98 = 0;
+    e->skip_9a = 0;
+  }
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.frame = 4;
+  f.mr.record.delta = 0x80;
+  f.mr.record.stage92 = 0;
+  f.mr.record.has_slot = 1;
+  f.mr.state.phase = 3u;
+  f.mr.session_gate_14c32a = 1;
+  f.mr.entities.team[0].records[1].has_slot = 1;   /* the taker holds the slot */
+  f.mr.slot.entity = 1;
+  f.mr.slot.released = 0x20;                       /* the 0x83428 code */
+  f.mr.slot.prev_mapped = 0;
+
+  /* First 0x20 edge: stage 0 -> 1 -> 2, then the receiver branch latches b6
+   * and waits (no camera cut yet). */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(f.mr.render.camera_target.source != 2);
+
+  /* Second 0x20 edge: FUN_0008DE8C re-picks the free receiver and the
+   * 0x83937 branch stages source 2 with that record's position. */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.render.camera_target.source == 2);
+  assert(f.mr.render.camera_target.record[0] == 0x200);   /* record 2 */
+  assert(f.mr.render.camera_target.record[1] == 0);
+  assert(f.mr.render.camera_target.record[2] == 0);
+  drop_fixture(&f);
+}
+
 /* FU-157 §4.2/§5 (T1) + FU-162 §3.3.A (T3 fix): the throw-in stage-3 camera
  * cut restores the native `[0x157750] = 0x80`. Native 0x85911..0x85919
  * (`MOV EAX,0x80`; the record position MOVSD x3; `MOV [0x00157750],EAX`) then
@@ -6328,6 +6370,7 @@ int main(void) {
   test_action_0b_duel_gates_and_choice();
   test_action_1E_runs_claim_place();
   test_action_10_runs_throw_in_body();
+  test_action_10_receiver_cut();
   test_live_throw_in_camera_y_cut();
   test_action_0e_live_jump_selector();
   test_action_11_runs_corner_body();

@@ -1402,6 +1402,14 @@ struct fifa96_match_run {
    *    default is 0 and the input-driven `FUN_00083428` rows 1..6 stay legs. */
   uint8_t sp_flag_158784;
   uint8_t sp_delivery;
+  /* FU275 L266-1/L266-4: the FUN_000832A8 staging cells. The target triple
+   * is the `0x15879C` copy; `sp_recv_1587ac` is the picked receiver record,
+   * and b0/b6/b7 are the `0x1587B0/6/7` latches the 0x83937 branch reads. */
+  int32_t sp_triple_15879c[3];
+  int32_t sp_recv_1587ac;
+  uint8_t sp_b0_1587b0;
+  uint8_t sp_b6_1587b6;
+  uint8_t sp_b7_1587b7;
   /* FU274 §1.1: `byte[0x157821]` -- row 0x10's far-ball re-queue gate
    * (`0x85CE4`) and the keeper predictor's pan gate (`0x739BB`/`0x7489C`) --
    * is one native cell owned by the camera block: `render.camera.pan_counter`

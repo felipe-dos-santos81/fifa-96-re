@@ -1813,7 +1813,66 @@ static void test_select_success_swap(void) {
   assert(fifa96_outfield_select_step(&s, NULL) == ROW04_INVALID);
 }
 
+static void test_sp_helpers(void) {
+  int32_t goal[3] = {-1, 2, 3};
+  int32_t focus[3] = {-5, 0, 0};
+  int32_t triple[3] = {9, 9, 9};
+  fifa96_sp_receiver_candidate c[11];
+
+  fifa96_sp_target_triple(3, goal, focus, 0, 0, 0, 0, 0, triple);
+  assert(triple[0] == -0x630 && triple[1] == 2 && triple[2] == 3);
+  goal[0] = 5;
+  fifa96_sp_target_triple(3, goal, focus, 0, 0, 0, 0, 0, triple);
+  assert(triple[0] == 0x630 && triple[1] == 2 && triple[2] == 3);
+  triple[0] = triple[1] = triple[2] = 9;
+  fifa96_sp_target_triple(4, goal, focus, 0, 0, 0, 0, 0, triple);
+  assert(triple[0] == -0x630 && triple[1] == 0 && triple[2] == 0x990);
+  focus[0] = 5;
+  fifa96_sp_target_triple(4, goal, focus, 0, 0, 1, 0, 0, triple);
+  assert(triple[0] == 0x630 && triple[1] == 0 && triple[2] == -0x990);
+  triple[0] = triple[1] = triple[2] = 9;
+  fifa96_sp_target_triple(5, goal, focus, 100, 200, 0, 500, -500, triple);
+  assert(triple[0] == 100 + 0x140 && triple[1] == 0 &&
+         triple[2] == 200 - 0x140);
+  triple[0] = triple[1] = triple[2] = 9;
+  fifa96_sp_target_triple(1, goal, focus, 0, 0, 0, 0, 0, triple);
+  assert(triple[0] == 9 && triple[1] == 9 && triple[2] == 9);
+
+  memset(c, 0, sizeof c);
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 0) == 0);
+  c[0].has_slot = 1;
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 0) == 1);
+  c[1].skip_98 = 1;
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 0) == 2);
+  c[2].skip_9a = 1;
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 0) == 3);
+
+  /* The record-0 gate, skip index and chosen record are native filters. */
+  memset(c, 0, sizeof c);
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 0, 0, 0, 0) == 1);
+  assert(fifa96_sp_pick_receiver(c, 11, 0, -1, 1, 0, 0, 0) == 1);
+  assert(fifa96_sp_pick_receiver(c, 11, -1, 0, 1, 0, 0, 0) == 1);
+
+  /* Nearest wins; equal metrics keep the earlier index. */
+  memset(c, 0, sizeof c);
+  c[5].x = 100;
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 0) == 0);
+  for (uint32_t i = 0; i < 11; i++) c[i].x = 100;
+  c[1].x = 10;
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 0) == 1);
+
+  /* The fallback scan ignores skip_98 and only checks holder/0x9A. */
+  for (uint32_t i = 0; i < 11; i++) c[i].has_slot = 1;
+  c[4].has_slot = 0;
+  c[4].skip_98 = 1;
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 1) == 4);
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 1) == 4);
+  c[4].has_slot = 1;
+  assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 1) == -1);
+}
+
 int main(void) {
+  test_sp_helpers();
   test_table_accessors();
   test_rule_match();
   test_rules_run();

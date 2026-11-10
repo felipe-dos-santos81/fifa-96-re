@@ -556,3 +556,33 @@ typedef struct fifa96_outfield_row08_out {
 
 fifa96_err_t fifa96_outfield_row08_step(const fifa96_outfield_row08_state *state,
                                         fifa96_outfield_row08_out *out);
+
+/* FU-275 L266-1/L266-3: the set-piece throw staging helpers.
+ * `fifa96_sp_target_triple` is FUN_00083164 (`0x83164..0x832A6`): the
+ * `0x157A77` staging triple. Mode 3 copies the goal snapshot and forces
+ * x = ±0x630; mode 4 is the focus-side x (±0x630), y = 0, z = ±0x990;
+ * mode >= 5 is the record-relative ball offset clamped to ±0x140; modes
+ * 0..2 leave the triple unchanged.
+ * `fifa96_sp_pick_receiver` is FUN_0008DB6C (`0x8DB6C..0x8DC49`): the
+ * nearest free receiver under the 0x8DC68 metric, filtering bound holders,
+ * the skip index, the chosen record, record 0 while the team search gate is
+ * clear, and the +0x98/+0x9A exclusions. The FUN_000A1860 Shell-sort tie
+ * order is reproduced exactly; `want_fallback` is the native param_4 scan.
+ * Both return the selected record index, or -1 when none is eligible. */
+typedef struct fifa96_sp_receiver_candidate {
+  int16_t x, z;
+  uint8_t has_slot;
+  uint8_t skip_98;
+  uint8_t skip_9a;
+} fifa96_sp_receiver_candidate;
+
+void fifa96_sp_target_triple(int32_t mode, const int32_t goal_snap[3],
+                             const int32_t focus[3], int32_t rec_x, int32_t rec_z,
+                             uint8_t side, int32_t ball_x, int32_t ball_z,
+                             int32_t triple[3]);
+
+int32_t fifa96_sp_pick_receiver(const fifa96_sp_receiver_candidate *candidates,
+                                uint32_t count, int32_t skip_index,
+                                int32_t chosen_index, int32_t search_gate,
+                                int16_t from_x, int16_t from_z,
+                                int32_t want_fallback);

@@ -978,3 +978,94 @@ fifa96_err_t fifa96_outfield_row08_step(const fifa96_outfield_row08_state *state
     return FIFA96_OK;
   }
 }
+
+/* The native FUN_000A1860 Shell sort on the {index, -metric} pairs. Sorting
+ * the raw metric ascending with `>=` is the same order: a tie keeps the
+ * earlier candidate, exactly as the native `<=` compare on -metric. */
+static int32_t sp_receiver_sort(int32_t *index, int32_t *metric, int32_t count) {
+  int32_t gap = count;
+  for (;;) {
+    gap >>= 1;
+    if (gap < 1) return count > 0 ? index[0] : -1;
+    for (int32_t i = gap; i < count; i++) {
+      for (int32_t j = i - gap; j >= 0; j -= gap) {
+        int32_t k = gap + j;
+        if (metric[k] >= metric[j]) break;
+        int32_t t = metric[j];
+        metric[j] = metric[k];
+        metric[k] = t;
+        t = index[j];
+        index[j] = index[k];
+        index[k] = t;
+      }
+    }
+  }
+}
+
+void fifa96_sp_target_triple(int32_t mode, const int32_t goal_snap[3],
+                             const int32_t focus[3], int32_t rec_x, int32_t rec_z,
+                             uint8_t side, int32_t ball_x, int32_t ball_z,
+                             int32_t triple[3]) {
+  int32_t dx, dz;
+  if (!triple) return;
+  if (mode == 3) {
+    if (goal_snap) {
+      triple[0] = goal_snap[0];
+      triple[1] = goal_snap[1];
+      triple[2] = goal_snap[2];
+    }
+    triple[0] = triple[0] < 0 ? -0x630 : 0x630;
+    return;
+  }
+  if (mode == 4) {
+    triple[0] = (focus && focus[0] < 0) ? -0x630 : 0x630;
+    triple[1] = 0;
+    triple[2] = side == 1u ? -0x990 : 0x990;
+    return;
+  }
+  if (mode >= 5) {
+    dx = ball_x - rec_x;
+    dz = ball_z - rec_z;
+    if (dx < -0x140) dx = -0x140;
+    else if (dx > 0x140) dx = 0x140;
+    if (dz < -0x140) dz = -0x140;
+    else if (dz > 0x140) dz = 0x140;
+    triple[0] = rec_x + dx;
+    triple[1] = 0;
+    triple[2] = rec_z + dz;
+  }
+}
+
+int32_t fifa96_sp_pick_receiver(const fifa96_sp_receiver_candidate *candidates,
+                                uint32_t count, int32_t skip_index,
+                                int32_t chosen_index, int32_t search_gate,
+                                int16_t from_x, int16_t from_z,
+                                int32_t want_fallback) {
+  int32_t index[16];
+  int32_t metric[16];
+  int32_t n = 0;
+  if (!candidates || count == 0u) return -1;
+  if (count > 16u) count = 16u;
+  for (uint32_t i = 0; i < count; i++) {
+    const fifa96_sp_receiver_candidate *c = &candidates[i];
+    if (c->has_slot != 0u) continue;
+    if ((int32_t)i == skip_index) continue;
+    if ((int32_t)i == chosen_index) continue;
+    if (i == 0u && search_gate == 0) continue;
+    if (c->skip_98 != 0u || c->skip_9a != 0u) continue;
+    index[n] = (int32_t)i;
+    metric[n] = fifa96_entity_distance((int16_t)(from_x - c->x),
+                                       (int16_t)(from_z - c->z));
+    n++;
+  }
+  if (n == 0) {
+    if (want_fallback != 0) {
+      for (uint32_t i = 0; i < count; i++) {
+        if (candidates[i].has_slot == 0u && candidates[i].skip_9a == 0u)
+          return (int32_t)i;
+      }
+    }
+    return -1;
+  }
+  return sp_receiver_sort(index, metric, n);
+}
