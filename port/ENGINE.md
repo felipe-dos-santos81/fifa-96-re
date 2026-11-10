@@ -4977,8 +4977,12 @@ the build also produces the windowed `fifa96` target (`make game`).
     is the staged `handler_skip` (FU-351 §16). The replay camera blend body is
     ported too: `FUN_0004CF60`'s camera snapshot, `FUN_00045069`'s cancel
     input latch, `FUN_0004F8C8`/`FUN_0004F830` with the `0x4CF7C`
-    100/300-tick start, six-field deltas and finish latch (FU-351 §17); the
-    `0x3BB1C` call site and `0x505D0` config-record switch remain open.
+    100/300-tick start, six-field deltas and finish latch (FU-351 §17); state
+    `0xB`'s action-table tail (`FUN_00036ACC`/`FUN_0004BAD8`) and the
+    `FUN_000365B0` target switch and the `0x4CF7C` head gate are ported with
+    staged tables/triples (FU-351 §18); `FUN_000974D8` is a bare `RET`. The
+    `0x3BB1C` replay call site and the `0x505D0` config-record bookkeeping
+    remain open.
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

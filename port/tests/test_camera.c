@@ -2458,6 +2458,15 @@ static void test_camera_replay_blend(void) {
   assert(fifa96_camera_replay_ease(600, 100, 300, 500) == 500);
   assert(fifa96_camera_replay_ease(600, 0, 0, 0) == 0);
 
+  /* FUN_0004CF7C's head gate: screen 7 skips the blend. */
+  memset(&state, 0, sizeof state);
+  assert(fifa96_camera_replay_begin_gated(&pose, &start, &target, &state, 7) ==
+         0);
+  assert(state.active == 0);
+  assert(fifa96_camera_replay_begin_gated(&pose, &start, &target, &state, 0) ==
+         FIFA96_OK);
+  assert(state.active == 1);
+
   assert(fifa96_camera_replay_begin(&pose, &start, &target, &state) ==
          FIFA96_OK);
   assert(pose.x == 0 && pose.y == 0 && pose.z == 0);
@@ -2542,6 +2551,108 @@ static void test_camera_replay_blend(void) {
          -FIFA96_ERR_INVALID);
   assert(fifa96_camera_replay_step(&pose, 0, 0, 0, NULL) ==
          -FIFA96_ERR_INVALID);
+}
+
+static void test_camera_action_table(void) {
+  /* FUN_000505D0 state 0xB tail: FUN_0004BAD8 -> FUN_0004BE44 slot, the
+   * 0x155AB0 12-byte entry copied to camera+0x34/38/3C, then FUN_00036ACC. */
+  int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3];
+  fifa96_camera_handler_state st;
+  fifa96_camera_pose6 pose;
+  fifa96_camera_replay_blend blend;
+  memset(table, 0, sizeof table);
+  table[0xB][0] = 100;
+  table[0xB][1] = 200;
+  table[0xB][2] = 0;
+  memset(&st, 0, sizeof st);
+  st.ratio = 0x1000;
+  st.yaw = 0xD000;
+  assert(fifa96_camera_action_target(&st, table, 1, 0, 0, 1) == 1);
+  assert(st.track_x == 100 && st.track_y == 200 && st.track_z == 0);
+  /* The point (100,0) is angle 0xC000; the 0xC00 step leaves a -0x400
+   * remainder, so yaw moves from 0xD000 to 0xCC00. */
+  assert(st.yaw == 0xCC00);
+
+  /* The positive-delta arm: point (0,-100) is angle 0x8000, yaw 0x7000. */
+  st.track_x = 0;
+  st.track_z = -100;
+  st.yaw = 0x7000;
+  fifa96_camera_yaw_approach(&st);
+  assert(st.yaw == 0x7400);
+
+  /* No event -> no slot, no target change. */
+  st.track_x = 7;
+  st.track_z = 9;
+  assert(fifa96_camera_action_target(&st, table, 0, 0, 0, 0) == 0);
+  assert(st.track_x == 7 && st.track_z == 9);
+  assert(fifa96_camera_action_target(NULL, table, 1, 0, 0, 1) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_action_target(&st, NULL, 1, 0, 0, 1) ==
+         -FIFA96_ERR_INVALID);
+
+  /* The composed state: a finished blend applies the target immediately. */
+  memset(&pose, 0, sizeof pose);
+  memset(&blend, 0, sizeof blend);
+  memset(&st, 0, sizeof st);
+  st.ratio = 0x1000;
+  st.yaw = 0xD000;
+  assert(fifa96_camera_action_step(&st, table, 1, 0, 0, 1, &pose, 0, 0, 0,
+                                   &blend) == 1);
+  assert(st.track_x == 100 && st.track_z == 0);
+  assert(st.yaw == 0xCC00);
+
+  /* An unfinished blend returns 0 without touching the target. */
+  memset(&blend, 0, sizeof blend);
+  blend.in_time = 100;
+  blend.out_time = 300;
+  blend.active = 1;
+  st.track_x = 7;
+  st.track_z = 9;
+  assert(fifa96_camera_action_step(&st, table, 1, 0, 0, 1, &pose, 100, 0, 0,
+                                   &blend) == 0);
+  assert(st.track_x == 7 && st.track_z == 9);
+  assert(fifa96_camera_action_step(NULL, table, 1, 0, 0, 1, &pose, 0, 0, 0,
+                                   &blend) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_action_step(&st, table, 1, 0, 0, 1, NULL, 0, 0, 0,
+                                   &blend) == -FIFA96_ERR_INVALID);
+}
+
+static void test_camera_target_select(void) {
+  /* FUN_000365B0's [0x105FC4] switch and the early replay fallback. */
+  const int32_t focus[3] = {1, 2, 3};
+  const int32_t pan[3] = {4, 5, 6};
+  const int32_t record[3] = {7, 8, 9};
+  const int32_t fallback[3] = {0, 0, 0};
+  int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3];
+  memset(table, 0, sizeof table);
+  table[21][0] = 21;
+  table[22][0] = 22;
+
+  assert(fifa96_camera_target_select(0, 1, 0, focus, pan, record, fallback,
+                                     table, 0) == focus);
+  assert(fifa96_camera_target_select(1, 1, 0, focus, pan, record, fallback,
+                                     table, 0) == pan);
+  assert(fifa96_camera_target_select(2, 1, 0, focus, pan, record, fallback,
+                                     table, 0) == record);
+  assert(fifa96_camera_target_select(3, 1, 0, focus, pan, record, fallback,
+                                     table, 0) == table[22]);
+  assert(fifa96_camera_target_select(4, 1, 0, focus, pan, record, fallback,
+                                     table, 21) == table[21]);
+  assert(fifa96_camera_target_select(4, 1, 0, focus, pan, record, fallback,
+                                     table, 22) == focus);
+  assert(fifa96_camera_target_select(4, 1, 0, focus, pan, record, fallback,
+                                     table, -1) == focus);
+  assert(fifa96_camera_target_select(9, 1, 0, focus, pan, record, fallback,
+                                     table, 0) == focus);
+  /* The early arm: replay_gate clear and record class -1. */
+  assert(fifa96_camera_target_select(0, 0, -1, focus, pan, record, fallback,
+                                     table, 0) == fallback);
+  assert(fifa96_camera_target_select(0, 1, -1, focus, pan, record, fallback,
+                                     table, 0) == focus);
+  assert(fifa96_camera_target_select(3, 1, 0, focus, pan, record, fallback,
+                                     NULL, 0) == NULL);
+  assert(fifa96_camera_target_select(4, 1, 0, focus, pan, record, fallback,
+                                     NULL, 0) == NULL);
 }
 
 static void test_behavior_table(void) {
@@ -3146,6 +3257,8 @@ int main(void) {
   test_camera_height_producer();
   test_replay_select();
   test_camera_replay_blend();
+  test_camera_action_table();
+  test_camera_target_select();
   puts("test_camera: ok");
   return 0;
 }

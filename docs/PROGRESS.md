@@ -4995,3 +4995,22 @@ close-out below).
   `make check` green 124/124; M1/M2 byte-exact. Remaining: the `0x3BB1C`
   call site/`0x505D0` pose switch and the `0x37114(1)` sound request.
   Record: FU-351 §17.
+
+- **Phase 105 action-table target, target selector and sound no-op (2026-11-10).**
+  The state-`0xB` camera tail is ported: `fifa96_camera_yaw_approach` is
+  `FUN_00036ACC`, `fifa96_camera_action_target` resolves the staged event
+  through `fifa96_camera_target_slot` and copies the 23-slot table, and
+  `fifa96_camera_action_step` composes the replay blend + target. The
+  `[0x105FC4]` source switch is ported as `fifa96_camera_target_select`
+  (focus/pan/record/slot-22/indexed-slot plus the `0x105FE8` replay
+  fallback), and `fifa96_camera_replay_begin_gated` models the `0x4CF7C`
+  head gate (`[0x105FFC] == 7`). The replay sound leg is closed as a
+  non-sink: `FUN_000974D8` is a bare `RET`, so `FUN_00037114(1)` has no
+  effect. `test_camera` pins both
+  yaw-approach signs, the table/no-event/NULL cases, the blend-finished and
+  unfinished action-step arms, all five target sources, the index bound,
+  the replay fallback and the NULL table/source cases. `make check` green
+  124/124; M1/M2 byte-exact. Remaining: `FUN_0004F274`'s PTR/handler side
+  effects, the `FUN_0003BB1C` replay call site and the `FUN_000505D0`
+  config-record bookkeeping; the pan/record/slot-index target producers stay
+  staged. Record: FU-351 §18.

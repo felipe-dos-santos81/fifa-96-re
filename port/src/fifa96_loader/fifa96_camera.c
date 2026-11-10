@@ -48,6 +48,31 @@ int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2) {
   return roster + (add ? 0xB : 0);
 }
 
+const int32_t *fifa96_camera_target_select(
+    int32_t source, int32_t replay_gate, int32_t record_class,
+    const int32_t *focus, const int32_t *pan, const int32_t *record,
+    const int32_t *replay_fallback,
+    const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3], int32_t index) {
+  if (replay_gate == 0 && record_class == -1)
+    return replay_fallback;
+  switch (source) {
+    case 0:
+      return focus;
+    case 1:
+      return pan;
+    case 2:
+      return record;
+    case 3:
+      return table != NULL ? table[22] : NULL;
+    case 4:
+      if (index >= 0 && index < 0x16)
+        return table != NULL ? table[index] : NULL;
+      return focus;
+    default:
+      return focus;
+  }
+}
+
 int32_t fifa96_camera_pose_axis_a(int32_t track_delta, int32_t event_slot,
                                   int32_t ac2, int32_t *latch) {
   int32_t out;
@@ -1676,6 +1701,15 @@ int fifa96_camera_replay_begin(fifa96_camera_pose6 *pose,
   return FIFA96_OK;
 }
 
+int fifa96_camera_replay_begin_gated(fifa96_camera_pose6 *pose,
+                                     const fifa96_camera_pose6 *start,
+                                     const fifa96_camera_pose6 *target,
+                                     fifa96_camera_replay_blend *state,
+                                     int32_t screen_105ffc) {
+  if (screen_105ffc == 7) return 0;
+  return fifa96_camera_replay_begin(pose, start, target, state);
+}
+
 int fifa96_camera_replay_step(fifa96_camera_pose6 *pose, int32_t tick,
                               int32_t cancel_input, int32_t view_mode,
                               fifa96_camera_replay_blend *state) {
@@ -1717,6 +1751,58 @@ int fifa96_camera_replay_step(fifa96_camera_pose6 *pose, int32_t tick,
                 fifa96_camera_replay_ease(state->dratio, state->in_time,
                                           state->out_time, state->elapsed);
   return 0;
+}
+
+void fifa96_camera_yaw_approach(fifa96_camera_handler_state *st) {
+  int32_t angle, delta, step, t;
+  if (!st) return;
+  angle = (int32_t)((0u - (uint32_t)camera_atan16(st->track_x - st->pos_x,
+                                                   st->track_z - st->pos_z)) &
+                    0xFFFF);
+  delta = (int32_t)(((uint32_t)angle - (uint32_t)st->yaw) & 0xFFFF);
+  if (delta > 0x8000) delta -= 0x10000;
+  step = camera_mul32(st->ratio, 3);
+  step >>= 2;
+  if (delta < 1) {
+    t = step + delta;
+    if (t < 0)
+      st->yaw = (int32_t)(((uint32_t)st->yaw + (uint32_t)t) & 0xFFFF);
+  } else {
+    t = step - delta;
+    if (t < 0)
+      st->yaw = (int32_t)(((uint32_t)st->yaw - (uint32_t)t) & 0xFFFF);
+  }
+}
+
+int fifa96_camera_action_target(
+    fifa96_camera_handler_state *st,
+    const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3], int32_t event_present,
+    int32_t event_roster, int32_t event_side, int32_t ac2) {
+  int32_t slot;
+  if (!st || !table) return -FIFA96_ERR_INVALID;
+  slot = event_present ? fifa96_camera_target_slot(event_roster, event_side, ac2)
+                       : -1;
+  if (slot < 0 || slot >= FIFA96_CAMERA_ACTION_SLOTS) return 0;
+  st->track_x = table[slot][0];
+  st->track_y = table[slot][1];
+  st->track_z = table[slot][2];
+  fifa96_camera_yaw_approach(st);
+  return 1;
+}
+
+int fifa96_camera_action_step(
+    fifa96_camera_handler_state *st,
+    const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3], int32_t event_present,
+    int32_t event_roster, int32_t event_side, int32_t ac2,
+    fifa96_camera_pose6 *pose, int32_t tick, int32_t cancel_input,
+    int32_t view_mode, fifa96_camera_replay_blend *blend) {
+  int rc;
+  if (!st || !table || !pose || !blend) return -FIFA96_ERR_INVALID;
+  rc = fifa96_camera_replay_step(pose, tick, cancel_input, view_mode, blend);
+  if (rc < 0) return rc;
+  if (rc == 0) return 0;
+  return fifa96_camera_action_target(st, table, event_present, event_roster,
+                                     event_side, ac2);
 }
 
 /* The default-arm handler dispatch (FUN_000505D0's `(*&0x108B80)[iVar6]`).

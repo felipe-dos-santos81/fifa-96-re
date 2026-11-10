@@ -866,11 +866,69 @@ int fifa96_camera_replay_begin(fifa96_camera_pose6 *pose,
                                const fifa96_camera_pose6 *target,
                                fifa96_camera_replay_blend *state);
 
+/* FUN_0004CF7C's head gate: FUN_00036BC8(7) is `[0x105FFC] == 7`; when it
+ * matches, the native selects the 0x1078F8 record and does not start the
+ * blend. Returns 0 without touching `pose`/`state` on the gate; otherwise
+ * the `fifa96_camera_replay_begin` result. */
+int fifa96_camera_replay_begin_gated(fifa96_camera_pose6 *pose,
+                                     const fifa96_camera_pose6 *start,
+                                     const fifa96_camera_pose6 *target,
+                                     fifa96_camera_replay_blend *state,
+                                     int32_t screen_105ffc);
+
+#define FIFA96_CAMERA_ACTION_SLOTS 23
+
+/* FU351-L2f: FUN_000365B0 (`0x365B0..0x3665A`) — the `[0x105FC4]` target
+ * source switch. 0 -> `focus` (`[0x109A70]`), 1 -> `pan` (`0x105FB8`),
+ * 2 -> `record` (`FUN_0004B97C`'s `0x14C454` copy), 3 -> table slot 22
+ * (`0x109A74 + 0x108`), 4 -> `table[[0x108E04]]` when the index is 0..21.
+ * The early replay arm returns `replay_fallback` (`0x105FE8`) when
+ * `replay_gate` (native `FUN_00063FD0` = `[0x109A98] & 0x80`) is zero and
+ * the active record's `+4` class is -1. Any other source/index returns
+ * `focus`. The sources are staged; this function does not invent the pan or
+ * record producers. Returns NULL on a NULL selected pointer. */
+const int32_t *fifa96_camera_target_select(
+    int32_t source, int32_t replay_gate, int32_t record_class,
+    const int32_t *focus, const int32_t *pan, const int32_t *record,
+    const int32_t *replay_fallback,
+    const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3], int32_t index);
+
+/* FUN_00036ACC (`0x36ACC..0x36B31`): the camera yaw approach for the
+ * action-table target. It looks at `(track_x, track_z)` from
+ * `(pos_x, pos_z)`, computes the signed delta to `yaw`, and if
+ * `|delta| > (ratio*3)>>2` leaves the cell alone; otherwise it moves yaw by
+ * the remaining signed amount. The native reads camera+0x4C/0x58 and the
+ * +0x10/+0x18/+0x34/+0x38 triple. */
+void fifa96_camera_yaw_approach(fifa96_camera_handler_state *st);
+
+/* FU-351-L2e: FUN_000505D0 state 0xB's tail after FUN_0004F8C8 reports the
+ * blend finished. FUN_0004BAD8 resolves the `[0x10F370]` record through
+ * FUN_0004BE44; the selected 12-byte slot of the `0x155AB0` table becomes
+ * camera+0x34/38/3C, then FUN_00036ACC runs. The row-0x17 producer is
+ * non-live (FU-201), so the event inputs and table are staged. Returns 1
+ * when applied, 0 for no record/slot, -FIFA96_ERR_INVALID on NULL. */
+int fifa96_camera_action_target(fifa96_camera_handler_state *st,
+                                const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3],
+                                int32_t event_present, int32_t event_roster,
+                                int32_t event_side, int32_t ac2);
+
+/* The state-0xB composition: advance the replay blend; once it reports
+ * finished, apply the action-table target. Returns 1 when the target was
+ * applied, 0 while the blend is still running, -FIFA96_ERR_INVALID on NULL. */
+int fifa96_camera_action_step(fifa96_camera_handler_state *st,
+                              const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3],
+                              int32_t event_present, int32_t event_roster,
+                              int32_t event_side, int32_t ac2,
+                              fifa96_camera_pose6 *pose, int32_t tick,
+                              int32_t cancel_input, int32_t view_mode,
+                              fifa96_camera_replay_blend *blend);
+
 /* FUN_0004F8C8's per-frame arms. `tick` is FUN_00049388; `cancel_input` is
  * the FUN_00045069 high-nibble result and `view_mode` the FUN_00053D50
  * value. Returns 1 when the transition has finished (or the cancel gate
  * fired), 0 while it is still blending. The yaw/pitch writes mask to the
- * native low 16 bits (the 0x5A/0x5E high-word clears). */
+ * native low 16 bits (the 0x5A/0x5E high-word clears). The native
+ * FUN_00037114(1) call is a no-op: FUN_000974D8 is a bare RET. */
 int fifa96_camera_replay_step(fifa96_camera_pose6 *pose, int32_t tick,
                               int32_t cancel_input, int32_t view_mode,
                               fifa96_camera_replay_blend *state);

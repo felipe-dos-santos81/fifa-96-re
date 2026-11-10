@@ -790,3 +790,52 @@ byte-exact.
 staged. The `FUN_00037114(1)` `0x974D8` sound request is not modelled. The
 state-`0xB` action-table consumer remains producer-blocked by the non-live
 row-0x17 installer.
+
+## 18. FU351-L2e/L2f action-table consumer, target switch and sound no-op (2026-11-10)
+
+**Evidence.** Fresh `decompile_function`/`disassemble_function`
+`0x36ACC` (40 instructions), `0x4BAD8`, `0x4BE44` (already ported as
+`fifa96_camera_target_slot`), `0x4F274`, `0x365B0` and `0x974D8`
+(1 instruction: `RET`). Fresh `get_xrefs_to 0x974D8` = 18; every
+`FUN_00037114` arm jumps to the `RET`.
+
+**Sound no-op.** `FUN_00037114(1)` loads `[0x106000]` then calls
+`FUN_000974D8`, which is a bare `RET` in the shipped image. The replay
+transition has no audible sink to model.
+
+**State 0xB tail.** `0x50F6B..0x50FD0`: after `FUN_0004F8C8` reports the
+blend finished, `FUN_0004BAD8` returns -1 for a NULL `[0x10F370]` or the
+`FUN_0004BE44` slot otherwise. A non-negative slot copies the 12-byte
+`0x155AB0 + slot*0xC` entry to camera `+0x34/38/3C`, then
+`FUN_00036ACC` runs. `FUN_00036ACC` computes the negated
+`FUN_0004A2A10` angle of the target minus the eye, takes the signed yaw
+delta, and if the `3*ratio/4` step leaves a remainder inside the delta
+moves yaw by that remainder.
+
+**`[0x105FC4]` switch.** `FUN_000365B0`: 0 -> `[0x109A70]`, 1 ->
+`0x105FB8`, 2 -> `FUN_0004B97C`'s `0x14C454` record copy, 3 ->
+`0x109A74 + 0x108` (slot 22), 4 -> `0x109A74 + [0x108E04]*0xC` for
+`[0x108E04]` 0..21, else `[0x109A70]`. The early arm returns
+`0x105FE8` when `FUN_00063FD0()` (`[0x109A98] & 0x80`) is zero and the
+active record's class is -1.
+
+**Landed.** `fifa96_camera_yaw_approach` is `FUN_00036ACC`;
+`fifa96_camera_action_target` resolves the staged event through
+`fifa96_camera_target_slot` and copies the staged 23-entry table;
+`fifa96_camera_action_step` composes the replay step + target;
+`fifa96_camera_target_select` is `FUN_000365B0` with staged triples;
+`fifa96_camera_replay_begin_gated` is the `FUN_0004CF7C` head gate
+(`[0x105FFC] == 7` skips the blend). The row-0x17 `[0x10F370]` producer
+remains non-live (FU-201), and the pan/record target producers remain staged.
+
+**Verification.** `test_camera` pins both yaw-approach signs, the no-event
+and NULL cases, the immediate and unfinished action-step arms, all five
+target sources, the 0..21 index bound, the replay fallback, the `0x105FFC`
+gate and the NULL table/source cases. `make check` **124/124**; M1/M2
+byte-exact.
+
+**Remaining.** `FUN_0004F274`'s PTR/handler side effects, the
+`FUN_0003BB1C` replay call site and the `FUN_000505D0` config-record
+bookkeeping (the latter is overwritten by `FUN_0004F8C8`'s start copy and
+cannot change the blend pose). The pan/record/slot-index target producers are
+not staged.
