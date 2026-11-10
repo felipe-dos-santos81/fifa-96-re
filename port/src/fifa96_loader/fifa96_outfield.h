@@ -586,3 +586,34 @@ int32_t fifa96_sp_pick_receiver(const fifa96_sp_receiver_candidate *candidates,
                                 int32_t chosen_index, int32_t search_gate,
                                 int16_t from_x, int16_t from_z,
                                 int32_t want_fallback);
+
+/* FU275 L266-4/L266-7: the FUN_0006DAB4 three-point path and the 0x158780
+ * interpolation. The path table is the native slot-5 `.fmt` entry
+ * (`FUN_0004C384(form*6+5)`): 299 cells of 12 bytes, each cell a
+ * {x,z}/{x,z} control pair at `cell*12 + dir*4`. The builder reads signed
+ * bytes scaled by 0x26/0x21 and negates both sides for side 1. The duration
+ * table is flat 0x10F4EE (0x190 bytes) and the height table is flat 0x10F3C4
+ * (149 words). */
+#define FIFA96_SP_PATH_CELLS 0x12Bu
+#define FIFA96_SP_PATH_STRIDE 12u
+
+typedef struct fifa96_sp_target_state {
+  uint8_t sub_index;   /* 0x158780 */
+  int16_t accum;       /* 0x15878C */
+  int16_t duration;    /* 0x158788 high */
+  int16_t vel_x;       /* 0x158786 */
+  int16_t vel_z;       /* 0x158788 low */
+  int32_t target[3];   /* 0x158767/6B/6F */
+} fifa96_sp_target_state;
+
+void fifa96_sp_build_path(int32_t focus_x, int32_t focus_z,
+                          const uint8_t *table, uint32_t table_len,
+                          int32_t cell_index, int32_t dir, uint8_t side,
+                          int32_t path[3][2], uint8_t *valid);
+
+int16_t fifa96_sp_duration_from_metric(int32_t metric_shifted);
+
+int fifa96_sp_target_step(fifa96_sp_target_state *state,
+                          const int32_t path[3][2], uint8_t valid,
+                          int32_t focus_x, int32_t focus_y, int32_t focus_z,
+                          int16_t delta);

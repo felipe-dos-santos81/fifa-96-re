@@ -1871,8 +1871,53 @@ static void test_sp_helpers(void) {
   assert(fifa96_sp_pick_receiver(c, 11, -1, -1, 1, 0, 0, 1) == -1);
 }
 
+static void test_sp_path_builder(void) {
+  uint8_t table[3 * FIFA96_SP_PATH_STRIDE] = {0};
+  int32_t path[3][2];
+  uint8_t valid = 0;
+  table[0] = 2; table[1] = (uint8_t)-3;
+  table[2] = 4; table[3] = (uint8_t)-5;
+  fifa96_sp_build_path(0x100, 0x200, table, sizeof table, 0, 0, 0, path,
+                       &valid);
+  assert(valid == 1);
+  assert(path[0][0] == 0x100 && path[0][1] == 0x200);
+  assert(path[1][0] == 2 * 0x26 && path[1][1] == -3 * 0x21);
+  assert(path[2][0] == 4 * 0x26 && path[2][1] == -5 * 0x21);
+  fifa96_sp_build_path(0x100, 0x200, table, sizeof table, 0, 0, 1, path,
+                       &valid);
+  assert(valid == 1);
+  assert(path[1][0] == -2 * 0x26 && path[1][1] == 3 * 0x21);
+  assert(path[2][0] == -4 * 0x26 && path[2][1] == 5 * 0x21);
+  fifa96_sp_build_path(0, 0, table, sizeof table, 2, 3, 0, path, &valid);
+  assert(valid == 0);
+  fifa96_sp_build_path(0, 0, table, 3, 0, 0, 0, path, &valid);
+  assert(valid == 0);
+  fifa96_sp_build_path(0, 0, NULL, 0, 0, 0, 0, path, &valid);
+  assert(valid == 0);
+}
+
+static void test_sp_target_step(void) {
+  int32_t path[3][2] = {{0, 0}, {0x26, 0}, {0, 0x21}};
+  fifa96_sp_target_state st;
+  memset(&st, 0, sizeof st);
+  assert(fifa96_sp_duration_from_metric(2) == 8);
+  assert(fifa96_sp_target_step(&st, path, 1, 0, 0x50, 0, 1) == 1);
+  assert(st.sub_index == 1);
+  assert(st.duration == 8);
+  assert(st.vel_x == 2 && st.vel_z == 0);
+  assert(st.target[0] == 2 && st.target[1] == 0 && st.target[2] == 0);
+  assert(fifa96_sp_target_step(&st, path, 1, 0, 0x50, 0, 1) == 1);
+  assert(st.sub_index == 1);
+  assert(st.accum == 1);
+  assert(fifa96_sp_target_step(&st, path, 0, 7, 9, 11, 1) == 0);
+  assert(st.sub_index == 0 && st.target[0] == 7 && st.target[1] == 9 &&
+         st.target[2] == 11);
+}
+
 int main(void) {
   test_sp_helpers();
+  test_sp_path_builder();
+  test_sp_target_step();
   test_table_accessors();
   test_rule_match();
   test_rules_run();
