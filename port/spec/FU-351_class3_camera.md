@@ -1012,10 +1012,11 @@ receiver cut (`0x83937` source 2). `test_arm_bodies` pins the row-29
 `fifa96_sp_target_triple`/`fifa96_sp_pick_receiver` helpers. `make check`
 **124/124**; M1/M2 byte-exact (non-live tapes never read `camera_target`).
 
-**Remaining.** The `0x83937` camera branch is wired, but the rest of
-`FUN_00083428` (the `0x158780` sub-index timers, the delivery-code returns
-1/6/3/4/5/2 and the `FUN_000786A0`/`FUN_0004C374`/`FUN_000361A4` sinks)
-stays a leg. Row 29's source-2 store is on the unwired row-29 entry. The
+**Remaining.** The `0x83937` camera branch and the delivery returns
+1/6/4/3/5/2 are wired (the latter live-gated to keep M2's derived
+timer/draw arm); the `0x158780` sub-index timers, the target staging
+velocity and the `FUN_000786A0`/`FUN_0004C374`/`FUN_000361A4` sinks stay
+legs. Row 29's source-2 store is on the unwired row-29 entry. The
 source-4 replay target writer is FU-351 §23; its non-goal `FUN_0008ED40`
 activity updates and the `0x515A6`/`0x3BB1C` replay UI trigger remain.
 

@@ -4960,6 +4960,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->sp_triple_15879c[2] = 0;
   mr->sp_recv_1587ac = FIFA96_MATCH_ENTITY_NONE;
   mr->sp_b0_1587b0 = 0;
+  mr->sp_b3_1587b3 = 0;
   mr->sp_b6_1587b6 = 0;
   mr->sp_b7_1587b7 = 0;
   /* FU274 §1.1: `byte[0x157821]` is the camera's `render.camera.pan_counter`
@@ -5255,6 +5256,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->sp_triple_15879c[2] = 0;
   mr->sp_recv_1587ac = FIFA96_MATCH_ENTITY_NONE;
   mr->sp_b0_1587b0 = 0;
+  mr->sp_b3_1587b3 = 0;
   mr->sp_b6_1587b6 = 0;
   mr->sp_b7_1587b7 = 0;
   /* FU274 §1.1: `byte[0x157821]` is the camera's `render.camera.pan_counter`. */

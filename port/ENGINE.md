@@ -4996,8 +4996,9 @@ the build also produces the windowed `fifa96` target (`make game`).
     0x14/0x25, phases 0x18/0x19, the restart terminal, phase-0x20, the
     keeper closedown/claim edges, the extra-time chooser's tied-score source
     3 and the set-piece no-slot source 0 now write their native source and
-    target. The `0x83937` receiver-cut branch is wired; the rest of the
-    `FUN_00083428` delivery/timer machine remains a leg. `FUN_000974D8` is a
+    target. The `0x83937` receiver cut and the delivery returns 1/6/4/3/5/2
+    are wired (the latter live-gated; M2 keeps the derived timer/draw arm);
+    the `FUN_00083428` timer/target-staging legs remain. `FUN_000974D8` is a
     bare `RET`.
     Row 29's source-2 store has no live entry (FU-142f/OL-48); `FUN_0004F274`
     and the `0x505D0` config-record switch are superseded by the direct view

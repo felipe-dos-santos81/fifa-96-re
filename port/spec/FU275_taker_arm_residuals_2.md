@@ -543,6 +543,8 @@ the four `FUN_00083164` branches, the six `FUN_0008DB6C` filters, the
 and the picked receiver. The `FUN_00083428` receiver-cut branch is wired:
 the first `released & 0x20` edge latches `[0x1587B6]`, the second re-picks
 through `fifa96_sp_pick_receiver` and stages `0x36200(2)` with the receiver
-position. The other machine branches (the `0x158780` sub-index timers, the
-delivery-code returns 1/6/3/4/5/2 and the `0x786A0`/`0x4C374`/`0x361A4`
-sinks) remain the L266-4 legs.
+position. `match_sp_delivery_step` ports the b0/b3/b6 input tail and the
+delivery returns 1/6/4/3/5/2; the slot probe runs it only when `live_start`,
+so the M2 characterization tape keeps the derived timer/draw arm. The
+remaining L266-4 legs are the `0x158780` sub-index timers, the target
+staging velocity, and the `0x786A0`/`0x4C374`/`0x361A4` sinks.

@@ -5104,8 +5104,11 @@ close-out below).
   `0x157A77`/`0x15879C` triple and the picked receiver, and the
   `FUN_00083428` receiver-cut branch is wired: the first `released & 0x20`
   edge latches `[0x1587B6]`, the second re-picks and stages `0x83937`
-  source 2 with the receiver position. The rest of the delivery/timer
-  machine (returns 1/6/3/4/5/2 and the `0x786A0`/`0x4C374`/`0x361A4`
-  sinks) remains the L266-4 leg. `test_engine_match_handlers` pins the
-  two-edge cut. `make check` green 124/124; M1/M2 byte-exact. Record:
-  FU-351 §22, FU-275 §3.
+  source 2 with the receiver position. `match_sp_delivery_step` ports the
+  b0/b3/b6 input tail and the delivery returns 1/6/4/3/5/2; the slot probe
+  runs it only when `live_start`, so M2 keeps the derived timer/draw arm.
+  The remaining L266-4 legs are the `0x158780` sub-index timers, the target
+  staging velocity and the `0x786A0`/`0x4C374`/`0x361A4` sinks.
+  `test_engine_match_handlers` pins the two-edge cut and the delivery codes.
+  `make check` green 124/124; M1/M2 byte-exact. Record: FU-351 §22,
+  FU-275 §3.

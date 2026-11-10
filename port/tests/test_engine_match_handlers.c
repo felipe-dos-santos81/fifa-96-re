@@ -436,6 +436,7 @@ static void test_action_10_receiver_cut(void) {
   f.mr.record.stage92 = 0;
   f.mr.record.has_slot = 1;
   f.mr.state.phase = 3u;
+  f.mr.live_start = 1;
   f.mr.session_gate_14c32a = 1;
   f.mr.entities.team[0].records[1].has_slot = 1;   /* the taker holds the slot */
   f.mr.slot.entity = 1;
@@ -456,6 +457,38 @@ static void test_action_10_receiver_cut(void) {
   assert(f.mr.render.camera_target.record[1] == 0);
   assert(f.mr.render.camera_target.record[2] == 0);
   drop_fixture(&f);
+}
+
+static void test_action_10_delivery_codes(void) {
+  static const struct {
+    uint16_t released;
+    uint16_t prev;
+    int code;
+  } cases[] = {
+      {0x10, 0, 6}, {0x10, 1, 1}, {0x20, 1, 4}, {0x40, 0, 3},
+  };
+  for (uint32_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+    struct fixture f;
+    make_fixture(&f);
+    f.mr.record.entity_id = 1;
+    f.mr.record.active = 1;
+    f.mr.record.code = 0x10;
+    f.mr.record.stage92 = 2;
+    f.mr.record.has_slot = 1;
+    f.mr.record.pos_x = 0x100;
+    f.mr.record.pos_z = 0;
+    f.mr.state.phase = 3u;
+    f.mr.live_start = 1;
+    f.mr.sp_b0_1587b0 = 1;              /* the slot staging latch */
+    f.mr.slot.entity = 1;
+    f.mr.slot.released = cases[i].released;
+    f.mr.slot.prev_mapped = cases[i].prev;
+    f.mr.slot.pressed = 0;
+    f.mr.slot.raw = 0;
+    assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+    assert(f.mr.sp_delivery == (uint8_t)cases[i].code);
+    drop_fixture(&f);
+  }
 }
 
 /* FU-157 §4.2/§5 (T1) + FU-162 §3.3.A (T3 fix): the throw-in stage-3 camera
@@ -6371,6 +6404,7 @@ int main(void) {
   test_action_1E_runs_claim_place();
   test_action_10_runs_throw_in_body();
   test_action_10_receiver_cut();
+  test_action_10_delivery_codes();
   test_live_throw_in_camera_y_cut();
   test_action_0e_live_jump_selector();
   test_action_11_runs_corner_body();

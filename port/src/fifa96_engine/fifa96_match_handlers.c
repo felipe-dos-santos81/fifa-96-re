@@ -1746,6 +1746,7 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
   fifa96_sp_receiver_candidate cand[FIFA96_MATCH_ENTITY_RECORDS];
   int32_t chosen;
   if (r->has_slot == 0u) return 0;
+  if (mr->sp_b0_1587b0 == 0u) return 0;
   if ((mr->slot.released & 0x20u) == 0u) return 0;
   if ((mr->slot.prev_mapped & 0x0Fu) != 0u) return 0;
   if (mr->sp_b6_1587b6 == 0u && mr->sp_b7_1587b7 == 0u) {
@@ -1784,9 +1785,55 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
   return 1;
 }
 
+static int match_sp_delivery_step(struct fifa96_match_run *mr) {
+  uint16_t released = mr->slot.released;
+  uint16_t prev = mr->slot.prev_mapped;
+  uint16_t raw = mr->slot.raw;
+  /* 0x83664/0x83693: the pressed 0x40 clears b3; the raw direction bits set
+   * it while the phase is not 8/9 and the 0x40 map bit is held. */
+  if ((mr->slot.pressed & 0x40u) != 0u) mr->sp_b3_1587b3 = 0;
+  if (mr->state.phase != 8u && mr->state.phase != 9u &&
+      (prev & 0x40u) != 0u) {
+    if ((raw & 8u) != 0u || (raw & 1u) != 0u || (raw & 4u) != 0u ||
+        (raw & 2u) != 0u)
+      mr->sp_b3_1587b3 = 1;
+  }
+  if (mr->sp_b0_1587b0 == 0u) {
+    /* 0x838xx: the receiver-held arm latches b0/b6 and waits for the cut. */
+    if (released == 0x10u) return 2;
+    if ((released & 0x20u) != 0u) {
+      if ((prev & 0x0Fu) == 0u) {
+        mr->sp_b0_1587b0 = 1;
+        mr->sp_b6_1587b6 = 1;
+        return 0;
+      }
+      return 5;
+    }
+    if (released == 0x40u && mr->sp_b3_1587b3 == 0u) return 3;
+    return 0;
+  }
+  if (released == 0x10u) return (prev & 0x0Fu) == 0u ? 6 : 1;
+  if ((released & 0x20u) != 0u)
+    return (prev & 0x0Fu) != 0u ? 4 : 0;   /* the clear case is the cut */
+  if (released == 0x40u && mr->sp_b3_1587b3 == 0u) return 3;
+  return 0;
+}
+
 static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
   uint16_t draw = 0;
-  if (match_sp_receiver_cut(mr, &mr->record)) return 0;
+  /* The native input machine is not live-only, but the M2 characterization
+   * tape keeps the derived timer/draw arm; the live path runs the native
+   * delivery codes. */
+  if (mr->record.has_slot != 0u && mr->live_start) {
+    int code;
+    if (match_sp_receiver_cut(mr, &mr->record)) return 0;
+    code = match_sp_delivery_step(mr);
+    if (code != 0) {
+      mr->sp_delivery = (uint8_t)code;
+      return 1;
+    }
+    return 0;
+  }
   if (mr->record.timer89 <= 0x78) return 0;
   if (fifa96_rng_step(&mr->rng, &draw) != 0) return 0;
   mr->sp_delivery = (uint8_t)((draw % span) < 3u ? 3u : 7u);

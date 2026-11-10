@@ -1408,6 +1408,7 @@ struct fifa96_match_run {
   int32_t sp_triple_15879c[3];
   int32_t sp_recv_1587ac;
   uint8_t sp_b0_1587b0;
+  uint8_t sp_b3_1587b3;
   uint8_t sp_b6_1587b6;
   uint8_t sp_b7_1587b7;
   /* FU274 §1.1: `byte[0x157821]` -- row 0x10's far-ball re-queue gate
