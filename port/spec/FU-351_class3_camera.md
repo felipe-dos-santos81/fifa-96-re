@@ -825,14 +825,20 @@ active record's class is -1.
 `fifa96_camera_action_step` composes the replay step + target;
 `fifa96_camera_target_select` is `FUN_000365B0` with staged triples;
 `fifa96_camera_replay_begin_gated` is the `FUN_0004CF7C` head gate
-(`[0x105FFC] == 7` skips the blend). The row-0x17 `[0x10F370]` producer
-remains non-live (FU-201), and the pan/record target producers remain staged.
+(`[0x105FFC] == 7` skips the blend). The engine now builds the 23-slot
+`0x155AB0` table from its two team record blocks + the ball and feeds
+`render.camera_target` into the live view step; source 0 defaults to the
+existing focus, and sources 1/2/3/4 are testable staging inputs. The
+row-0x17 `[0x10F370]` producer remains non-live (FU-201), the `0x36200`
+writer is not wired, and the pan/record target producers remain staged.
 
 **Verification.** `test_camera` pins both yaw-approach signs, the no-event
 and NULL cases, the immediate and unfinished action-step arms, all five
 target sources, the 0..21 index bound, the replay fallback, the `0x105FFC`
-gate and the NULL table/source cases. `make check` **124/124**; M1/M2
-byte-exact.
+gate and the NULL table/source cases. `test_engine_live_control` pins the
+live source-1/2/3/4 staging, the source-3 ball slot, the indexed player
+slot, the force-focus and replay-fallback gates, and the source-0 default.
+`make check` **124/124**; M1/M2 byte-exact.
 
 **Remaining.** `FUN_0004F274`'s PTR/handler side effects, the
 `FUN_0003BB1C` replay call site and the `FUN_000505D0` config-record

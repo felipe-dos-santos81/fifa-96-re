@@ -2824,6 +2824,86 @@ static void test_live_native_view_class1_camera(void) {
   drop_lc_fixture(&f);
 }
 
+/* FU351-L2f: the live view step consumes FUN_000365B0's [0x105FC4] source
+ * switch. Source 3 is the ball slot (table[22]), source 4 an indexed
+ * player slot, source 1/2 the staged pan/record triples. */
+static void test_live_camera_target_sources(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_class == 1);
+  assert(mr->render.camera_target.source == 0);
+  assert(mr->render.camera_target.index == -1);
+
+  mr->entities.ball.x = 0x500;
+  mr->entities.ball.y = 0x51;
+  mr->entities.ball.z = -0x300;
+  mr->render.camera_target.source = 3;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_cam[1].track_x == 0x500);
+  assert(mr->render.native_view_cam[1].track_y == 0);
+  assert(mr->render.native_view_cam[1].track_z == -0x300);
+
+  mr->entities.team[1].records[0].active = 0;
+  mr->entities.team[1].records[0].pos_x = 0x700;
+  mr->entities.team[1].records[0].pos_y = 0x52;
+  mr->entities.team[1].records[0].pos_z = 0x900;
+  mr->render.camera_target.source = 4;
+  mr->render.camera_target.index = 11;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_cam[1].track_x ==
+         mr->entities.team[1].records[0].pos_x);
+  assert(mr->render.native_view_cam[1].track_y == 0);
+  assert(mr->render.native_view_cam[1].track_z ==
+         mr->entities.team[1].records[0].pos_z);
+
+  /* Index 22 is out of the 0..21 player range and falls back to the focus. */
+  mr->render.camera_target.index = 22;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_cam[1].track_x ==
+         mr->render.render_focus_x);
+  assert(mr->render.native_view_cam[1].track_z ==
+         mr->render.render_focus_z);
+
+  mr->render.camera_target.source = 1;
+  mr->render.camera_target.pan[0] = 0x111;
+  mr->render.camera_target.pan[1] = 0x53;
+  mr->render.camera_target.pan[2] = -0x222;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_cam[1].track_x == 0x111);
+  assert(mr->render.native_view_cam[1].track_y == 0);
+  assert(mr->render.native_view_cam[1].track_z == -0x222);
+
+  mr->render.camera_target.source = 2;
+  mr->render.camera_target.record[0] = -0x333;
+  mr->render.camera_target.record[1] = 0x54;
+  mr->render.camera_target.record[2] = 0x444;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_cam[1].track_x == -0x333);
+  assert(mr->render.native_view_cam[1].track_y == 0);
+  assert(mr->render.native_view_cam[1].track_z == 0x444);
+
+  /* FUN_00063FD0 forces the focus path; FUN_00037AE4 + class -1 takes the
+   * replay fallback. */
+  mr->render.camera_target.force_focus = 1;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_cam[1].track_x ==
+         mr->render.render_focus_x);
+  mr->render.camera_target.force_focus = 0;
+  mr->render.camera_target.replay_active = 1;
+  mr->render.camera_target.source = 3;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_cam[1].track_x == 0);
+  assert(mr->render.native_view_cam[1].track_z == 0);
+
+  mr->render.camera_target.source = 0;
+  mr->render.camera_target.replay_active = 0;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_cam[1].track_x ==
+         mr->render.render_focus_x);
+  drop_lc_fixture(&f);
+}
+
 /* FU351-L2c-3: FUN_0004CE34 skips the selector while the overlay state is
  * not 0/6 or while [0x14E57C] is 0x13/0x14/0x1C/0x1D. */
 static void test_live_view_selector_gate(void) {
@@ -3237,6 +3317,7 @@ int main(void) {
   test_live_setpiece_timeout_falls_back(7u);
   test_live_setpiece_timeout_falls_back(6u);
   test_live_native_view_class1_camera();
+  test_live_camera_target_sources();
   test_live_view_selector_gate();
   test_live_follow_keeps_ball_during_pan();
   test_live_offball_shape_moves_team();

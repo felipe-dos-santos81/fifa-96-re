@@ -5004,13 +5004,18 @@ close-out below).
   `[0x105FC4]` source switch is ported as `fifa96_camera_target_select`
   (focus/pan/record/slot-22/indexed-slot plus the `0x105FE8` replay
   fallback), and `fifa96_camera_replay_begin_gated` models the `0x4CF7C`
-  head gate (`[0x105FFC] == 7`). The replay sound leg is closed as a
-  non-sink: `FUN_000974D8` is a bare `RET`, so `FUN_00037114(1)` has no
-  effect. `test_camera` pins both
+  head gate (`[0x105FFC] == 7`). The live view step now builds the native
+  23-slot table from both team record blocks + the ball and consumes
+  `render.camera_target`; source 0 keeps the existing focus behavior and
+  sources 1/2/3/4 are staged. The replay sound leg is closed as a non-sink:
+  `FUN_000974D8` is a bare `RET`, so `FUN_00037114(1)` has no effect.
+  `test_camera` pins both
   yaw-approach signs, the table/no-event/NULL cases, the blend-finished and
   unfinished action-step arms, all five target sources, the index bound,
-  the replay fallback and the NULL table/source cases. `make check` green
-  124/124; M1/M2 byte-exact. Remaining: `FUN_0004F274`'s PTR/handler side
-  effects, the `FUN_0003BB1C` replay call site and the `FUN_000505D0`
-  config-record bookkeeping; the pan/record/slot-index target producers stay
-  staged. Record: FU-351 §18.
+  the replay fallback and the NULL table/source cases.
+  `test_engine_live_control` pins the live source-1/2/3/4 staging, source-3
+  ball slot, indexed player slot and both gates. `make check` green 124/124;
+  M1/M2 byte-exact. Remaining: the `0x36200` target-source writer and
+  pan/record target producers; `FUN_0004F274`'s PTR/handler side effects, the
+  `FUN_0003BB1C` replay call site and the `FUN_000505D0` config-record
+  bookkeeping. Record: FU-351 §18.

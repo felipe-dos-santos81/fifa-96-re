@@ -2172,6 +2172,24 @@ static int match_run_native_view_handler(int32_t class_of,
   }
 }
 
+/* FUN_00036C70's 23-slot staging subset: team-0 records 0..10, team-1
+ * records 0..10, then the ball at slot 22. */
+static void match_run_camera_action_table(
+    const struct fifa96_match_run *mr,
+    int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3]) {
+  for (int i = 0; i < 11; i++) {
+    table[i][0] = mr->entities.team[0].records[i].pos_x;
+    table[i][1] = mr->entities.team[0].records[i].pos_y;
+    table[i][2] = mr->entities.team[0].records[i].pos_z;
+    table[11 + i][0] = mr->entities.team[1].records[i].pos_x;
+    table[11 + i][1] = mr->entities.team[1].records[i].pos_y;
+    table[11 + i][2] = mr->entities.team[1].records[i].pos_z;
+  }
+  table[22][0] = mr->entities.ball.x;
+  table[22][1] = mr->entities.ball.y;
+  table[22][2] = mr->entities.ball.z;
+}
+
 /* Run the selected native class and publish its record cells to the render
  * eye/orientation. Returns 1 on success. */
 static int match_run_native_view_step(struct fifa96_match_run *mr,
@@ -2192,12 +2210,29 @@ static int match_run_native_view_step(struct fifa96_match_run *mr,
   st->pan_axis_a = 0;
   st->pan_axis_b = 0;
   match_run_native_view_apply_variant(r, class_of);
-  /* FUN_000365B0's image/default source is [0x105FC4]==0 -> [0x109A70]
-   * (0x155AA4); FUN_00036544 copies it into +0x34/+0x3C and clamps x to
-   * +-0x720, z to +-0xB10. */
-  st->track_x = match_run_native_target_clamp(r->render_focus_x, -0x720, 0x720);
-  st->track_y = r->render_focus_y;
-  st->track_z = match_run_native_target_clamp(r->render_focus_z, -0xB10, 0xB10);
+  /* FUN_000365B0's [0x105FC4] source switch; FUN_00036544 copies the
+   * selected triple into +0x34/+0x3C and clamps x to +-0x720, z to
+   * +-0xB10. Source 3/4 needs the 23-slot table. */
+  {
+    const int32_t focus[3] = {r->render_focus_x, r->render_focus_y,
+                              r->render_focus_z};
+    int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3];
+    const int32_t *target;
+    if (r->camera_target.source == 3 || r->camera_target.source == 4)
+      match_run_camera_action_table(mr, table);
+    target = fifa96_camera_target_select(
+        r->camera_target.source, r->camera_target.force_focus,
+        r->camera_target.replay_active, -1, focus, r->camera_target.pan,
+        r->camera_target.record, r->camera_target.fallback,
+        (r->camera_target.source == 3 || r->camera_target.source == 4)
+            ? table
+            : NULL,
+        r->camera_target.index);
+    if (target == NULL) target = focus;
+    st->track_x = match_run_native_target_clamp(target[0], -0x720, 0x720);
+    st->track_y = target[1];
+    st->track_z = match_run_native_target_clamp(target[2], -0xB10, 0xB10);
+  }
   if (settle) {
     st->hist_x = st->track_x;
     st->hist_y = st->track_y;
@@ -2668,6 +2703,9 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->native_view_slot = 1;
   r->native_view_variant = 0;
   r->native_view_class = 1;
+  /* FU351-L2f image defaults: [0x105FC4] = 0, [0x108E04] = -1. */
+  r->camera_target.source = 0;
+  r->camera_target.index = -1;
   r->pitch_art.sky_index = FIFA96_PITCH_SKY_INDEX;
   r->pitch_art.line_index = FIFA96_PITCH_LINE_INDEX;
   for (int i = 0; i < 256; i++) r->remap[i] = (uint8_t)(i == 0 ? 0xFF : i);

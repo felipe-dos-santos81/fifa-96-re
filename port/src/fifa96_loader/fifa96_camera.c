@@ -49,12 +49,12 @@ int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2) {
 }
 
 const int32_t *fifa96_camera_target_select(
-    int32_t source, int32_t replay_gate, int32_t record_class,
-    const int32_t *focus, const int32_t *pan, const int32_t *record,
-    const int32_t *replay_fallback,
+    int32_t source, int32_t force_focus, int32_t replay_active,
+    int32_t record_class, const int32_t *focus, const int32_t *pan,
+    const int32_t *record, const int32_t *replay_fallback,
     const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3], int32_t index) {
-  if (replay_gate == 0 && record_class == -1)
-    return replay_fallback;
+  if (force_focus != 0) return focus;
+  if (replay_active != 0 && record_class == -1) return replay_fallback;
   switch (source) {
     case 0:
       return focus;

@@ -882,15 +882,17 @@ int fifa96_camera_replay_begin_gated(fifa96_camera_pose6 *pose,
  * source switch. 0 -> `focus` (`[0x109A70]`), 1 -> `pan` (`0x105FB8`),
  * 2 -> `record` (`FUN_0004B97C`'s `0x14C454` copy), 3 -> table slot 22
  * (`0x109A74 + 0x108`), 4 -> `table[[0x108E04]]` when the index is 0..21.
- * The early replay arm returns `replay_fallback` (`0x105FE8`) when
- * `replay_gate` (native `FUN_00063FD0` = `[0x109A98] & 0x80`) is zero and
- * the active record's `+4` class is -1. Any other source/index returns
- * `focus`. The sources are staged; this function does not invent the pan or
- * record producers. Returns NULL on a NULL selected pointer. */
+ * The early arms: `force_focus` (native `FUN_00063FD0` =
+ * `[0x109A98] & 0x80`) makes the function return `focus` without looking at
+ * the source; otherwise `replay_active` (`FUN_00037AE4`) plus the active
+ * record's `+4` class `-1` returns `replay_fallback` (`0x105FE8`). Any other
+ * source/index returns `focus`. The sources are staged; this function does
+ * not invent the pan or record producers. Returns NULL on a NULL selected
+ * pointer. */
 const int32_t *fifa96_camera_target_select(
-    int32_t source, int32_t replay_gate, int32_t record_class,
-    const int32_t *focus, const int32_t *pan, const int32_t *record,
-    const int32_t *replay_fallback,
+    int32_t source, int32_t force_focus, int32_t replay_active,
+    int32_t record_class, const int32_t *focus, const int32_t *pan,
+    const int32_t *record, const int32_t *replay_fallback,
     const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3], int32_t index);
 
 /* FUN_00036ACC (`0x36ACC..0x36B31`): the camera yaw approach for the

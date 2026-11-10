@@ -424,6 +424,22 @@ int fifa96_match_run_overlay_visible(const struct fifa96_match_run *mr);
  * predicate reports the reachability of the staged producer. */
 int fifa96_match_run_ball_row_reachable(const struct fifa96_match_run *mr);
 
+/* FU351-L2f: the staged inputs of FUN_000365B0's [0x105FC4] target switch.
+ * `source` is the native cell (image 0), `index` is [0x108E04] (image -1),
+ * the three triples are 0x105FB8, FUN_0004B97C's 0x14C454 and 0x105FE8, and
+ * the two gates are FUN_00063FD0's [0x109A98]&0x80 and FUN_00037AE4. The
+ * engine builds the 23-slot 0x155AB0 table from the two team record blocks
+ * and the ball each frame. */
+typedef struct fifa96_match_run_camera_target {
+  int32_t source;
+  int32_t index;
+  int32_t pan[3];
+  int32_t record[3];
+  int32_t fallback[3];
+  int32_t force_focus;
+  int32_t replay_active;
+} fifa96_match_run_camera_target;
+
 struct fifa96_match_run_render {
   int enabled;
   struct fifa96_camera camera;
@@ -503,6 +519,7 @@ struct fifa96_match_run_render {
    * next ball follow, not this target. Cleared by the render reset memset. */
   int32_t render_focus_x, render_focus_y, render_focus_z;
   uint8_t render_focus_valid;
+  fifa96_match_run_camera_target camera_target;
   /* FU-148 §4.2 (S4): the translation-pool seam. The native pool (FUN_00049138
    * -> FUN_00046F80) is a distinct allocation whose content producer is leg 11;
    * a caller may stage one by partitioning a buffer through

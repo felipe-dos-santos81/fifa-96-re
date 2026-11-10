@@ -2628,30 +2628,33 @@ static void test_camera_target_select(void) {
   table[21][0] = 21;
   table[22][0] = 22;
 
-  assert(fifa96_camera_target_select(0, 1, 0, focus, pan, record, fallback,
+  /* force_focus = 0, replay_active = 0; the active view record class is -1. */
+  assert(fifa96_camera_target_select(0, 0, 0, -1, focus, pan, record, fallback,
                                      table, 0) == focus);
-  assert(fifa96_camera_target_select(1, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(1, 0, 0, -1, focus, pan, record, fallback,
                                      table, 0) == pan);
-  assert(fifa96_camera_target_select(2, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(2, 0, 0, -1, focus, pan, record, fallback,
                                      table, 0) == record);
-  assert(fifa96_camera_target_select(3, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(3, 0, 0, -1, focus, pan, record, fallback,
                                      table, 0) == table[22]);
-  assert(fifa96_camera_target_select(4, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(4, 0, 0, -1, focus, pan, record, fallback,
                                      table, 21) == table[21]);
-  assert(fifa96_camera_target_select(4, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(4, 0, 0, -1, focus, pan, record, fallback,
                                      table, 22) == focus);
-  assert(fifa96_camera_target_select(4, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(4, 0, 0, -1, focus, pan, record, fallback,
                                      table, -1) == focus);
-  assert(fifa96_camera_target_select(9, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(9, 0, 0, -1, focus, pan, record, fallback,
                                      table, 0) == focus);
-  /* The early arm: replay_gate clear and record class -1. */
-  assert(fifa96_camera_target_select(0, 0, -1, focus, pan, record, fallback,
+  /* FUN_00063FD0 forces focus; FUN_00037AE4 + class -1 takes the fallback. */
+  assert(fifa96_camera_target_select(1, 1, 0, -1, focus, pan, record, fallback,
+                                     table, 0) == focus);
+  assert(fifa96_camera_target_select(0, 0, 1, -1, focus, pan, record, fallback,
                                      table, 0) == fallback);
-  assert(fifa96_camera_target_select(0, 1, -1, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(0, 0, 1, 0, focus, pan, record, fallback,
                                      table, 0) == focus);
-  assert(fifa96_camera_target_select(3, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(3, 0, 0, -1, focus, pan, record, fallback,
                                      NULL, 0) == NULL);
-  assert(fifa96_camera_target_select(4, 1, 0, focus, pan, record, fallback,
+  assert(fifa96_camera_target_select(4, 0, 0, -1, focus, pan, record, fallback,
                                      NULL, 0) == NULL);
 }
 

@@ -4980,9 +4980,11 @@ the build also produces the windowed `fifa96` target (`make game`).
     100/300-tick start, six-field deltas and finish latch (FU-351 §17); state
     `0xB`'s action-table tail (`FUN_00036ACC`/`FUN_0004BAD8`) and the
     `FUN_000365B0` target switch and the `0x4CF7C` head gate are ported with
-    staged tables/triples (FU-351 §18); `FUN_000974D8` is a bare `RET`. The
-    `0x3BB1C` replay call site and the `0x505D0` config-record bookkeeping
-    remain open.
+    staged tables/triples (FU-351 §18); the live view step builds the
+    23-slot table from both team blocks + the ball and consumes
+    `render.camera_target` (source 0 default unchanged). `FUN_000974D8` is a
+    bare `RET`. The `0x36200` writer, pan/record target producers, `0x3BB1C`
+    replay call site and `0x505D0` config-record bookkeeping remain open.
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

@@ -21,11 +21,13 @@ and the replay sound leg with exact native evidence.
 4. Port the `0x4CF7C` head gate (`[0x105FFC] == 7`).
 5. Tests for both yaw arms, table/no-event, all sources, fallback, bounds,
    gate.
-6. `make check`, M1/M2, docs FU-351 §18, commit/push.
+6. Build the 23-slot table in the engine and consume the selector in the live
+   view step; test source 1/2/3/4 and source 0.
+7. `make check`, M1/M2, docs FU-351 §18, commit/push.
 
 ## Remaining
 
+- `0x36200` target-source writer and the pan/record producers.
 - `FUN_0004F274` PTR/handler side effects.
 - `FUN_0003BB1C` replay call site and `FUN_000505D0` config-record
   bookkeeping (the switch is overwritten by F8C8's start copy).
-- Pan/record/slot-index target producers.
