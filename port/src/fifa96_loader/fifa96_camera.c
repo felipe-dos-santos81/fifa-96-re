@@ -41,6 +41,55 @@ int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2) {
   return roster + (add ? 0xB : 0);
 }
 
+int32_t fifa96_camera_ramp_factor(int32_t tick, int32_t rate) {
+  /* 0x4D66B..0x4D670: the rate*15 is a 32-bit wrap. */
+  int32_t divisor = (int32_t)((uint32_t)rate * 15u);
+  if (tick <= 0 || divisor <= 0) return 0;
+  return (int32_t)(((int64_t)tick * 0x10000) / divisor);
+}
+
+static int32_t camera_slide_step(int32_t delta, int32_t factor) {
+  /* Native `IMUL EDX; ADD EAX,0x8000; ADC EDX,0; SHRD EAX,EDX,0x10`. */
+  return (int32_t)(((int64_t)delta * factor + 0x8000) >> 16);
+}
+
+int32_t fifa96_camera_slide(int32_t cam, int32_t target, int32_t hist,
+                            int32_t mode, int32_t lo, int32_t hi,
+                            int32_t hist_offset, int32_t rate, int32_t tick) {
+  int32_t clamped = (int32_t)((uint32_t)target - (uint32_t)hist_offset);
+  if (clamped < lo) clamped = lo;
+  else if (clamped > hi) clamped = hi;
+
+  if (cam > lo && cam < hi) {
+    int32_t factor = fifa96_camera_ramp_factor(tick, rate);
+    int32_t delta = (int32_t)((uint32_t)clamped - (uint32_t)cam);
+    int32_t step = camera_slide_step(delta, factor);
+    int32_t next = (int32_t)((uint32_t)cam + (uint32_t)step);
+    int32_t dir = (int32_t)((uint32_t)target - (uint32_t)hist);
+    if (mode < 1) {
+      if (mode != -1) return cam;
+      if (dir < -0xA0 && step > 0) return cam;
+      if (next < lo) return lo;
+    } else if (mode < 2) {
+      if (0xA0 < dir && step < 0) return cam;
+      if (next < lo) return lo;
+    } else {
+      if (mode != 2) return cam;
+      /* [0x108B94] = 1 (no writer), so the native direction gate is skipped. */
+      if (next < lo) return lo;
+    }
+    if (next > hi) return hi;
+    return next;
+  }
+
+  {
+    int32_t factor = fifa96_camera_ramp_factor(tick, 8);
+    int32_t delta = (int32_t)((uint32_t)clamped - (uint32_t)cam);
+    return (int32_t)((uint32_t)cam +
+                     (uint32_t)camera_slide_step(delta, factor));
+  }
+}
+
 int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   if (!cam) return -FIFA96_ERR_INVALID;
   cam->pos_x = x;

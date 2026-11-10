@@ -4827,3 +4827,17 @@ close-out below).
   (`0x4E972`); the integrator body remains leg 9. `make check` green 124/124;
   M1/M2 `cmp` exact. Record: FU-351 §8. Open: camera-type/view-mode selection
   (FU351-L2), and the class-0 integrator.
+
+- **Phase 95 class-0 camera integrator primitives (2026-11-09).** FU351-L2
+  starts with the two pure bodies the class-0 steady handler calls for the
+  eye x/z cells: `fifa96_camera_ramp_factor` (`FUN_0004D668`, the Q16
+  `floor(tick*0x10000/(rate*15))`) and `fifa96_camera_slide`
+  (`FUN_0004D698`, the clamped target/history slide with modes -1/1/2 and the
+  outside-bounds rate-8 branch). The image constants are `[0x108B90]=0xA0`
+  and `[0x108B94]=1`, both no-writer, so mode 2 has no direction gate. The
+  handler call-site mapping and the `+0x50` C-table records are recorded in
+  FU-351 §9. Not wired yet: the block model lacks `+0x18`/`+0x28`/the C
+  record, and the yaw/pitch integrators (`FUN_0004DF34`/`FUN_0004E05C`) are
+  still open. `test_camera` pins the ramp, modes, clamps and outside branch.
+  `make check` green 124/124; M1/M2 `cmp` exact. Next: extend the block and
+  wire the handler, then the native preset/class selection.

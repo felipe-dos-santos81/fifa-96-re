@@ -302,6 +302,32 @@ int fifa96_camera_focus_clamp(int32_t x, int32_t y, int32_t z,
  * resolver is not wired into open play. */
 int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2);
 
+/* FU-351-L2: FUN_0004D668 (`0x4D668..0x4D695`) — the Q16 ramp factor
+ * `floor(tick * 0x10000 / (rate * 15))`, where `tick` is the native
+ * FUN_00049388 elapsed value and `rate` is the behavior block's `+0x28`
+ * word (`param_2[10]`). The native body multiplies the rate by 15 in 32-bit
+ * (`SHL EBX,4; SUB EBX,EAX`), shifts both operands by 16, and runs the
+ * quotient/remainder IDIV pair; for the live positive domain this is the
+ * floor above. `rate * 15` <= 0 or `tick <= 0` returns 0 (the native call
+ * sites never pass those; the guard only keeps the division defined). */
+int32_t fifa96_camera_ramp_factor(int32_t tick, int32_t rate);
+
+/* FU-351-L2: FUN_0004D698 (`0x4D698..0x4D7E5`) — the one-axis slide the
+ * class-0 handler runs for the camera x and z cells:
+ *
+ *   clamped = clamp(target - hist_offset, lo, hi);
+ *   step    = ((clamped - cam) * ramp_factor(tick, rate) + 0x8000) >> 16;
+ *   ... mode gates (-1/1/2) and the lo/hi clamp on cam + step;
+ *
+ * with the native mode constants `[0x108B90] = 0xA0` and `[0x108B94] = 1`
+ * (both no-writer image cells, so mode 2's direction gate is skipped). When
+ * `cam` is outside `(lo, hi)` the native takes the no-history branch with a
+ * fixed rate 8. `rate` is the behavior +0x28 word; `hist_offset` is the
+ * native param_7 (`+0x18` for z, the sign-adjusted target for x). */
+int32_t fifa96_camera_slide(int32_t cam, int32_t target, int32_t hist,
+                            int32_t mode, int32_t lo, int32_t hi,
+                            int32_t hist_offset, int32_t rate, int32_t tick);
+
 /* Handler constants (fresh 0x4DB38): the yaw slew divisor 0x1E0000 and the
  * pitch slew divisor 0x3C0000. */
 #define FIFA96_CAMERA_ACTION_YAW_DIVISOR 0x1E0000

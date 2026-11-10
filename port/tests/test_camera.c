@@ -2214,6 +2214,36 @@ static void test_focus_clamp(void) {
   assert(fifa96_camera_target_slot(10, 1, 0) == 21);
 }
 
+static void test_camera_slide(void) {
+  /* FU-351-L2 / FUN_0004D668: the Q16 ramp factor. */
+  assert(fifa96_camera_ramp_factor(8, 2) == 0x4444);
+  assert(fifa96_camera_ramp_factor(8, 8) == 0x1111);
+  assert(fifa96_camera_ramp_factor(0, 2) == 0);
+  assert(fifa96_camera_ramp_factor(8, 0) == 0);
+  assert(fifa96_camera_ramp_factor(-1, 2) == 0);
+
+  /* FUN_0004D698 mode 2 inside the bounds: clamped target 150, rate 8,
+   * tick 8 -> step 10. The negative target mirrors to -10. */
+  assert(fifa96_camera_slide(0, 1000, 0, 2, -150, 150, 0, 8, 8) == 10);
+  assert(fifa96_camera_slide(0, -1000, 0, 2, -150, 150, 0, 8, 8) == -10);
+  /* Low/high clamps. The step must overshoot the clamped target, so use a
+   * ramp factor above 1.0 (tick 100, rate 1). */
+  assert(fifa96_camera_slide(0, -1000, 0, 2, -5, 150, 0, 1, 100) == -5);
+  assert(fifa96_camera_slide(0, 1000, 0, 2, -150, 5, 0, 1, 100) == 5);
+  /* The mode -1 / mode 1 history-direction gates return the old cell. */
+  assert(fifa96_camera_slide(0, 1000, 1200, -1, -150, 150, 0, 8, 8) == 0);
+  assert(fifa96_camera_slide(0, -1000, -1200, 1, -150, 150, 0, 8, 8) == 0);
+  /* Unlisted modes are identity. */
+  assert(fifa96_camera_slide(7, 1000, 0, 0, -150, 150, 0, 8, 8) == 7);
+  assert(fifa96_camera_slide(7, 1000, 0, 3, -150, 150, 0, 8, 8) == 7);
+  /* Outside (lo, hi): the native no-history branch uses rate 8 and does not
+   * clamp to hi. */
+  assert(fifa96_camera_slide(200, 1000, 0, 2, -150, 150, 0, 8, 8) == 197);
+  assert(fifa96_camera_slide(-200, 1000, 0, 2, -150, 150, 0, 8, 8) == -177);
+  /* hist_offset is the native target subtraction. */
+  assert(fifa96_camera_slide(0, 1000, 0, 2, -150, 150, 900, 8, 8) == 7);
+}
+
 int main(void) {
   test_init_fields();
   test_init_invalid();
@@ -2296,6 +2326,7 @@ int main(void) {
   test_behavior_table();
   test_behavior_steady();
   test_focus_clamp();
+  test_camera_slide();
   test_behavior_sidetrack();
   test_behavior_staged();
   test_behavior_action();

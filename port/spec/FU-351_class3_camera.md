@@ -271,3 +271,45 @@ body remains the FU-100 §3 leg 9; only the consumer is now identified.
 0..16000 bands and the `-4000` fallback; `test_engine_live_control` pins
 the class-3 target to the native focus (and away from a distinct controlled
 record) plus the eye clamps.
+
+## 9. FU351-L2 class-0 integrator primitives (2026-11-09)
+
+**Landed.** The two pure bodies the class-0 steady handler (`FUN_0004E834`)
+calls for the camera x/z cells are ported and tested:
+
+- `fifa96_camera_ramp_factor` = `FUN_0004D668` (`0x4D668..0x4D695`): the
+  native rate*15 left shift, the two IDIV steps and the quotient/remainder
+  reconstruction reduce to `floor(tick * 0x10000 / (rate * 15))` on the live
+  positive domain. `tick` is `FUN_00049388`; `rate` is behavior `+0x28`
+  (`param_2[10]`).
+- `fifa96_camera_slide` = `FUN_0004D698` (`0x4D698..0x4D7E5`): clamp
+  `target - hist_offset` to `[lo, hi]`, step by the Q16 factor, then the
+  native mode gates. Mode -1 rejects a positive step when `target - hist <
+  -0xA0`; mode 1 rejects a negative step when `0xA0 < target - hist`; mode 2
+  has no gate because `[0x108B94] = 1` (fresh `read_memory 0x108B90` =
+  `A0 00 00 00 01 00 00 00`; both cells have no writer). The outside
+  `(lo, hi)` branch uses the fixed rate 8 and does not clamp high.
+
+**Call-site mapping (fresh `decompile_function 0x4E834`).** The handler
+calls the slide twice:
+
+- z: `slide(cam+0x18, [cam+0x3C], [cam+0x48], mode, -C[2], C[3],
+  ±block[+0x18], block[+0x28], tick)`, where mode is -1 when behavior class
+  4, else 1, and the C bounds swap in that branch;
+- x: `slide(cam+0x10, [cam+0x34], [cam+0x40], 2, -C[0], C[1], sign-adjusted
+  target, block[+0x28], tick)`.
+
+`C` is the behavior block's `+0x50` table record (`0x85AC`/`0x85EC`/`0x862C`
+plus variant*0x20; the first records read `{150,150,1000,3800}`,
+`{900,1900,900,3750}`, `{600,2400,1500,1500}`).
+
+**Not wired yet.** `fifa96_camera_handler_block` does not carry `+0x18`,
+`+0x28` or the `+0x50` C record, and the handler's yaw/pitch arms
+(`FUN_0004DF34` / `FUN_0004E05C`) are still open; wiring only x/z would move
+the eye without the native orientation. The next L2b slice extends the block
+model, wires both slide calls, ports the orientation arms, and then selects
+the live class from the native preset (`FUN_0004CE34` / `FUN_0004B308`).
+
+**Verification.** `test_camera::test_camera_slide` pins the ramp factors and
+the inside/outside, mode-gate, low/high-clamp and history-offset branches.
+`make check` **124/124**; M1/M2 `cmp` exact.
