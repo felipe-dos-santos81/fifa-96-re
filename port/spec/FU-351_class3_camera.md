@@ -949,16 +949,18 @@ side-1 maximum and the NULL cases. `make check` **124/124**; M1
 | Item | Evidence | Verdict |
 | --- | --- | --- |
 | `FUN_0004BBFC`/`FUN_0004BCC4` | fresh `0x4BBFC`/`0x4BCC4`; sole caller `0x5179F` | selector body ported and tested |
-| source-4 live producer | `0x515A6` state 4 writes `0x108E04`; `0x15A99E` activity table has no engine producer | **blocked** on the replay UI state machine and the `FUN_0008ED40` activity chain — the engine table would be a fake zero |
+| source-4 live producer | `0x515A6` state 4 writes `0x108E04`; `0x15A99E` activity table has no full engine producer | **target writer live** via `fifa96_match_run_replay_target` (FU-351 §23); non-goal `FUN_0008ED40` updates and the replay UI trigger remain |
 | `FUN_0004F274` | 6 xrefs, all `FUN_000505D0`; copies a `0x107508+idx*0x1C` config record and runs a `0x108B80` handler | no camera-pose consumer: the replay start copy (`FUN_0004F8C8`, §18) overwrites its pose; superseded |
 | `FUN_0003BB1C` | `0x3BB1C..0x3C000`; sole camera call `0x3BFED FUN_0004CF7C` | the camera body is ported (`fifa96_camera_replay_begin_gated`); the pad/audio/UI loop is a separate slice |
 | `0x505D0` config-record switch | `0x505D0..0x51066`; `FUN_0004F274` callers `0x50866/0x50971/0x50CA0/0x50E50/0x50EE6/0x50F78` | superseded by the engine's direct `match_run_native_view_step`; no pose consumer |
 | row-29 source 2 | FU-142f/OL-48 | no live entry; closed as unreachable |
 | row-0x17 `[0x10F370]` | FU-201 | proven non-live; closed |
 
-**Remaining.** The source-4 live producer needs the `0x515A6` replay
-camera state machine plus the `0x15A998/9E` activity table. Neither is
-part of the camera-pose spine; the selector body is ready for them.
+**Remaining.** The source-4 target writer is now §23: the selector body,
+goal ring and `roster_order` ids are live through
+`fifa96_match_run_replay_target`. The non-goal `FUN_0008ED40` activity
+updates and the `0x515A6`/`0x3BB1C` replay UI trigger remain; they are not
+part of the camera-pose spine.
 
 ## 22. FU351-L2j `0x36200` writer audit (2026-11-10)
 
@@ -1011,3 +1013,39 @@ unwired row-29 entry. The `0x8BA97` extra-time-setup source-3 site inside
 `FUN_0008B9CC` is not separately ported (the engine's derived period-end
 chooser writes the phase-0xC source 3 instead). The source-4 replay
 producer remains FU-351 §21.
+
+## 23. FU351-L2k source-4 replay target writer (2026-11-10)
+
+**Evidence.** `FUN_0008A938` case 6 appends the goal side (`0x157B02`) and
+the scorer descriptor (`0x157B16`) to the 10-entry ring, shifting left when
+full (`0x8ACFD`). `FUN_00091BC4` initialises the `0x15A998/9E` 2x16 table
+from `[[0x14C360]]`; `FUN_0004BBFC` bumps the selected event by 0x32 through
+`FUN_0008EE04`. `FUN_0004BCC4` is called only at `0x5179F`, which stores its
+return at `0x108E04`; `FUN_000365B0` source 4 reads that index (FU-351 §21).
+
+**Landed.** `struct fifa96_match_run_replay` now carries the goal ring
+(`goal_side`/`goal_roster`/`goal_count`) and the activity counts.
+`fifa96_match_run_score_event` appends a ring entry when the score word
+changes, storing the scorer's `desc_d` roster slot. `fifa96_match_run_replay_target`
+builds the `0x14C360` ids from `roster_order` when the PCCD order is
+available (else `sub_lineup`, else the slot identity), calls
+`fifa96_camera_replay_choice_select`, persists the bumped counts, and stages
+`render.camera_target.source = 4` with the selected `0x155AB0` pitch index.
+The 0x81 -> PLAY arm of `fifa96_match_run_replay_step` runs it; the exit arm
+restores source 0 and index -1.
+
+**Deliberate divergence.** The engine targets the selected pitch record
+directly (`side*0xB + slot`) instead of applying the native `0x157BD6`
+order-1 copy and `FUN_0004728C` -> `FUN_00047298(1)` pool rebuild (the
+FU-351 §21 `copy_slot` seam).
+
+**Verification.** `test_engine_match_render` pins the `0,1,0` ring selection
+(side 0 / pitch 7), the `0,1,1` ring special (side 1 / pitch 0 -> target 11),
+the ARMED->PLAY writer, the exit reset and the score-event ring append.
+`make check` **124/124**; M1/M2 byte-exact.
+
+**Legs.** The non-goal `FUN_0008ED40` activity updates (35 native call sites)
+are not wired, so the table only carries goal-event bumps; the native
+`0x515A6` replay camera state machine and the `0x3BB1C` UI loop still gate
+the replay trigger in the host. The selector body and the goal ring are
+exact; those legs are the remaining source-4 fidelity work.

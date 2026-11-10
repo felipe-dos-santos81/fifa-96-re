@@ -4988,9 +4988,11 @@ the build also produces the windowed `fifa96` target (`make game`).
     arm 2/pre-dispatch sets source 2 with the current record triple; row-28
     arm 0 sets it with the team record-0 triple (FU-351 §20).
     `FUN_0004BBFC`/`FUN_0004BCC4`'s source-4 selector is ported as
-    `fifa96_camera_replay_choice_select` (FU-351 §21); its live producer is
-    blocked on the `0x515A6` replay camera state machine and the
-    `0x15A998/9E` activity table. The 26-site `0x36200` audit is §22: rows
+    `fifa96_camera_replay_choice_select` (FU-351 §21) and
+    `fifa96_match_run_replay_target` stages source 4 from the engine roster
+    order + goal ring (FU-351 §23); the non-goal `FUN_0008ED40` activity
+    updates and the `0x515A6`/`0x3BB1C` replay UI trigger remain. The
+    26-site `0x36200` audit is §22: rows
     0x14/0x25, phases 0x18/0x19, the restart terminal, phase-0x20 and the
     keeper closedown/claim edges now write their native source and target.
     `FUN_000974D8` is a bare `RET`.

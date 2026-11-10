@@ -298,6 +298,13 @@ struct fifa96_match_run_replay {
   int32_t caption_x;      /* staged engine caption cell (native FUN_00012FE4 leg) */
   int32_t caption_y;
   char captions[6][FIFA96_MATCH_HUD_NAME_MAX];  /* [0x109AD0..0x109AD8] leg 1 */
+  /* FU351-L2k: the `0x157B02`/`0x157B16` goal ring and the `0x15A99E`
+   * activity counts read by FUN_0004BBFC. The ring is appended by the
+   * score-event writer; the non-goal FUN_0008ED40 updates remain a leg. */
+  uint8_t goal_side[FIFA96_CAMERA_REPLAY_EVENTS];
+  uint8_t goal_roster[FIFA96_CAMERA_REPLAY_EVENTS];
+  uint8_t goal_count;
+  int32_t activity_count[2][FIFA96_CAMERA_REPLAY_SLOTS];
 };
 
 /* The R2 row gate (fresh 0x565BC decompile + the predicate bodies):
@@ -339,6 +346,14 @@ void fifa96_match_run_replay_exit(struct fifa96_match_run *mr);
  * default. Returns 1 on a selected camera, 0 for the default,
  * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_replay_camera_set(struct fifa96_match_run *mr, uint32_t index);
+
+/* FU351-L2k: the FUN_0004BBFC/FUN_0004BCC4 replay target chooser. Builds
+ * the score pair, the `0x157B02/16` goal ring and the `0x14C360` order ids
+ * from the run, calls `fifa96_camera_replay_choice_select`, and stages
+ * source 4 with the selected `0x155AB0` index. The non-goal
+ * `FUN_0008ED40` activity updates are a leg; the goal-event bump is native.
+ * Returns 1 on a selected target, -FIFA96_ERR_INVALID on NULL. */
+int fifa96_match_run_replay_target(struct fifa96_match_run *mr);
 
 /* The R1 substitution strip (FU-152 §2.6/§3.2). `record` is the byte block
  * behind the native [0x1587D4] pointer (the field meanings stay FU-145 L4);

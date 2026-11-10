@@ -32,6 +32,8 @@ and the replay sound leg with exact native evidence.
     close the camera-spine evidence (FU-351 §21).
 11. Audit all 26 `0x36200` sites; wire the live ported row-0x14/0x25 and
     phase-0x18/0x19/restart/phase-0x20 writes (FU-351 §22).
+12. Wire the source-4 replay target writer from the engine roster order and
+    goal ring (FU-351 §23).
 
 ## Remaining
 

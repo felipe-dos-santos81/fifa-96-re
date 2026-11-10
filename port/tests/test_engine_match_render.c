@@ -2604,6 +2604,72 @@ static void test_replay_step_machine(void) {
   assert(r->state == 0 && r->hud_armed == 0);
 }
 
+static void test_replay_target(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  struct fifa96_match_run_replay *r = &mr.render.replay;
+  for (int side = 0; side < 2; side++) {
+    for (int slot = 0; slot < 16; slot++) mr.roster_order[side][slot] = slot;
+    mr.roster_order_ok[side] = 1;
+  }
+
+  /* The 0,1,0 ring selects the first event after the 1-1 level: side 0 /
+   * roster 7, target 7 and source 4. */
+  mr.score[0] = 2;
+  mr.score[1] = 1;
+  r->goal_count = 3;
+  r->goal_side[0] = 0;
+  r->goal_roster[0] = 5;
+  r->goal_side[1] = 1;
+  r->goal_roster[1] = 3;
+  r->goal_side[2] = 0;
+  r->goal_roster[2] = 7;
+  assert(fifa96_match_run_replay_target(&mr) == 1);
+  assert(mr.render.camera_target.source == 4);
+  assert(mr.render.camera_target.index == 7);
+  assert(r->activity_count[0][7] == 0x32);
+
+  /* The 0,1,1 ring with a 1-2 score selects side 1 / roster 0 (the 0x10
+   * special): target index 11. */
+  mr.score[0] = 1;
+  mr.score[1] = 2;
+  r->goal_count = 3;
+  r->goal_side[0] = 0;
+  r->goal_roster[0] = 5;
+  r->goal_side[1] = 1;
+  r->goal_roster[1] = 3;
+  r->goal_side[2] = 1;
+  r->goal_roster[2] = 0;
+  r->activity_count[0][7] = 0;   /* clear the previous bump */
+  assert(fifa96_match_run_replay_target(&mr) == 1);
+  assert(mr.render.camera_target.index == 11);
+  assert(r->activity_count[1][0] == 0x32);
+
+  /* The 0x81 -> PLAY arm runs the chooser; the exit arm restores source 0. */
+  r->state = 0x80;
+  r->phase_counter = 0;
+  mr.render.camera_target.source = 0;
+  mr.render.camera_target.index = -1;
+  fifa96_match_run_replay_step(&mr, 0, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(mr.render.camera_target.source == 4);
+  fifa96_match_run_replay_step(&mr, 0x80, 0);
+  assert(mr.render.camera_target.source == 0);
+  assert(mr.render.camera_target.index == -1);
+
+  /* The score-event writer appends the goal ring entry. */
+  fifa96_match_run_init(&mr);
+  r = &mr.render.replay;
+  mr.running = 1;
+  mr.goal_record = 13;                  /* team 1 / record 2 */
+  mr.entities.team[1].records[2].desc_d = 3;
+  assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
+  assert(mr.score[0] == 1);
+  assert(r->goal_count == 1);
+  assert(r->goal_side[0] == 0);
+  assert(r->goal_roster[0] == 3);
+}
+
 static void test_replay_camera_set(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -2963,6 +3029,7 @@ int main(void) {
   test_live_pause_and_result_panels();
   test_replay_state_helpers();
   test_replay_step_machine();
+  test_replay_target();
   test_replay_camera_set();
   test_sub_marks_and_numbers();
   test_overlay_rows_and_timeout();

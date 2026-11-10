@@ -4999,6 +4999,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
   memset(mr->formation_current, 0, sizeof mr->formation_current);
+  memset(mr->roster_order, 0, sizeof mr->roster_order);
+  memset(mr->roster_order_ok, 0, sizeof mr->roster_order_ok);
   mr->formation_mismatch[0] = 0;
   mr->formation_mismatch[1] = 0;
   mr->store_158820 = 0;
@@ -5627,12 +5629,39 @@ int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side) {
   return 0;
 }
 
+/* FU351-L2k: FUN_0008A938 case 6 appends the `0x157B02` side byte and the
+ * `0x157B16` scorer descriptor to the 10-entry goal ring. The engine stores
+ * the scorer's roster slot; the ring shifts left when full (0x8ACFD). */
+static void match_run_replay_note_goal(struct fifa96_match_run *mr,
+                                       uint32_t side) {
+  struct fifa96_match_run_replay *r = &mr->render.replay;
+  uint8_t roster = 0;
+  if (mr->goal_record >= 0) {
+    uint32_t team = (uint32_t)mr->goal_record / FIFA96_MATCH_ENTITY_RECORDS;
+    uint32_t picked = (uint32_t)mr->goal_record % FIFA96_MATCH_ENTITY_RECORDS;
+    if (team < FIFA96_MATCH_ENTITY_TEAMS)
+      roster = mr->entities.team[team].records[picked].desc_d;
+  }
+  if (r->goal_count >= FIFA96_CAMERA_REPLAY_EVENTS) {
+    memmove(r->goal_side, r->goal_side + 1,
+            FIFA96_CAMERA_REPLAY_EVENTS - 1);
+    memmove(r->goal_roster, r->goal_roster + 1,
+            FIFA96_CAMERA_REPLAY_EVENTS - 1);
+    r->goal_count = FIFA96_CAMERA_REPLAY_EVENTS - 1;
+  }
+  r->goal_side[r->goal_count] = (uint8_t)(side & 1u);
+  r->goal_roster[r->goal_count] = roster;
+  r->goal_count++;
+}
+
 int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uint8_t probe) {
   fifa96_action_score state;
   fifa96_action_score_out out;
   fifa96_err_t rc;
+  uint16_t old_score;
   if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
+  old_score = mr->score[side];
   state.score[0] = mr->score[0];
   state.score[1] = mr->score[1];
   state.last_side = mr->score_last_side;
@@ -5649,6 +5678,7 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
   mr->score_max_diff = state.max_diff;
   mr->score_last_event = out.posted ? out.post_id : 0u;
   mr->score_display_event = out.dispatched ? out.post_id : 0u;
+  if (mr->score[side] != old_score) match_run_replay_note_goal(mr, side);
   return 0;
 }
 
@@ -9243,6 +9273,54 @@ int fifa96_match_run_replay_blink_step(struct fifa96_match_run_replay *replay,
   return replay->blink <= 9;
 }
 
+static int32_t match_run_replay_roster_id(const struct fifa96_match_run *mr,
+                                          uint32_t side, uint32_t slot) {
+  if (mr->roster_order_ok[side] != 0) return (int32_t)mr->roster_order[side][slot];
+  if (mr->sub_lineup_ready != 0 &&
+      mr->sub_lineup[side][slot] < FIFA96_CAMERA_REPLAY_SLOTS)
+    return (int32_t)mr->sub_lineup[side][slot];
+  return (int32_t)slot;
+}
+
+int fifa96_match_run_replay_target(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_replay *r;
+  fifa96_camera_replay_target target;
+  fifa96_camera_replay_activity activity;
+  fifa96_camera_replay_choice choice;
+  int rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  r = &mr->render.replay;
+  memset(&target, 0, sizeof target);
+  memset(&activity, 0, sizeof activity);
+  target.score[0] = mr->score[0];
+  target.score[1] = mr->score[1];
+  target.event_count = r->goal_count;
+  if (target.event_count > FIFA96_CAMERA_REPLAY_EVENTS)
+    target.event_count = FIFA96_CAMERA_REPLAY_EVENTS;
+  for (uint32_t i = 0; i < FIFA96_CAMERA_REPLAY_EVENTS; i++) {
+    target.event_side[i] = r->goal_side[i];
+    target.event_id[i] = r->goal_roster[i];
+  }
+  for (uint32_t side = 0; side < 2u; side++) {
+    for (uint32_t slot = 0; slot < FIFA96_CAMERA_REPLAY_SLOTS; slot++) {
+      int32_t id = match_run_replay_roster_id(mr, side, slot);
+      target.order_id[side][slot] = id;
+      activity.id[side][slot] = id;
+      activity.count[side][slot] = r->activity_count[side][slot];
+    }
+  }
+  rc = fifa96_camera_replay_choice_select(&target, &activity, &choice);
+  if (rc != FIFA96_OK) return rc;
+  for (uint32_t side = 0; side < 2u; side++)
+    for (uint32_t slot = 0; slot < FIFA96_CAMERA_REPLAY_SLOTS; slot++)
+      r->activity_count[side][slot] = activity.count[side][slot];
+  mr->render.camera_target.source = 4;
+  mr->render.camera_target.index = choice.target_index;
+  mr->render.camera_target.force_focus = 0;
+  mr->render.camera_target.replay_active = 0;
+  return 1;
+}
+
 int fifa96_match_run_replay_camera_set(struct fifa96_match_run *mr, uint32_t index) {
   int32_t kind, sub;
   int rc;
@@ -9265,6 +9343,11 @@ void fifa96_match_run_replay_exit(struct fifa96_match_run *mr) {
    * freed (the hero/selection release and the audio sinks stay legs). */
   mr->render.replay.state = FIFA96_MATCH_REPLAY_LIVE;
   mr->render.replay.hud_armed = 0;
+  /* FUN_00036B98's camera reset: the normal view resumes on source 0. */
+  if (mr->render.camera_target.source == 4) {
+    mr->render.camera_target.source = 0;
+    mr->render.camera_target.index = -1;
+  }
 }
 
 int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons,
@@ -9284,6 +9367,7 @@ int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons,
       (void)fifa96_match_run_replay_camera_set(mr, 0);
       r->advance = 0;
       r->state = FIFA96_MATCH_REPLAY_PLAY;
+      (void)fifa96_match_run_replay_target(mr);
     }
     return 0;
   }

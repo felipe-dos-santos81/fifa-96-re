@@ -5078,3 +5078,16 @@ close-out below).
   `test_engine_match_handlers`, `test_engine_match_act` and
   `test_arm_bodies` pin the new targets. `make check` green 124/124; M1/M2
   byte-exact. Record: FU-351 §22.
+
+- **Phase 110 source-4 replay target writer (2026-11-10).** The replay state
+  now carries the `0x157B02`/`0x157B16` goal ring and the `0x15A99E` activity
+  counts. `fifa96_match_run_score_event` appends the scorer's roster slot
+  when a score word changes; `fifa96_match_run_replay_target` builds the
+  `0x14C360` ids from `roster_order` (falling back to `sub_lineup`/identity),
+  calls `fifa96_camera_replay_choice_select`, persists the goal-event bump
+  and stages source 4 with the selected `0x155AB0` pitch index. The replay
+  0x81 -> PLAY arm runs it; the exit arm restores source 0. The non-goal
+  `FUN_0008ED40` updates (35 sites) and the `0x515A6`/`0x3BB1C` replay UI
+  trigger remain legs. `test_engine_match_render` pins the `0,1,0` and
+  `0,1,1` ring choices, the arm/exit and the score-event append. `make
+  check` green 124/124; M1/M2 byte-exact. Record: FU-351 §23.
