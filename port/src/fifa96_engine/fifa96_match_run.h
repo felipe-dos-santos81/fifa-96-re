@@ -1425,6 +1425,11 @@ struct fifa96_match_run {
   uint8_t sp_b5_1587b5;
   int32_t sp_path[3][2];
   uint8_t sp_path_valid;
+  /* The two 0x839BC-cut clears: FUN_0004C374 writes word[0x157A68] = 0 and
+   * FUN_000361A4 writes dword[0x105FB0] = 0. Both cells have no other engine
+   * home; the fields are reset-only observables. */
+  uint16_t sp_clock_157a68;
+  int32_t sp_global_105fb0;
   /* FU274 §1.1: `byte[0x157821]` -- row 0x10's far-ball re-queue gate
    * (`0x85CE4`) and the keeper predictor's pan gate (`0x739BB`/`0x7489C`) --
    * is one native cell owned by the camera block: `render.camera.pan_counter`

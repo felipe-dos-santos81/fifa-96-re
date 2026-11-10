@@ -1055,3 +1055,34 @@ are not wired, so the table only carries goal-event bumps; the native
 `0x515A6` replay camera state machine and the `0x3BB1C` UI loop still gate
 the replay trigger in the host. The selector body and the goal ring are
 exact; those legs are the remaining source-4 fidelity work.
+
+## 24. FU351-L2l set-piece target chain closure (2026-11-10)
+
+**Erratum (quoted).** §22's "Remaining" paragraph says the `0x158780`
+sub-index timers, the target staging velocity and the
+`FUN_000786A0`/`FUN_0004C374`/`FUN_000361A4` sinks stay legs. That is
+superseded for the timers, velocity and the two reset clears: they are now
+ported (FU-275 §4). The `0x83937` row's "other machine branches stay legs" is
+also superseded for the path builder, interpolation, input tail and no-slot
+build.
+
+**Landed.** `fifa96_sp_build_path` + `fifa96_sp_target_step` implement the
+`FUN_0006DAB4` three-point path and the `0x158780` interpolation. The live
+slot probe builds at `0x83441` (previous frame's `0x15877B._3`), steps once,
+and rebuilds at `0x839BC`/`0x83AF1` with `0x15877F`; the no-slot arm builds at
+`0x85572` from the draw. The `0x157A6F` override now drives the live camera
+focus through `match_run_live_camera_follow` (clamped by
+`fifa96_camera_focus_clamp`), and the gate-fail arm restores the FU-71 focus.
+The cut writes `0x157A68 = 0` (`FUN_0004C374`, twice) and `0x105FB0 = 0`
+(`FUN_000361A4`) through reset-only run cells.
+
+**Verification.** `test_engine_match_handlers` pins the live head path, the
+cut's `has_slot`/reset writes and the gate-fail clear;
+`test_engine_match_render` pins the override consumer; `test_outfield` and
+`test_engine_team_data` pin the pure builder/interpolation and the real
+`352sp.fmt` entry. `make check` **124/124**; M1/M2 byte-exact.
+
+**Remaining.** `FUN_000786A0`'s taker list-head clear and the receiver
+control-field clears stay **FU275-L6**; the visible receiver exclusion is
+ported. Row 29's source-2 store remains on the unwired row-29 entry; the
+source-4 non-goal activity updates and replay UI trigger are unchanged.

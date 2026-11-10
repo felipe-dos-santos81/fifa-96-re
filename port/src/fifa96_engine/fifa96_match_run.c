@@ -5018,6 +5018,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->sp_path[1][0] = mr->sp_path[1][1] = 0;
   mr->sp_path[2][0] = mr->sp_path[2][1] = 0;
   mr->sp_path_valid = 0;
+  mr->sp_clock_157a68 = 0;
+  mr->sp_global_105fb0 = 0;
   /* FU274 §1.1: `byte[0x157821]` is the camera's `render.camera.pan_counter`
    * (cleared by reset_render's fifa96_camera_init), not a separate cell. */
   /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2): the producer gates
@@ -5325,6 +5327,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->sp_path[1][0] = mr->sp_path[1][1] = 0;
   mr->sp_path[2][0] = mr->sp_path[2][1] = 0;
   mr->sp_path_valid = 0;
+  mr->sp_clock_157a68 = 0;
+  mr->sp_global_105fb0 = 0;
   /* FU274 §1.1: `byte[0x157821]` is the camera's `render.camera.pan_counter`. */
   /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2) / FU-202 §6 rec (b)
    * (M2 phase-18 T3): a fresh match ACTIVATES the native situation producer —

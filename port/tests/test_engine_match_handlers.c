@@ -451,11 +451,16 @@ static void test_action_10_receiver_cut(void) {
 
   /* Second 0x20 edge: FUN_0008DE8C re-picks the free receiver and the
    * 0x83937 branch stages source 2 with that record's position. */
+  f.mr.sp_clock_157a68 = 0x123;
+  f.mr.sp_global_105fb0 = 0x456;
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
   assert(f.mr.render.camera_target.source == 2);
   assert(f.mr.render.camera_target.record[0] == 0x200);   /* record 2 */
   assert(f.mr.render.camera_target.record[1] == 0);
   assert(f.mr.render.camera_target.record[2] == 0);
+  assert(f.mr.entities.team[0].records[2].has_slot == 1);
+  assert(f.mr.sp_clock_157a68 == 0);
+  assert(f.mr.sp_global_105fb0 == 0);
   drop_fixture(&f);
 }
 

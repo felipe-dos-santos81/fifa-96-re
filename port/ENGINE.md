@@ -4997,8 +4997,12 @@ the build also produces the windowed `fifa96` target (`make game`).
     keeper closedown/claim edges, the extra-time chooser's tied-score source
     3 and the set-piece no-slot source 0 now write their native source and
     target. The `0x83937` receiver cut and the delivery returns 1/6/4/3/5/2
-    are wired (the latter live-gated; M2 keeps the derived timer/draw arm);
-    the `FUN_00083428` timer/target-staging legs remain. `FUN_000974D8` is a
+    are wired (the latter live-gated; M2 keeps the derived timer/draw arm).
+    FU-351 §24 closes the set-piece target chain: the `FUN_0006DAB4` path
+    builder, the `0x158780` interpolation, the `0x15877B/7F/B5` input tail,
+    the slot-5 `352sp.fmt` table and the `0x157A6F` live focus override are
+    live-only; the remaining leg is `FUN_000786A0`'s taker list-head clear
+    and the receiver control-field clears (FU275-L6). `FUN_000974D8` is a
     bare `RET`.
     Row 29's source-2 store has no live entry (FU-142f/OL-48); `FUN_0004F274`
     and the `0x505D0` config-record switch are superseded by the direct view

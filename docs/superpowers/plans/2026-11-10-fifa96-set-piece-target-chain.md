@@ -514,3 +514,20 @@ git add port/src/fifa96_engine/fifa96_match_handlers.c port/src/fifa96_engine/fi
 git commit -m "feat(engine): close the set-piece target chain"
 git push origin main
 ```
+
+## Result (2026-11-10)
+
+All six tasks landed on `main`:
+
+- `307dcea` — pure path builder, duration/height tables, interpolation.
+- `ea5cb6d` — `GAMEART0.PVI` slot-5 loader and fixed per-team `sp` buffer.
+- `d35de09` — target state and the `0x15877B/7F/B5` input tail.
+- `76d7e76` — live path build at `0x83441`/`0x839BC`/`0x83AF1`/`0x85572`
+  and the per-frame step.
+- `b23b486` — `0x157A6F` live camera-focus override.
+- final — `FUN_000786A0` visible half, `0x157A68`/`0x105FB0` resets, docs.
+
+`make check` **124/124**; M1/M2 `cmp` exact; windowed smoke `124` (timeout)
+with no error. The remaining set-piece leg is FU275-L6: the taker list-head
+clear and the receiver control-field clears. FU-275 §4, FU-351 §24 and FU154
+R2-L2 record the closure.

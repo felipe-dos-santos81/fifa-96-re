@@ -484,3 +484,23 @@ R2-L4 (T1/R1); the settled-lead exit (R2-L5) is unchanged.
   count-0/absent), and whether PLAYART bank 3 is native-reachable for row 3.
   Until then the slot draws the synthetic table's frame-0 sprite (a PLAYART
   player pose).
+
+## R2-L2 closure — the `[0x157A6F]` set-piece camera override (2026-11-10)
+
+R2-L2 asked what maintains `0x158767` when `[0x157A6F]` is set and which
+animation mode uses it. Fresh `FUN_00083428` answers both: the override is
+seeded at `0x83471` (`MOV dword[0x157A6F], 0x158767`) when the set-piece guard
+passes (`byte[0x1587B5] == 0` and direction `0x15877B._3` in 0..2), and the
+`0x158780` interpolation maintains the triple through `fifa96_sp_target_step`.
+The gate-fail arm (`0x83629..0x8363D`) copies the FU-71 triple into `0x158767`
+and clears the pointer. It is the set-piece delivery mode, not a general
+animation mode.
+
+**Landed.** `fifa96_match_run` carries `camera_override_157a6f` as a 0/1 flag
+plus `camera_override_triple[3]`; the live follow reads it through
+`fifa96_camera_focus_clamp` and otherwise keeps `camera.pos_*`.
+`match_sp_stage_camera_override` copies the interpolated target on the
+guard-pass arm and restores the FU-71 focus on the gate-fail arm.
+`test_engine_match_render` pins the override focus and the clear; the
+set-piece handler test pins the stage/clear. `make check` **124/124**; M1/M2
+byte-exact. R2-L2 is closed by FU-275 §4 / FU-351 §24.

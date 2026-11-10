@@ -5112,3 +5112,23 @@ close-out below).
   `test_engine_match_handlers` pins the two-edge cut and the delivery codes.
   `make check` green 124/124; M1/M2 byte-exact. Record: FU-351 §22,
   FU-275 §3.
+
+- **Phase 112 set-piece target chain (2026-11-10).** The live set-piece
+  machine now builds and steps the native target instead of the derived
+  timer/draw stand-in. `fifa96_sp_build_path` ports `FUN_0006DAB4` (the
+  299-cell × 12-byte `352sp.fmt` family, signed `*0x26`/`*0x21`, side mirror,
+  last-cell/dir-3 bound) and `fifa96_sp_target_step` ports the `0x158780`
+  interpolation (duration/height tables, accumulator and sub-index, the
+  `0x158780 = 1` reload). The slot-5 `sp` files load from `GAMEART0.PVI` into
+  a fixed per-team 3588-byte buffer. The input tail writes `0x15877B._3` /
+  `0x15877F` from the raw `8/1/4/2` bits, toggles `0x1587B5` on `pressed &
+  0xB0`, and the live no-slot arm stores the draw in `team+0x7E7` before the
+  build. The `0x157A6F` override now drives the live camera focus through
+  `camera_override_triple`, and the gate-fail arm restores the FU-71 focus.
+  The cut writes `0x157A68`/`0x105FB0` through reset-only cells and sets the
+  picked receiver `has_slot = 1`; the taker list-head clear and receiver
+  control-field clears stay FU275-L6. `test_outfield`, `test_engine_team_data`,
+  `test_engine_match_handlers` and `test_engine_match_render` cover the
+  builder, interpolation, real ISO table, live path/override and the cut.
+  `make check` green 124/124; M1/M2 byte-exact. Record: FU-275 §4, FU-351 §24,
+  FU154 R2-L2. Commits: `307dcea`, `ea5cb6d`, `d35de09`, `76d7e76`, `b23b486`.

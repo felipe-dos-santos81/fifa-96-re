@@ -1769,7 +1769,7 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
                                  struct fifa96_match_run_record *r) {
   uint32_t team;
   uint32_t pick;
-  const struct fifa96_match_team *t;
+  struct fifa96_match_team *t;
   fifa96_sp_receiver_candidate cand[FIFA96_MATCH_ENTITY_RECORDS];
   int32_t chosen;
   if (r->has_slot == 0u) return 0;
@@ -1804,6 +1804,12 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
   mr->sp_recv_1587ac = (int32_t)pick;
   mr->sp_b0_1587b0 = 0;
   mr->sp_b6_1587b6 = 0;
+  /* 0x786A0's visible half: the picked receiver takes the list-head flag, so
+   * the next FUN_0008DB6C pick excludes it. The taker's list-head clear and
+   * the receiver control-field clears stay FU275-L6. */
+  t->records[pick].has_slot = 1;
+  mr->sp_clock_157a68 = 0;     /* FUN_0004C374 (called twice) */
+  mr->sp_global_105fb0 = 0;    /* FUN_000361A4 */
   /* 0x839BC: the cut rebuilds the path from 0x15877F before the 0x83937
    * camera target write. The native does not step the interpolation here. */
   match_sp_build_native_path(mr, r, mr->sp_dir_15877f);

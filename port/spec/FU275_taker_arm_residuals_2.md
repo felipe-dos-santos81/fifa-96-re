@@ -548,3 +548,37 @@ delivery returns 1/6/4/3/5/2; the slot probe runs it only when `live_start`,
 so the M2 characterization tape keeps the derived timer/draw arm. The
 remaining L266-4 legs are the `0x158780` sub-index timers, the target
 staging velocity, and the `0x786A0`/`0x4C374`/`0x361A4` sinks.
+
+## 4. Set-piece target-chain closure (2026-11-10)
+
+**Landed.** The `FUN_0006DAB4` path builder is `fifa96_sp_build_path`
+(`fifa96_outfield.c`): the 299-cell × 12-byte table, the signed `*0x26`/`*0x21`
+control offsets, the side-1 negation and the last-cell/dir-3 bound. The
+`0x158780` interpolation is `fifa96_sp_target_step` with the `0x15878C`
+accumulator, `0x158786`/`0x158788` velocities, the `0x10F4EE` duration table,
+the `0x10F3C4` height arc and the `0x158780 = 1` + entry-1 reload on the
+sub-index overflow. The slot-5 `352sp.fmt` / `442sp.fmt` / `swsp.fmt` /
+`424sp.fmt` / `433sp.fmt` entries are loaded from `GAMEART0.PVI` into a fixed
+3588-byte per-team buffer (`FUN_0006D9C4`/`FUN_0004C384(form*6+5)`). The input
+tail now writes `0x15877B._3`/`0x15877F` from the raw `8/1/4/2` bits, toggles
+`0x1587B5` on `pressed & 0xB0`, clears the low nibble of `[param_2+0x10]`, and
+the live no-slot arm stores the draw in `team+0x7E7` before building. The
+`0x157A6F` override is a 0/1 flag plus `camera_override_triple[3]`; the live
+camera follow uses it through `fifa96_camera_focus_clamp` and clears it on the
+gate-fail arm.
+
+**Verification.** `test_outfield` pins the builder (dirs 0..3, side 0/1,
+signed bytes, last-cell and short-table guards) and the interpolation
+(sub 0 -> 1, accumulator, duration 8, velocity 2, y arc). `test_engine_team_data`
+loads the real `352sp.fmt` from the ISO and asserts 3588 bytes plus a valid
+path. `test_engine_match_handlers` pins the live head build, the input tail,
+the cut's `has_slot`/reset writes and the gate-fail override clear.
+`test_engine_match_render` pins the override consumer. `make check`
+**124/124**; M1/M2 `cmp` exact.
+
+**Remaining.** `FUN_000786A0`'s taker list-head clear and the receiver
+control-field clears are not modeled; the visible half (the picked receiver
+`has_slot = 1`, so the next `FUN_0008DB6C` excludes it) is ported and recorded
+as **FU275-L6**. The slot-3 `form*6+3` table and the exact `264` per-team
+`+0x7E8` block layout are not needed by this chain; they stay legs if a future
+consumer reads them.
