@@ -4944,10 +4944,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   - **R5 ball row**: dormant pinned (`render.ball_row` NULL; FUN_00056690's
     only caller passes EDX=0, disasm 0x56E1B..0x56E41).
   - **Camera handlers** (`fifa96_camera_type`, `fifa96_camera_behavior_
-    steady/sidetrack/staged/action`): the 0x107508 `{+4,+0xC}` mapping (3->5
-    remap, negative clamp; the image -1 cells are the degenerate 0x108B60
-    read, engine-clamped) and the quoted clamp/constant level of the four
-    0x108B80 bodies plus the pinned 0x108B64 mode table
+    steady/sidetrack/staged/action`): the 0x107508 `{+4 class, +8 handler
+    selector, +0xC behavior}` mapping (3->5 remap, negative clamp; the image
+    -1 cells are the degenerate 0x108B60 read, engine-clamped) and the quoted
+    clamp/constant level of the four 0x108B80 bodies plus the pinned 0x108B64
+    mode table
     (`fifa96_camera_behavior_blocks`: classes {3,1,3,3,1,3}, class-gate cells
     the dword +0xC {0,0,0xA7F8,0,0,0xA21C} — blocks 2/5 take FUN_0004EC9C's
     class-3 arm), wired into the FUN_000505D0 default arm through the staged
@@ -4961,8 +4962,13 @@ the build also produces the windowed `fifa96` target (`make game`).
     FUN_0004EC9C's FUN_000A1A60 sin/cos scale, stored class gate, pan-cell
     clamp, x/z slide split, four snap arms and ±0x1620 pitch target; the
     +0x50 sub-record +0x10/+0x14 cells are in the block model (FU-351 §13).
-    The live class is still 3 until the resolver is wired; the computed-call
-    register-leftover and [0x107DD4] replay-pitch arms remain legs.
+    The live render camera now consumes `fifa96_camera_view_select`: phase 2
+    resolves to preset 0 / slot 1 / class 1, slots 0/1/2 run the completed
+    steady/sidetrack/staged bodies with persistent per-class record state and
+    the 20-step view-change settle; slot 5 keeps the class-3 action fallback
+    (FU-351 §14). `render.view_class` (the FU-71 walk input) is unchanged, and
+    the computed-call register-leftover and [0x107DD4] replay-pitch arms remain
+    legs.
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

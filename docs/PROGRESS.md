@@ -4919,3 +4919,21 @@ close-out below).
   camera is still class 3: the bodies are complete, but wiring
   `fifa96_camera_view_select` is the next slice (FU351-L2c-3). Record:
   FU-351 §13.
+
+- **Phase 101 live native view selection (2026-11-10).** The ported
+  `fifa96_camera_view_select` resolver is now consumed by the live render
+  camera. `FUN_0004D908` switches on the camera-record `+0x08` handler
+  selector; slots 0/1/2 run the completed class-0/1/2 bodies with persistent
+  per-class record state seeded from `(-1920,160,30)`, ratio `0x1500`, yaw
+  `0xBF9C`, pitch `0xC8`. Phase 2 resolves to preset 0 / slot 1 / class 1, so
+  the old hardcoded class-3 render is gone from open play; slot 5 remains the
+  class-3 action fallback. A slot/variant change runs the native 20-step
+  settle, and `fifa96_camera_behavior_block` supplies the mutable behavior-row
+  copy. `test_engine_live_control` pins the phase-2 selection, class-1 C
+  bounds and record-to-render publication; `test_camera` pins the block-copy
+  helper. `make check` green 124/124; M1/M2 `cmp` exact (the M2 transcript is
+  unchanged under the wired selector). Windowed Release smoke ran to the 25 s timeout
+  without error. Open: `render.view_class` (the FU-71 walk input) still has
+  its old constant, the per-frame target refresh remains the engine's
+  native-place mapping, and the `FUN_0004CE34` view-mode gates are not staged
+  (the default `view_mode` 0 takes the selector). Record: FU-351 §14.

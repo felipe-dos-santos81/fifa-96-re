@@ -534,3 +534,52 @@ arms.
 `FU351-L2c-2` (`[0x107DD4] == 1` replay pitch arm) are unchanged.
 `FU351-L2c-3` is now only the live wiring: the bodies are complete, but the
 live camera still selects class 3 until the resolver is connected.
+
+## 14. FU351-L2c-3 live native view selection (2026-11-10)
+
+**Evidence.** Fresh `decompile_function`/`disassemble_function` `0x4D04C`
+(67 instructions) and `0x4CE34` (32); `FUN_0004D908` (53). Fresh
+`read_memory 0x1074D0`/`0x1074EC` (the slot/variant tables) and the camera
+records `0x107508/0x107578/0x1075E8/0x107738`. `read_memory 0x107DD0`
+starts as slot 1 / variant 0.
+
+**Landed.** The live render camera now follows the native selection path:
+
+- `FUN_0004D908` switches on the record `+0x08` handler selector, not the
+  `+0x04` class. Slots 0/1/2 carry selector 0/1/2 and behavior row 0/1/2;
+  slot 5 carries selector 5 (the class-3 action body) and behavior row -1
+  (the degenerate `0x108B60` read, unused by the action handler).
+- The render state carries `native_view_preset/slot/variant/class` and three
+  persistent record states (`native_view_cam[0..2]`,
+  `native_view_block[0..2]`, `native_view_valid[0..2]`). Each is seeded from
+  the image record: eye `(-1920,160,30)`, ratio `0x1500`, yaw `0xBF9C`,
+  pitch `0xC8`, behavior row = class.
+- Each live frame calls `fifa96_camera_view_select(phase,
+  difficulty_14c2f6, screen_leg)`. A slot/variant change takes
+  `FUN_0004D04C`'s 20-step settle (`FUN_0004D908` loop) after copying the
+  native focus into the target/history; otherwise one handler step runs. The
+  selected class 0/1/2 body publishes its record eye/yaw/pitch/ratio to
+  `render_eye_*`, `yaw`, `pitch`, `view_ratio`. Class 3 keeps the action
+  handler as the slot-5 fallback.
+- `fifa96_camera_behavior_block` is the mutable-row copy helper used to seed
+  the handler blocks. `fifa96_match_run_eye` returns the native selected
+  record eye when one is valid; the old class-3 side envelope remains only as
+  the pre-selection fallback.
+
+**Verification.** `make check` **124/124**; M1
+`09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` and M2
+`41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`
+byte-exact under the wired selector (M2's transcript is unchanged). The windowed
+Release build ran until the 25 s smoke timeout without an error.
+`test_engine_live_control` pins phase-2 -> preset 0 / slot 1 / variant 0 /
+class 1, the class-1 C bounds, the handler track (focus x/z, native-zeroed
+track y) and the record->render eye/orientation publication.
+
+**Remaining legs.** `render.view_class` (the FU-71 walk input) stays 0; the
+native class source at that call site is a separate leg. The per-frame target
+refresh is still the engine's native-place mapping; a distinct per-frame
+target producer outside `FUN_0004D04C` is not established. The
+`FUN_0004CE34` view-mode gates (`[0x14E57C]` in 0x13/0x14/0x1C/0x1D skip the
+selector, plus the `FUN_00053D9C` early-out) are not staged; the engine calls
+the resolver every live frame and the image/default `view_mode` is 0.
+FU351-L2c-1 and L2c-2 are unchanged.

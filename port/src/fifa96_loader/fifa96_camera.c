@@ -825,6 +825,42 @@ const fifa96_camera_behavior_table_entry
          .pan = 0, .pan_step = 0},
 };
 
+int fifa96_camera_behavior_block(fifa96_camera_handler_block *out,
+                                 uint32_t index) {
+  const fifa96_camera_behavior_table_entry *src;
+  if (!out || index >= FIFA96_CAMERA_BEHAVIOR_BLOCKS)
+    return -FIFA96_ERR_INVALID;
+  src = &fifa96_camera_behavior_blocks[index];
+  out->class_of = src->class_of;
+  out->target0 = src->target0;
+  out->target1 = src->target1;
+  out->const10 = src->const10;
+  out->const18 = src->const18;
+  out->const1c = src->const1c;
+  out->const20 = src->const20;
+  out->const24 = src->const24;
+  out->const28 = src->const28;
+  out->const30 = src->const30;
+  out->const34 = src->const34;
+  out->const38 = src->const38;
+  out->const3c = src->const3c;
+  out->const40 = src->const40;
+  out->field3 = src->field3;
+  out->c0 = src->c0;
+  out->c1 = src->c1;
+  out->c2 = src->c2;
+  out->c3 = src->c3;
+  out->sub10 = src->sub10;
+  out->sub14 = src->sub14;
+  out->sub18 = src->sub18;
+  out->sub1c = src->sub1c;
+  out->cell18 = src->cell18;
+  out->cell1c = src->cell1c;
+  out->pan = src->pan;
+  out->pan_step = src->pan_step;
+  return FIFA96_OK;
+}
+
 int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
                        uint32_t selector, int32_t *handler, int32_t *behavior) {
   int32_t handler_index, behavior_record, behavior_index;

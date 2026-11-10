@@ -2476,6 +2476,22 @@ static void test_behavior_table(void) {
   scaled = (int32_t)(((int64_t)block.sub14 * cos16 + 0x8000) >> 16);
   assert(block.const10 == (scaled < 0 ? -scaled : scaled));
   assert(out.horizon_a == 0x9C3 && out.horizon_b == 0x58B);
+
+  /* The mutable handler-block copy used by the live view selector. */
+  memset(&block, 0xAA, sizeof block);
+  assert(fifa96_camera_behavior_block(&block, 5) == FIFA96_OK);
+  assert(block.class_of == fifa96_camera_behavior_blocks[5].class_of);
+  assert(block.target0 == fifa96_camera_behavior_blocks[5].target0);
+  assert(block.field3 == fifa96_camera_behavior_blocks[5].field3);
+  assert(block.const40 == fifa96_camera_behavior_blocks[5].const40);
+  assert(block.c0 == fifa96_camera_behavior_blocks[5].c0);
+  assert(block.c3 == fifa96_camera_behavior_blocks[5].c3);
+  assert(block.sub10 == fifa96_camera_behavior_blocks[5].sub10);
+  assert(block.sub14 == fifa96_camera_behavior_blocks[5].sub14);
+  assert(block.cell18 == fifa96_camera_behavior_blocks[5].cell18);
+  assert(block.pan == 0 && block.pan_step == 0);
+  assert(fifa96_camera_behavior_block(&block, 6) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_behavior_block(NULL, 0) == -FIFA96_ERR_INVALID);
 }
 
 static void test_focus_clamp(void) {

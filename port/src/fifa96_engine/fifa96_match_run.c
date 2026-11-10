@@ -2082,6 +2082,85 @@ static void match_run_render_eye_update(struct fifa96_match_run *mr) {
 #define MATCH_RUN_CLASS3_DISTANCE 500
 #define MATCH_RUN_CLASS3_TICK_SCALE 4
 
+/* FU351-L2c-3: the native view records 0x107508+slot*0x70 all start at
+ * (-1920,160,30), ratio 0x1500, yaw 0xBF9C, pitch 0xC8. The behavior row is
+ * the record +0xC; slots 0/1/2 carry 0/1/2. The native view-change arm
+ * (FUN_0004D04C) runs FUN_0004D908 20 times after copying 0x109A70 into the
+ * record target/history; the engine keeps the per-frame focus refresh and
+ * uses the same 20-step settle on a slot/variant change. */
+#define MATCH_RUN_NATIVE_VIEW_SETTLE 20
+
+static void match_run_native_view_init(struct fifa96_match_run_render *r,
+                                       int32_t class_of) {
+  fifa96_camera_handler_state *st = &r->native_view_cam[class_of];
+  memset(st, 0, sizeof *st);
+  st->pos_x = -1920;
+  st->pos_y = 160;
+  st->pos_z = 30;
+  st->yaw = 0xBF9C;
+  st->pitch = 0xC8;
+  st->ratio = 0x1500;
+  (void)fifa96_camera_behavior_block(&r->native_view_block[class_of],
+                                     (uint32_t)class_of);
+  r->native_view_valid[class_of] = 1u;
+}
+
+static int match_run_native_view_handler(int32_t class_of,
+                                         fifa96_camera_handler_state *st,
+                                         fifa96_camera_handler_block *block,
+                                         int32_t tick,
+                                         fifa96_camera_handler_out *out) {
+  switch (class_of) {
+    case 0:
+      return fifa96_camera_behavior_steady(st, block, tick, out);
+    case 1:
+      return fifa96_camera_behavior_sidetrack(st, block, tick, out);
+    case 2:
+      return fifa96_camera_behavior_staged(st, block, tick, out);
+    default:
+      return -FIFA96_ERR_INVALID;
+  }
+}
+
+/* Run the selected native class and publish its record cells to the render
+ * eye/orientation. Returns 1 on success. */
+static int match_run_native_view_step(struct fifa96_match_run *mr,
+                                      int32_t class_of, int32_t tick,
+                                      int settle) {
+  struct fifa96_match_run_render *r = &mr->render;
+  fifa96_camera_handler_state *st;
+  fifa96_camera_handler_block *block;
+  fifa96_camera_handler_out out;
+  int steps = settle ? MATCH_RUN_NATIVE_VIEW_SETTLE : 1;
+  if (class_of < 0 || class_of > 2) return 0;
+  if (r->native_view_valid[class_of] == 0u)
+    match_run_native_view_init(r, class_of);
+  st = &r->native_view_cam[class_of];
+  block = &r->native_view_block[class_of];
+  st->track_x = r->render_focus_x;
+  st->track_y = r->render_focus_y;
+  st->track_z = r->render_focus_z;
+  if (settle) {
+    st->hist_x = r->render_focus_x;
+    st->hist_y = r->render_focus_y;
+    st->hist_z = r->render_focus_z;
+  }
+  memset(&out, 0, sizeof out);
+  for (int i = 0; i < steps; i++) {
+    if (match_run_native_view_handler(class_of, st, block, tick, &out) !=
+        FIFA96_OK)
+      return 0;
+  }
+  r->render_eye_x = st->pos_x;
+  r->render_eye_y = st->pos_y;
+  r->render_eye_z = st->pos_z;
+  r->render_eye_valid = 1u;
+  r->yaw = st->yaw;
+  r->pitch = st->pitch;
+  r->view_ratio = st->ratio;
+  return 1;
+}
+
 static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   struct fifa96_camera *cam = &mr->render.camera;
   struct fifa96_match_run_render *r = &mr->render;
@@ -2117,36 +2196,49 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   r->render_focus_y = native_focus.y;
   r->render_focus_z = native_focus.z;
   r->render_focus_valid = 1u;
-  /* Native class-3 side camera (FUN_0004DB38). The target is the native live
-   * focus triple (0x155AA4, FU351-L1), not the old derived render blend; the
-   * geometry is the native 500-unit chase, with the position clamps
-   * ±0x420/±0x810 and the native yaw/pitch slew. The derived envelope seeds
-   * the first frame only. Non-live tapes keep the old camera path byte-exact.
-   * FU351-L2c-3: the live class stays 3 because FUN_0004E3A8/FUN_0004EC9C
-   * (classes 1/2) are still partial; fifa96_camera_view_select is ported but
-   * not wired until those bodies land. */
+  /* FU351-L2c-3: select the native view from the live phase/option/screen
+   * leg. Slots 0/1/2 are classes 0/1/2 and run the completed steady/sidetrack/
+   * staged bodies; slot 5 stays the class-3 action fallback (FUN_0004DB38).
+   * A slot/variant change takes FUN_0004D04C's 20-step settle. Non-live tapes
+   * keep the old camera path byte-exact. */
   if (mr->live_start) {
-    if (r->render_eye_valid == 0u) match_run_render_eye_update(mr);
-    fifa96_camera_handler_state *acs = &r->action_cam;
-    fifa96_camera_handler_out ac_out = {0};
-    acs->track_x = r->render_focus_x;
-    acs->track_y = r->render_focus_y;
-    acs->track_z = r->render_focus_z;
-    acs->pos_x = r->render_eye_x;
-    acs->pos_y = r->render_eye_y;
-    acs->pos_z = r->render_eye_z;
-    acs->yaw = r->yaw;
-    acs->pitch = r->pitch;
-    if (fifa96_camera_behavior_action(
-            acs, 1, MATCH_RUN_CLASS3_DISTANCE,
-            (int32_t)mr->state.frame_delta * MATCH_RUN_CLASS3_TICK_SCALE,
-            &ac_out) == FIFA96_OK) {
-      r->render_eye_x = acs->pos_x;
-      r->render_eye_y = acs->pos_y;
-      r->render_eye_z = acs->pos_z;
-      r->render_eye_valid = 1u;
-      r->yaw = acs->yaw;
-      r->pitch = acs->pitch;
+    fifa96_camera_view view;
+    int native_ok = 0;
+    int changed = 0;
+    int32_t tick = (int32_t)mr->state.frame_delta * MATCH_RUN_CLASS3_TICK_SCALE;
+    if (fifa96_camera_view_select(mr->state.phase, mr->difficulty_14c2f6,
+                                  mr->screen_leg, &view) == FIFA96_OK) {
+      r->native_view_preset = view.preset;
+      if (view.slot != r->native_view_slot ||
+          view.variant != r->native_view_variant)
+        changed = 1;
+      r->native_view_slot = view.slot;
+      r->native_view_variant = view.variant;
+      r->native_view_class = view.class_of;
+      if (view.class_of >= 0 && view.class_of <= 2)
+        native_ok = match_run_native_view_step(mr, view.class_of, tick, changed);
+    }
+    if (!native_ok) {
+      if (r->render_eye_valid == 0u) match_run_render_eye_update(mr);
+      fifa96_camera_handler_state *acs = &r->action_cam;
+      fifa96_camera_handler_out ac_out = {0};
+      acs->track_x = r->render_focus_x;
+      acs->track_y = r->render_focus_y;
+      acs->track_z = r->render_focus_z;
+      acs->pos_x = r->render_eye_x;
+      acs->pos_y = r->render_eye_y;
+      acs->pos_z = r->render_eye_z;
+      acs->yaw = r->yaw;
+      acs->pitch = r->pitch;
+      if (fifa96_camera_behavior_action(acs, 1, MATCH_RUN_CLASS3_DISTANCE, tick,
+                                        &ac_out) == FIFA96_OK) {
+        r->render_eye_x = acs->pos_x;
+        r->render_eye_y = acs->pos_y;
+        r->render_eye_z = acs->pos_z;
+        r->render_eye_valid = 1u;
+        r->yaw = acs->yaw;
+        r->pitch = acs->pitch;
+      }
     }
   }
   if ((cam->event_param != 0 || cam->speed != 0) &&
@@ -2510,6 +2602,12 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->yaw = FIFA96_MATCH_RUN_VIEW_YAW;
   r->pitch = FIFA96_MATCH_RUN_VIEW_PITCH;
   r->view_ratio = MATCH_RUN_VIEW_RATIO;
+  /* FU351-L2c-3: the image [0x107DD0]/[0x107DD4] start as slot 1 / variant 0,
+   * so a first phase-2 phase does not take FUN_0004D04C's view-change arm. */
+  r->native_view_preset = 0;
+  r->native_view_slot = 1;
+  r->native_view_variant = 0;
+  r->native_view_class = 1;
   r->pitch_art.sky_index = FIFA96_PITCH_SKY_INDEX;
   r->pitch_art.line_index = FIFA96_PITCH_LINE_INDEX;
   for (int i = 0; i < 256; i++) r->remap[i] = (uint8_t)(i == 0 ? 0xFF : i);
@@ -5335,12 +5433,13 @@ int fifa96_match_run_set_mode(struct fifa96_match_run *mr, uint8_t mode) {
 
 void fifa96_match_run_eye(const struct fifa96_match_run *mr, fifa96_render_pos *out) {
   if (!mr || !out) return;
-  if (mr->live_start) {
-    /* Phase 81 [D]: the native default match view is the class-3 side camera
-     * (slot 5), not camera object 0's type-0 end preset. The derived eye uses
-     * the class-3 500-unit distance and 0x2000 pitch envelope; the FU-71 triple
-     * stays the simulation focus and the render-only view focus follows the
-     * ball independently. */
+  if (mr->live_start && mr->render.render_eye_valid != 0u) {
+    /* FU351-L2c-3: the native selected view record's eye. */
+    out->x = mr->render.render_eye_x;
+    out->y = mr->render.render_eye_y;
+    out->z = mr->render.render_eye_z;
+  } else if (mr->live_start) {
+    /* Pre-selection fallback [D]: the old class-3 side envelope. */
     int32_t fx = mr->render.view_focus_valid ? mr->render.view_focus_x
                                              : mr->render.camera.pos_x;
     int32_t fy = mr->render.view_focus_valid ? mr->render.view_focus_y

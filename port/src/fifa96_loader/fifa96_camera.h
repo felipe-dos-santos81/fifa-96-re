@@ -491,6 +491,13 @@ typedef struct fifa96_camera_behavior_table_entry {
 extern const fifa96_camera_behavior_table_entry
     fifa96_camera_behavior_blocks[FIFA96_CAMERA_BEHAVIOR_BLOCKS];
 
+/* Copy table row `index` into the mutable handler block. The native table is
+ * shared image state; a caller that runs a handler must use this copy so the
+ * pan/cell writes do not alias the const rows. Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID (NULL or index >= 6). */
+int fifa96_camera_behavior_block(fifa96_camera_handler_block *out,
+                                 uint32_t index);
+
 typedef struct fifa96_camera_pose_args {
   uint32_t view_mode;   /* [0x14E57C] (getter FUN_00053D50) */
   uint32_t block;       /* behavior index (native [0x107514 + selector*0x70]) */

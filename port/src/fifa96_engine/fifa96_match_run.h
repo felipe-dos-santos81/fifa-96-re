@@ -469,11 +469,26 @@ struct fifa96_match_run_render {
    * cannot teleport the view. Cleared by reset_render's memset. */
   int32_t render_eye_x, render_eye_y, render_eye_z;
   uint8_t render_eye_valid;
-  /* Native class-3 side camera (FUN_0004DB38) live state. The position is
-   * the rendered eye; the target triple is the native focus (0x155AA4,
-   * FU351-L1); yaw and pitch are the camera's stored orientation (also fed to
-   * the projection). The derived envelope seeds the first frame only. */
+  /* Slot-5 class-3 action fallback (FUN_0004DB38). The selected native view
+   * classes 0/1/2 use `native_view_cam`; this state remains for the action
+   * selector and the pre-selection fallback. The target triple is the native
+   * focus (0x155AA4, FU351-L1); yaw and pitch are the camera's stored
+   * orientation (also fed to the projection). */
   fifa96_camera_handler_state action_cam;
+  /* FU351-L2c-3: the native live view selection. FUN_0004B308 maps the phase
+   * / [0x14C2F6] / [0x15B680] to preset 0..6; FUN_0004D04C selects the camera
+   * slot {1,1,0,0,2,2,5} and variant {0,1,0,1,0,1,1}. Slots 0/1/2 are view
+   * classes 0/1/2 with handler selectors 0/1/2 and behavior rows 0/1/2; slot 5
+   * is class 3 / selector 5 and keeps the action-camera fallback. The three
+   * class states below are the selected records' +0x10/14/18/4C/58/5C cells;
+   * each is seeded from the image record (-1920,160,30, ratio 0x1500, yaw
+   * 0xBF9C, pitch 0xC8) on first use and then persists. The image's
+   * [0x107DD0]/[0x107DD4] start as slot 1 / variant 0. */
+  int32_t native_view_preset, native_view_slot, native_view_variant;
+  int32_t native_view_class;
+  fifa96_camera_handler_state native_view_cam[3];
+  fifa96_camera_handler_block native_view_block[3];
+  uint8_t native_view_valid[3];
   /* Phase 81 [D]: the live ball focus. The native FU-71 focus must stay
    * untouched for the ball machine/AI while a native pan is active; the side
    * presentation eye converges on this focus. `camera.pos_*` is staged from

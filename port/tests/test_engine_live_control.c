@@ -2741,28 +2741,39 @@ static void test_live_setpiece_timeout_falls_back(uint8_t phase) {
   drop_lc_fixture(&f);
 }
 
-/* FU-351: the live eye is the native class-3 chase (FUN_0004DB38). The target
- * is the derived render focus; the position is clamped to the native
- * ±0x420/±0x810 box and the live Y floor 100. A far focus proves the native
- * clamp is active (the old derived envelope could only reach 0x3C0 there). */
-static void test_live_native_class3_camera(void) {
+/* FU351-L2c-3: the live phase-2 view resolves to slot 1 / class 1, so the
+ * native sidetrack body (FUN_0004E3A8) owns the render eye. The eye starts at
+ * the image record's (-1920,160,30) and slides inside the class-1 C bounds;
+ * the target is still the native FU-71 focus (0x155AA4). */
+static void test_live_native_view_class1_camera(void) {
   struct lc_fixture f = make_lc_fixture();
   struct fifa96_match_run *mr = f.mr;
+  const fifa96_camera_behavior_table_entry *b =
+      &fifa96_camera_behavior_blocks[1];
   one_granted_frame(mr);
+  assert(mr->state.phase == 2u);
+  assert(mr->render.native_view_preset == 0);
+  assert(mr->render.native_view_slot == 1);
+  assert(mr->render.native_view_variant == 0);
+  assert(mr->render.native_view_class == 1);
+  assert(mr->render.native_view_valid[1] == 1u);
   assert(mr->render.render_eye_valid == 1u);
-  assert(mr->render.view_focus_valid == 1u);
-  assert(mr->render.render_focus_valid == 1u);
-  assert(mr->render.render_eye_x >= -0x420 &&
-         mr->render.render_eye_x <= 0x420);
-  assert(mr->render.render_eye_z >= -0x810 &&
-         mr->render.render_eye_z <= 0x810);
-  assert(mr->render.render_eye_y >= 100);
-  assert(mr->render.yaw == 0xC000 && mr->render.pitch == 0x2000);
+  assert(mr->render.render_eye_x == mr->render.native_view_cam[1].pos_x);
+  assert(mr->render.render_eye_y == mr->render.native_view_cam[1].pos_y);
+  assert(mr->render.render_eye_z == mr->render.native_view_cam[1].pos_z);
+  assert(mr->render.yaw == mr->render.native_view_cam[1].yaw);
+  assert(mr->render.pitch == mr->render.native_view_cam[1].pitch);
+  assert(mr->render.view_ratio == mr->render.native_view_cam[1].ratio);
+  /* Class 1's non-class-2 x slide takes lo=-C[1], hi=-C[0]. */
+  assert(mr->render.render_eye_x >= -b->c1 &&
+         mr->render.render_eye_x <= -b->c0);
+  assert(mr->render.render_eye_z >= -b->c2 &&
+         mr->render.render_eye_z <= b->c3);
 
-  /* FU351-L1: the class-3 target is the native focus of the FU-71 place
-   * (0x155AA4), not the retired Phase-85 controlled-record blend. Stage a
-   * distinct controlled record, a distinct ball follow, and a known FU-71
-   * place; the target must be the place.
+  /* The target is the native focus of the FU-71 place (0x155AA4), not the
+   * retired Phase-85 controlled-record blend. Stage a distinct controlled
+   * record, a distinct ball follow, and a known FU-71 place; the class-1
+   * handler track must be the place.
    */
   mr->state.period = 4u;
   mr->entities.controlled = 0;
@@ -2780,19 +2791,20 @@ static void test_live_native_class3_camera(void) {
   mr->entities.ball.vel_z = 0;
   one_granted_frame(mr);
   assert(mr->render.render_eye_valid == 1u);
-  assert(mr->render.action_cam.track_x == mr->render.render_focus_x);
-  assert(mr->render.action_cam.track_y == mr->render.render_focus_y);
-  assert(mr->render.action_cam.track_z == mr->render.render_focus_z);
+  assert(mr->render.native_view_cam[1].track_x ==
+         mr->render.render_focus_x);
+  /* FUN_0004E05C permanently zeroes camera+0x38 (the pitch arm). */
+  assert(mr->render.native_view_cam[1].track_y == 0);
+  assert(mr->render.native_view_cam[1].track_z ==
+         mr->render.render_focus_z);
   assert(mr->render.render_focus_x == 0x300);
   assert(mr->render.render_focus_y == 0x50);
   assert(mr->render.render_focus_z == -0x200);
   assert(mr->render.view_focus_x != mr->render.render_focus_x);
-  assert(mr->render.action_cam.track_x != mr->entities.team[0].records[0].pos_x);
-  assert(mr->render.render_eye_x >= -0x420 &&
-         mr->render.render_eye_x <= 0x420);
-  assert(mr->render.render_eye_z >= -0x810 &&
-         mr->render.render_eye_z <= 0x810);
-  assert(mr->render.render_eye_y >= 100);
+  assert(mr->render.native_view_cam[1].track_x !=
+         mr->entities.team[0].records[0].pos_x);
+  assert(mr->render.render_eye_x == mr->render.native_view_cam[1].pos_x);
+  assert(mr->render.render_eye_z == mr->render.native_view_cam[1].pos_z);
   drop_lc_fixture(&f);
 }
 
@@ -3141,7 +3153,7 @@ int main(void) {
   test_live_setpiece_out_force_clears_taker();
   test_live_setpiece_timeout_falls_back(7u);
   test_live_setpiece_timeout_falls_back(6u);
-  test_live_native_class3_camera();
+  test_live_native_view_class1_camera();
   test_live_follow_keeps_ball_during_pan();
   test_live_offball_shape_moves_team();
   test_live_support_run_moves_forward();
