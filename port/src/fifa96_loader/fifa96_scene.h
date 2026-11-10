@@ -44,6 +44,15 @@ fifa96_err_t fifa96_scene_formation_load(const uint8_t *file, size_t file_len,
                                          const char *name,
                                          fifa96_scene_formation *formation);
 
+/* Load one whole BIGF entry (the slot-5 `352sp.fmt` family) from a resource
+ * container. The same decode/BIGF path as `fifa96_scene_formation_load`, but
+ * the caller receives a malloc'd copy of the full entry and frees it. NULL
+ * arguments -> -FIFA96_ERR_INVALID; missing name -> FIFA96_ERR_NOT_FOUND;
+ * empty/oversized entry -> FIFA96_ERR_TRUNCATED. */
+fifa96_err_t fifa96_scene_bank_entry_load(const uint8_t *file, size_t file_len,
+                                          const char *name, uint8_t **out,
+                                          size_t *out_len);
+
 /* The `FUN_0006E1D0` placement for `formation` record `index` (0..10) of the
  * team with side `side` (0/1) when `controlled_side` (0/1) owns the ball:
  * writes the derived target triple. A not-loaded formation writes nothing and

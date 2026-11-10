@@ -178,6 +178,68 @@ fifa96_err_t fifa96_scene_formation_load(const uint8_t *file, size_t file_len,
   return FIFA96_ERR_NOT_FOUND;
 }
 
+fifa96_err_t fifa96_scene_bank_entry_load(const uint8_t *file, size_t file_len,
+                                          const char *name, uint8_t **out,
+                                          size_t *out_len) {
+  uint8_t *decoded = NULL;
+  const uint8_t *container = file;
+  size_t container_len = file_len;
+  struct fifa96_bigf_info info;
+  fifa96_err_t err;
+  if (!file || !name || !out || !out_len)
+    return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  *out = NULL;
+  *out_len = 0;
+  if (file_len >= 5 && file[1] == 0xFB) {
+    size_t declared = ((size_t)file[2] << 16) | ((size_t)file[3] << 8) |
+                      (size_t)file[4];
+    size_t used = 0;
+    if (declared == 0) return FIFA96_ERR_TRUNCATED;
+    decoded = malloc(declared);
+    if (!decoded) return FIFA96_ERR_UNSUPPORTED;
+    if (fifa96_record_decode(file, file_len, decoded, declared, &used) != 0) {
+      free(decoded);
+      return FIFA96_ERR_TRUNCATED;
+    }
+    container = decoded;
+    container_len = used;
+  } else if (!(file_len >= 4 && memcmp(file, "BIGF", 4) == 0)) {
+    return FIFA96_ERR_UNSUPPORTED;
+  }
+  err = fifa96_bigf_parse(container, container_len, &info);
+  if (err != FIFA96_OK) {
+    free(decoded);
+    return err;
+  }
+  for (size_t i = 0; i < info.count; i++) {
+    uint32_t off = 0;
+    uint32_t size = 0;
+    const char *entry = NULL;
+    err = fifa96_bigf_record(&info, i, &off, &size, &entry);
+    if (err != FIFA96_OK) {
+      free(decoded);
+      return err;
+    }
+    if (strcmp(entry, name) != 0) continue;
+    if (size == 0 || (size_t)off + (size_t)size > container_len) {
+      free(decoded);
+      return FIFA96_ERR_TRUNCATED;
+    }
+    uint8_t *copy = malloc(size);
+    if (!copy) {
+      free(decoded);
+      return FIFA96_ERR_UNSUPPORTED;
+    }
+    memcpy(copy, container + off, size);
+    *out = copy;
+    *out_len = size;
+    free(decoded);
+    return FIFA96_OK;
+  }
+  free(decoded);
+  return FIFA96_ERR_NOT_FOUND;
+}
+
 fifa96_err_t fifa96_scene_formation_place(const fifa96_scene_formation *formation,
                                           uint32_t index, uint8_t side,
                                           uint8_t controlled_side, int32_t *x,

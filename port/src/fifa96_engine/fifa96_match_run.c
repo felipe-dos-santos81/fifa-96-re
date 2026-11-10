@@ -2824,6 +2824,38 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
 #define MATCH_RUN_NET_BANK "Net.fsh"
 #define MATCH_RUN_POST_BANK "Npost.fsh"
 
+/* FU275 L266-7: the slot-5 `.fmt` names from flat 0x107370 (indices 5, 11,
+ * 17, 23, 29; the subagent read the retail bank at 3588 bytes each). */
+static const char *const match_sp_fmt_names[5] = {
+    "352sp.fmt", "442sp.fmt", "swsp.fmt", "424sp.fmt", "433sp.fmt",
+};
+
+static void match_run_formation_sp_seed_team(struct fifa96_match_run *mr,
+                                             uint32_t team, uint8_t id) {
+  struct fifa96_match_team *t;
+  uint8_t *bank = NULL;
+  uint8_t *entry = NULL;
+  size_t bank_len = 0;
+  size_t entry_len = 0;
+  if (!mr || team >= FIFA96_MATCH_ENTITY_TEAMS) return;
+  t = &mr->entities.team[team];
+  t->sp_table_len = 0;
+  t->sp_table_ready = 0;
+  if (!mr->engine || !mr->engine->assets || id >= 5u) return;
+  if (fifa96_asset_read(mr->engine->assets, MATCH_RUN_FORMATION_BANK, &bank,
+                        &bank_len) != FIFA96_OK)
+    return;
+  if (fifa96_scene_bank_entry_load(bank, bank_len, match_sp_fmt_names[id],
+                                   &entry, &entry_len) == FIFA96_OK &&
+      entry_len != 0u && entry_len <= sizeof t->sp_table) {
+    memcpy(t->sp_table, entry, entry_len);
+    t->sp_table_len = (uint32_t)entry_len;
+    t->sp_table_ready = 1;
+  }
+  free(entry);
+  fifa96_asset_free(bank);
+}
+
 static int match_run_formation_seed_team(struct fifa96_match_run *mr, uint32_t team,
                                          uint8_t id) {
   struct fifa96_scene_formation formation;
@@ -2842,6 +2874,7 @@ static int match_run_formation_seed_team(struct fifa96_match_run *mr, uint32_t t
                  &mr->entities, &formation, team,
                  mr->phase_machine.side_controlled) == FIFA96_OK;
   fifa96_asset_free(bytes);
+  match_run_formation_sp_seed_team(mr, team, id);
   return seeded;
 }
 
@@ -2867,6 +2900,8 @@ static int match_run_formation_seed(struct fifa96_match_run *mr) {
                                                   mr->phase_machine.side_controlled) ==
              FIFA96_OK;
   fifa96_asset_free(bytes);
+  match_run_formation_sp_seed_team(mr, 0u, id);
+  match_run_formation_sp_seed_team(mr, 1u, id);
   return seeded;
 }
 

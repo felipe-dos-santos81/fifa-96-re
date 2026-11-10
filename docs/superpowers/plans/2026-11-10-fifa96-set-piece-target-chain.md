@@ -165,7 +165,7 @@ git commit -m "feat(engine): port set-piece path builder and interpolation"
 - Consumes: `fifa96_bigf_parse`, `fifa96_bigf_record`, `fifa96_record_decode`.
 - Produces:
   - `fifa96_err_t fifa96_scene_bank_entry_load(const uint8_t *file, size_t file_len, const char *name, uint8_t **out, size_t *out_len);`
-  - `struct fifa96_match_team` fields `uint8_t *sp_table; uint32_t sp_table_len; uint8_t sp_table_ready;`
+  - `struct fifa96_match_team` fields `uint8_t sp_table[3588]; uint32_t sp_table_len; uint8_t sp_table_ready;`
 
 - [ ] **Step 1: Write the failing loader test**
 
@@ -192,9 +192,8 @@ In `fifa96_match_entities.h`, add the three `sp_table*` fields to `struct fifa96
 In `fifa96_match_run.c`:
 
 - Add the name table `{ "352sp.fmt", "442sp.fmt", "swsp.fmt", "424sp.fmt", "433sp.fmt" }`.
-- Add `static void match_run_formation_sp_seed_team(struct fifa96_match_run *mr, uint32_t team, uint8_t id)`; it frees the old `sp_table`, reads `MATCH_RUN_FORMATION_BANK`, loads the slot-5 name, copies the entry, and sets `sp_table`/`sp_table_len`/`sp_table_ready`.
+- Add `static void match_run_formation_sp_seed_team(struct fifa96_match_run *mr, uint32_t team, uint8_t id)`; it reads `MATCH_RUN_FORMATION_BANK`, loads the slot-5 name, copies the entry into the fixed per-team buffer, and sets `sp_table_len`/`sp_table_ready`.
 - Call it for both teams where `match_run_formation_seed` runs, using the same formation id the placement seed uses.
-- Free both `sp_table` pointers in `fifa96_match_run_init` and `fifa96_match_run_end` (or the matching reset path).
 - A missing bank/entry leaves `sp_table_ready = 0`; do not synthesize.
 
 - [ ] **Step 6: Run the team-data test and the engine build**
@@ -348,7 +347,7 @@ static void match_sp_build_native_path(struct fifa96_match_run *mr,
   team = (uint32_t)r->entity_id / FIFA96_MATCH_ENTITY_RECORDS;
   if (team >= FIFA96_MATCH_ENTITY_TEAMS) { mr->sp_path_valid = 0; return; }
   t = &mr->entities.team[team];
-  if (!t->sp_table_ready || t->sp_table == NULL || t->sp_table_len == 0u) {
+  if (!t->sp_table_ready || t->sp_table_len == 0u) {
     mr->sp_path_valid = 0;
     return;
   }

@@ -8,12 +8,15 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "fifa96_engine/fifa96_asset.h"
 #include "fifa96_engine/fifa96_menu_model.h"
 #include "fifa96_engine/fifa96_team_data.h"
 #include "fifa96_loader/fifa96_err.h"
+#include "fifa96_loader/fifa96_outfield.h"
+#include "fifa96_loader/fifa96_scene.h"
 
 #define TEAM_DATA_ISO_PATH "data/game/FIFAPCCD96.iso"
 
@@ -176,10 +179,38 @@ static void test_retail_identity(void) {
   fifa96_asset_unmount(assets);
 }
 
+static void test_retail_sp_table(void) {
+  if (!file_exists(TEAM_DATA_ISO_PATH)) {
+    fprintf(stderr, "SKIP retail set-piece table case (no %s)\n",
+            TEAM_DATA_ISO_PATH);
+    return;
+  }
+  struct fifa96_asset_table *assets = NULL;
+  assert(fifa96_asset_mount_file(TEAM_DATA_ISO_PATH, &assets) == FIFA96_OK);
+  uint8_t *bank = NULL;
+  size_t bank_len = 0;
+  assert(fifa96_asset_read(assets, "/ART/GAMEART0.PVI", &bank, &bank_len) ==
+         FIFA96_OK);
+  uint8_t *entry = NULL;
+  size_t entry_len = 0;
+  assert(fifa96_scene_bank_entry_load(bank, bank_len, "352sp.fmt", &entry,
+                                      &entry_len) == FIFA96_OK);
+  assert(entry != NULL && entry_len == 3588u);
+  int32_t path[3][2];
+  uint8_t valid = 0;
+  fifa96_sp_build_path(0, 0, entry, (uint32_t)entry_len, 0, 0, 0, path,
+                       &valid);
+  assert(valid == 1);
+  free(entry);
+  fifa96_asset_free(bank);
+  fifa96_asset_unmount(assets);
+}
+
 int main(void) {
   test_mapping();
   test_soft_failure();
   test_retail_identity();
+  test_retail_sp_table();
   puts("test_engine_team_data OK");
   return 0;
 }

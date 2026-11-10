@@ -286,6 +286,16 @@ struct fifa96_match_team {
    * 1-in-7 commentary event `0xA2` is a leg, FU169-L2). */
   uint32_t duel_7d7;        /* +0x7D7 (0x81B83 increment) */
   uint32_t stumble_7cf;     /* +0x7CF (0x81D6B increment) */
+  /* FU275 L266-7: the native team+0x7DB/0x7DF table pointers are filled by
+   * `FUN_0006D9C4` from `FUN_0004C384(form*6+3)` and `FUN_0004C384(form*6+5)`.
+   * This slice stages only the slot-5 set-piece table (299 cells x 12 bytes;
+   * the `352sp.fmt` family) for `FUN_0006DAB4`; the slot-3 table stays a leg.
+   * The 3588-byte entry is copied into a fixed per-team buffer so the run owns
+   * no extra heap allocation and the bank can be freed after staging. */
+#define FIFA96_MATCH_SP_TABLE_BYTES 3588u
+  uint8_t sp_table[FIFA96_MATCH_SP_TABLE_BYTES];
+  uint32_t sp_table_len;    /* entry bytes */
+  uint8_t sp_table_ready;   /* 1 when the entry loaded */
 };
 
 /* FU-120 §2 ball record plus the FU-139 §3.1 staging block. The update chain
