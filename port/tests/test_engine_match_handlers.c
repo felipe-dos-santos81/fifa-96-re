@@ -316,6 +316,15 @@ static void test_action_1E_runs_claim_place(void) {
   assert(f.mr.record.helper_request == 0);
   assert(f.mr.record.place_valid == 1);
   assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
+
+  /* Stage 3 slot edge 0x10: the 0x757E0 0x36200(0) request resets focus. */
+  f.mr.record.stage92 = 3;
+  f.mr.record.has_slot = 1;
+  f.mr.slot.entity = f.mr.record.entity_id;
+  f.mr.slot.released = 0x10;
+  f.mr.render.camera_target.source = 2;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.render.camera_target.source == 0);
   drop_fixture(&f);
 }
 
@@ -2491,6 +2500,17 @@ static void test_action_1D_runs_closedown(void) {
   assert(f.mr.phase_machine.state == 2u);
   assert(f.mr.record.install == 0);            /* 1D installs no code */
   assert(f.mr.record.stage92 == 4);            /* stage 3 -> 4 then the tail */
+
+  /* Stage 1 slot edge 0x50: the 0x75125 0x36200(0) request resets focus. */
+  f.mr.record.stage92 = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.timer89 = 5;
+  f.mr.record.delta = 0;
+  f.mr.slot.entity = f.mr.record.entity_id;
+  f.mr.slot.released = 0x50;
+  f.mr.render.camera_target.source = 2;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1D) == FIFA96_OK);
+  assert(f.mr.render.camera_target.source == 0);
   drop_fixture(&f);
 }
 

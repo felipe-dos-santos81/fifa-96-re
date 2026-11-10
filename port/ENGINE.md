@@ -4991,8 +4991,9 @@ the build also produces the windowed `fifa96` target (`make game`).
     `fifa96_camera_replay_choice_select` (FU-351 §21); its live producer is
     blocked on the `0x515A6` replay camera state machine and the
     `0x15A998/9E` activity table. The 26-site `0x36200` audit is §22: rows
-    0x14/0x25, phases 0x18/0x19, the restart terminal and phase-0x20 now
-    write their native source and target. `FUN_000974D8` is a bare `RET`.
+    0x14/0x25, phases 0x18/0x19, the restart terminal, phase-0x20 and the
+    keeper closedown/claim edges now write their native source and target.
+    `FUN_000974D8` is a bare `RET`.
     Row 29's source-2 store has no live entry (FU-142f/OL-48); `FUN_0004F274`
     and the `0x505D0` config-record switch are superseded by the direct view
     path, and `FUN_0003BB1C` is the replay UI loop whose camera call is

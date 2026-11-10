@@ -985,8 +985,8 @@ preceding `EAX`; `0` restores the focus, `2` the current/selected record,
 | `0x4B204`/`0x4B283` | `FUN_0004B100` init | 0 | reset default |
 | `0x4C35B` | `FUN_0004C324` | 0 | reset default |
 | `0x744D6`/`0x744E8` | `FUN_000744D4` | 0 | reset default |
-| `0x75125`/`0x75165` | keeper body | 0 | unported keeper sub-bodies |
-| `0x757E0`/`0x75805`/`0x75841` | keeper body | 0 | unported keeper sub-bodies |
+| `0x75125`/`0x75165` | keeper closedown | 0 | wired from `out.ui` bits 0x20/0x40 |
+| `0x757E0`/`0x75805`/`0x75841` | keeper claim | 0 | wired from `out.ui` bits 0x10/0x40/0x80 |
 | `0x8339B` | `FUN_000832A8` | 0 | unported set-piece staging |
 | `0x92E36` | `FUN_00092E2C` | 0 | reset default |
 
@@ -998,16 +998,16 @@ phase 0x18 uses `contact_kind == 3 ? rec_first : rec_second`; phase 0x19 uses
 the phase-0x20 situation-1 re-dispatch.
 
 **Verification.** `test_engine_match_handlers` pins the row-0x14 current
-record and the row-0x25 team record-0 target. `test_engine_match_act` pins
-the phase-0x18 rec_second, phase-0x19 rec_first, the restart focus reset and
-the phase-0x20 stage-2 reset. `test_arm_bodies` pins the row-29
+record, the row-0x25 team record-0 target, the keeper closedown edge bit
+0x50 and the keeper claim edge bit 0x10 focus resets. `test_engine_match_act`
+pins the phase-0x18 rec_second, phase-0x19 rec_first, the restart focus
+reset and the phase-0x20 stage-2 reset. `test_arm_bodies` pins the row-29
 `target_source = 2` body write. `make check` **124/124**; M1/M2 byte-exact
 (non-live tapes never read `camera_target`).
 
 **Remaining.** The source-2 write inside the unported set-piece staging
-(`0x83937`) and the source-0 keeper sub-body writes stay with their owner
-bodies; row 29's source-2 store is on the unwired row-29 entry. The
-`0x8BA97` extra-time-setup source-3 site inside `FUN_0008B9CC` is not
-separately ported (the engine's derived period-end chooser writes the
-phase-0xC source 3 instead). The source-4 replay producer remains FU-351
-§21.
+(`0x83937`) stays with its owner body; row 29's source-2 store is on the
+unwired row-29 entry. The `0x8BA97` extra-time-setup source-3 site inside
+`FUN_0008B9CC` is not separately ported (the engine's derived period-end
+chooser writes the phase-0xC source 3 instead). The source-4 replay
+producer remains FU-351 §21.

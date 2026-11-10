@@ -567,6 +567,10 @@ static int match_keeper_claim_apply(struct fifa96_match_run *mr,
   mr->keeper_saved_z = s->saved_z;
   mr->keeper_gauge = s->gauge;
   mr->keeper_latch_157ab2 = s->latch_157ab2;
+  /* 0x757E0 / 0x75805 / 0x75841: the slot-edge 0x36200(0) requests restore
+   * the focus target (the paired 0x361A4/0x4C380 sinks stay unmodelled). */
+  if ((out->ui & (0x10u | 0x40u | 0x80u)) != 0u)
+    mr->render.camera_target.source = 0;
   if (out->flag_write != 0) {
     mr->flag_157820 = out->flag_157820;
     mr->flag_157822 = out->flag_157822;
@@ -703,6 +707,10 @@ static int match_keeper_closedown_apply(struct fifa96_match_run *mr,
   mr->keeper_vec_dx = s->vec.dx;
   mr->keeper_vec_dz = s->vec.dz;
   mr->keeper_latch_157ab2 = s->latch_157ab2;
+  /* 0x75125 / 0x75165: the slot-edge 0x36200(0) requests restore the
+   * focus target (the paired 0x361A4 sink stays unmodelled). */
+  if ((out->ui & (0x20u | 0x40u)) != 0u)
+    mr->render.camera_target.source = 0;
   if (out->reset != 0 && e != NULL) match_row_reset(mr, e);
   if (out->situation_0b != 0) return fifa96_match_run_situation(mr, 0x0Bu);
   return FIFA96_OK;
