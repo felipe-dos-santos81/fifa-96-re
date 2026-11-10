@@ -229,6 +229,8 @@ static void test_update_event_cursor_accumulates(void) {
   assert(cam.step == 10);
   assert(cam.event_cursor == 0x6A);
   assert(cam.target_x == 0);
+  /* cursor_high = the native [0x14C2F6] != 0 selector: the threshold is
+   * 0x90, so 0x6F still accumulates. */
   cam.event_cursor = 0x6F;
   assert(fifa96_camera_update(&cam, 1, 1, 0) == FIFA96_OK);
   assert(cam.event_cursor == 0x79);
@@ -2391,6 +2393,15 @@ static void test_behavior_table(void) {
   const int32_t s14[6] = {0, 0x720, 0x5DC, 0, 0x720, 0x5DC};
   const int32_t s18[6] = {1330, 0, 1330, 1330, 0, 1330};
   const int32_t s1c[6] = {1750, 0, 2000, 1750, 0, 2000};
+  const int32_t v1c[6][4] = {
+      {450, 450, 1600, 3430}, {-200, 2100, 1600, 1600},
+      {200, 1860, 1600, 3400}, {450, 450, 1600, 3430},
+      {-200, 2100, 1600, 1600}, {200, 1860, 1600, 3400},
+  };
+  const int32_t v1s10[6] = {0, 700, 0, 0, 700, 0};
+  const int32_t v1s14[6] = {0, 1150, 1200, 0, 1150, 1200};
+  const int32_t v1s18[6] = {700, 0, 0, 700, 0, 0};
+  const int32_t v1s1c[6] = {1150, 0, 0, 1150, 0, 0};
   const int32_t c_rec[6][4] = {
       {150, 150, 1000, 3800}, {600, 2400, 1500, 1500},
       {900, 1900, 900, 3750}, {150, 150, 1000, 3800},
@@ -2413,6 +2424,14 @@ static void test_behavior_table(void) {
     assert(fifa96_camera_behavior_blocks[i].sub14 == s14[i]);
     assert(fifa96_camera_behavior_blocks[i].sub18 == s18[i]);
     assert(fifa96_camera_behavior_blocks[i].sub1c == s1c[i]);
+    assert(fifa96_camera_behavior_blocks[i].v1_c0 == v1c[i][0]);
+    assert(fifa96_camera_behavior_blocks[i].v1_c1 == v1c[i][1]);
+    assert(fifa96_camera_behavior_blocks[i].v1_c2 == v1c[i][2]);
+    assert(fifa96_camera_behavior_blocks[i].v1_c3 == v1c[i][3]);
+    assert(fifa96_camera_behavior_blocks[i].v1_sub10 == v1s10[i]);
+    assert(fifa96_camera_behavior_blocks[i].v1_sub14 == v1s14[i]);
+    assert(fifa96_camera_behavior_blocks[i].v1_sub18 == v1s18[i]);
+    assert(fifa96_camera_behavior_blocks[i].v1_sub1c == v1s1c[i]);
     assert(fifa96_camera_behavior_blocks[i].cell18 == c18[i]);
     assert(fifa96_camera_behavior_blocks[i].cell1c == c1c[i]);
     assert(fifa96_camera_behavior_blocks[i].pan == 0);
@@ -2492,6 +2511,24 @@ static void test_behavior_table(void) {
   assert(block.pan == 0 && block.pan_step == 0);
   assert(fifa96_camera_behavior_block(&block, 6) == -FIFA96_ERR_INVALID);
   assert(fifa96_camera_behavior_block(NULL, 0) == -FIFA96_ERR_INVALID);
+
+  /* FUN_0004F1C8: variant 1 selects target0 0xB4 and the sub-record +0x20
+   * half (row 4 / slot 1). Variant 0 keeps the +0x00 half. */
+  memset(&block, 0, sizeof block);
+  assert(fifa96_camera_behavior_block_variant(&block, 4, 1) == FIFA96_OK);
+  assert(block.target0 == 0xB4);
+  assert(block.c0 == -200 && block.c1 == 2100);
+  assert(block.c2 == 1600 && block.c3 == 1600);
+  assert(block.sub10 == 700 && block.sub14 == 1150);
+  assert(block.sub18 == 0 && block.sub1c == 0);
+  assert(block.class_of == 1);
+  memset(&block, 0, sizeof block);
+  assert(fifa96_camera_behavior_block_variant(&block, 4, 0) == FIFA96_OK);
+  assert(block.target0 == 0x340);
+  assert(block.c0 == 600 && block.c1 == 2400);
+  assert(block.c2 == 1500 && block.c3 == 1500);
+  assert(fifa96_camera_behavior_block_variant(NULL, 0, 0) ==
+         -FIFA96_ERR_INVALID);
 }
 
 static void test_focus_clamp(void) {
@@ -2762,6 +2799,30 @@ static void test_behavior_steady_pitch(void) {
   st.pitch = 0;
   assert(fifa96_camera_behavior_steady(&st, &block, 8, &out) == FIFA96_OK);
   assert(st.pitch == 133);
+  assert(st.pos_y == 55);
+  assert(st.ratio == 4000);
+
+  /* [0x107DD4] == 1 (the FUN_0004D04C variant): floor 0x2EE and point y =
+   * camera_y << 5 instead of the 0x140 arm. */
+  memset(&st, 0, sizeof st);
+  memset(&block, 0, sizeof block);
+  block.class_of = 3;
+  block.target0 = 0x340;
+  block.target1 = 4000;
+  block.const10 = 200;
+  block.const20 = 8;
+  block.const24 = 8;
+  block.const28 = 8;
+  block.const3c = 600;
+  block.const40 = 80;
+  block.c0 = 150;
+  block.c1 = 150;
+  block.c2 = 1000;
+  block.c3 = 3800;
+  st.view_variant = 1;
+  st.ratio = 4000;
+  assert(fifa96_camera_behavior_steady(&st, &block, 8, &out) == FIFA96_OK);
+  assert(st.pitch == 267);
   assert(st.pos_y == 55);
   assert(st.ratio == 4000);
 }

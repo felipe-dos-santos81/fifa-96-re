@@ -4966,9 +4966,14 @@ the build also produces the windowed `fifa96` target (`make game`).
     resolves to preset 0 / slot 1 / class 1, slots 0/1/2 run the completed
     steady/sidetrack/staged bodies with persistent per-class record state and
     the 20-step view-change settle; slot 5 keeps the class-3 action fallback
-    (FU-351 §14). `render.view_class` (the FU-71 walk input) is unchanged, and
-    the computed-call register-leftover and [0x107DD4] replay-pitch arms remain
-    legs.
+    (FU-351 §14). The FU-71 cursor threshold now uses the native
+    `[0x14C2F6] != 0` selector (0x70/0x90), the `FUN_0004CE34` overlay/view-mode
+    gates are staged, the `[0x107DD4]` variant selects the 0x2EE pitch arm and
+    the active view rows 3/4/5 plus the `FUN_0004F1C8` C-record overlay, and
+    the per-frame target takes FUN_000365B0's image/default `[0x109A70]` source
+    with FUN_00036544's +-0x720/+-0xB10 clamp (FU-351 §15). The pose-feed
+    computed-call side latch `[0x1074A8]`/`[0x157AC2]` remains the narrowed
+    L2c-1 leg.
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

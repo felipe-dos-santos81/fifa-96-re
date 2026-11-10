@@ -2090,6 +2090,23 @@ static void match_run_render_eye_update(struct fifa96_match_run *mr) {
  * uses the same 20-step settle on a slot/variant change. */
 #define MATCH_RUN_NATIVE_VIEW_SETTLE 20
 
+/* FUN_0004CE34's selector gate: FUN_00053D9C() is false when the overlay
+ * state [0x14E578] is 0 or 6, and FUN_00053D50() values 0x13/0x14/0x1C/0x1D
+ * skip FUN_0004D04C. */
+static int match_run_view_selector_allowed(
+    const struct fifa96_match_run_render *r) {
+  uint32_t mode = r->camera_pose.view_mode;
+  if (mode == 0x13u || mode == 0x14u || mode == 0x1Cu || mode == 0x1Du)
+    return 0;
+  return r->display.state == 0 || r->display.state == 6;
+}
+
+static int32_t match_run_native_target_clamp(int32_t v, int32_t lo, int32_t hi) {
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
+}
+
 static void match_run_native_view_init(struct fifa96_match_run_render *r,
                                        int32_t class_of) {
   fifa96_camera_handler_state *st = &r->native_view_cam[class_of];
@@ -2100,9 +2117,42 @@ static void match_run_native_view_init(struct fifa96_match_run_render *r,
   st->yaw = 0xBF9C;
   st->pitch = 0xC8;
   st->ratio = 0x1500;
-  (void)fifa96_camera_behavior_block(&r->native_view_block[class_of],
-                                     (uint32_t)class_of);
+  /* The active view record 0x107968+slot*0x70 carries behavior row 3/4/5
+   * (camera record 0x107508+slot*0x70 carries 0/1/2; the rows are duplicates
+   * in the image). FUN_0004F1C8 overlays the variant. */
+  (void)fifa96_camera_behavior_block_variant(
+      &r->native_view_block[class_of], (uint32_t)(class_of + 3),
+      r->native_view_variant);
   r->native_view_valid[class_of] = 1u;
+}
+
+/* FUN_0004F1C8's per-selection overlay: target0 0x340/0xB4 and the selected
+ * C record half. The mutable pan/cell state is preserved. */
+static void match_run_native_view_apply_variant(
+    struct fifa96_match_run_render *r, int32_t class_of) {
+  const fifa96_camera_behavior_table_entry *src =
+      &fifa96_camera_behavior_blocks[class_of + 3];
+  fifa96_camera_handler_block *block = &r->native_view_block[class_of];
+  block->target0 = r->native_view_variant == 1 ? 0xB4 : src->target0;
+  if (r->native_view_variant == 1) {
+    block->c0 = src->v1_c0;
+    block->c1 = src->v1_c1;
+    block->c2 = src->v1_c2;
+    block->c3 = src->v1_c3;
+    block->sub10 = src->v1_sub10;
+    block->sub14 = src->v1_sub14;
+    block->sub18 = src->v1_sub18;
+    block->sub1c = src->v1_sub1c;
+  } else {
+    block->c0 = src->c0;
+    block->c1 = src->c1;
+    block->c2 = src->c2;
+    block->c3 = src->c3;
+    block->sub10 = src->sub10;
+    block->sub14 = src->sub14;
+    block->sub18 = src->sub18;
+    block->sub1c = src->sub1c;
+  }
 }
 
 static int match_run_native_view_handler(int32_t class_of,
@@ -2137,13 +2187,18 @@ static int match_run_native_view_step(struct fifa96_match_run *mr,
     match_run_native_view_init(r, class_of);
   st = &r->native_view_cam[class_of];
   block = &r->native_view_block[class_of];
-  st->track_x = r->render_focus_x;
+  st->view_variant = r->native_view_variant;
+  match_run_native_view_apply_variant(r, class_of);
+  /* FUN_000365B0's image/default source is [0x105FC4]==0 -> [0x109A70]
+   * (0x155AA4); FUN_00036544 copies it into +0x34/+0x3C and clamps x to
+   * +-0x720, z to +-0xB10. */
+  st->track_x = match_run_native_target_clamp(r->render_focus_x, -0x720, 0x720);
   st->track_y = r->render_focus_y;
-  st->track_z = r->render_focus_z;
+  st->track_z = match_run_native_target_clamp(r->render_focus_z, -0xB10, 0xB10);
   if (settle) {
-    st->hist_x = r->render_focus_x;
-    st->hist_y = r->render_focus_y;
-    st->hist_z = r->render_focus_z;
+    st->hist_x = st->track_x;
+    st->hist_y = st->track_y;
+    st->hist_z = st->track_z;
   }
   memset(&out, 0, sizeof out);
   for (int i = 0; i < steps; i++) {
@@ -2206,7 +2261,8 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
     int native_ok = 0;
     int changed = 0;
     int32_t tick = (int32_t)mr->state.frame_delta * MATCH_RUN_CLASS3_TICK_SCALE;
-    if (fifa96_camera_view_select(mr->state.phase, mr->difficulty_14c2f6,
+    if (match_run_view_selector_allowed(r) &&
+        fifa96_camera_view_select(mr->state.phase, mr->difficulty_14c2f6,
                                   mr->screen_leg, &view) == FIFA96_OK) {
       r->native_view_preset = view.preset;
       if (view.slot != r->native_view_slot ||
@@ -2215,9 +2271,10 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
       r->native_view_slot = view.slot;
       r->native_view_variant = view.variant;
       r->native_view_class = view.class_of;
-      if (view.class_of >= 0 && view.class_of <= 2)
-        native_ok = match_run_native_view_step(mr, view.class_of, tick, changed);
     }
+    if (r->native_view_class >= 0 && r->native_view_class <= 2)
+      native_ok = match_run_native_view_step(mr, r->native_view_class, tick,
+                                             changed);
     if (!native_ok) {
       if (r->render_eye_valid == 0u) match_run_render_eye_update(mr);
       fifa96_camera_handler_state *acs = &r->action_cam;
@@ -7684,7 +7741,8 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
       uint16_t range = (uint16_t)(mr->input_range[0] | mr->input_range[1]);
       (void)fifa96_camera_update_walk(&mr->render.camera, &mr->rng,
                                       (int16_t)mr->state.frame_delta,
-                                      mr->render.view_class, mr->render.input_bit2,
+                                      mr->difficulty_14c2f6 != 0,
+                                      mr->render.input_bit2,
                                       (int)(range & 4u));
     }
     /* FU-152 §2.9 / FU-145 §1.2 (M2 phase-9 T3): the every-frame FUN_00071DF4

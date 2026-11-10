@@ -583,3 +583,79 @@ target producer outside `FUN_0004D04C` is not established. The
 selector, plus the `FUN_00053D9C` early-out) are not staged; the engine calls
 the resolver every live frame and the image/default `view_mode` is 0.
 FU351-L2c-1 and L2c-2 are unchanged.
+
+## 15. FU351-L2 residual camera closures (2026-11-10)
+
+**Evidence.** Fresh `disassemble_bytes` `0x73A60..0x73AAF` (the FU-71 walk
+threshold), `0x505D0` head/tail (`0x505D0..0x5062F`, `0x5062C..0x5072F`,
+`0x51020..0x51064`), and `0x4D2D4` (118 instructions). Fresh
+`decompile_function` `0x53D9C` (overlay gate), `0x365B0`/`0x36544` (the
+per-frame target source/copy), `0x4B8D4` (the handler EBX selector) and
+`0x4B64C` (the lead-pair copy). `read_memory 0x105FC4` = 0,
+`0x109A70` = `0x155AA4`, `0x107DD0` = slot 1, `0x107DD4` = 0.
+
+**Errata (quoted).** FU71 §2/§3 calls the `0x70/0x90` threshold input
+“view_class”; `0x73A80` actually reads
+`[0x14C2F6] == 0 ? 0x70 : 0x90`. FU351-L2c-2 calls `[0x107DD4] == 1` the
+“replay pitch arm”; `FUN_0004D04C 0x4D07F` writes `[0x107DD4]` from the
+variant table `0x1074EC`, so the condition is the selected view variant.
+FU351-L2c-1 calls the handler EBX/ECX “caller-register leftovers”; the
+computed call has concrete sources (below).
+
+**Erratum (quoted).** §13/§14 say slots 0/1/2 use behavior rows 0/1/2.
+That is the **camera-config** record `0x107508+slot*0x70`; the active
+per-frame record is `0x107968+slot*0x70` (`FUN_0004D04C 0x4D0FE`), whose
+`+0xC` is 3/4/5. The rows are duplicates in the image; the engine now uses
+3/4/5 so the `FUN_0004F1C8` variant overlay lands on the right row.
+
+**Landed.**
+
+- **FU-71 cursor threshold.** `fifa96_camera_update`/`_walk`’s parameter is
+  renamed `cursor_high`; the engine passes `difficulty_14c2f6 != 0`, matching
+  `0x73A80`. The old `render.view_class` cell is removed (it had no writer
+  and was not the native input).
+- **View selector gate.** `FUN_0004CE34`: `FUN_00053D9C()` is false when the
+  overlay state `[0x14E578]` is 0 or 6, and `FUN_00053D50()` values
+  0x13/0x14/0x1C/0x1D skip `FUN_0004D04C`. The live selector now checks
+  `render.display.state` and `camera_pose.view_mode`; a gated frame keeps the
+  previous selected class and still runs its handler.
+- **Variant pitch arm.** `fifa96_camera_handler_state` gains `view_variant`;
+  the live native view sets it from `native_view_variant`. `FUN_0004E05C`’s
+  `[0x107DD4] == 1` arm now uses floor `0x2EE` and ground y `camera_y << 5`;
+  variant 0 keeps the `0x140` floor/point.
+- **Variant C record.** `FUN_0004F1C8` writes `target0` from
+  `0x107E0C[variant]` (0x340/0xB4) and points `+0x50` at
+  `0x1085AC/0x10862C/0x1085EC + variant*0x20`. The table rows now carry the
+  `+0x20` half (`v1_c0..v1_c3`, `v1_sub10..v1_sub1c`);
+  `fifa96_camera_behavior_block_variant` applies it on init and the live step
+  overlays it each frame without disturbing pan/cell state.
+- **Per-frame target source.** `FUN_0004D2D4` calls
+  `FUN_000365B0`/`FUN_00036544` every live frame. With the image
+  `[0x105FC4] == 0`, `FUN_000365B0` returns `[0x109A70]` (the FU-71 place
+  `0x155AA4`), and `FUN_00036544` copies it into camera `+0x34/38/3C` and
+  clamps x to `+-0x720`, z to `+-0xB10`. The engine’s per-frame
+  `render_focus` staging now applies that target clamp before the handler.
+
+**Verification.** `make check` **124/124**; M1
+`09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` and M2
+`41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`
+byte-exact. Windowed Release smoke ran to the 20 s timeout without error.
+`test_camera` pins the `0x90` threshold, the variant-1 pitch result and the
+mutable block copy; `test_engine_live_control` pins the overlay/view-mode
+gates (same phase-4 input selects class 1 while gated and class 2 when
+clear) and the `+-0x720/+-0xB10` target clamp.
+
+**Remaining legs.**
+
+- **FU351-L2c-1 (narrowed).** The computed `0x51056` call reads EBX from
+  `FUN_0004B8D4(camera+0x3c - camera+0x48, ...)` at `0x50627..0x5062C`; the
+  function returns `-1/0/1` from `[0x157AC2]`, `[0x1074A8]` and the input.
+  `ECX` is `[ESP+0x14]`: for classes 0/1/2 that is the dword copied from
+  `0x1577C0` (the packed lead pair), and class 3 overwrites it with
+  `[0x108B7C]+0xC8` = 800. The pose-feed default arm still passes `(0,0)`;
+  the open part is the `FUN_0004B8D4` side latch `[0x1074A8]`/`[0x157AC2]`
+  and the packed lead dword, not unknown registers.
+- **FU-351 §14 alternate target sources.** `[0x105FC4]` values 1..4 select
+  `0x105FB8`, `FUN_0004B97C`, `0x109A74+0x108` or
+  `0x109A74+[0x108E04]*0xC`; the image cell is 0 and those producers are not
+  staged. The image/default path above is closed.

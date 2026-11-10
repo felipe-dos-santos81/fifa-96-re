@@ -244,12 +244,13 @@ static int camera_pan_step_internal(fifa96_camera *cam, struct fifa96_rng *rng,
                                     int walk_gate, int32_t *class_of,
                                     int32_t *param);
 
-int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int view_class, int input_bit2) {
-  return fifa96_camera_update_walk(cam, NULL, delta, view_class, input_bit2, 0);
+int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int cursor_high,
+                         int input_bit2) {
+  return fifa96_camera_update_walk(cam, NULL, delta, cursor_high, input_bit2, 0);
 }
 
 int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
-                              int16_t delta, int view_class, int input_bit2,
+                              int16_t delta, int cursor_high, int input_bit2,
                               int walk_gate) {
   int16_t gate_speed;
   if (!cam) return -FIFA96_ERR_INVALID;
@@ -311,7 +312,8 @@ int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
         int interpolate = 0;
         if (input_bit2) {
           interpolate = 1;
-        } else if ((int16_t)cam->event_cursor >= (view_class ? 0x90 : 0x70)) {
+        } else if ((int16_t)cam->event_cursor >=
+                   (cursor_high ? 0x90 : 0x70)) {   /* 0x73A80 [0x14C2F6] */
           interpolate = 1;
         } else {
           cam->event_cursor = (uint16_t)(cam->event_cursor + cam->step);
@@ -781,7 +783,10 @@ const fifa96_camera_behavior_table_entry
          .const38 = 0, .const3c = 600, .const40 = 80,
          .c0 = 150, .c1 = 150, .c2 = 1000, .c3 = 3800,
          .sub10 = 0, .sub14 = 0,
-         .sub18 = 1330, .sub1c = 1750, .cell18 = 0x578, .cell1c = 32,
+         .sub18 = 1330, .sub1c = 1750,
+         .v1_c0 = 450, .v1_c1 = 450, .v1_c2 = 1600, .v1_c3 = 3430,
+         .v1_sub10 = 0, .v1_sub14 = 0, .v1_sub18 = 700, .v1_sub1c = 1150,
+         .cell18 = 0x578, .cell1c = 32,
          .pan = 0, .pan_step = 0},
         {.target0 = 0x340, .target1 = 0x1200, .class_of = 1, .field3 = 0,
          .const10 = 0x4B0, .const18 = 0, .const1c = 0, .const20 = 8,
@@ -789,7 +794,10 @@ const fifa96_camera_behavior_table_entry
          .const38 = 0, .const3c = 600, .const40 = 80,
          .c0 = 600, .c1 = 2400, .c2 = 1500, .c3 = 1500,
          .sub10 = 0x437, .sub14 = 0x720,
-         .sub18 = 0, .sub1c = 0, .cell18 = 0, .cell1c = 0,
+         .sub18 = 0, .sub1c = 0,
+         .v1_c0 = -200, .v1_c1 = 2100, .v1_c2 = 1600, .v1_c3 = 1600,
+         .v1_sub10 = 700, .v1_sub14 = 1150, .v1_sub18 = 0, .v1_sub1c = 0,
+         .cell18 = 0, .cell1c = 0,
          .pan = 0, .pan_step = 0},
         {.target0 = 0x340, .target1 = 0xD48, .class_of = 3, .field3 = 0xA7F8,
          .const10 = 0, .const18 = 0x578, .const1c = 20, .const20 = 8,
@@ -797,7 +805,10 @@ const fifa96_camera_behavior_table_entry
          .const38 = 0, .const3c = 550, .const40 = 60,
          .c0 = 900, .c1 = 1900, .c2 = 900, .c3 = 3750,
          .sub10 = 0, .sub14 = 0x5DC,
-         .sub18 = 1330, .sub1c = 2000, .cell18 = 0x578, .cell1c = 20,
+         .sub18 = 1330, .sub1c = 2000,
+         .v1_c0 = 200, .v1_c1 = 1860, .v1_c2 = 1600, .v1_c3 = 3400,
+         .v1_sub10 = 0, .v1_sub14 = 1200, .v1_sub18 = 0, .v1_sub1c = 0,
+         .cell18 = 0x578, .cell1c = 20,
          .pan = 0, .pan_step = 0},
         {.target0 = 0x340, .target1 = 0xFA0, .class_of = 3, .field3 = 0,
          .const10 = 0xC8, .const18 = 0x578, .const1c = 32, .const20 = 8,
@@ -805,7 +816,10 @@ const fifa96_camera_behavior_table_entry
          .const38 = 0, .const3c = 600, .const40 = 80,
          .c0 = 150, .c1 = 150, .c2 = 1000, .c3 = 3800,
          .sub10 = 0, .sub14 = 0,
-         .sub18 = 1330, .sub1c = 1750, .cell18 = 0x578, .cell1c = 32,
+         .sub18 = 1330, .sub1c = 1750,
+         .v1_c0 = 450, .v1_c1 = 450, .v1_c2 = 1600, .v1_c3 = 3430,
+         .v1_sub10 = 0, .v1_sub14 = 0, .v1_sub18 = 700, .v1_sub1c = 1150,
+         .cell18 = 0x578, .cell1c = 32,
          .pan = 0, .pan_step = 0},
         {.target0 = 0x340, .target1 = 0x1200, .class_of = 1, .field3 = 0,
          .const10 = 0x4B0, .const18 = 0, .const1c = 0, .const20 = 8,
@@ -813,7 +827,10 @@ const fifa96_camera_behavior_table_entry
          .const38 = 0, .const3c = 600, .const40 = 80,
          .c0 = 600, .c1 = 2400, .c2 = 1500, .c3 = 1500,
          .sub10 = 0x437, .sub14 = 0x720,
-         .sub18 = 0, .sub1c = 0, .cell18 = 0, .cell1c = 0,
+         .sub18 = 0, .sub1c = 0,
+         .v1_c0 = -200, .v1_c1 = 2100, .v1_c2 = 1600, .v1_c3 = 1600,
+         .v1_sub10 = 700, .v1_sub14 = 1150, .v1_sub18 = 0, .v1_sub1c = 0,
+         .cell18 = 0, .cell1c = 0,
          .pan = 0, .pan_step = 0},
         {.target0 = 0x340, .target1 = 0xD48, .class_of = 3, .field3 = 0xA21C,
          .const10 = 0, .const18 = 0x578, .const1c = 20, .const20 = 8,
@@ -821,18 +838,21 @@ const fifa96_camera_behavior_table_entry
          .const38 = 0, .const3c = 550, .const40 = 60,
          .c0 = 900, .c1 = 1900, .c2 = 900, .c3 = 3750,
          .sub10 = 0, .sub14 = 0x5DC,
-         .sub18 = 1330, .sub1c = 2000, .cell18 = 0x578, .cell1c = 20,
+         .sub18 = 1330, .sub1c = 2000,
+         .v1_c0 = 200, .v1_c1 = 1860, .v1_c2 = 1600, .v1_c3 = 3400,
+         .v1_sub10 = 0, .v1_sub14 = 1200, .v1_sub18 = 0, .v1_sub1c = 0,
+         .cell18 = 0x578, .cell1c = 20,
          .pan = 0, .pan_step = 0},
 };
 
-int fifa96_camera_behavior_block(fifa96_camera_handler_block *out,
-                                 uint32_t index) {
+int fifa96_camera_behavior_block_variant(fifa96_camera_handler_block *out,
+                                         uint32_t index, int32_t variant) {
   const fifa96_camera_behavior_table_entry *src;
   if (!out || index >= FIFA96_CAMERA_BEHAVIOR_BLOCKS)
     return -FIFA96_ERR_INVALID;
   src = &fifa96_camera_behavior_blocks[index];
   out->class_of = src->class_of;
-  out->target0 = src->target0;
+  out->target0 = variant == 1 ? 0xB4 : src->target0;   /* 0x107E0C */
   out->target1 = src->target1;
   out->const10 = src->const10;
   out->const18 = src->const18;
@@ -846,19 +866,35 @@ int fifa96_camera_behavior_block(fifa96_camera_handler_block *out,
   out->const3c = src->const3c;
   out->const40 = src->const40;
   out->field3 = src->field3;
-  out->c0 = src->c0;
-  out->c1 = src->c1;
-  out->c2 = src->c2;
-  out->c3 = src->c3;
-  out->sub10 = src->sub10;
-  out->sub14 = src->sub14;
-  out->sub18 = src->sub18;
-  out->sub1c = src->sub1c;
+  if (variant == 1) {
+    out->c0 = src->v1_c0;
+    out->c1 = src->v1_c1;
+    out->c2 = src->v1_c2;
+    out->c3 = src->v1_c3;
+    out->sub10 = src->v1_sub10;
+    out->sub14 = src->v1_sub14;
+    out->sub18 = src->v1_sub18;
+    out->sub1c = src->v1_sub1c;
+  } else {
+    out->c0 = src->c0;
+    out->c1 = src->c1;
+    out->c2 = src->c2;
+    out->c3 = src->c3;
+    out->sub10 = src->sub10;
+    out->sub14 = src->sub14;
+    out->sub18 = src->sub18;
+    out->sub1c = src->sub1c;
+  }
   out->cell18 = src->cell18;
   out->cell1c = src->cell1c;
   out->pan = src->pan;
   out->pan_step = src->pan_step;
   return FIFA96_OK;
+}
+
+int fifa96_camera_behavior_block(fifa96_camera_handler_block *out,
+                                 uint32_t index) {
+  return fifa96_camera_behavior_block_variant(out, index, 0);
 }
 
 int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
@@ -1285,7 +1321,7 @@ static int32_t camera_pitch_delta(fifa96_camera_handler_state *st,
   int32_t dx = st->track_x - st->pos_x;
   int32_t dz = st->track_z - st->pos_z;
   int32_t angle1, angle2, angle3, atan1, blend, correction, prod, delta;
-  int32_t floor_y, point_z2, angle4, factor, step;
+  int32_t floor_y, ground_y, point_z2, angle4, factor, step;
 
   angle1 = camera_atan_pitch16(dx, st->track_y - st->pos_y, dz);
   st->track_y = 0;   /* 0x4E091: the native permanently zeroes camera+0x38 */
@@ -1306,13 +1342,19 @@ static int32_t camera_pitch_delta(fifa96_camera_handler_state *st,
     blend = (int32_t)(((uint32_t)blend - (uint32_t)correction) & 0xFFFFu);
   }
 
-  /* 0x4E109..: [0x107DD4] == 1 selects 0x2EE and point y = camera_y << 5;
-   * the image cell is 0, so the live arm is point y = 0x140 and the
+  /* 0x4E109..: [0x107DD4] == 1 (the FUN_0004D04C variant) selects 0x2EE and
+   * point y = camera_y << 5; variant 0 is point y = 0x140 and the
    * [0x108BB4] = 0x140 floor. */
-  floor_y = 0x140;
+  if (st->view_variant == 1) {
+    floor_y = 0x2EE;
+    ground_y = (int32_t)((uint32_t)st->pos_y << 5);
+  } else {
+    floor_y = 0x140;
+    ground_y = 0x140;
+  }
   if (st->pos_y < floor_y) {
     point_z2 = st->pos_z > 0 ? 0xB10 : -0xB10;
-    angle4 = camera_atan_pitch16(-st->pos_x, 0x140 - st->pos_y,
+    angle4 = camera_atan_pitch16(-st->pos_x, ground_y - st->pos_y,
                                  point_z2 - st->pos_z);
     if (angle4 > 0x8000) {
       blend = st->ratio / 2;

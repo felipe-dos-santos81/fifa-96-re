@@ -428,7 +428,6 @@ struct fifa96_match_run_render {
   int enabled;
   struct fifa96_camera camera;
   int32_t yaw, pitch;
-  int view_class;
   int input_bit2;
   /* FU-145 S2 (0x718FF): the boundary reflect arm's input bit 0 — the native
    * tests `(word[0x14C1D4] | word[0x14C1D6]) & 1` (the per-side range words
@@ -478,11 +477,13 @@ struct fifa96_match_run_render {
   /* FU351-L2c-3: the native live view selection. FUN_0004B308 maps the phase
    * / [0x14C2F6] / [0x15B680] to preset 0..6; FUN_0004D04C selects the camera
    * slot {1,1,0,0,2,2,5} and variant {0,1,0,1,0,1,1}. Slots 0/1/2 are view
-   * classes 0/1/2 with handler selectors 0/1/2 and behavior rows 0/1/2; slot 5
-   * is class 3 / selector 5 and keeps the action-camera fallback. The three
-   * class states below are the selected records' +0x10/14/18/4C/58/5C cells;
-   * each is seeded from the image record (-1920,160,30, ratio 0x1500, yaw
-   * 0xBF9C, pitch 0xC8) on first use and then persists. The image's
+   * classes 0/1/2 with handler selectors 0/1/2; the active view records
+   * 0x107968+slot*0x70 carry behavior rows 3/4/5 (the camera-config records
+   * 0x107508+slot*0x70 carry 0/1/2; the rows are duplicates in the image).
+   * Slot 5 is class 3 / selector 5 and keeps the action-camera fallback. The
+   * three class states below are the selected records' +0x10/14/18/4C/58/5C
+   * cells; each is seeded from the image record (-1920,160,30, ratio 0x1500,
+   * yaw 0xBF9C, pitch 0xC8) on first use and then persists. The image's
    * [0x107DD0]/[0x107DD4] start as slot 1 / variant 0. */
   int32_t native_view_preset, native_view_slot, native_view_variant;
   int32_t native_view_class;

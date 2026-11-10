@@ -4937,3 +4937,25 @@ close-out below).
   its old constant, the per-frame target refresh remains the engine's
   native-place mapping, and the `FUN_0004CE34` view-mode gates are not staged
   (the default `view_mode` 0 takes the selector). Record: FU-351 §14.
+
+- **Phase 102 camera residual closures (2026-11-10).** Three camera legs
+  closed with fresh evidence. The FU-71 walk's 0x70/0x90 cursor threshold is
+  `[0x14C2F6] != 0`, not a view-class flag; `render.view_class` is gone and
+  the live frame passes `difficulty_14c2f6 != 0`. `FUN_0004CE34`'s selector
+  gate is staged: overlay state `[0x14E578]` not 0/6 and view-mode
+  0x13/0x14/0x1C/0x1D skip the resolver while the previous native class keeps
+  running. `[0x107DD4]` is the `FUN_0004D04C` variant (not a replay flag); the
+  `FUN_0004E05C` variant-1 arm now uses floor 0x2EE and ground y
+  `camera_y<<5`; the active view records use behavior rows 3/4/5 and
+  `FUN_0004F1C8` overlays target0 0x340/0xB4 plus the +0x20 variant C record.
+  The per-frame target source is
+  `FUN_0004D2D4` -> `FUN_000365B0`/`FUN_00036544`: image `[0x105FC4]=0`
+  returns `[0x109A70]` (`0x155AA4`) and clamps target x/z to
+  `±0x720/±0xB10`; the live staging applies that clamp. `test_camera` pins
+  the 0x90 threshold and variant-1 pitch; `test_engine_live_control` pins
+  both gates and the target clamp. `make check` green 124/124; M1/M2 `cmp`
+  exact; windowed smoke ran to the 20 s timeout without error. Remaining:
+  L2c-1 is narrowed to `FUN_0004B8D4`'s `[0x1074A8]`/`[0x157AC2]` side latch
+  and the packed `0x1577C0` lead dword (the `0x51056` EBX/ECX sources are
+  known); the alternate `[0x105FC4]` target sources 1..4 stay a leg (image 0).
+  Record: FU-351 §15.

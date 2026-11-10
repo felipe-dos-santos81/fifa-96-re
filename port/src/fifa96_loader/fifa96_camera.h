@@ -101,14 +101,17 @@ typedef struct fifa96_camera {
 #define FIFA96_CAMERA_TRACKED_NONE (-1)
 
 int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z);
-int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int view_class, int input_bit2);
+/* `cursor_high` is the native `[0x14C2F6] != 0` selector at 0x73A80: the
+ * event-cursor interpolation threshold is 0x90 when set, 0x70 when clear. */
+int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int cursor_high,
+                         int input_bit2);
 
 /* FU-148 §12.2 / FU-145 §1.8 (M2 phase-9 T3): the native FUN_000736AC in-line
  * update with the ([0x14C1D4]|[0x14C1D6]) & 4 walk gate and the match RNG
  * threaded to the pan step. `fifa96_camera_update` is the gate-0 wrapper (the
  * pre-T3 frame path); the engine computes the gate from its range words. */
 int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
-                              int16_t delta, int view_class, int input_bit2,
+                              int16_t delta, int cursor_high, int input_bit2,
                               int walk_gate);
 
 /* FU-152 §2.9 (T3): FUN_00071C94 0x71D27's `[0x1577CA] = rec` write. The id
@@ -282,6 +285,7 @@ typedef struct fifa96_camera_handler_state {
   int32_t yaw;                       /* +0x58 */
   int32_t pitch;                     /* +0x5C */
   int32_t hist_x, hist_y, hist_z;    /* +0x40/+0x44/+0x48 (target history) */
+  int32_t view_variant;              /* [0x107DD4] 0/1 (FUN_0004D04C) */
 } fifa96_camera_handler_state;
 
 typedef struct fifa96_camera_handler_out {
@@ -458,8 +462,9 @@ int fifa96_camera_behavior_action(fifa96_camera_handler_state *st, int live,
  * +0x20 const20, +0x24 const24, +0x28 const28, +0x30 const30 (dword 0xC),
  * +0x34 const34 (dword 0xD), +0x38 const38, +0x3C const3c, +0x40 const40,
  * the +0xC dword (`field3` = native `param_2[3]`, the FUN_0004EC9C class-gate
- * cell), and the +0x50 record (`c0..c3`, `sub10`, `sub14`, `sub18`, `sub1c`).
- * Observed classes
+ * cell), and the +0x50 record (`c0..c3`, `sub10`, `sub14`, `sub18`, `sub1c`)
+ * plus its variant-1 copy at `+0x20` (`v1_c0..v1_c3`,
+ * `v1_sub10..v1_sub1c`). Observed classes
  * {3,1,3,3,1,3}; the +0xC cells are {0,0,0xA7F8,0,0,0xA21C}, so blocks 2/5
  * take FUN_0004EC9C's class-3 arm (0x4000..0xC000) and blocks 0/1/3/4 the
  * class-4 arm; every +0x34 is 0 (handler 1's yaw target is the bare staged
@@ -484,6 +489,8 @@ typedef struct fifa96_camera_behavior_table_entry {
   int32_t c0, c1, c2, c3; /* +0x50 record: x lo/hi, z lo/hi */
   int32_t sub10, sub14;   /* +0x50 record +0x10/+0x14 */
   int32_t sub18, sub1c;   /* +0x50 record +0x18/+0x1C */
+  int32_t v1_c0, v1_c1, v1_c2, v1_c3; /* +0x20 variant-1 C record */
+  int32_t v1_sub10, v1_sub14, v1_sub18, v1_sub1c;
   int32_t cell18, cell1c, pan, pan_step; /* native writable block state */
 } fifa96_camera_behavior_table_entry;
 
@@ -497,6 +504,11 @@ extern const fifa96_camera_behavior_table_entry
  * -FIFA96_ERR_INVALID (NULL or index >= 6). */
 int fifa96_camera_behavior_block(fifa96_camera_handler_block *out,
                                  uint32_t index);
+/* FUN_0004F1C8's variant overlay: target0 = 0x340/0xB4 and the C record is
+ * the selected sub-record's +0x00 or +0x20 half. `variant` is [0x107DD4].
+ * The row's mutable pan/cell fields are left as-is. */
+int fifa96_camera_behavior_block_variant(fifa96_camera_handler_block *out,
+                                         uint32_t index, int32_t variant);
 
 typedef struct fifa96_camera_pose_args {
   uint32_t view_mode;   /* [0x14E57C] (getter FUN_00053D50) */

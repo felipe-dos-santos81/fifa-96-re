@@ -147,7 +147,7 @@ static void test_init_resets_render_state(void) {
    * MATCH_RUN_VIEW_RATIO. */
   assert(mr.render.yaw == FIFA96_MATCH_RUN_VIEW_YAW &&
          mr.render.pitch == FIFA96_MATCH_RUN_VIEW_PITCH);
-  assert(mr.render.view_class == 0 && mr.render.input_bit2 == 0);
+  assert(mr.difficulty_14c2f6 == 0 && mr.render.input_bit2 == 0);
   assert(mr.render.window.box.w == 0 && mr.render.window.box.h == 0);
   assert(mr.render.display.suspend == 0 && mr.render.display.state == 0);
   assert(mr.render.display.selector == 0);

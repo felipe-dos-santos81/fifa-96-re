@@ -2805,6 +2805,89 @@ static void test_live_native_view_class1_camera(void) {
          mr->entities.team[0].records[0].pos_x);
   assert(mr->render.render_eye_x == mr->render.native_view_cam[1].pos_x);
   assert(mr->render.render_eye_z == mr->render.native_view_cam[1].pos_z);
+
+  /* FUN_00036544 clamps the per-frame target: x +-0x720, z +-0xB10 (the
+   * FU-71 focus clamp is the wider +-6000 stage). */
+  mr->render.camera.pos_x = 0x1000;
+  mr->render.camera.pos_z = 0x1000;
+  mr->render.camera.event_param = 0;
+  mr->render.camera.speed = 0;
+  mr->render.camera.vel_x = 0;
+  mr->render.camera.vel_z = 0;
+  mr->render.camera.timer = 0;
+  mr->render.camera.timer_limit = 0;
+  one_granted_frame(mr);
+  assert(mr->render.render_focus_x == 0x1000);
+  assert(mr->render.render_focus_z == 0x1000);
+  assert(mr->render.native_view_cam[1].track_x == 0x720);
+  assert(mr->render.native_view_cam[1].track_z == 0xB10);
+  drop_lc_fixture(&f);
+}
+
+/* FU351-L2c-3: FUN_0004CE34 skips the selector while the overlay state is
+ * not 0/6 or while [0x14E57C] is 0x13/0x14/0x1C/0x1D. */
+static void test_live_view_selector_gate(void) {
+  struct lc_fixture f = make_lc_fixture();
+  struct fifa96_match_run *mr = f.mr;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_class == 1);
+  mr->state.phase = 4;
+  mr->render.display.state = 2;   /* overlay state != 0/6 */
+  one_granted_frame(mr);
+  assert(mr->state.phase == 4u);
+  assert(mr->render.native_view_class == 1);
+  assert(mr->render.native_view_preset == 0);
+  assert(mr->render.native_view_slot == 1);
+  assert(mr->render.native_view_variant == 0);
+  drop_lc_fixture(&f);
+
+  f = make_lc_fixture();
+  mr = f.mr;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_class == 1);
+  mr->state.phase = 4;
+  mr->render.camera_pose.view_mode = 0x13;
+  one_granted_frame(mr);
+  assert(mr->state.phase == 4u);
+  assert(mr->render.native_view_class == 1);
+  assert(mr->render.native_view_preset == 0);
+  assert(mr->render.native_view_slot == 1);
+  assert(mr->render.native_view_variant == 0);
+  drop_lc_fixture(&f);
+
+  /* The same phase-4 input with the gates clear selects preset 4 / slot 2 /
+   * variant 0 / class 2. */
+  f = make_lc_fixture();
+  mr = f.mr;
+  one_granted_frame(mr);
+  assert(mr->render.native_view_class == 1);
+  mr->state.phase = 4;
+  one_granted_frame(mr);
+  assert(mr->state.phase == 4u);
+  assert(mr->render.native_view_class == 2);
+  assert(mr->render.native_view_preset == 4);
+  assert(mr->render.native_view_slot == 2);
+  assert(mr->render.native_view_variant == 0);
+  drop_lc_fixture(&f);
+
+  /* Phase 3 with the option cell 1 selects preset 1 / slot 1 / variant 1;
+   * FUN_0004F1C8 overlays target0 0xB4 and the active row's +0x20 C record. */
+  f = make_lc_fixture();
+  mr = f.mr;
+  one_granted_frame(mr);
+  mr->state.phase = 3;
+  mr->difficulty_14c2f6 = 1;
+  one_granted_frame(mr);
+  assert(mr->state.phase == 3u);
+  assert(mr->render.native_view_class == 1);
+  assert(mr->render.native_view_preset == 1);
+  assert(mr->render.native_view_slot == 1);
+  assert(mr->render.native_view_variant == 1);
+  assert(mr->render.native_view_block[1].target0 == 0xB4);
+  assert(mr->render.native_view_block[1].c0 == -200);
+  assert(mr->render.native_view_block[1].c1 == 2100);
+  assert(mr->render.native_view_block[1].sub10 == 700);
+  assert(mr->render.native_view_block[1].sub14 == 1150);
   drop_lc_fixture(&f);
 }
 
@@ -3154,6 +3237,7 @@ int main(void) {
   test_live_setpiece_timeout_falls_back(7u);
   test_live_setpiece_timeout_falls_back(6u);
   test_live_native_view_class1_camera();
+  test_live_view_selector_gate();
   test_live_follow_keeps_ball_during_pan();
   test_live_offball_shape_moves_team();
   test_live_support_run_moves_forward();
