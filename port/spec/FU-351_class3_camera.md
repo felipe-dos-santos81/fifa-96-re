@@ -908,3 +908,54 @@ entry (FU-142f/OL-48), so there is no live caller to attach. The
 source-4 `FUN_0004BCC4` lineup index, `FUN_0004F274` PTR/handler
 bookkeeping and the `0x3BB1C` replay UI call site remain. The row-0x17
 `[0x10F370]` producer stays non-live (FU-201).
+
+## 21. FU351-L2i source-4 selector body and camera-spine closure (2026-11-10)
+
+**Evidence (fresh this section).** `decompile_function`/`disassemble_function`
+`0x4BBFC` (the goal-ring equaliser scan, `0x4BC04..0x4BC51`) and `0x4BCC4`
+(`0x4BCC4..0x4BD35`). `get_xrefs_to 0x4BCC4` = **1**: `0x5179F` inside the
+`0x515A6` replay camera state machine (jump table `0x515A8`; state 4 is
+`0x51799..0x517A4`, which stores the return at `0x108E04`). The only other
+`0x108E04` writer is the init `FUN_000537F8` (`0x53922 MOV [0x108E04],-1`).
+`FUN_0004BBFC` reads `0x157AC5/7`, `0x157AC9`, `0x157B02`, `0x157B16` and
+`0x14C360`; `FUN_0008EE04` reads/bumps the `0x15A998/9E` 2x16 table. The
+ring producer is `FUN_0008A938` case 6 (`0x8ACFD..0x8AD77`); the activity
+table is initialised by `FUN_00091BC4` (`0x91C24..`) and updated by
+`FUN_0008ED40` (35 fresh xrefs) before `FUN_0008EE04` selects the maximum.
+
+**Landed.** `fifa96_camera_replay_choice_select` is the exact
+`FUN_0004BBFC` + `FUN_0004BCC4` selector: the score-difference gate, the
+`0x157B02` ring scan (the selected index is the first event *after* a
+nonzero level, not the equaliser itself), the `0x32` bump, the strict
+maximum scan with the `[0][0]` seed, the `0x14C360` first-match slot scan,
+the `0`/`0x10` special returns and the `side*0xB+1` normal return. The
+result also carries the un-reordered `0x155AB0` pitch index
+(`side*0xB+slot`) and the native `0x157BD6` copy slot.
+
+**Deliberate divergence.** The engine does not apply the `0x157BD6` order-1
+copy or the `FUN_0004728C` -> `FUN_00047298(1)` 23-descriptor pool rebuild.
+It would target the selected pitch record directly. The native copy is
+reported as `copy_slot = 1`; the pool rebuild is the remaining
+`FUN_00047298` leg.
+
+**Verification.** `test_camera` pins: the tied/zero choice, the 1-0 score
+(no equaliser, so no bump), a pre-existing activity count, the `0,1,0`
+ring (selected index 2), the mirrored 1-2 ring, the `0x10` special, the
+side-1 maximum and the NULL cases. `make check` **124/124**; M1
+`09b726b7…` and M2 `41521559…` byte-exact.
+
+**Closure status.**
+
+| Item | Evidence | Verdict |
+| --- | --- | --- |
+| `FUN_0004BBFC`/`FUN_0004BCC4` | fresh `0x4BBFC`/`0x4BCC4`; sole caller `0x5179F` | selector body ported and tested |
+| source-4 live producer | `0x515A6` state 4 writes `0x108E04`; `0x15A99E` activity table has no engine producer | **blocked** on the replay UI state machine and the `FUN_0008ED40` activity chain — the engine table would be a fake zero |
+| `FUN_0004F274` | 6 xrefs, all `FUN_000505D0`; copies a `0x107508+idx*0x1C` config record and runs a `0x108B80` handler | no camera-pose consumer: the replay start copy (`FUN_0004F8C8`, §18) overwrites its pose; superseded |
+| `FUN_0003BB1C` | `0x3BB1C..0x3C000`; sole camera call `0x3BFED FUN_0004CF7C` | the camera body is ported (`fifa96_camera_replay_begin_gated`); the pad/audio/UI loop is a separate slice |
+| `0x505D0` config-record switch | `0x505D0..0x51066`; `FUN_0004F274` callers `0x50866/0x50971/0x50CA0/0x50E50/0x50EE6/0x50F78` | superseded by the engine's direct `match_run_native_view_step`; no pose consumer |
+| row-29 source 2 | FU-142f/OL-48 | no live entry; closed as unreachable |
+| row-0x17 `[0x10F370]` | FU-201 | proven non-live; closed |
+
+**Remaining.** The source-4 live producer needs the `0x515A6` replay
+camera state machine plus the `0x15A998/9E` activity table. Neither is
+part of the camera-pose spine; the selector body is ready for them.

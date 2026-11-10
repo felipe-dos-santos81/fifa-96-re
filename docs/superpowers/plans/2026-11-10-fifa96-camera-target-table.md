@@ -28,10 +28,13 @@ and the replay sound leg with exact native evidence.
 8. Wire row-2A's `[0x157AA3] = rec` + `0x36200(2)` source-2 writer and
    row-28's team-record-0 variant.
 9. `make check`, M1/M2, docs FU-351 §18–§20, commit/push.
+10. Port `FUN_0004BBFC`/`FUN_0004BCC4` as the source-4 selector body and
+    close the camera-spine evidence (FU-351 §21).
 
 ## Remaining
 
-- `0x36200` target-source writer and the pan/record producers.
-- `FUN_0004F274` PTR/handler side effects.
-- `FUN_0003BB1C` replay call site and `FUN_000505D0` config-record
-  bookkeeping (the switch is overwritten by F8C8's start copy).
+- The source-4 live producer: `0x515A6` replay camera state machine +
+  `0x15A998/9E` activity table (`FUN_0008ED40` chain).
+- `FUN_0004F274` and `0x505D0` have no camera-pose consumer (superseded).
+- `FUN_0003BB1C` is the replay UI loop; its `0x4CF7C` camera call is
+  already ported.

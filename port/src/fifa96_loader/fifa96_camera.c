@@ -73,6 +73,76 @@ const int32_t *fifa96_camera_target_select(
   }
 }
 
+int fifa96_camera_replay_choice_select(
+    const fifa96_camera_replay_target *target,
+    fifa96_camera_replay_activity *activity,
+    fifa96_camera_replay_choice *out) {
+  int32_t counts[2] = {0, 0};
+  int32_t selected = -1;
+  int32_t best_side = 0;
+  int32_t best_id;
+  int32_t best_count;
+  int32_t slot = 0;
+  int32_t r;
+  int n;
+  if (!target || !activity || !out) return -FIFA96_ERR_INVALID;
+  if (target->score[0] != target->score[1]) {
+    n = target->event_count;
+    if (n > FIFA96_CAMERA_REPLAY_EVENTS) n = FIFA96_CAMERA_REPLAY_EVENTS;
+    for (int i = 0; i < n; i++) {
+      /* 0x4BC26: the selected index is the first event whose pre-add
+       * counts are equal and nonzero — the start of a scoring run. */
+      if (counts[0] == counts[1] && counts[0] != 0) selected = i;
+      if (target->event_side[i] < 2u) counts[target->event_side[i]]++;
+    }
+  }
+  /* 0x8EE04: bump the selected event's player by 0x32, then pick the
+   * highest activity count. The initial best is entry [0][0]'s count and
+   * the strict compare keeps the earliest entry on a tie. */
+  best_count = activity->count[0][0];
+  best_id = activity->id[0][0];
+  for (int side = 0; side < 2; side++) {
+    for (int i = 0; i < FIFA96_CAMERA_REPLAY_SLOTS; i++) {
+      if (selected >= 0 && side == (int)target->event_side[selected] &&
+          activity->id[side][i] == target->event_id[selected])
+        activity->count[side][i] += 0x32;
+      if (activity->count[side][i] > best_count) {
+        best_count = activity->count[side][i];
+        best_id = activity->id[side][i];
+        best_side = side;
+      }
+    }
+  }
+  /* FUN_0004BBFC's 0x14C360 scan: the first slot with the winning id, else
+   * slot 0 (the native `iVar4 == 0x10` reset at 0x4BCB0). */
+  for (int i = 0; i < FIFA96_CAMERA_REPLAY_SLOTS; i++) {
+    if (target->order_id[best_side][i] == best_id) {
+      slot = i;
+      break;
+    }
+  }
+  r = best_side * 0x10 + slot;
+  out->side = best_side;
+  out->slot = slot;
+  out->target_index = best_side * 0xB + slot;
+  out->copy_slot = -1;
+  out->source_index = 0;
+  out->order_value = target->order_id[best_side][slot];
+  if (r == 0) return FIFA96_OK;            /* 0x4BCD2 -> 0 */
+  if (r == 0x10) {                         /* 0x4BCD4 -> 0xB */
+    out->source_index = 0xB;
+    out->target_index = 0xB;
+    return FIFA96_OK;
+  }
+  /* 0x4BCE2..0x4BD31: copy the selected order entry to current slot 1 and
+   * return side*0xB + 1 (the native 0x157BD6 write + FUN_0004728C call).
+   * The engine targets the selected pitch slot directly instead of
+   * reordering the pool; `copy_slot` records the native seam. */
+  out->copy_slot = 1;
+  out->source_index = best_side * 0xB + 1;
+  return FIFA96_OK;
+}
+
 int32_t fifa96_camera_pose_axis_a(int32_t track_delta, int32_t event_slot,
                                   int32_t ac2, int32_t *latch) {
   int32_t out;

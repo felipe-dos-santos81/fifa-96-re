@@ -4986,11 +4986,15 @@ the build also produces the windowed `fifa96` target (`make game`).
     preset helper and `FUN_00036208`'s pan-target body are ported
     (FU-351 §19), and the phase-`0xC` `0x8BC43` writer sets source 3. Row-2A
     arm 2/pre-dispatch sets source 2 with the current record triple; row-28
-    arm 0 sets it with the team record-0 triple (FU-351 §20). `FUN_000974D8`
-    is a bare `RET`. Row 29's source-2 store has no live entry
-    (FU-142f/OL-48); source-4 `FUN_0004BCC4`, `FUN_0004F274`, the `0x3BB1C`
-    replay call site and the `0x505D0` config-record bookkeeping remain
-    open.
+    arm 0 sets it with the team record-0 triple (FU-351 §20).
+    `FUN_0004BBFC`/`FUN_0004BCC4`'s source-4 selector is ported as
+    `fifa96_camera_replay_choice_select` (FU-351 §21); its live producer is
+    blocked on the `0x515A6` replay camera state machine and the
+    `0x15A998/9E` activity table. `FUN_000974D8` is a bare `RET`. Row 29's
+    source-2 store has no live entry (FU-142f/OL-48); `FUN_0004F274` and the
+    `0x505D0` config-record switch are superseded by the direct view path,
+    and `FUN_0003BB1C` is the replay UI loop whose camera call is already
+    ported (FU-351 §21).
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

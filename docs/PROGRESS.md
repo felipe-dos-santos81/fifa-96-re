@@ -5046,3 +5046,20 @@ close-out below).
   byte-exact. Remaining: source-4 `FUN_0004BCC4`, `FUN_0004F274`
   bookkeeping, `0x3BB1C` replay UI and the non-live row-0x17 producer.
   Record: FU-351 §20.
+
+- **Phase 108 source-4 selector body and camera-spine closure (2026-11-10).**
+  `fun_0004bbfc`/`fun_0004bcc4` are ported as
+  `fifa96_camera_replay_choice_select`: the score gate, the `0x157B02` ring
+  scan (first event after a nonzero level), the `0x32` bump, the strict
+  `0x15A99E` maximum, the `0x14C360` slot scan and the `0`/`0x10` specials.
+  The engine's source-4 live producer is **blocked** on the `0x515A6` replay
+  camera state machine (sole `FUN_0004BCC4` caller at `0x5179F`) and the
+  `0x15A998/9E` activity table (`FUN_0008ED40`, 35 call sites) — the
+  selector body is ready, but a zero table would be a fake producer.
+  `FUN_0004F274` and the `0x505D0` config-record switch have no camera-pose
+  consumer (the replay start copy overwrites the pose); `FUN_0003BB1C` is
+  the pad/audio replay UI loop whose only camera call (`0x3BFED
+  FUN_0004CF7C`) is already ported. Row-29 source 2 stays unreachable
+  (FU-142f/OL-48) and row-0x17 stays non-live (FU-201). `test_camera` pins
+  the selector cases; `make check` green 124/124; M1/M2 byte-exact. Record:
+  FU-351 §21.

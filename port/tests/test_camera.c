@@ -2664,6 +2664,119 @@ static void test_camera_pan_target(void) {
   assert(pan.x == 0 && pan.z == 0x7AF && pan.dx == 0 && pan.dz == 0);
 }
 
+static void test_camera_replay_choice(void) {
+  fifa96_camera_replay_target t;
+  fifa96_camera_replay_activity a;
+  fifa96_camera_replay_choice c;
+  memset(&t, 0, sizeof t);
+  memset(&a, 0, sizeof a);
+  for (int side = 0; side < 2; side++) {
+    for (int slot = 0; slot < 16; slot++) {
+      t.order_id[side][slot] = side * 16 + slot;
+      a.id[side][slot] = side * 16 + slot;
+    }
+  }
+
+  /* Tied score with no events: the zero table picks side 0 / slot 0. */
+  assert(fifa96_camera_replay_choice_select(&t, &a, &c) == FIFA96_OK);
+  assert(c.side == 0 && c.slot == 0);
+  assert(c.target_index == 0 && c.source_index == 0 && c.copy_slot == -1);
+
+  /* A 1-0 goal is not an equaliser: the ring starts at 0-0, so FUN_0004BBFC
+   * leaves the event index -1 and does not bump the scorer. With a zero
+   * activity table the choice is side 0 / slot 0. */
+  memset(&a, 0, sizeof a);
+  for (int side = 0; side < 2; side++)
+    for (int slot = 0; slot < 16; slot++)
+      a.id[side][slot] = side * 16 + slot;
+  t.score[0] = 1;
+  t.score[1] = 0;
+  t.event_count = 1;
+  t.event_side[0] = 0;
+  t.event_id[0] = 5;
+  assert(fifa96_camera_replay_choice_select(&t, &a, &c) == FIFA96_OK);
+  assert(c.side == 0 && c.slot == 0);
+  assert(c.target_index == 0 && c.source_index == 0 && c.copy_slot == -1);
+  assert(a.count[0][5] == 0);
+
+  /* The same 1-0 score with a pre-existing activity count picks that entry
+   * without the goal bump. */
+  a.count[0][5] = 100;
+  assert(fifa96_camera_replay_choice_select(&t, &a, &c) == FIFA96_OK);
+  assert(c.side == 0 && c.slot == 5 && c.order_value == 5);
+  assert(c.target_index == 5 && c.source_index == 1 && c.copy_slot == 1);
+  assert(a.count[0][5] == 100);
+
+  /* The ring 0,1,0 makes the third event the first one after the 1-1 level:
+   * FUN_0004BBFC's selected index is 2, so side 0 / id 7 is bumped. */
+  memset(&a, 0, sizeof a);
+  for (int side = 0; side < 2; side++)
+    for (int slot = 0; slot < 16; slot++)
+      a.id[side][slot] = side * 16 + slot;
+  t.score[0] = 2;
+  t.score[1] = 1;
+  t.event_count = 3;
+  t.event_side[0] = 0;
+  t.event_id[0] = 5;
+  t.event_side[1] = 1;
+  t.event_id[1] = 19;
+  t.event_side[2] = 0;
+  t.event_id[2] = 7;
+  assert(fifa96_camera_replay_choice_select(&t, &a, &c) == FIFA96_OK);
+  assert(c.side == 0 && c.slot == 7 && c.order_value == 7);
+  assert(c.target_index == 7 && c.source_index == 1 && c.copy_slot == 1);
+  assert(a.count[0][7] == 0x32);
+
+  /* The mirrored ring 0,1,1 with a 1-2 score selects side 1 / id 21. */
+  memset(&a, 0, sizeof a);
+  for (int side = 0; side < 2; side++)
+    for (int slot = 0; slot < 16; slot++)
+      a.id[side][slot] = side * 16 + slot;
+  t.score[0] = 1;
+  t.score[1] = 2;
+  t.event_count = 3;
+  t.event_side[2] = 1;
+  t.event_id[2] = 21;
+  assert(fifa96_camera_replay_choice_select(&t, &a, &c) == FIFA96_OK);
+  assert(c.side == 1 && c.slot == 5 && c.order_value == 21);
+  assert(c.target_index == 16 && c.source_index == 12 && c.copy_slot == 1);
+  assert(a.count[1][5] == 0x32);
+
+  /* Side 1 / slot 0 is the 0x10 special: source 0xB, no order copy. */
+  memset(&a, 0, sizeof a);
+  for (int side = 0; side < 2; side++)
+    for (int slot = 0; slot < 16; slot++)
+      a.id[side][slot] = side * 16 + slot;
+  t.score[0] = 1;
+  t.score[1] = 2;
+  t.event_count = 3;
+  t.event_side[2] = 1;
+  t.event_id[2] = 16;
+  assert(fifa96_camera_replay_choice_select(&t, &a, &c) == FIFA96_OK);
+  assert(c.side == 1 && c.slot == 0);
+  assert(c.target_index == 11 && c.source_index == 0xB && c.copy_slot == -1);
+
+  /* A pre-existing side-1 / slot-2 count wins when the score is tied. */
+  memset(&a, 0, sizeof a);
+  for (int side = 0; side < 2; side++)
+    for (int slot = 0; slot < 16; slot++)
+      a.id[side][slot] = side * 16 + slot;
+  a.count[1][2] = 100;
+  t.score[0] = 0;
+  t.score[1] = 0;
+  t.event_count = 0;
+  assert(fifa96_camera_replay_choice_select(&t, &a, &c) == FIFA96_OK);
+  assert(c.side == 1 && c.slot == 2);
+  assert(c.target_index == 13 && c.source_index == 12 && c.copy_slot == 1);
+
+  assert(fifa96_camera_replay_choice_select(NULL, &a, &c) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_replay_choice_select(&t, NULL, &c) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_replay_choice_select(&t, &a, NULL) ==
+         -FIFA96_ERR_INVALID);
+}
+
 static void test_camera_target_select(void) {
   /* FUN_000365B0's [0x105FC4] switch and the early replay fallback. */
   const int32_t focus[3] = {1, 2, 3};
@@ -3309,6 +3422,7 @@ int main(void) {
   test_camera_replay_blend();
   test_camera_action_table();
   test_camera_pan_target();
+  test_camera_replay_choice();
   test_camera_target_select();
   puts("test_camera: ok");
   return 0;

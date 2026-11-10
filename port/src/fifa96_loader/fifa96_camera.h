@@ -918,6 +918,47 @@ const int32_t *fifa96_camera_target_select(
     const int32_t *record, const int32_t *replay_fallback,
     const int32_t table[FIFA96_CAMERA_ACTION_SLOTS][3], int32_t index);
 
+/* FU351-L2i: FUN_0004BBFC (`0x4BBFC..0x4BC1`) + FUN_0004BCC4
+ * (`0x4BCC4..0x4BD35`) — the replay camera's target-player choice. The
+ * `0x515A6` replay camera state machine calls FUN_0004BCC4 at `0x5179F`
+ * and stores its return at `0x108E04`, the source-4 index. FUN_0004BBFC
+ * scans the `0x157B02` goal-side ring for the first event after the last
+ * nonzero level when the `0x157AC5/7` score words differ, bumps its player in the
+ * `0x15A998/9E` 2x16 activity table by 0x32, then finds that player's
+ * `0x14C360` order slot. FUN_0004BCC4 copies the selected order entry to
+ * current slot 1 and returns `side*0xB + 1`, with 0 -> 0 and 0x10 -> 0xB
+ * special cases. `order_id` is the dereferenced `0x14C360` entry (the
+ * player id); `event_id` is the dereferenced `0x157B16` entry. */
+#define FIFA96_CAMERA_REPLAY_EVENTS 10
+#define FIFA96_CAMERA_REPLAY_SLOTS 16
+
+typedef struct fifa96_camera_replay_target {
+  uint16_t score[2];       /* 0x157AC5 / 0x157AC7 (word compare) */
+  uint8_t event_count;     /* 0x157AC9 */
+  uint8_t event_side[FIFA96_CAMERA_REPLAY_EVENTS]; /* 0x157B02 */
+  int32_t event_id[FIFA96_CAMERA_REPLAY_EVENTS];   /* [[0x157B16]] */
+  int32_t order_id[2][FIFA96_CAMERA_REPLAY_SLOTS]; /* [[0x14C360 + ...]] */
+} fifa96_camera_replay_target;
+
+typedef struct fifa96_camera_replay_activity {
+  int32_t id[2][FIFA96_CAMERA_REPLAY_SLOTS];    /* 0x15A998 */
+  int32_t count[2][FIFA96_CAMERA_REPLAY_SLOTS]; /* 0x15A99E */
+} fifa96_camera_replay_activity;
+
+typedef struct fifa96_camera_replay_choice {
+  int32_t side;         /* selected 0x14C360 side (0/1) */
+  int32_t slot;         /* selected 0x14C360 slot (0..15) */
+  int32_t target_index; /* 0x155AB0 index side*11 + slot */
+  int32_t source_index; /* FUN_0004BCC4 return stored at 0x108E04 */
+  int32_t copy_slot;    /* 0x157BD2 copy target (1), or -1 for a special */
+  int32_t order_value;  /* selected order entry */
+} fifa96_camera_replay_choice;
+
+int fifa96_camera_replay_choice_select(
+    const fifa96_camera_replay_target *target,
+    fifa96_camera_replay_activity *activity,
+    fifa96_camera_replay_choice *out);
+
 /* FUN_00036ACC (`0x36ACC..0x36B31`): the camera yaw approach for the
  * action-table target. It looks at `(track_x, track_z)` from
  * `(pos_x, pos_z)`, computes the signed delta to `yaw`, and if
