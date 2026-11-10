@@ -75,6 +75,10 @@ struct fifa96_arm_record {
   uint8_t chase;           /* derived: [0x10F36C] == this record (stage gates) */
   uint8_t side_controlled; /* [0x157AAC]>>24: the phase-cell pair selector */
   uint8_t install;         /* derived install request code, 0 = none (row 29) */
+  /* FU351-L2g: the `0x36200` request value; row 2A arm 2/pre-dispatch writes
+   * 2 after setting `[0x157AA3] = rec`. The engine maps it to the live
+   * camera target source. */
+  int32_t target_source;
   int8_t cell[2][2];       /* [rec+8] descriptor: [0] = +0/+1, [1] = +2/+3 */
   fifa96_arm_vec ball_pos; /* [[0x157A9F]+0x59]: nearest-search target (x, z) */
   const fifa96_entity_candidate *team_candidates; /* [rec+0]: the 11 records */

@@ -594,7 +594,7 @@ fifa96_err_t fifa96_arm_2a_step(struct fifa96_arm_record *rec, uint8_t arm) {
    * `[0x157AA3] = rec` store has no derived consumer (Appendix H open leg). */
   if ((int8_t)arm > 2) {
     rec->timer7b = 4;                          /* 0x86A6B */
-    (void)fifa96_arm_stub_36200();             /* 0x86A71, native EAX = 2 */
+    rec->target_source = 2;                    /* 0x86A71 [0x157AA3] = rec */
   }
   /* 0x86A76..0x86A89: unsigned selector > 0xB -> the shared epilogue RET. */
   if (arm > 11u) return FIFA96_OK;
@@ -638,7 +638,7 @@ fifa96_err_t fifa96_arm_2a_step(struct fifa96_arm_record *rec, uint8_t arm) {
        * derived no-op), the 0x36200 native EAX=2 stub and the latch. */
       if (rec->distance > 0x20) return FIFA96_OK;
       (void)fifa96_arm_camera_stop();          /* 0x86B6E */
-      (void)fifa96_arm_stub_36200();           /* 0x86B7E */
+      rec->target_source = 2;                  /* 0x86B7E [0x157AA3] = rec */
       rec->timer89 = 0;                        /* 0x86B89 */
       rec->stage92 = (uint8_t)(rec->stage92 + 1u);
       return FIFA96_OK;

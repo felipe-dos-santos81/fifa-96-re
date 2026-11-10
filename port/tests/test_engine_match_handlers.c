@@ -860,6 +860,23 @@ static void test_action_2A_runs_body(void) {
   assert(f.mr.record.timer89 == 0);
   assert(f.mr.record.stage92 == 1);
 
+  /* Arm 2 writes [0x157AA3] = rec and 0x36200(2): the live camera target
+   * source becomes 2 and the record position is staged as 0x14C454. */
+  f.mr.record.stage92 = 2;
+  f.mr.record.distance = 0;
+  f.mr.record.pos_x = 0x123;
+  f.mr.record.pos_y = 0x45;
+  f.mr.record.pos_z = -0x678;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x2A) == FIFA96_OK);
+  assert(f.mr.render.camera_target.source == 2);
+  assert(f.mr.render.camera_target.record[0] == 0x123);
+  assert(f.mr.render.camera_target.record[1] == 0x45);
+  assert(f.mr.render.camera_target.record[2] == -0x678);
+  /* The signed-stage > 2 pre-dispatch also requests source 2. */
+  f.mr.record.stage92 = 3;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x2A) == FIFA96_OK);
+  assert(f.mr.render.camera_target.source == 2);
+
   /* arm 8 through the run RNG (seed 63: 0x7801, 0xEB29, 0xD746, 0x3DC7):
    * target = (-1, +297), timer89 = 0, latch advances to 9 */
   assert(fifa96_rng_seed(&f.mr.rng, 63) == FIFA96_OK);

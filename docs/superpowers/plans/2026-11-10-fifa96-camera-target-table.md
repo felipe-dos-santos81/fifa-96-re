@@ -25,7 +25,8 @@ and the replay sound leg with exact native evidence.
    view step; test source 1/2/3/4 and source 0.
 7. Port `FUN_0004B308`/`FUN_00036208` and wire the phase-`0xC` source-3
    writer.
-8. `make check`, M1/M2, docs FU-351 §18/§19, commit/push.
+8. Wire row-2A's `[0x157AA3] = rec` + `0x36200(2)` source-2 writer.
+9. `make check`, M1/M2, docs FU-351 §18–§20, commit/push.
 
 ## Remaining
 

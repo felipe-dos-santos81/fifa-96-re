@@ -864,6 +864,12 @@ static int fifa96_match_action_2A(struct fifa96_match_run *mr) {
   rec.rng = &mr->rng;
   rc = fifa96_arm_2a_step(&rec, mr->record.stage92);
   if (rc != FIFA96_OK) return rc;
+  if (rec.target_source == 2) {
+    mr->render.camera_target.source = 2;   /* 0x36200(2) */
+    mr->render.camera_target.record[0] = mr->record.pos_x;
+    mr->render.camera_target.record[1] = mr->record.pos_y;
+    mr->render.camera_target.record[2] = mr->record.pos_z;
+  }
   mr->record.anim_id = rec.anim_sel;   /* OL-80: selector write-back */
   mr->record.target_x = rec.target.x;
   mr->record.target_y = rec.target.y;

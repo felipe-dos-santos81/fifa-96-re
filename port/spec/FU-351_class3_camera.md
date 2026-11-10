@@ -883,3 +883,27 @@ record target and the source-4 `FUN_0004BCC4` lineup index remain
 unportable without those producers. `FUN_0004F274`'s PTR/handler
 bookkeeping and the `0x3BB1C` replay UI call site remain. The row-0x17
 `[0x10F370]` producer stays non-live (FU-201).
+
+## 20. FU351-L2h row-2A source-2 writer (2026-11-10)
+
+**Evidence.** Fresh `0x86A6B..0x86A71` and `0x86B6E..0x86B7E`:
+arm 2 and the signed-stage >2 pre-dispatch both set `[0x157AA3] = rec`,
+`EAX = 2; CALL 0x36200`. `FUN_0004B97C 0x4B983..0x4B995` copies
+`[[0x157AA3]+0x59/5D/61]` to `0x14C454`, and `FUN_000365B0` source 2
+returns that triple.
+
+**Landed.** `fifa96_arm_record` carries `target_source`; the row-2A
+pre-dispatch and arm 2 set it to 2. `fifa96_match_action_2A` maps it to
+`render.camera_target.source = 2` and stages the current record's
+`pos_x/pos_y/pos_z` as the `0x14C454` triple. The other row-2A arms keep
+the previous source.
+
+**Verification.** `test_engine_match_handlers` pins arm 2 and the
+signed-stage >2 pre-dispatch (`source == 2` and the three record cells).
+`make check` **124/124**; M1/M2 byte-exact.
+
+**Remaining.** Row-28/29 `[0x157AA3] = [rec+0]`/`[nearest+0]` target
+the record's base pointer, not this record's position; they stay unwired.
+The source-4 `FUN_0004BCC4` lineup index, `FUN_0004F274` PTR/handler
+bookkeeping and the `0x3BB1C` replay UI call site remain. The row-0x17
+`[0x10F370]` producer stays non-live (FU-201).
