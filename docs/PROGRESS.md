@@ -4854,3 +4854,14 @@ close-out below).
   `test_camera` pins the block-0 x=10/z=67 result, the z history gate and the
   table rows. `make check` green 124/124; M1/M2 `cmp` exact. Next: L2c
   orientation arms + native preset/class selection.
+
+- **Phase 97 native camera preset/class resolver (2026-11-09).** L2's
+  selection path is ported as `fifa96_camera_view_select`: `FUN_0004B308`
+  maps the phase/`[0x14C2F6]`/`[0x15B680]` inputs to presets 1/2, 3/4,
+  5/6/8 or 0, `FUN_0004D04C` clamps to 0..6 and selects slot
+  `{1,1,0,0,2,2,5}` / variant `{0,1,0,1,0,1,1}`, and the camera-record class
+  is slot 0→0, 1→1, 2→2, 5→3. Not wired: the live camera is still class 3
+  and the class 0/1/2 orientation arms are not ported. `test_camera` pins the
+  matrix and the preset-8 clamp. `make check` green 124/124; M1/M2 `cmp`
+  exact. Next: port `FUN_0004DF34`/`FUN_0004E05C`, then call the resolver
+  from the live pose staging.

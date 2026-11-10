@@ -57,6 +57,7 @@ int32_t fifa96_camera_slide(int32_t cam, int32_t target, int32_t hist,
                             int32_t mode, int32_t lo, int32_t hi,
                             int32_t hist_offset, int32_t rate, int32_t tick) {
   int32_t clamped = (int32_t)((uint32_t)target - (uint32_t)hist_offset);
+
   if (clamped < lo) clamped = lo;
   else if (clamped > hi) clamped = hi;
 
@@ -88,6 +89,26 @@ int32_t fifa96_camera_slide(int32_t cam, int32_t target, int32_t hist,
     return (int32_t)((uint32_t)cam +
                      (uint32_t)camera_slide_step(delta, factor));
   }
+}
+
+int32_t fifa96_camera_view_select(int32_t phase, int32_t option, int32_t b680,
+                                  fifa96_camera_view *out) {
+  /* FUN_0004B308 (phase/option/0x15B680) + FUN_0004D04C (clamp/table). */
+  static const int32_t slots[7] = {1, 1, 0, 0, 2, 2, 5};
+  static const int32_t variants[7] = {0, 1, 0, 1, 0, 1, 1};
+  static const int32_t classes[6] = {0, 1, 2, -1, -1, 3};
+  int32_t preset;
+  if (!out) return -FIFA96_ERR_INVALID;
+  if (phase == 3) preset = option == 1 ? 1 : 2;
+  else if (phase == 4) preset = option == 1 ? 3 : 4;
+  else if (phase == 0x15) preset = b680 == 3 ? 5 : (b680 == 0 ? 6 : 8);
+  else preset = 0;
+  if (preset < 0 || preset > 6) preset = 0;   /* the FUN_0004D04C clamp */
+  out->preset = preset;
+  out->slot = slots[preset];
+  out->variant = variants[preset];
+  out->class_of = classes[out->slot];
+  return FIFA96_OK;
 }
 
 int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {

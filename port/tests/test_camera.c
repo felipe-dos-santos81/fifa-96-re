@@ -2293,6 +2293,31 @@ static void test_behavior_steady_slides(void) {
   assert(st.pos_z == 500);
 }
 
+static void test_camera_view_select(void) {
+  /* FUN_0004B308 phase/option/0x15B680 presets + the FUN_0004D04C
+   * {slot,variant} table and the selected camera-record class. */
+  fifa96_camera_view v;
+  assert(fifa96_camera_view_select(3, 1, 0, &v) == FIFA96_OK);
+  assert(v.preset == 1 && v.slot == 1 && v.variant == 1 && v.class_of == 1);
+  assert(fifa96_camera_view_select(3, 0, 0, &v) == FIFA96_OK);
+  assert(v.preset == 2 && v.slot == 0 && v.variant == 0 && v.class_of == 0);
+  assert(fifa96_camera_view_select(4, 1, 0, &v) == FIFA96_OK);
+  assert(v.preset == 3 && v.slot == 0 && v.variant == 1 && v.class_of == 0);
+  assert(fifa96_camera_view_select(4, 0, 0, &v) == FIFA96_OK);
+  assert(v.preset == 4 && v.slot == 2 && v.variant == 0 && v.class_of == 2);
+  assert(fifa96_camera_view_select(0x15, 0, 3, &v) == FIFA96_OK);
+  assert(v.preset == 5 && v.slot == 2 && v.variant == 1 && v.class_of == 2);
+  assert(fifa96_camera_view_select(0x15, 0, 0, &v) == FIFA96_OK);
+  assert(v.preset == 6 && v.slot == 5 && v.variant == 1 && v.class_of == 3);
+  assert(fifa96_camera_view_select(0x15, 0, 1, &v) == FIFA96_OK);
+  assert(v.preset == 0 && v.slot == 1 && v.variant == 0 && v.class_of == 1);
+  assert(fifa96_camera_view_select(0, 0, 0, &v) == FIFA96_OK);
+  assert(v.preset == 0 && v.slot == 1 && v.variant == 0 && v.class_of == 1);
+  assert(fifa96_camera_view_select(3, 2, 0, &v) == FIFA96_OK);
+  assert(v.preset == 2 && v.slot == 0 && v.variant == 0);
+  assert(fifa96_camera_view_select(0, 0, 0, NULL) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_init_fields();
   test_init_invalid();
@@ -2377,6 +2402,7 @@ int main(void) {
   test_behavior_steady_slides();
   test_focus_clamp();
   test_camera_slide();
+  test_camera_view_select();
   test_behavior_sidetrack();
   test_behavior_staged();
   test_behavior_action();

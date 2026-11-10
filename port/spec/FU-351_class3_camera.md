@@ -321,3 +321,25 @@ the inside/outside, mode-gate, low/high-clamp and history-offset branches;
 `test_camera::test_behavior_steady_slides` pins both handler calls (x 10,
 z 67 at tick 8 for block 0) and the z mode-1 history gate; the behavior-table
 test pins the six new rows. `make check` **124/124**; M1/M2 `cmp` exact.
+
+## 10. FU351-L2 native preset/class resolver (2026-11-09)
+
+**Landed.** `fifa96_camera_view_select` ports the selection path without
+wiring it:
+
+- `FUN_0004B308` (fresh decompile): phase `[0x157A4A] >> 24` 3 -> preset 1
+  when `[0x14C2F6] == 1`, else 2; 4 -> 3/4; 0x15 -> 5 when `[0x15B680] == 3`,
+  6 when it is 0, else 8; every other phase -> 0.
+- `FUN_0004D04C` (`0x4D04C..0x4D10F`): clamps the preset to 0..6 and selects
+  slot `{1,1,0,0,2,2,5}` and variant `{0,1,0,1,0,1,1}`.
+- The selected camera record's `+0x04` class is slot 0 -> 0, 1 -> 1, 2 -> 2,
+  5 -> 3 (slots 3/4 are disabled). Preset 8 clamps to 0, i.e. slot 1/class 1.
+
+The helper returns `{preset, slot, variant, class_of}`. It is **not wired**:
+the live camera is still forced to class 3, and the class 0/1/2 orientation
+arms are not ported. It is the resolver the next slice will call from the
+camera pose staging.
+
+**Verification.** `test_camera::test_camera_view_select` pins the phase-3/4,
+0x15/b680 and default rows, the preset-8 clamp and NULL handling.
+`make check` **124/124**; M1/M2 `cmp` exact.

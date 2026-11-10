@@ -333,6 +333,30 @@ int32_t fifa96_camera_slide(int32_t cam, int32_t target, int32_t hist,
                             int32_t mode, int32_t lo, int32_t hi,
                             int32_t hist_offset, int32_t rate, int32_t tick);
 
+/* FU-351-L2: the native view preset/class resolver. `FUN_0004B308` maps the
+ * mode byte `[0x157A4A] >> 24`, the options camera cell `[0x14C2F6]` and the
+ * `[0x15B680]` selector to a preset:
+ *
+ *   phase 3  -> 1 when option == 1, else 2
+ *   phase 4  -> 3 when option == 1, else 4
+ *   phase 15 -> 5 when b680 == 3, 6 when b680 == 0, else 8
+ *   else     -> 0
+ *
+ * `FUN_0004D04C` clamps the preset to 0..6 and selects the slot from
+ * `{1,1,0,0,2,2,5}` and the variant from `{0,1,0,1,0,1,1}`; the selected
+ * camera record's +0x04 class is `{slot 0:0, 1:1, 2:2, 5:3}` (slots 3/4 are
+ * disabled). `class_of` is -1 only for a caller-visible slot 3/4, which the
+ * table never selects. Returns FIFA96_OK or -FIFA96_ERR_INVALID on NULL. */
+typedef struct fifa96_camera_view {
+  int32_t preset;    /* 0..6 after the FUN_0004D04C clamp */
+  int32_t slot;      /* 0/1/2/5 */
+  int32_t variant;   /* 0/1 */
+  int32_t class_of;  /* the camera record +0x04 class */
+} fifa96_camera_view;
+
+int fifa96_camera_view_select(int32_t phase, int32_t option, int32_t b680,
+                              fifa96_camera_view *out);
+
 /* Handler constants (fresh 0x4DB38): the yaw slew divisor 0x1E0000 and the
  * pitch slew divisor 0x3C0000. */
 #define FIFA96_CAMERA_ACTION_YAW_DIVISOR 0x1E0000
