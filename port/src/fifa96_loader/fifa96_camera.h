@@ -267,6 +267,41 @@ typedef struct fifa96_camera_handler_out {
   int32_t class_of;    /* the staged handler's native param_2[2] (3 or 4) */
 } fifa96_camera_handler_out;
 
+/* FU-351-L1 (fresh 0x36C70, head): the live focus triple staged at
+ * `0x155AA4/8/C` — the camera-relative basis, separate from the class-3
+ * view pose. The source is `[0x157A6F]` (a camera-triple override seeded from
+ * `0x15774C`; FU-154 §2.1) when it is set and `FUN_00063FD0()` (the replay
+ * bit `[0x109A98] & 0x80`) is clear, else the FU-71 triple
+ * `0x15774C/50/54`. The native body:
+ *
+ *   if (|x| > 6000 || |z| > 6000) { x = -4000; y = 0; z = -4000; }
+ *   if (y < 0 || y > 16000) y = 0;
+ *
+ * (`0x36C76..0x36CFA`; the decompiler's 6000/16000 are signed dword compares).
+ * The focus feeds the class-3 target on a view change (`FUN_0004D04C 0x4D0A3`
+ * copies `[0x109A70]` into `camera+0x34/38/3C`), so it is the native live
+ * target producer. Returns FIFA96_OK or -FIFA96_ERR_INVALID on NULL. */
+typedef struct fifa96_camera_focus {
+  int32_t x, y, z;
+} fifa96_camera_focus;
+
+int fifa96_camera_focus_clamp(int32_t x, int32_t y, int32_t z,
+                              fifa96_camera_focus *out);
+
+/* FU-351-L1: FUN_0004BE44's 23-slot table index for a record
+ * (`0x4B99F..0x4B9FF`). `roster` is the record's byte `+0x8D`
+ * (`[rec+0x8A] >> 24`), `side` its byte `+0x826`, and `ac2` the native
+ * `[0x157AC2]` mode byte. The native adds `0xB` to one side:
+ *
+ *   if (ac2 & 1) side 0 gets +0xB when ac2 < 4, else side 1 does;
+ *   if (!(ac2 & 1)) side 1 gets +0xB.
+ *
+ * The wrappers FUN_0004BAD8 (`[0x10F370]`) and FUN_0004BA00
+ * (`[0x157A83]`, with the transient ac2=8 park when ac2 >= 5) are the
+ * producer side; the row-0x17 installer is non-live (FU-201), so this
+ * resolver is not wired into open play. */
+int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2);
+
 /* Handler constants (fresh 0x4DB38): the yaw slew divisor 0x1E0000 and the
  * pitch slew divisor 0x3C0000. */
 #define FIFA96_CAMERA_ACTION_YAW_DIVISOR 0x1E0000

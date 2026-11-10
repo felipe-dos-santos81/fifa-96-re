@@ -2759,17 +2759,37 @@ static void test_live_native_class3_camera(void) {
   assert(mr->render.render_eye_y >= 100);
   assert(mr->render.yaw == 0xC000 && mr->render.pitch == 0x2000);
 
-  /* Freeze the derived ball lead and push the focus outside the camera box;
-   * the native handler stores the clamp, not the derived focus+offset. */
+  /* FU351-L1: the class-3 target is the native focus of the FU-71 place
+   * (0x155AA4), not the retired Phase-85 controlled-record blend. Stage a
+   * distinct controlled record, a distinct ball follow, and a known FU-71
+   * place; the target must be the place.
+   */
   mr->state.period = 4u;
-  mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.controlled = 0;
+  mr->entities.team[0].records[0].pos_x = 0x700;
+  mr->entities.team[0].records[0].pos_z = 0x500;
+  mr->render.camera.pos_x = 0x300;
+  mr->render.camera.pos_y = 0x50;
+  mr->render.camera.pos_z = -0x200;
+  mr->render.camera.event_param = 0;
+  mr->render.camera.speed = 0;
   mr->entities.ball.x = 0x1000;
-  mr->entities.ball.z = 0;
+  mr->entities.ball.y = 0x40;
+  mr->entities.ball.z = 0x20;
   mr->entities.ball.vel_x = 0;
   mr->entities.ball.vel_z = 0;
   one_granted_frame(mr);
   assert(mr->render.render_eye_valid == 1u);
-  assert(mr->render.render_eye_x == 0x420);
+  assert(mr->render.action_cam.track_x == mr->render.render_focus_x);
+  assert(mr->render.action_cam.track_y == mr->render.render_focus_y);
+  assert(mr->render.action_cam.track_z == mr->render.render_focus_z);
+  assert(mr->render.render_focus_x == 0x300);
+  assert(mr->render.render_focus_y == 0x50);
+  assert(mr->render.render_focus_z == -0x200);
+  assert(mr->render.view_focus_x != mr->render.render_focus_x);
+  assert(mr->render.action_cam.track_x != mr->entities.team[0].records[0].pos_x);
+  assert(mr->render.render_eye_x >= -0x420 &&
+         mr->render.render_eye_x <= 0x420);
   assert(mr->render.render_eye_z >= -0x810 &&
          mr->render.render_eye_z <= 0x810);
   assert(mr->render.render_eye_y >= 100);

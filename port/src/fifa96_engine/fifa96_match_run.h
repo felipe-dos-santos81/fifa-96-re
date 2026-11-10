@@ -470,9 +470,9 @@ struct fifa96_match_run_render {
   int32_t render_eye_x, render_eye_y, render_eye_z;
   uint8_t render_eye_valid;
   /* Native class-3 side camera (FUN_0004DB38) live state. The position is
-   * the rendered eye; the target triple is the derived render focus; yaw and
-   * pitch are the camera's stored orientation (also fed to the projection).
-   * The derived envelope seeds the first frame only. */
+   * the rendered eye; the target triple is the native focus (0x155AA4,
+   * FU351-L1); yaw and pitch are the camera's stored orientation (also fed to
+   * the projection). The derived envelope seeds the first frame only. */
   fifa96_camera_handler_state action_cam;
   /* Phase 81 [D]: the live ball focus. The native FU-71 focus must stay
    * untouched for the ball machine/AI while a native pan is active; the side
@@ -480,12 +480,12 @@ struct fifa96_match_run_render {
    * it below. Live-only. */
   int32_t view_focus_x, view_focus_y, view_focus_z;
   uint8_t view_focus_valid;
-  /* Phase 85 [D]: a second, strictly render-only focus. When the opponent (or
-   * a loose ball) owns the play it blends halfway toward the human's selected
-   * record so the controlled player stays on canvas; the simulation camera
-   * and ball machine keep the ball `view_focus` above. Cleared by the render
-   * reset memset. */
-  int32_t render_focus_x, render_focus_z;
+  /* FU-351-L1: the native focus triple staged at 0x155AA4/8/C by
+   * FUN_00036C70 — the current FU-71 place (or its override), with the
+   * ±6000 / 0..16000 clamps. This is the class-3 target; it is not a
+   * ball/controlled blend. `view_focus_*` is the FU-71 simulation focus's
+   * next ball follow, not this target. Cleared by the render reset memset. */
+  int32_t render_focus_x, render_focus_y, render_focus_z;
   uint8_t render_focus_valid;
   /* FU-148 §4.2 (S4): the translation-pool seam. The native pool (FUN_00049138
    * -> FUN_00046F80) is a distinct allocation whose content producer is leg 11;

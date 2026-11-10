@@ -4809,3 +4809,21 @@ close-out below).
   replay 505/120 values, the fixed point and the history;
   `test_engine_match_render` pins yaw/pitch 0 for its identity-view ball
   fixture. `make check` green 124/124; M1/M2 `cmp` exact. Record: FU-351 §7.
+
+- **Phase 94 native live camera focus (2026-11-09).** FU351-L1's live half is
+  closed: the class-3 target is the native focus triple `0x155AA4` produced by
+  `FUN_00036C70` from the current pan-updated FU-71 place (the `[0x157A6F]`
+  override is a camera triple seeded from `0x15774C`, not the ball; FU-154
+  §2.1), with the
+  ±6000 x/z fallback to `(-4000,0,-4000)` and Y 0..16000. The view selector
+  `FUN_0004D04C` copies that triple into `camera+0x34/38/3C` on a view
+  change, so it is the native target. The Phase-85 ball/controlled blend is
+  retired from the class-3 target; the FU-71 focus keeps the P6 lead. The
+  `0x109A74` 23-slot player table and `FUN_0004BAD8`/`FUN_0004BE44` index are
+  ported at the resolver level (`fifa96_camera_target_slot`, tested) but stay
+  unwired: the only `[0x10F370]` writer is action row 0x17, whose act-4
+  installer is proven non-live (FU-201). The class-3 target
+  history's consumer is identified as the class-0 `FUN_0004D698` call
+  (`0x4E972`); the integrator body remains leg 9. `make check` green 124/124;
+  M1/M2 `cmp` exact. Record: FU-351 §8. Open: camera-type/view-mode selection
+  (FU351-L2), and the class-0 integrator.

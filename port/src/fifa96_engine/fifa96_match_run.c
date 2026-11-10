@@ -2043,7 +2043,7 @@ static void match_run_render_eye_update(struct fifa96_match_run *mr) {
   r = &mr->render;
   if (r->render_focus_valid) {
     fx = r->render_focus_x;
-    fy = r->view_focus_y;
+    fy = r->render_focus_y;
     fz = r->render_focus_z;
   } else if (r->view_focus_valid) {
     fx = r->view_focus_x;
@@ -2094,64 +2094,40 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
   if (lead_x < -0x120) lead_x = -0x120;
   if (lead_z > 0x120) lead_z = 0x120;
   if (lead_z < -0x120) lead_z = -0x120;
-  /* Phase 81 [D]: the presentation focus always follows the play. The native
-   * class-3 director that would consume a pan is unported, so using the frozen
-   * FU-71 focus for the eye let the ball leave the frame. Keep the simulation
-   * focus untouched below when a pan is active; only the render focus moves.
-   *
-   * Phase-85 [D]: when the opponent (or a loose ball) owns the play, the
-   * ball-only focus could leave the human's selected record off the canvas —
-   * the control follow had switched to the nearest own outfielder, but the
-   * camera kept staring at the opponent. Blend the render focus halfway
-   * toward the controlled record while the human side does not carry; when
-   * the pair is more than 0x600 apart the midpoint is still off-canvas, so the
-   * far case focuses the controlled record directly. The simulation focus
-   * below is unchanged. Live-only. */
   int32_t focus_x = mr->entities.ball.x + lead_x;
   int32_t focus_z = mr->entities.ball.z + lead_z;
-  int32_t render_x = focus_x;
-  int32_t render_z = focus_z;
-  if (mr->live_start && mr->entities.controlled >= 0) {
-    int32_t cid = mr->entities.controlled;
-    int32_t carrier = mr->entities.ball.carrier;
-    int human_owns = carrier >= 0 &&
-                     (carrier / (int32_t)FIFA96_MATCH_ENTITY_RECORDS) ==
-                         (cid / (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
-    if (!human_owns) {
-      const struct fifa96_match_entity *ce =
-          &mr->entities.team[(uint32_t)cid / FIFA96_MATCH_ENTITY_RECORDS]
-               .records[(uint32_t)cid % FIFA96_MATCH_ENTITY_RECORDS];
-      int32_t dx = ce->pos_x - focus_x;
-      int32_t dz = ce->pos_z - focus_z;
-      if (fifa96_entity_distance(dx, dz) > 0x600) {
-        /* Too far apart for a midpoint: keep the human's selected record on
-         * canvas and let the camera bring the ball back as it is chased. */
-        render_x = ce->pos_x;
-        render_z = ce->pos_z;
-      } else {
-        render_x = (focus_x + ce->pos_x) / 2;
-        render_z = (focus_z + ce->pos_z) / 2;
-      }
-    }
+  /* FU-351-L1: the native focus triple staged at 0x155AA4 is the FU-71 place
+   * `0x15774C/50/54` (the override `[0x157A6F]` is itself seeded from
+   * `0x15774C`; FU-154 §2.1), clamped ±6000 (x/z) and 0..16000 (y). The
+   * composer runs after the pan update and before the view driver, so read
+   * the current place here, not this frame's new ball follow. This is the
+   * class-3 target; the Phase-85 controlled-record blend is retired. */
+  fifa96_camera_focus native_focus;
+  if (fifa96_camera_focus_clamp(cam->pos_x, cam->pos_y, cam->pos_z,
+                                &native_focus) != FIFA96_OK) {
+    native_focus.x = cam->pos_x;
+    native_focus.y = cam->pos_y;
+    native_focus.z = cam->pos_z;
   }
   r->view_focus_x = focus_x;
   r->view_focus_y = 0x50;
   r->view_focus_z = focus_z;
   r->view_focus_valid = 1u;
-  r->render_focus_x = render_x;
-  r->render_focus_z = render_z;
+  r->render_focus_x = native_focus.x;
+  r->render_focus_y = native_focus.y;
+  r->render_focus_z = native_focus.z;
   r->render_focus_valid = 1u;
-  /* Native class-3 side camera (FUN_0004DB38). The target is the existing
-   * derived render focus; the geometry is the native 500-unit chase, with
-   * the position clamps ±0x420/±0x810 and the native yaw/pitch slew. The
-   * derived envelope seeds the first frame only. Non-live tapes keep the
-   * old camera path byte-exact. */
+  /* Native class-3 side camera (FUN_0004DB38). The target is the native live
+   * focus triple (0x155AA4, FU351-L1), not the old derived render blend; the
+   * geometry is the native 500-unit chase, with the position clamps
+   * ±0x420/±0x810 and the native yaw/pitch slew. The derived envelope seeds
+   * the first frame only. Non-live tapes keep the old camera path byte-exact. */
   if (mr->live_start) {
     if (r->render_eye_valid == 0u) match_run_render_eye_update(mr);
     fifa96_camera_handler_state *acs = &r->action_cam;
     fifa96_camera_handler_out ac_out = {0};
     acs->track_x = r->render_focus_x;
-    acs->track_y = r->view_focus_y;
+    acs->track_y = r->render_focus_y;
     acs->track_z = r->render_focus_z;
     acs->pos_x = r->render_eye_x;
     acs->pos_y = r->render_eye_y;

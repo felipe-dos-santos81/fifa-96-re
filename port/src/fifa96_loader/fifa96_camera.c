@@ -11,6 +11,36 @@ static int32_t camera_abs(int32_t value) {
   return (int32_t)magnitude;
 }
 
+int fifa96_camera_focus_clamp(int32_t x, int32_t y, int32_t z,
+                              fifa96_camera_focus *out) {
+  if (!out) return -FIFA96_ERR_INVALID;
+  /* FUN_00036C70 0x36CA2..0x36CFA: the signed dword bounds. The fallback
+   * replaces all three, then the Y band runs on the replacement. */
+  if (x > 6000 || x < -6000 || z > 6000 || z < -6000) {
+    x = -4000;
+    y = 0;
+    z = -4000;
+  }
+  if (y < 0 || y > 16000) y = 0;
+  out->x = x;
+  out->y = y;
+  out->z = z;
+  return FIFA96_OK;
+}
+
+int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2) {
+  /* FUN_0004BE44 0x4B99F..0x4B9FF. FUN_0004B678 is `ac2 >= 4`; the odd
+   * `ac2 & 1` arm flips which side receives the away-bank addend. */
+  int add = 0;
+  if ((ac2 & 1) != 0) {
+    if (ac2 < 4) add = side == 0;
+    else add = side == 1;
+  } else {
+    add = side == 1;
+  }
+  return roster + (add ? 0xB : 0);
+}
+
 int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   if (!cam) return -FIFA96_ERR_INVALID;
   cam->pos_x = x;

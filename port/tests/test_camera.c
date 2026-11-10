@@ -2181,6 +2181,39 @@ static void test_behavior_table(void) {
   assert(st.yaw == 0);   /* const34 0 */
 }
 
+static void test_focus_clamp(void) {
+  /* FU-351-L1 / FUN_00036C70 head: ±6000 x/z fallback replaces all three;
+   * the Y band is 0..16000. */
+  fifa96_camera_focus f;
+  assert(fifa96_camera_focus_clamp(123, 456, -789, &f) == FIFA96_OK);
+  assert(f.x == 123 && f.y == 456 && f.z == -789);
+  assert(fifa96_camera_focus_clamp(6000, 16000, -6000, &f) == FIFA96_OK);
+  assert(f.x == 6000 && f.y == 16000 && f.z == -6000);
+  assert(fifa96_camera_focus_clamp(6001, 42, 0, &f) == FIFA96_OK);
+  assert(f.x == -4000 && f.y == 0 && f.z == -4000);
+  assert(fifa96_camera_focus_clamp(0, 42, -6001, &f) == FIFA96_OK);
+  assert(f.x == -4000 && f.y == 0 && f.z == -4000);
+  assert(fifa96_camera_focus_clamp(1, -1, 2, &f) == FIFA96_OK);
+  assert(f.x == 1 && f.y == 0 && f.z == 2);
+  assert(fifa96_camera_focus_clamp(1, 16001, 2, &f) == FIFA96_OK);
+  assert(f.x == 1 && f.y == 0 && f.z == 2);
+  assert(fifa96_camera_focus_clamp(0, 0, 0, NULL) == -FIFA96_ERR_INVALID);
+
+  /* FUN_0004BE44: the away-bank addend follows [0x157AC2] & 1 and the
+   * >= 4 gate (FUN_0004B678). Side 1 is the default addend side. */
+  assert(fifa96_camera_target_slot(4, 0, 0) == 4);
+  assert(fifa96_camera_target_slot(4, 1, 0) == 15);
+  assert(fifa96_camera_target_slot(4, 0, 1) == 15);
+  assert(fifa96_camera_target_slot(4, 1, 1) == 4);
+  assert(fifa96_camera_target_slot(4, 0, 3) == 15);
+  assert(fifa96_camera_target_slot(4, 1, 3) == 4);
+  assert(fifa96_camera_target_slot(4, 0, 4) == 4);
+  assert(fifa96_camera_target_slot(4, 1, 4) == 15);
+  assert(fifa96_camera_target_slot(4, 1, 8) == 15);
+  assert(fifa96_camera_target_slot(10, 0, 0) == 10);
+  assert(fifa96_camera_target_slot(10, 1, 0) == 21);
+}
+
 int main(void) {
   test_init_fields();
   test_init_invalid();
@@ -2262,6 +2295,7 @@ int main(void) {
   test_camera_type_mapping();
   test_behavior_table();
   test_behavior_steady();
+  test_focus_clamp();
   test_behavior_sidetrack();
   test_behavior_staged();
   test_behavior_action();
