@@ -960,8 +960,9 @@ struct fifa96_match_run {
    *  - `flag_157ab0` = byte `[0x157AB0]`, the outfield released-arm gate
    *    (producer unported, OL-72);
    *  - `camera_override_157a6f` = dword `[0x157A6F]`, the animation-camera
-   *    override triple pointer (native producers/consumers unported,
-   *    FU154/R2-L2).
+   *    override pointer. The engine now uses it as a 0/1 flag; when set,
+   *    `camera_override_triple` is the `0x158767` triple the live focus
+   *    consumes (`FUN_00036C70`, FU154/R2-L2).
    * Init/begin stage the image defaults (0); act-9 stage 0 applies the
    * `0x73E28` values. */
   uint32_t clock_saved_157a60;
@@ -970,6 +971,7 @@ struct fifa96_match_run {
   int16_t camera_height_157a6d;
   uint8_t flag_157ab0;
   int32_t camera_override_157a6f;
+  int32_t camera_override_triple[3];
   /* FU-188 §4 / FU-202 (row-0x24 stage 1): the native `word[0x15B37A]` ball
    * gate latch. `FUN_0008EEC0` (`0x8EEC0..0x8EEC6`) returns the word;
    * `FUN_0008EEB4` (`0x8EEB4..0x8EEBD`) stores 1. Row 0x24 stage 1

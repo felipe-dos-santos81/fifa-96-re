@@ -1869,6 +1869,20 @@ static int match_sp_delivery_step(struct fifa96_match_run *mr) {
   return 0;
 }
 
+static void match_sp_stage_camera_override(struct fifa96_match_run *mr) {
+  if (mr->sp_path_valid) {
+    mr->camera_override_triple[0] = mr->sp_target.target[0];
+    mr->camera_override_triple[1] = mr->sp_target.target[1];
+    mr->camera_override_triple[2] = mr->sp_target.target[2];
+    mr->camera_override_157a6f = 1;
+  } else {
+    mr->camera_override_triple[0] = mr->render.camera.pos_x;
+    mr->camera_override_triple[1] = mr->render.camera.pos_y;
+    mr->camera_override_triple[2] = mr->render.camera.pos_z;
+    mr->camera_override_157a6f = 0;
+  }
+}
+
 static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
   uint16_t draw = 0;
   /* The native input machine is not live-only, but the M2 characterization
@@ -1887,6 +1901,7 @@ static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
     } else {
       mr->sp_path_valid = 0;
     }
+    match_sp_stage_camera_override(mr);
     if (match_sp_receiver_cut(mr, &mr->record)) return 0;
     code = match_sp_delivery_step(mr);
     if (code != 0) {

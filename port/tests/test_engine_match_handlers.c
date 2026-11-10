@@ -561,6 +561,13 @@ static void test_action_10_native_path(void) {
   assert(f.mr.sp_path[1][0] == 2 * 0x26);
   assert(f.mr.sp_target.duration > 0);
   assert(f.mr.sp_target.target[0] >= 0);
+  assert(f.mr.camera_override_157a6f == 1);
+  assert(f.mr.camera_override_triple[0] == f.mr.sp_target.target[0]);
+  f.mr.sp_b5_1587b5 = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_path_valid == 0);
+  assert(f.mr.camera_override_157a6f == 0);
+  assert(f.mr.camera_override_triple[0] == f.mr.render.camera.pos_x);
 
   f.mr.live_start = 0;
   f.mr.sp_path_valid = 0;

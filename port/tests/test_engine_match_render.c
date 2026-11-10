@@ -1474,6 +1474,25 @@ static void test_live_start_gate_and_eye(void) {
   fifa96_match_run_eye(&mr, NULL);
 }
 
+static void test_live_camera_override_focus(void) {
+  struct live_fixture f;
+  live_fixture_make(&f);
+  f.mr.camera_override_triple[0] = 0x123;
+  f.mr.camera_override_triple[1] = 0x456;
+  f.mr.camera_override_triple[2] = 0x789;
+  f.mr.camera_override_157a6f = 1;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.render_focus_x == 0x123);
+  assert(f.mr.render.render_focus_y == 0x456);
+  assert(f.mr.render.render_focus_z == 0x789);
+  f.mr.camera_override_157a6f = 0;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.render_focus_x == f.mr.render.camera.pos_x);
+  assert(f.mr.render.render_focus_y == f.mr.render.camera.pos_y);
+  assert(f.mr.render.render_focus_z == f.mr.render.camera.pos_z);
+  live_fixture_drop(&f);
+}
+
 static void test_live_begin_formation_pitch_and_kit(void) {
   struct live_fixture f;
   live_fixture_make(&f);
@@ -3039,6 +3058,7 @@ int main(void) {
   test_ball_row_dormant();
   test_engine_match_step_renders();
   test_live_start_gate_and_eye();
+  test_live_camera_override_focus();
   test_view_addend_cardinals();
   if (live_file_exists(LIVE_ISO_PATH)) {
     test_live_begin_formation_pitch_and_kit();

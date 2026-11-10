@@ -2275,11 +2275,17 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
    * the current place here, not this frame's new ball follow. This is the
    * class-3 target; the Phase-85 controlled-record blend is retired. */
   fifa96_camera_focus native_focus;
-  if (fifa96_camera_focus_clamp(cam->pos_x, cam->pos_y, cam->pos_z,
-                                &native_focus) != FIFA96_OK) {
-    native_focus.x = cam->pos_x;
-    native_focus.y = cam->pos_y;
-    native_focus.z = cam->pos_z;
+  int32_t src_x = mr->camera_override_157a6f ? mr->camera_override_triple[0]
+                                             : cam->pos_x;
+  int32_t src_y = mr->camera_override_157a6f ? mr->camera_override_triple[1]
+                                             : cam->pos_y;
+  int32_t src_z = mr->camera_override_157a6f ? mr->camera_override_triple[2]
+                                             : cam->pos_z;
+  if (fifa96_camera_focus_clamp(src_x, src_y, src_z, &native_focus) !=
+      FIFA96_OK) {
+    native_focus.x = src_x;
+    native_focus.y = src_y;
+    native_focus.z = src_z;
   }
   r->view_focus_x = focus_x;
   r->view_focus_y = 0x50;
@@ -2622,6 +2628,9 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->camera_height_157a6d = 0;
   mr->flag_157ab0 = 0;
   mr->camera_override_157a6f = 0;
+  mr->camera_override_triple[0] = 0;
+  mr->camera_override_triple[1] = 0;
+  mr->camera_override_triple[2] = 0;
   /* FU-145 S2: the restart-body clear (`0x84F90`) drops the goal-arm state
    * with the match; the session gate returns to 0 with the session. */
   mr->goal_armed = 0;
@@ -4867,6 +4876,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->camera_height_157a6d = 0;        /* 0x157A6D: fresh BSS word */
   mr->flag_157ab0 = 0;                 /* 0x157AB0: OL-72 default */
   mr->camera_override_157a6f = 0;      /* 0x157A6F: no override pointer */
+  mr->camera_override_triple[0] = 0;
+  mr->camera_override_triple[1] = 0;
+  mr->camera_override_triple[2] = 0;
   mr->ball_gate_15b37a = 0;            /* FU-188: fresh [0x15B37A] BSS word */
   memset(mr->row17_stash_1587fc, 0, sizeof mr->row17_stash_1587fc); /* FU-181 */
   mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
@@ -5164,6 +5176,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->camera_height_157a6d = 0;        /* 0x157A6D: fresh BSS word */
   mr->flag_157ab0 = 0;                 /* 0x157AB0: OL-72 default */
   mr->camera_override_157a6f = 0;      /* 0x157A6F: no override pointer */
+  mr->camera_override_triple[0] = 0;
+  mr->camera_override_triple[1] = 0;
+  mr->camera_override_triple[2] = 0;
   mr->ball_gate_15b37a = 0;            /* FU-188: fresh [0x15B37A] word */
   memset(mr->row17_stash_1587fc, 0, sizeof mr->row17_stash_1587fc); /* FU-181 */
   mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
@@ -5799,6 +5814,9 @@ int fifa96_match_run_act9_reset(struct fifa96_match_run *mr) {
   mr->camera_height_157a6d = (int16_t)((mr->difficulty_14c2f6 == 0 ? 0x40 : 0x30) + 0x70);
   mr->flag_157ab0 = 0;                  /* 0x73EC1 byte [0x157AB0] */
   mr->camera_override_157a6f = 0;       /* 0x73EC7 dword [0x157A6F] */
+  mr->camera_override_triple[0] = 0;
+  mr->camera_override_triple[1] = 0;
+  mr->camera_override_triple[2] = 0;
   /* 0x73ECD CALL 0x7F144: the full possession/carrier block 0x158724..0x15872F
    * (fresh bytes: the dword at 0x158724 plus the eight bytes 0x158728..0x15872F). */
   mr->entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;   /* 0x158724 pointer */
