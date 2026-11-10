@@ -4865,3 +4865,16 @@ close-out below).
   matrix and the preset-8 clamp. `make check` green 124/124; M1/M2 `cmp`
   exact. Next: port `FUN_0004DF34`/`FUN_0004E05C`, then call the resolver
   from the live pose staging.
+
+- **Phase 98 class-0 yaw arm `FUN_0004DF34` (2026-11-09).** Phase 96's
+  "yaw/pitch arms remain the quoted clamp level" is now half closed: the yaw
+  cell runs the native two-look-at blend (`FUN_0004C7D0`/`FUN_0004D5F4`),
+  the block `+0x24` rate ramp, the ±30 minimum step and the
+  `ratio/2+ratio/4` catch-up band. The block/table gained `+0x24`; the
+  placeholder `yaw_lo`/`yaw_hi` clamp and fields were removed. The pitch arm
+  `FUN_0004E05C`, the class-3 yaw snap, the pan/roll block
+  (`FUN_0004E248`), the mutable `+0x18` cell and the y-ease/ratio easing
+  remain legs. `test_camera` pins `0xC2EE`, the tick-1 minimum `30` and the
+  ratio-0 early return. `make check` green 124/124; M1/M2 `cmp` exact. No
+  live effect (live class is still 3). Next: pitch arm, then the class-3
+  snap and the remaining steady-body state.

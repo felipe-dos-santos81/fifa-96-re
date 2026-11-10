@@ -1719,31 +1719,55 @@ static void test_camera_type_mapping(void) {
 }
 
 static void test_behavior_steady(void) {
-  /* FUN_0004E834: yaw accumulator clamped into the block sub-record bounds
-   * [0x18,0x1C], pitch clamp +-0x1620, horizon jitter rnd>>3 + 0xE09/0xAA1. */
+  /* FUN_0004E834: the yaw step FUN_0004DF34, the pitch clamp +-0x1620 and
+   * the horizon jitter rnd>>3 + 0xE09/0xAA1. */
   fifa96_camera_handler_state st;
   fifa96_camera_handler_block block;
   fifa96_camera_handler_out out;
   memset(&st, 0, sizeof st);
   memset(&block, 0, sizeof block);
   memset(&out, 0, sizeof out);
-  block.yaw_lo = -100;
-  block.yaw_hi = 100;
   st.yaw = 0;
   st.pitch = 0x2000;
   assert(fifa96_camera_behavior_steady(&st, &block, 0x40, 0, &out) == FIFA96_OK);
   assert(st.yaw == 0);
   assert(st.pitch == 0x1620);
   assert(out.horizon_a == 0xE09 + 8 && out.horizon_b == 0xAA1 + 8);
-  st.yaw = -500;
-  assert(fifa96_camera_behavior_steady(&st, &block, 0, 0, &out) == FIFA96_OK);
-  assert(st.yaw == -100 && out.horizon_a == 0xE09);
-  st.yaw = 500;
-  assert(fifa96_camera_behavior_steady(&st, &block, 0, 0, &out) == FIFA96_OK);
-  assert(st.yaw == 100);
   st.pitch = -0x2000;
   assert(fifa96_camera_behavior_steady(&st, &block, 0, 0, &out) == FIFA96_OK);
-  assert(st.pitch == -0x1620);
+  assert(st.pitch == -0x1620 && out.horizon_a == 0xE09);
+
+  /* FUN_0004DF34: target +x, class-3 point z = -0xB10, ratio 1000, rate 8,
+   * tick 8. The blend is 0xBE0C, delta -0x41F4, ramp 0x1111 -> -1126, then
+   * the ratio/2+ratio/4 catch-up band (15634) returns -15634. */
+  block.class_of = 3;
+  block.const24 = 8;
+  block.const28 = 0;   /* the two slides are no-ops for this arm */
+  st.pos_x = 0;
+  st.pos_z = 0;
+  st.track_x = 1000;
+  st.track_z = 0;
+  st.ratio = 1000;
+  st.yaw = 0;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 8, &out) == FIFA96_OK);
+  assert(st.yaw == 0xC2EE);   /* (-15634) & 0xffff */
+  assert(st.pos_x == 0 && st.pos_z == 0);
+
+  /* Target +z gives atan1 = 0 and blend 500; tick 1/rate 8 gives step 4,
+   * which the native minimum raises to +30. */
+  st.track_x = 0;
+  st.track_z = 1000;
+  st.yaw = 0;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 1, &out) == FIFA96_OK);
+  assert(st.yaw == 30);
+
+  /* ratio 0 collapses the blend to atan1 = 0: the delta is inside the
+   * +/-30 deadband and the yaw cell stays put. */
+  st.ratio = 0;
+  st.yaw = 0;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, 8, &out) == FIFA96_OK);
+  assert(st.yaw == 0);
+
   assert(fifa96_camera_behavior_steady(NULL, &block, 0, 0, &out) ==
          -FIFA96_ERR_INVALID);
   assert(fifa96_camera_behavior_steady(&st, NULL, 0, 0, &out) ==
@@ -1954,8 +1978,6 @@ static void test_pose_feed_default_handler_arm(void) {
   st.pos_z = -50;
   st.yaw = 0;
   st.pitch = 0x2000;
-  block.yaw_lo = -100;
-  block.yaw_hi = 100;
   int32_t yaw = 7, pitch = 7, ratio = 7;
   assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
   assert(cam.pos_x == 100 && cam.pos_z == -50);
@@ -2136,7 +2158,7 @@ static void test_replay_select(void) {
 
 static void test_behavior_table(void) {
   /* First-hand 0x10896C (504 B) rows {target0, target1, class, field3(+0xC),
-   * +0x10, +0x18, +0x28, const30, const34, C record(+0x50)}: classes
+   * +0x10, +0x18, +0x24, +0x28, const30, const34, C record(+0x50)}: classes
    * {3,1,3,3,1,3}; the +0xC class-gate cells are {0,0,0xA7F8,0,0,0xA21C} so
    * blocks 2/5 take FUN_0004EC9C's class-3 arm (0x4000..0xC000) and 0/1/3/4
    * the class-4 arm; every +0x34 is zero (handler 1's yaw target is the bare
@@ -2146,6 +2168,7 @@ static void test_behavior_table(void) {
   const int32_t gate[6] = {0, 0, 0xA7F8, 0, 0, 0xA21C};
   const int32_t c10[6] = {0xC8, 0x4B0, 0, 0xC8, 0x4B0, 0};
   const int32_t c18[6] = {0x578, 0, 0x578, 0x578, 0, 0x578};
+  const int32_t c24[6] = {8, 8, 8, 8, 8, 8};
   const int32_t c28[6] = {8, 0x20, 8, 8, 0x20, 8};
   const int32_t c_rec[6][4] = {
       {150, 150, 1000, 3800}, {600, 2400, 1500, 1500},
@@ -2159,6 +2182,7 @@ static void test_behavior_table(void) {
     assert(fifa96_camera_behavior_blocks[i].target0 == 0x340);
     assert(fifa96_camera_behavior_blocks[i].const10 == c10[i]);
     assert(fifa96_camera_behavior_blocks[i].const18 == c18[i]);
+    assert(fifa96_camera_behavior_blocks[i].const24 == c24[i]);
     assert(fifa96_camera_behavior_blocks[i].const28 == c28[i]);
     assert(fifa96_camera_behavior_blocks[i].c0 == c_rec[i][0]);
     assert(fifa96_camera_behavior_blocks[i].c1 == c_rec[i][1]);

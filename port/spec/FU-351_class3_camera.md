@@ -310,11 +310,11 @@ carry `+0x10`, `+0x18`, `+0x28` and the `+0x50` C record
 native `FUN_00049388` tick. The slides consume `hist_x`/`hist_z`, so the
 class-3 x/z target history has a wired consumer (L4 closed for x/z;
 `hist_y` has no reader in the ported class-0 body). The
-handler's yaw/pitch arms (`FUN_0004DF34` / `FUN_0004E05C`) and the class-3
-snap remain the quoted clamp level. The live class is still 3, so this has
-no open-play effect yet; the next L2c slice ports the orientation arms and
-selects the live class from the native preset (`FUN_0004CE34` /
-`FUN_0004B308`).
+handler's yaw arm is now `FUN_0004DF34` (§11); the pitch arm
+(`FUN_0004E05C`), the class-3 snap and the pan/roll block remain. The live
+class is still 3, so this has no open-play effect yet; the next L2c slice
+ports the pitch arm and then selects the live class from the native preset
+(`FUN_0004CE34` / `FUN_0004B308`).
 
 **Verification.** `test_camera::test_camera_slide` pins the ramp factors and
 the inside/outside, mode-gate, low/high-clamp and history-offset branches;
@@ -336,10 +336,64 @@ wiring it:
   5 -> 3 (slots 3/4 are disabled). Preset 8 clamps to 0, i.e. slot 1/class 1.
 
 The helper returns `{preset, slot, variant, class_of}`. It is **not wired**:
-the live camera is still forced to class 3, and the class 0/1/2 orientation
-arms are not ported. It is the resolver the next slice will call from the
-camera pose staging.
+the live camera is still forced to class 3, and the class 0/1/2 pitch arm is
+not ported. It is the resolver the next slice will call from the camera pose
+staging.
 
 **Verification.** `test_camera::test_camera_view_select` pins the phase-3/4,
 0x15/b680 and default rows, the preset-8 clamp and NULL handling.
 `make check` **124/124**; M1/M2 `cmp` exact.
+
+## 11. FU351-L2 yaw arm `FUN_0004DF34` (2026-11-09)
+
+**Landed.** The class-0 steady yaw cell is the native step, not the placeholder
+clamp.
+
+Fresh disassembly:
+
+- `FUN_0004C7D0` (`0x4C7D0..0x4C7F5`, 19 instructions) reads
+  `dz = point[+0x8] - origin[+0x8]`, `dx = point[0] - origin[0]`, pushes
+  `(dz, dx)` into `FUN_000A2A10`, then returns `-angle & 0xFFFF`. The port's
+  `camera_atan16(dx, dz)` is the same 16-bit angle, so the wrapper is
+  `-camera_atan16(dx, dz)`.
+- `FUN_0004D5F4` (`0x4D5F4..0x4D667`, 54 instructions) is the ±ratio
+  deadband blend: `d = wrap16(atan2 - atan1)`; if `d > 0` return
+  `atan1 + ratio/2` when `d > ratio`, else `atan1 + d/2`; if `d <= 0` return
+  `atan1 - ratio/2` when `|d| > ratio`, else `atan1 - |d|/2`. `param4 == 1`
+  selects the `atan2`-side half-step (the pitch caller).
+- `FUN_0004DF34` (`0x4DF34..0x4E059`, 110 instructions):
+  `atan1` is the target look-at (`camera+0x34` from `camera+0x10`), `atan2`
+  the look-at of the stack point `{x=0, z=class==4 ? +0xB10 : -0xB10}`. It
+  blends them with `camera+0x4C`, subtracts `camera+0x58` as a 16-bit wrap,
+  and:
+  - `|delta| < [0x108BAC]=30` -> return `delta`;
+  - else `factor = FUN_0004D668(block+0x24)` =
+    `floor(tick*0x10000/(rate*15))`, `step = round(delta*factor/0x10000)`;
+  - negative `step` in `(-30,0)` -> `-30`; positive in `(0,30)` -> `+30`
+    (zero stays zero);
+  - `band = |wrap16(atan1 - yaw)| - ratio/2 - ratio/4`; when `band > 0`,
+    raise a negative/positive step to `-band`/`+band` when it is closer to
+    zero.
+- The steady call (`0x4E97D..0x4E99F`) passes `EAX=camera`,
+  `EDX=&stack-point`, `EBX=block+0x24`, `ECX=camera+0x4C`, then adds the
+  returned step to `camera+0x58` and masks. The stack point's z is the same
+  class-based `±0xB10` cell set at `0x4E8D1`/`0x4E8FB`.
+
+Port: `fifa96_camera_handler_block` and the six-row table gained `+0x24`
+(all six native rows are 8); `camera_steady_yaw_delta` implements the two
+look-ats, the blend, the ramp, the ±30 minimum and the catch-up band; the
+steady handler adds it to `st->yaw`. The placeholder `yaw_lo`/`yaw_hi`
+clamp (and those two struct fields) was removed — the native steady yaw is
+not a clamp.
+
+**Not ported in this arm:** the pitch arm `FUN_0004E05C`, the class-3 yaw
+snap (`0x4E9A2..0x4EA9B`), the pan/roll block (`FUN_0004E248`,
+`0x4E84A..0x4E87F`), the mutable `+0x18` cell and its sub-record clamp
+(`0x4E8A4..0x4E8C8`), the y-ease/slope block (`0x4EAB0..0x4EC5A`) and the
+ratio easing (`0x4EC5D..0x4EC87`). The yaw cell is now native, but the
+steady body is still partial.
+
+**Verification.** `test_camera::test_behavior_steady` pins the +x/-z
+scenario (`0xC2EE`), the +z tick-1 minimum (`30`) and the ratio-0 early
+return (`0`); the table test pins `+0x24 = 8`. `make check` **124/124**;
+M1/M2 `cmp` exact.

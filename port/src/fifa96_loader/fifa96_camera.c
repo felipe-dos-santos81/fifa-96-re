@@ -591,17 +591,75 @@ static int32_t camera_clamp_i32(int32_t value, int32_t lo, int32_t hi) {
   return value;
 }
 
+static int32_t camera_atan16(int32_t x, int32_t z);
+
+/* FUN_0004D5F4: hold the target angle inside the +/-ratio deadband around
+ * atan1; param4 == 1 returns the atan2-side half-step. */
+static int32_t camera_angle_blend16(int32_t atan1, int32_t atan2,
+                                    int32_t ratio, int param4) {
+  int32_t d = (int32_t)(((uint32_t)atan2 - (uint32_t)atan1) & 0xFFFFu);
+  int32_t half = ratio >> 1;
+  if (d > 0x8000) d -= 0x10000;
+  if (d > 0) {
+    int32_t next = (int32_t)(((uint32_t)atan1 + (uint32_t)half) & 0xFFFFu);
+    if (param4 == 1 || d > ratio) return next;
+    return (int32_t)(((uint32_t)atan1 + (uint32_t)(d >> 1)) & 0xFFFFu);
+  }
+  if (param4 == 1)
+    return (int32_t)(((uint32_t)atan2 + (uint32_t)half) & 0xFFFFu);
+  if (-d > ratio)
+    return (int32_t)(((uint32_t)atan1 - (uint32_t)half) & 0xFFFFu);
+  return (int32_t)(((uint32_t)atan1 - (uint32_t)((-d) >> 1)) & 0xFFFFu);
+}
+
+/* FUN_0004DF34: the class-0 yaw step. atan1 is the look-at of the staged
+ * target (`camera+0x34`), atan2 the look-at of the class point
+ * `(0, +-0xB10)` (class 4 positive, else negative); FUN_0004D5F4 blends
+ * them, then the native applies the rate ramp, a +/-30 minimum step and the
+ * ratio/2+ratio/4 catch-up band. */
+static int32_t camera_steady_yaw_delta(const fifa96_camera_handler_state *st,
+                                       int32_t point_z,
+                                       const fifa96_camera_handler_block *block,
+                                       int32_t tick) {
+  int32_t atan1, atan2, blend, delta, factor, step, band;
+  atan1 = (int32_t)(0u - (uint32_t)camera_atan16(st->track_x - st->pos_x,
+                                                 st->track_z - st->pos_z)) &
+          0xFFFF;
+  atan2 = (int32_t)(0u - (uint32_t)camera_atan16(0 - st->pos_x,
+                                                 point_z - st->pos_z)) &
+          0xFFFF;
+  blend = camera_angle_blend16(atan1, atan2, st->ratio, 0);
+  delta = (int32_t)(((uint32_t)blend - (uint32_t)st->yaw) & 0xFFFFu);
+  if (delta > 0x8000) delta -= 0x10000;
+  if (camera_abs(delta) < 30) return delta;
+
+  factor = fifa96_camera_ramp_factor(tick, block->const24);
+  step = (int32_t)(((int64_t)delta * factor + 0x8000) >> 16);
+  if (step < 0 && step > -30) step = -30;
+  else if (step > 0 && step < 30) step = 30;
+
+  band = (int32_t)(((uint32_t)atan1 - (uint32_t)st->yaw) & 0xFFFFu);
+  if (band > 0x8000) band -= 0x10000;
+  band = camera_abs(band) - (st->ratio >> 1) - (st->ratio >> 2);
+  if (band > 0) {
+    if (step < 0 && step > -band) step = -band;
+    else if (step > 0 && step < band) step = band;
+  }
+  return step;
+}
+
 /* FU-152 §2.8: the 0x10896C behavior-block fields (first-hand read_memory;
  * layout per 84-byte block: +0x00/+0x04 targets, +0x08 class, +0xC the
- * class-gate dword, +0x30/+0x34 constants). */
+ * class-gate dword, +0x10/+0x18/+0x24/+0x28 constants, +0x30/+0x34
+ * constants and the +0x50 C record). */
 const fifa96_camera_behavior_table_entry
     fifa96_camera_behavior_blocks[FIFA96_CAMERA_BEHAVIOR_BLOCKS] = {
-        {0x340, 0xFA0, 3, 0, 0xC8, 0x578, 8, 0xEA6, 0, 150, 150, 1000, 3800},
-        {0x340, 0x1200, 1, 0, 0x4B0, 0, 0x20, 0x578, 0, 600, 2400, 1500, 1500},
-        {0x340, 0xD48, 3, 0xA7F8, 0, 0x578, 8, 0x1130, 0, 900, 1900, 900, 3750},
-        {0x340, 0xFA0, 3, 0, 0xC8, 0x578, 8, 0xEA6, 0, 150, 150, 1000, 3800},
-        {0x340, 0x1200, 1, 0, 0x4B0, 0, 0x20, 0x578, 0, 600, 2400, 1500, 1500},
-        {0x340, 0xD48, 3, 0xA21C, 0, 0x578, 8, 0x1130, 0, 900, 1900, 900, 3750},
+        {0x340, 0xFA0, 3, 0, 0xC8, 0x578, 8, 8, 0xEA6, 0, 150, 150, 1000, 3800},
+        {0x340, 0x1200, 1, 0, 0x4B0, 0, 8, 0x20, 0x578, 0, 600, 2400, 1500, 1500},
+        {0x340, 0xD48, 3, 0xA7F8, 0, 0x578, 8, 8, 0x1130, 0, 900, 1900, 900, 3750},
+        {0x340, 0xFA0, 3, 0, 0xC8, 0x578, 8, 8, 0xEA6, 0, 150, 150, 1000, 3800},
+        {0x340, 0x1200, 1, 0, 0x4B0, 0, 8, 0x20, 0x578, 0, 600, 2400, 1500, 1500},
+        {0x340, 0xD48, 3, 0xA21C, 0, 0x578, 8, 8, 0x1130, 0, 900, 1900, 900, 3750},
 };
 
 int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
@@ -631,12 +689,12 @@ int fifa96_camera_behavior_steady(fifa96_camera_handler_state *st,
                                   const fifa96_camera_handler_block *block,
                                   int32_t rnd, int32_t tick,
                                   fifa96_camera_handler_out *out) {
-  int32_t mode, lo, hi, hist_off, tx, atx, x_off;
+  int32_t mode, lo, hi, hist_off, tx, atx, x_off, point_z, yaw_delta;
   if (!st || !block || !out) return -FIFA96_ERR_INVALID;
   /* 0x4E834: the two FUN_0004D698 slides run before the orientation arms.
    * The z mode/bounds swap by the behavior class; the x call is mode 2 with
-   * the sign-adjusted target offset. The yaw/pitch arms (FUN_0004DF34 /
-   * FUN_0004E05C) and the class-3 snap stay the next leg. */
+   * the sign-adjusted target offset. The yaw arm is FUN_0004DF34; the pitch
+   * arm, the class-3 snap and the pan/roll block remain legs. */
   if (block->class_of == 4) {
     mode = -1;
     lo = -block->c2;
@@ -658,9 +716,10 @@ int fifa96_camera_behavior_steady(fifa96_camera_handler_state *st,
   st->pos_x = fifa96_camera_slide(st->pos_x, tx, st->hist_x, 2, -block->c0,
                                   block->c1, x_off, block->const28, tick);
 
-  /* The orientation arms remain the quoted clamp level until FUN_0004DF34 /
-   * FUN_0004E05C land. */
-  st->yaw = camera_clamp_i32(st->yaw, block->yaw_lo, block->yaw_hi);
+  point_z = block->class_of == 4 ? 0xB10 : -0xB10;
+  yaw_delta = camera_steady_yaw_delta(st, point_z, block, tick);
+  st->yaw = (int32_t)(((uint32_t)st->yaw + (uint32_t)yaw_delta) & 0xFFFFu);
+
   st->pitch = camera_clamp_i32(st->pitch, -0x1620, 0x1620);
   out->horizon_a = (rnd >> 3) + 0xE09;
   out->horizon_b = (rnd >> 3) + 0xAA1;
