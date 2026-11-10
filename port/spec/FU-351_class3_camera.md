@@ -659,3 +659,67 @@ clear) and the `+-0x720/+-0xB10` target clamp.
   `0x105FB8`, `FUN_0004B97C`, `0x109A74+0x108` or
   `0x109A74+[0x108E04]*0xC`; the image cell is 0 and those producers are not
   staged. The image/default path above is closed.
+
+## 16. FU351-L2c-1 closure: the computed 0x51056 axes and guard (2026-11-10)
+
+**Evidence.** Fresh `get_xrefs_to 0x505D0` = 3 (`0x4D3D9` in
+`FUN_0004D2D4`, `0x4CF51` in `FUN_0004CEF4`, `0x4D009` in
+`FUN_0004CF7C`). Fresh `disassemble_bytes` `0x505D0..0x50635`,
+`0x506A0..0x50720`, `0x51020..0x51066`, `0x4B64C..0x4B690`,
+`0x4B8D4..0x4B979`, `0x4B7D0..0x4B816`, `0x4B6FC..0x4B760`,
+`0x53D50..0x53D55`, `0x6401C..0x6402E`; fresh `decompile_function`
+`0x4B8D4`, `0x4BA00`. Fresh `read_memory 0x1074A8` = 0,
+`0x157A83` = 0, `0x157AC2` = 0.
+
+**Errata (quoted).** FU351 §15 says the handler `ECX` is “the dword copied
+from `0x1577C0` (the packed lead pair)”. `FUN_0004B64C 0x4B658..0x4B660`
+reads `dword[0x1577C0]`, `SAR 0x10`, so `[ESP+0x14]` is the sign-extended
+word at `0x1577C2` — the lead **z** word, not a packed pair. FU351 §12 says
+only the view-driver `(0,0)` is statically proven; the pose path’s EBX/ECX
+are now resolved too. FU351 §15’s “the pose-feed default arm still passes
+`(0,0)`” is superseded.
+
+**Caller map.**
+
+- `FUN_0004D2D4 0x4D3B3..0x4D3D9`: `EAX=1` (`0x4D3D4`) enters
+  `FUN_000505D0`; `ECX=1` at the `0x51047` guard.
+- `FUN_0004CF7C 0x4D002..0x4D009`: `EAX=0`, `ECX=0xA`; the guard is taken
+  and the handler runs.
+- `FUN_0004CEF4 0x4CF4D..0x4CF51`: `EAX=0`, `EBX=0`; it does **not** set
+  `ECX`, so the `0x51047` guard is whatever its 10 callers left there. The
+  port exposes that case as the staged `handler_skip` input.
+
+`FUN_000505D0 0x50616` calls `FUN_0004B64C` first (`[ESP+0x18] =
+lead_x`, `[ESP+0x14] = lead_z`), then `0x50627` calls
+`FUN_0004B8D4(track_z - hist_z)` and `0x5062C` puts its result in `EBX`.
+`FUN_0004B8D4` reads `[0x157AC2]`, stores the persistent `[0x1074A8]`
+latch and returns `-1/0/1`; its `FUN_0004BA00` slot comes from
+`[0x157A83]` through `FUN_0004BE44`. `FUN_0004B64C`, `FUN_0004B8D4`,
+`FUN_0004B6FC` and `FUN_0004B7D0` preserve `ECX`; `FUN_00053D50` and
+`FUN_0006401C` do not write it, so the caller’s `ECX` reaches `0x51047`.
+At `0x5104B` the fourth handler argument is reloaded from `[ESP+0x14]`
+(the lead z word), independent of the guard.
+
+**Landed.** `fifa96_camera_handler_state` carries `pan_axis_a/b`,
+`axis_ac2`, `axis_present`, `axis_roster`, `axis_side`, `axis_lead_z` and
+`axis_latch`. `fifa96_camera_pose_axis_a` is the `FUN_0004B8D4` body;
+`fifa96_camera_pose_feed` resolves the event slot with the existing
+`fifa96_camera_target_slot` (`FUN_0004BE44`), runs the axis/latch before
+the pose switch, and sets `pan_axis_b` from the staged lead word.
+`camera_pan_update` now passes `pan_axis_a/b` to
+`fifa96_camera_steady_pan_step` instead of hard-coded `(0,0)`. A new
+`handler_skip` pose argument stages the zero-guard case (the axis/latch still
+run before the skipped call, matching `0x505D0`); `FUN_0004CEF4` itself
+inherits `ECX` from its callers, so no fixed value is asserted. The live
+`FUN_0004D908` driver continues to stage the proven `(0,0)` pair.
+
+**Verification.** `make check` **124/124**; M1
+`09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` and M2
+`41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`
+byte-exact. `test_camera` pins every `FUN_0004B8D4` branch, the
+zero-guard skip, and the pose-step `+17/-17` effects.
+
+**Remaining legs.** The `FUN_0004CF7C` replay driver itself
+(`[0x107DD8]=1`, the `FUN_0004F8C8` downstream) is still unported, as are
+the alternate `[0x105FC4]` target sources and the non-live row-0x17
+action-camera installer.

@@ -286,6 +286,17 @@ typedef struct fifa96_camera_handler_state {
   int32_t pitch;                     /* +0x5C */
   int32_t hist_x, hist_y, hist_z;    /* +0x40/+0x44/+0x48 (target history) */
   int32_t view_variant;              /* [0x107DD4] 0/1 (FUN_0004D04C) */
+  /* FU351-L2c-1: the computed 0x51056 handler arguments. The live
+   * FUN_0004D908 driver passes (0,0); the FUN_000505D0 pose path stages
+   * FUN_0004B8D4's side result and the 0x1577C2 lead word. */
+  int32_t pan_axis_a;                /* native EBX (FUN_0004B8D4 result) */
+  int32_t pan_axis_b;                /* native ECX (lead_z) */
+  int32_t axis_ac2;                  /* staged [0x157AC2] */
+  int32_t axis_present;              /* [0x157A83] != 0 */
+  int32_t axis_roster;               /* [rec+0x8D] */
+  int32_t axis_side;                 /* [rec+0x826] */
+  int32_t axis_lead_z;               /* [0x1577C2] sign-extended */
+  int32_t axis_latch;                /* [0x1074A8], persistent */
 } fifa96_camera_handler_state;
 
 typedef struct fifa96_camera_handler_out {
@@ -329,6 +340,14 @@ int fifa96_camera_focus_clamp(int32_t x, int32_t y, int32_t z,
  * producer side; the row-0x17 installer is non-live (FU-201), so this
  * resolver is not wired into open play. */
 int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2);
+
+/* FU351-L2c-1: FUN_0004B8D4 (`0x4B8D4..0x4B979`) — the side/axis result the
+ * pose-feed handler call puts in EBX. `track_delta` is
+ * `camera+0x3c - camera+0x48`; `event_slot` is FUN_0004BA00's 0..22 result
+ * (or -1 when `[0x157A83]` is clear); `ac2` is `[0x157AC2]`. The native
+ * writes the persistent `[0x1074A8]` latch through `latch`. Returns -1/0/1. */
+int32_t fifa96_camera_pose_axis_a(int32_t track_delta, int32_t event_slot,
+                                  int32_t ac2, int32_t *latch);
 
 /* FU-351-L2: FUN_0004D668 (`0x4D668..0x4D695`) — the Q16 ramp factor
  * `floor(tick * 0x10000 / (rate * 15))`, where `tick` is the native
@@ -526,6 +545,11 @@ typedef struct fifa96_camera_pose_args {
   fifa96_camera_handler_state *handler_state;
   fifa96_camera_handler_block *handler_block;
   fifa96_camera_handler_out *handler_out;
+  /* FUN_000505D0 0x51047: the default-arm handler runs only when the
+   * caller's ECX is nonzero. FUN_0004D2D4 passes 1 and FUN_0004CF7C passes
+   * 0xA; FUN_0004CEF4 leaves ECX to its caller. Zero here keeps the call;
+   * stage 1 for the zero-guard case (the axis/latch still run first). */
+  int handler_skip;
   int32_t handler_live;
   int32_t handler_speed;
   /* FUN_00049388()'s `[0x107300]` tick fed to the handler integrators and

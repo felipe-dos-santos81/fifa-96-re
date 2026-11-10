@@ -4959,3 +4959,20 @@ close-out below).
   and the packed `0x1577C0` lead dword (the `0x51056` EBX/ECX sources are
   known); the alternate `[0x105FC4]` target sources 1..4 stay a leg (image 0).
   Record: FU-351 §15.
+
+- **Phase 103 camera L2c-1 axis closure (2026-11-10).** The pose-feed
+  computed `0x51056` arguments are now ported instead of zeroed.
+  `FUN_000505D0` calls `FUN_0004B64C` first, so `[ESP+0x14]` is the
+  sign-extended `0x1577C2` lead-z word (the §15 “packed lead pair” wording is
+  corrected); `FUN_0004B8D4(track_z - hist_z)` supplies the EBX side axis
+  `-1/0/1` from `FUN_0004BA00`/`FUN_0004BE44` and the `[0x157AC2]` mode,
+  storing the persistent `[0x1074A8]` latch. The three callers are mapped:
+  `FUN_0004D2D4` passes the guard `ECX=1`, `FUN_0004CF7C` passes `0xA`, and
+  `FUN_0004CEF4` leaves `ECX` to its callers. The loader now has
+  `fifa96_camera_pose_axis_a`, handler-state axis/lead/latch inputs, a staged
+  `handler_skip` guard, and `camera_pan_update` uses the two axes; the live
+  `FUN_0004D908` driver keeps the proven `(0,0)` pair. `test_camera` pins
+  every axis branch, the skip, and the `+17/-17` pan effects. `make check`
+  green 124/124; M1/M2 byte-exact. Remaining: the `FUN_0004CF7C` replay
+  driver, alternate `[0x105FC4]` target sources, and the non-live row-0x17
+  action-camera installer. Record: FU-351 §16.

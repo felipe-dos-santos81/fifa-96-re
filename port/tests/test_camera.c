@@ -2170,6 +2170,25 @@ static void test_behavior_action(void) {
          -FIFA96_ERR_INVALID);
 }
 
+static void test_pose_axis_a(void) {
+  /* FUN_0004B8D4 0x4B8D4..0x4B979: ac2 > 3 -> -1; the event-slot band
+   * 0xB..0x15 takes +1 only when ac2 != 0; outside the band a negative
+   * event means no actor and the track delta decides. The latch gets the
+   * returned value. */
+  int32_t latch = 0x7F;
+  assert(fifa96_camera_pose_axis_a(0, 0, 4, &latch) == -1 && latch == -1);
+  assert(fifa96_camera_pose_axis_a(0, 0xB, 0, &latch) == -1 && latch == -1);
+  assert(fifa96_camera_pose_axis_a(0, 0xB, 1, &latch) == 1 && latch == 1);
+  assert(fifa96_camera_pose_axis_a(0, 0x15, 3, &latch) == 1 && latch == 1);
+  assert(fifa96_camera_pose_axis_a(0, 0x16, 0, &latch) == 1 && latch == 1);
+  assert(fifa96_camera_pose_axis_a(0, 0xA, 0, &latch) == 1 && latch == 1);
+  assert(fifa96_camera_pose_axis_a(0, 5, 1, &latch) == -1 && latch == -1);
+  assert(fifa96_camera_pose_axis_a(-7, -1, 0, &latch) == -1 && latch == -1);
+  assert(fifa96_camera_pose_axis_a(7, -1, 0, &latch) == 1 && latch == 1);
+  assert(fifa96_camera_pose_axis_a(0, -1, 0, &latch) == 0 && latch == 0);
+  assert(fifa96_camera_pose_axis_a(0, -1, 0, NULL) == 0);
+}
+
 static void test_pose_feed_default_handler_arm(void) {
   /* The default arm now dispatches the 0x108B80 handler when the caller
    * stages the camera-record subset + behavior block (the unported default
@@ -2198,6 +2217,44 @@ static void test_pose_feed_default_handler_arm(void) {
   assert(cam.pos_x == 100 && cam.pos_z == -50);
   assert(yaw == 0 && pitch == 0x2000 && ratio == 0);
   assert(out.horizon_a == 0xE09 && out.horizon_b == 0xAA1);
+
+  /* FU351-L2c-1: the pose feed stages FUN_0004B8D4's result in pan_axis_a
+   * and the 0x1577C2 lead word in pan_axis_b. axis_side=1 + ac2=1 resolves
+   * the controlled slot to 0xB, whose band returns +1. */
+  st.track_z = 0;
+  st.hist_z = 0;
+  st.axis_present = 1;
+  st.axis_roster = 0;
+  st.axis_side = 0;   /* ac2 & 1 adds 0xB to side 0 while ac2 < 4 */
+  st.axis_ac2 = 1;
+  st.axis_lead_z = 0;
+  block.const3c = 1000;
+  block.const40 = 80;
+  block.pan = 0;
+  block.pan_step = 0;
+  args.handler_tick = 8;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(st.pan_axis_a == 1 && st.pan_axis_b == 0);
+  assert(st.axis_latch == 1);
+  assert(block.pan_step == 17 && block.pan == 17);
+
+  /* Opposite lead signs take the 32-step arm with the negative sign. */
+  st.axis_lead_z = -1;
+  block.pan = 0;
+  block.pan_step = 0;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(st.pan_axis_a == 1 && st.pan_axis_b == -1);
+  assert(block.pan_step == -17 && block.pan == -17);
+
+  /* The 0x51047 zero-guard case: the handler is skipped, but the
+   * FUN_0004B8D4 axis/latch still run before the call. */
+  args.handler_skip = 1;
+  block.pan = 100;
+  block.pan_step = 123;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 0);
+  assert(st.pan_axis_a == 1 && st.axis_latch == 1);
+  assert(block.pan == 100 && block.pan_step == 123);
+  args.handler_skip = 0;
 
   /* selector 3 = the action handler (unsigned live flag + speed). With the
    * camera at +0x500 and the target at the origin the class-3 geometry keeps
@@ -2965,6 +3022,7 @@ int main(void) {
   test_behavior_sidetrack();
   test_behavior_staged();
   test_behavior_action();
+  test_pose_axis_a();
   test_pose_feed_default_handler_arm();
   test_classifier_bits();
   test_pan_band();

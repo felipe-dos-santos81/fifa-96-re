@@ -4972,8 +4972,9 @@ the build also produces the windowed `fifa96` target (`make game`).
     the active view rows 3/4/5 plus the `FUN_0004F1C8` C-record overlay, and
     the per-frame target takes FUN_000365B0's image/default `[0x109A70]` source
     with FUN_00036544's +-0x720/+-0xB10 clamp (FU-351 §15). The pose-feed
-    computed-call side latch `[0x1074A8]`/`[0x157AC2]` remains the narrowed
-    L2c-1 leg.
+    computed-call arguments are closed: FUN_0004B8D4's side axis plus the
+    `0x1577C2` lead word drive `FUN_0004E248`, and the `0x51047` ECX guard
+    is the staged `handler_skip` (FU-351 §16).
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

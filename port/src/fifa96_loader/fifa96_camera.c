@@ -48,6 +48,30 @@ int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2) {
   return roster + (add ? 0xB : 0);
 }
 
+int32_t fifa96_camera_pose_axis_a(int32_t track_delta, int32_t event_slot,
+                                  int32_t ac2, int32_t *latch) {
+  int32_t out;
+  if (ac2 > 3) {
+    out = -1;
+  } else if (event_slot < 0xB || event_slot > 0x15) {
+    if (event_slot < 0) {
+      if (track_delta < 0) out = -1;
+      else if (track_delta > 0) out = 1;
+      else out = 0;
+    } else if (ac2 != 0) {
+      out = -1;
+    } else {
+      out = 1;
+    }
+  } else if (ac2 == 0) {
+    out = -1;
+  } else {
+    out = 1;
+  }
+  if (latch != NULL) *latch = out;
+  return out;
+}
+
 int32_t fifa96_camera_ramp_factor(int32_t tick, int32_t rate) {
   /* 0x4D66B..0x4D670: the rate*15 is a 32-bit wrap. */
   int32_t divisor = (int32_t)((uint32_t)rate * 15u);
@@ -573,6 +597,16 @@ int fifa96_camera_pose_feed(fifa96_camera *cam, int32_t *yaw, int32_t *pitch,
   int32_t record;
   if (!cam || !yaw || !pitch || !view_ratio || !args) return -FIFA96_ERR_INVALID;
   if (args->block >= FIFA96_CAMERA_POSE_BLOCKS) return -FIFA96_ERR_INVALID;
+  if (args->handler_state != NULL) {
+    fifa96_camera_handler_state *st = args->handler_state;
+    int32_t slot = st->axis_present
+                       ? fifa96_camera_target_slot(st->axis_roster,
+                                                   st->axis_side, st->axis_ac2)
+                       : -1;
+    st->pan_axis_a = fifa96_camera_pose_axis_a(st->track_z - st->hist_z, slot,
+                                               st->axis_ac2, &st->axis_latch);
+    st->pan_axis_b = st->axis_lead_z;
+  }
   block = &fifa96_camera_pose_blocks[args->block];
   switch (args->view_mode) {
     case 1u:
@@ -722,9 +756,9 @@ static int32_t camera_yaw_delta(const fifa96_camera_handler_state *st,
 static int32_t camera_pan_update(fifa96_camera_handler_state *st,
                                  fifa96_camera_handler_block *block,
                                  int32_t tick) {
-  int32_t delta = fifa96_camera_steady_pan_step(0, 0, block->pan,
-                                                block->const40, st->track_z,
-                                                tick);
+  int32_t delta = fifa96_camera_steady_pan_step(
+      st->pan_axis_a, st->pan_axis_b, block->pan, block->const40, st->track_z,
+      tick);
   block->pan_step = delta;
   block->pan += delta;
   block->pan = camera_clamp_i32(block->pan, -block->const3c, block->const3c);
@@ -1583,7 +1617,7 @@ static int camera_pose_handler_arm(fifa96_camera *cam, int32_t *yaw, int32_t *pi
   fifa96_camera_handler_out *out = args->handler_out;
   fifa96_camera_handler_out scratch;
   int rc;
-  if (!st) return 0;
+  if (!st || args->handler_skip) return 0;
   if (!out) {
     memset(&scratch, 0, sizeof scratch);
     out = &scratch;

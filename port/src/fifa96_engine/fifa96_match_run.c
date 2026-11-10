@@ -2188,6 +2188,9 @@ static int match_run_native_view_step(struct fifa96_match_run *mr,
   st = &r->native_view_cam[class_of];
   block = &r->native_view_block[class_of];
   st->view_variant = r->native_view_variant;
+  /* FUN_0004D908's live call is the proven (0,0) argument form. */
+  st->pan_axis_a = 0;
+  st->pan_axis_b = 0;
   match_run_native_view_apply_variant(r, class_of);
   /* FUN_000365B0's image/default source is [0x105FC4]==0 -> [0x109A70]
    * (0x155AA4); FUN_00036544 copies it into +0x34/+0x3C and clamps x to
