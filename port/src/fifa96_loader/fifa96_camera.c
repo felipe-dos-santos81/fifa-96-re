@@ -1637,6 +1637,11 @@ int32_t fifa96_camera_replay_ease(int32_t delta, int32_t in_time,
   return camera_div32(num, den);
 }
 
+void fifa96_camera_replay_snapshot(fifa96_camera_pose6 *snapshot,
+                                   const fifa96_camera_pose6 *pose) {
+  if (snapshot != NULL && pose != NULL) *snapshot = *pose;
+}
+
 int fifa96_camera_replay_begin(fifa96_camera_pose6 *pose,
                                const fifa96_camera_pose6 *start,
                                const fifa96_camera_pose6 *target,

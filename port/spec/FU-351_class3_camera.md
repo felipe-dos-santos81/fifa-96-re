@@ -760,24 +760,32 @@ target producer/call site, not the interpolation.
   the times/elapsed/latch and returns true. `FUN_00045069` also latches
   `[0x1067F4] = 5`; `FUN_00037114(1)` issues the `0x974D8` sound request.
 
+**Target producer.** Fresh `FUN_0004CF60` (`0x4CF60..0x4CF78`) is a
+`MOVSD.REP` of the active camera record to `0x14E460`; its `+0x10/+0x14/
++0x18/+0x58/+0x5C/+0x4C` cells are exactly the `0x14E470/4/8`,
+`0x14E4B8/C` and `0x14E4AC` target. `FUN_00037B34 0x37B49` calls it. So
+the target is the saved camera pose, not an unlocated producer.
+
 **Landed.** `fifa96_camera_pose6` and `fifa96_camera_replay_blend` mirror
 the six native record fields and the `0x14E4F8`/`0x108BD4`/
-`0x107DE0..DE8`/`[0x107DD8]` state. `fifa96_camera_replay_ease` is
-`FUN_0004F830`; `fifa96_camera_replay_begin` is the `FUN_0004CF7C`
-start arm with `10/30`; `fifa96_camera_replay_step` is the per-frame
-`FUN_0004F8C8` arm, with `cancel_input`/`view_mode` staging the gate.
+`0x107DE0..DE8`/`[0x107DD8]` state. `fifa96_camera_replay_snapshot` is
+`FUN_0004CF60`; `fifa96_camera_replay_ease` is `FUN_0004F830`;
+`fifa96_camera_replay_begin` is the `FUN_0004CF7C` start arm with `10/30`;
+`fifa96_camera_replay_step` is the per-frame `FUN_0004F8C8` arm, with
+`cancel_input`/`view_mode` staging the gate.
 
-**Verification.** `test_camera` pins the ease at 0/50/100/200/300/350/400/
-500, the start copy and deltas, the 100/300 total, the finish latch, the
-NULL-start snapshot, the cancel gate, the `view_mode == 0x14` exemption and
-the invalid arguments. `make check` **124/124**; M1
+**Verification.** `test_camera` pins the `FUN_0004CF60` snapshot, the ease at
+0/50/100/200/300/350/400/500, the start copy and deltas, the 100/300 total,
+the finish latch, the NULL-start snapshot, the cancel gate, the
+`view_mode == 0x14` exemption and the invalid arguments. `make check`
+**124/124**; M1
 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` and M2
 `41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`
 byte-exact.
 
-**Remaining.** The replay target globals `0x14E470/4/8`, `0x14E4B8/C` and
-`0x14E4AC` and the `FUN_0004CF7C` call site/`FUN_000505D0` pose switch are
-still unstaged. `FUN_00045069`'s `[0x1067F4]` latch and the
-`FUN_00037114(1)` `0x974D8` sound request are not modelled; the cancel input
-is staged. The state-`0xB` action-table consumer remains producer-blocked by
-the non-live row-0x17 installer.
+**Remaining.** The `FUN_0004CF7C` call site (`FUN_0003BB1C`) and its
+`FUN_000505D0` config-record pose switch are not wired; the blend inputs are
+staged. `FUN_00045069`'s `[0x1067F4]` latch and the `FUN_00037114(1)`
+`0x974D8` sound request are not modelled; the cancel input is staged. The
+state-`0xB` action-table consumer remains producer-blocked by the non-live
+row-0x17 installer.

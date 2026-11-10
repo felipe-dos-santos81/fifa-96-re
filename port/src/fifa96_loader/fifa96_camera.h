@@ -839,6 +839,13 @@ typedef struct fifa96_camera_replay_blend {
 int32_t fifa96_camera_replay_ease(int32_t delta, int32_t in_time,
                                   int32_t out_time, int32_t elapsed);
 
+/* FUN_0004CF60 (`0x4CF60..0x4CF78`): copy the active camera record to
+ * `0x14E460`; its +0x10/+0x14/+0x18/+0x58/+0x5C/+0x4C cells are the replay
+ * target at `0x14E470/4/8`, `0x14E4B8/C` and `0x14E4AC`. The caller keeps
+ * this snapshot across the replay transition. */
+void fifa96_camera_replay_snapshot(fifa96_camera_pose6 *snapshot,
+                                   const fifa96_camera_pose6 *pose);
+
 /* FUN_0004F8C8's start arm with the FUN_0004CF7C 10/30 in/out constants.
  * `start` may be NULL (the native then snapshots `pose`); `target` is
  * required. Copies the start pose into `pose`, stores the deltas, clears

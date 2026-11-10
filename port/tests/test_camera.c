@@ -2435,7 +2435,18 @@ static void test_camera_replay_blend(void) {
   const fifa96_camera_pose6 start = {0, 0, 0, 0, 0, 0};
   const fifa96_camera_pose6 target = {600, 0, 0, 0x2000, 0, 6000};
   fifa96_camera_replay_blend state;
+  fifa96_camera_pose6 snapshot;
   memset(&state, 0, sizeof state);
+  memset(&snapshot, 0, sizeof snapshot);
+
+  /* FUN_0004CF60 snapshots the active camera record for the 0x14E460
+   * target block. */
+  fifa96_camera_replay_snapshot(&snapshot, &target);
+  assert(snapshot.x == target.x && snapshot.y == target.y);
+  assert(snapshot.z == target.z && snapshot.yaw == target.yaw);
+  assert(snapshot.pitch == target.pitch && snapshot.ratio == target.ratio);
+  fifa96_camera_replay_snapshot(NULL, &target);
+  fifa96_camera_replay_snapshot(&snapshot, NULL);
 
   assert(fifa96_camera_replay_ease(600, 100, 300, 0) == 0);
   assert(fifa96_camera_replay_ease(600, 100, 300, 50) == 25);
