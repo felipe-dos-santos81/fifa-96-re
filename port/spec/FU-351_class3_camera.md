@@ -397,3 +397,81 @@ steady body is still partial.
 scenario (`0xC2EE`), the +z tick-1 minimum (`30`) and the ratio-0 early
 return (`0`); the table test pins `+0x24 = 8`. `make check` **124/124**;
 M1/M2 `cmp` exact.
+
+## 12. FU351-L2c steady body completion (2026-11-09)
+
+**Erratum (quoted).** §9: “z: `slide(cam+0x18, [cam+0x3C], [cam+0x48], mode,
+-C[2], C[3], ±block[+0x18], ...)`” is corrected by a fresh
+`disassemble_function 0x4E834`; the same §9 line “the outside `(lo, hi)`
+branch uses the fixed rate 8” is correct.
+
+- `0x4E8D1..0x4E8F9` (class 4): mode `-1`, `lo=-C[3]`, `hi=C[2]`,
+  `hist_offset=+block[0x18]`.
+- `0x4E8FB..0x4E925` (else): mode `1`, `lo=-C[2]`, `hi=C[3]`,
+  `hist_offset=-block[0x18]`.
+- `FUN_0004D698 0x4D6D4` loads rate 8 on the **outside** branch;
+  `0x4D705` loads the block rate on the strict **inside** branch.
+  `test_camera_slide` pins both.
+
+**Landed.** `fifa96_camera_behavior_steady` is now the full `0x4E834` body:
+
+- **Pan/roll `FUN_0004E248`** (`0x4E248..0x4E3A5`, 136 instructions):
+  `fifa96_camera_steady_pan_step` implements the four Q16 factors
+  `(tick * n * 0x1111 + 0x8000) >> 16` for n=20/32/32/block+0x40 and the
+  four native branches (zero first input, zero second input, opposite signs
+  with the `|camera+0x3c| <= 0x587` gate, same signs). The zero-first-input
+  arm returns `-pan` inside the `20*0x1111` step and `-f20` when positive
+  (the native decays the cell toward zero; only a negative cell returns
+  `+f20`). The steady handler calls it with the view driver’s proven `(0,0)`
+  arguments, adds the result to block+0x34, clamps to `±block+0x3C` and to
+  `[-(0xB10+camera+0x3C), 0xB10-camera+0x3C]`, then adds the same step to
+  block+0x18 and clamps to the `+0x50` record’s `+0x18/+0x1C` cells.
+  `FUN_0004D908 0x4D932..0x4D948` is the zero-argument caller.
+- **Pitch `FUN_0004E05C`** (`0x4E05C..0x4E222`, 153 instructions):
+  `camera_steady_pitch_delta` runs the two `FUN_0004C77C` looks around the
+  native `camera+0x38 = 0` write, the `ratio/8` midpoint, the
+  `FUN_0004D5F4` `param4=1` half-step at `ratio*7/4`, the
+  `(ratio-param4)*(atan1-angle3)/ratio` correction, the low-altitude
+  `(0,0x140,±0xB10)` look (floor `[0x108BB4]=0x140`; the `[0x107DD4]==1`
+  arm uses `(0,camera_y<<5,±0xB10)` and floor `0x2EE`), and the
+  `FUN_0004D668(block+0x20)` rate with the ±30 minimum. The hand-off point
+  is `[0x107DC8]+0x18 ± block+0x30`, clamped `±0x1620`.
+- **Class-3 yaw snap** (`0x4E9A2..0x4EA9B`): `fifa96_camera_yaw_snap`
+  implements both class-3 arms (`track_z > 0x8A0`, point `±0x720/0xB60`,
+  full ratio) and both non-class-3 arms (`track_z < -0x8A0`, point
+  `±0x720/-0xB60`, half ratio). The point angle is the negated
+  `FUN_0004C7D0` wrapper; the native stores the raw 32-bit `angle ± ratio`
+  in `camera+0x58` and only masks the comparison delta.
+- **Horizon / y / ratio / tail.** The horizon is the native
+  `(-11*block[0])>>3 + 0xE09` and `(-13*block[0])>>3 + 0xAA1`, not the old
+  `rnd` argument. The y ease uses `block[0]` (`+100` while
+  `block[0] < 300 && camera+0x18 > 0xB10`), the ratio eases to `block+0x04`,
+  both at `FUN_0004D668(8)`, and the handler copies
+  `+0x40/44/48 = +0x34/38/3C`.
+
+**Block state.** The native block is writable. The port’s
+`fifa96_camera_handler_block` now carries `cell18/cell1c/pan/pan_step` and
+the `+0x50` record’s `sub18/sub1c`; the six table rows carry the initial
+`+0x1C/+0x20/+0x38/+0x3C/+0x40` cells and the sub-record bounds read from
+`0x10896C` and the `+0x50` records. Callers pass a mutable block copy.
+
+**Verification.** `make check` **124/124**; M1
+`09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` and M2
+`41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`
+byte-exact. `test_camera` pins the pan-step branches, the two pan/cell
+clamps, the class-3 and class-4 slide bounds, the slide rate split, the
+pitch correction and low-altitude arms, the class-3/non-class-3 yaw snap, the
+native horizon, and the y/ratio eases.
+
+**Remaining legs.**
+
+- **FU351-L2c-1** the computed handler call `FUN_000505D0 0x51056` passes
+  caller-register leftovers as `FUN_0004E834`’s third/fourth arguments; only
+  the view-driver `(0,0)` is statically proven. The port uses `(0,0)`.
+- **FU351-L2c-2** `[0x107DD4] == 1` selects the `0x2EE` pitch floor and
+  the `(0,camera_y<<5,±0xB10)` point. The image cell is 0 and no writer is
+  known; the replay arm is not wired.
+- **FU351-L2c-3** the live class remains 3. The native resolver
+  (`fifa96_camera_view_select`) is ported, but class 1/2
+  (`FUN_0004E3A8`/`FUN_0004EC9C`) are still partial; selecting them now would
+  replace one stand-in with another.

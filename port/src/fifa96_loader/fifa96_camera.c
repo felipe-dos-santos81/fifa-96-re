@@ -11,6 +11,12 @@ static int32_t camera_abs(int32_t value) {
   return (int32_t)magnitude;
 }
 
+static int32_t camera_atan16(int32_t x, int32_t z);
+static int32_t camera_atan_pitch16(int32_t dx, int32_t dy, int32_t dz);
+static int32_t camera_steady_pitch_delta(fifa96_camera_handler_state *st,
+                                         const fifa96_camera_handler_block *block,
+                                         int32_t point_z, int32_t tick);
+
 int fifa96_camera_focus_clamp(int32_t x, int32_t y, int32_t z,
                               fifa96_camera_focus *out) {
   if (!out) return -FIFA96_ERR_INVALID;
@@ -89,6 +95,67 @@ int32_t fifa96_camera_slide(int32_t cam, int32_t target, int32_t hist,
     return (int32_t)((uint32_t)cam +
                      (uint32_t)camera_slide_step(delta, factor));
   }
+}
+
+/* FUN_0004E248's four Q16 factors are `(tick * n * 0x1111 + 0x8000) >> 16`;
+ * the `tick * n` multiply is the native 32-bit wrap. */
+static int32_t camera_1111_step(int32_t tick, int32_t n) {
+  int32_t product = (int32_t)((uint32_t)tick * (uint32_t)n);
+  return (int32_t)(((int64_t)product * 0x1111 + 0x8000) >> 16);
+}
+
+int32_t fifa96_camera_steady_pan_step(int32_t axis_a, int32_t axis_b,
+                                      int32_t pan, int32_t rate,
+                                      int32_t track_z, int32_t tick) {
+  int32_t f20 = camera_1111_step(tick, 20);
+  int32_t f32 = camera_1111_step(tick, 32);
+  int32_t frate = camera_1111_step(tick, rate);
+
+  if (axis_a == 0) {
+    int32_t mag = camera_abs(pan);
+    if (mag < f20) return -pan;
+    if (pan < 1) return pan < 0 ? f20 : 0;
+    return -f20;
+  }
+  if (axis_b == 0) return axis_a < 0 ? -f32 : f32;
+  if ((axis_a < 0 && axis_b > 0) || (axis_a > 0 && axis_b < 0)) {
+    if (camera_abs(track_z) > 0x587) return 0;
+    return axis_a > 0 ? -f32 : f32;
+  }
+  return axis_a > 0 ? frate : -frate;
+}
+
+int32_t fifa96_camera_yaw_snap(int32_t class_of, int32_t pos_x, int32_t pos_z,
+                               int32_t track_z, int32_t yaw, int32_t ratio) {
+  int32_t angle, target, diff;
+  if (class_of == 3) {
+    if (track_z <= 0x8A0) return yaw;
+    if (yaw > 0x8000) {
+      angle = (int32_t)((0u - (uint32_t)camera_atan16(0x720 - pos_x,
+                                                      0xB60 - pos_z)) & 0xFFFFu);
+      target = (int32_t)((uint32_t)angle - (uint32_t)ratio);
+      diff = (int32_t)(((uint32_t)yaw - (uint32_t)target) & 0xFFFFu);
+      return diff < 0x8000 ? target : yaw;
+    }
+    angle = (int32_t)((0u - (uint32_t)camera_atan16(-0x720 - pos_x,
+                                                    0xB60 - pos_z)) & 0xFFFFu);
+    target = (int32_t)((uint32_t)angle + (uint32_t)ratio);
+    diff = (int32_t)(((uint32_t)yaw - (uint32_t)target) & 0xFFFFu);
+    return diff > 0x8000 ? target : yaw;
+  }
+  if (track_z >= -0x8A0) return yaw;
+  if (yaw > 0x8000) {
+    angle = (int32_t)((0u - (uint32_t)camera_atan16(0x720 - pos_x,
+                                                    -0xB60 - pos_z)) & 0xFFFFu);
+    target = (int32_t)((uint32_t)angle + (uint32_t)(ratio >> 1));
+    diff = (int32_t)(((uint32_t)yaw - (uint32_t)target) & 0xFFFFu);
+    return diff > 0x8000 ? target : yaw;
+  }
+  angle = (int32_t)((0u - (uint32_t)camera_atan16(-0x720 - pos_x,
+                                                  -0xB60 - pos_z)) & 0xFFFFu);
+  target = (int32_t)((uint32_t)angle - (uint32_t)(ratio >> 1));
+  diff = (int32_t)(((uint32_t)yaw - (uint32_t)target) & 0xFFFFu);
+  return diff < 0x8000 ? target : yaw;
 }
 
 int32_t fifa96_camera_view_select(int32_t phase, int32_t option, int32_t b680,
@@ -582,7 +649,8 @@ int fifa96_camera_pose_feed(fifa96_camera *cam, int32_t *yaw, int32_t *pitch,
 
 /* ------------------------------------------------------------------------- *
  * FU-152 §2.8 (P4): the 0x107508 camera-type mapping and the four 0x108B80
- * handler bodies (derived constant/clamp level; integrator helpers leg 9).
+ * handler bodies. The class-0 steady body is complete (FU-351 §12); the
+ * class-1/2 bodies remain partial.
  * ------------------------------------------------------------------------- */
 
 static int32_t camera_clamp_i32(int32_t value, int32_t lo, int32_t hi) {
@@ -590,8 +658,6 @@ static int32_t camera_clamp_i32(int32_t value, int32_t lo, int32_t hi) {
   if (value > hi) return hi;
   return value;
 }
-
-static int32_t camera_atan16(int32_t x, int32_t z);
 
 /* FUN_0004D5F4: hold the target angle inside the +/-ratio deadband around
  * atan1; param4 == 1 returns the atan2-side half-step. */
@@ -650,16 +716,52 @@ static int32_t camera_steady_yaw_delta(const fifa96_camera_handler_state *st,
 
 /* FU-152 §2.8: the 0x10896C behavior-block fields (first-hand read_memory;
  * layout per 84-byte block: +0x00/+0x04 targets, +0x08 class, +0xC the
- * class-gate dword, +0x10/+0x18/+0x24/+0x28 constants, +0x30/+0x34
- * constants and the +0x50 C record). */
+ * class-gate dword, +0x10/+0x18/+0x1C/+0x20/+0x24/+0x28 constants,
+ * +0x30/+0x34/+0x38/+0x3C/+0x40 fields and the +0x50 C record). */
 const fifa96_camera_behavior_table_entry
     fifa96_camera_behavior_blocks[FIFA96_CAMERA_BEHAVIOR_BLOCKS] = {
-        {0x340, 0xFA0, 3, 0, 0xC8, 0x578, 8, 8, 0xEA6, 0, 150, 150, 1000, 3800},
-        {0x340, 0x1200, 1, 0, 0x4B0, 0, 8, 0x20, 0x578, 0, 600, 2400, 1500, 1500},
-        {0x340, 0xD48, 3, 0xA7F8, 0, 0x578, 8, 8, 0x1130, 0, 900, 1900, 900, 3750},
-        {0x340, 0xFA0, 3, 0, 0xC8, 0x578, 8, 8, 0xEA6, 0, 150, 150, 1000, 3800},
-        {0x340, 0x1200, 1, 0, 0x4B0, 0, 8, 0x20, 0x578, 0, 600, 2400, 1500, 1500},
-        {0x340, 0xD48, 3, 0xA21C, 0, 0x578, 8, 8, 0x1130, 0, 900, 1900, 900, 3750},
+        {.target0 = 0x340, .target1 = 0xFA0, .class_of = 3, .field3 = 0,
+         .const10 = 0xC8, .const18 = 0x578, .const1c = 32, .const20 = 8,
+         .const24 = 8, .const28 = 8, .const30 = 0xEA6, .const34 = 0,
+         .const38 = 0, .const3c = 600, .const40 = 80,
+         .c0 = 150, .c1 = 150, .c2 = 1000, .c3 = 3800,
+         .sub18 = 1330, .sub1c = 1750, .cell18 = 0x578, .cell1c = 32,
+         .pan = 0, .pan_step = 0},
+        {.target0 = 0x340, .target1 = 0x1200, .class_of = 1, .field3 = 0,
+         .const10 = 0x4B0, .const18 = 0, .const1c = 0, .const20 = 8,
+         .const24 = 8, .const28 = 0x20, .const30 = 0x578, .const34 = 0,
+         .const38 = 0, .const3c = 600, .const40 = 80,
+         .c0 = 600, .c1 = 2400, .c2 = 1500, .c3 = 1500,
+         .sub18 = 0, .sub1c = 0, .cell18 = 0, .cell1c = 0,
+         .pan = 0, .pan_step = 0},
+        {.target0 = 0x340, .target1 = 0xD48, .class_of = 3, .field3 = 0xA7F8,
+         .const10 = 0, .const18 = 0x578, .const1c = 20, .const20 = 8,
+         .const24 = 8, .const28 = 8, .const30 = 0x1130, .const34 = 0,
+         .const38 = 0, .const3c = 550, .const40 = 60,
+         .c0 = 900, .c1 = 1900, .c2 = 900, .c3 = 3750,
+         .sub18 = 1330, .sub1c = 2000, .cell18 = 0x578, .cell1c = 20,
+         .pan = 0, .pan_step = 0},
+        {.target0 = 0x340, .target1 = 0xFA0, .class_of = 3, .field3 = 0,
+         .const10 = 0xC8, .const18 = 0x578, .const1c = 32, .const20 = 8,
+         .const24 = 8, .const28 = 8, .const30 = 0xEA6, .const34 = 0,
+         .const38 = 0, .const3c = 600, .const40 = 80,
+         .c0 = 150, .c1 = 150, .c2 = 1000, .c3 = 3800,
+         .sub18 = 1330, .sub1c = 1750, .cell18 = 0x578, .cell1c = 32,
+         .pan = 0, .pan_step = 0},
+        {.target0 = 0x340, .target1 = 0x1200, .class_of = 1, .field3 = 0,
+         .const10 = 0x4B0, .const18 = 0, .const1c = 0, .const20 = 8,
+         .const24 = 8, .const28 = 0x20, .const30 = 0x578, .const34 = 0,
+         .const38 = 0, .const3c = 600, .const40 = 80,
+         .c0 = 600, .c1 = 2400, .c2 = 1500, .c3 = 1500,
+         .sub18 = 0, .sub1c = 0, .cell18 = 0, .cell1c = 0,
+         .pan = 0, .pan_step = 0},
+        {.target0 = 0x340, .target1 = 0xD48, .class_of = 3, .field3 = 0xA21C,
+         .const10 = 0, .const18 = 0x578, .const1c = 20, .const20 = 8,
+         .const24 = 8, .const28 = 8, .const30 = 0x1130, .const34 = 0,
+         .const38 = 0, .const3c = 550, .const40 = 60,
+         .c0 = 900, .c1 = 1900, .c2 = 900, .c3 = 3750,
+         .sub18 = 1330, .sub1c = 2000, .cell18 = 0x578, .cell1c = 20,
+         .pan = 0, .pan_step = 0},
 };
 
 int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
@@ -686,29 +788,51 @@ int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
 }
 
 int fifa96_camera_behavior_steady(fifa96_camera_handler_state *st,
-                                  const fifa96_camera_handler_block *block,
-                                  int32_t rnd, int32_t tick,
+                                  fifa96_camera_handler_block *block,
+                                  int32_t tick,
                                   fifa96_camera_handler_out *out) {
-  int32_t mode, lo, hi, hist_off, tx, atx, x_off, point_z, yaw_delta;
+  int32_t pan_delta, mode, lo, hi, hist_off, tx, atx, x_off, point_z;
+  int32_t yaw_delta, target_y, diff, factor, step;
   if (!st || !block || !out) return -FIFA96_ERR_INVALID;
-  /* 0x4E834: the two FUN_0004D698 slides run before the orientation arms.
-   * The z mode/bounds swap by the behavior class; the x call is mode 2 with
-   * the sign-adjusted target offset. The yaw arm is FUN_0004DF34; the pitch
-   * arm, the class-3 snap and the pan/roll block remain legs. */
+
+  /* 0x4E84A..0x4E8C8: the pan/roll block. The view driver passes (0,0); the
+   * returned step is stored at +0x38, added to +0x34, clamped to the +-0x3C
+   * pad and then to the camera-relative +-0xB10 band. The same step moves the
+   * mutable +0x18 cell, clamped to the +0x50 record's +0x18/+0x1C. */
+  pan_delta = fifa96_camera_steady_pan_step(0, 0, block->pan, block->const40,
+                                            st->track_z, tick);
+  block->pan_step = pan_delta;
+  block->pan += pan_delta;
+  block->pan = camera_clamp_i32(block->pan, -block->const3c, block->const3c);
+  {
+    int32_t band_lo = -st->track_z - 0xB10;
+    int32_t band_hi = 0xB10 - st->track_z;
+    if (block->pan < band_lo) block->pan = band_lo;
+    else if (block->pan > band_hi) block->pan = band_hi;
+  }
+  block->cell1c = pan_delta;
+  block->cell18 += pan_delta;
+  if (block->cell18 < block->sub18) block->cell18 = block->sub18;
+  else if (block->cell18 > block->sub1c) block->cell18 = block->sub1c;
+
+  /* 0x4E8CB..0x4E92D: the z slide. Class 4 takes mode -1 with lo=-C[3],
+   * hi=C[2] and hist_offset=+cell18; the other classes take mode 1 with
+   * lo=-C[2], hi=C[3] and hist_offset=-cell18. */
   if (block->class_of == 4) {
     mode = -1;
-    lo = -block->c2;
-    hi = block->c3;
-    hist_off = block->const18;
-  } else {
-    mode = 1;
     lo = -block->c3;
     hi = block->c2;
-    hist_off = -block->const18;
+    hist_off = block->cell18;
+  } else {
+    mode = 1;
+    lo = -block->c2;
+    hi = block->c3;
+    hist_off = -block->cell18;
   }
   st->pos_z = fifa96_camera_slide(st->pos_z, st->track_z, st->hist_z, mode,
                                   lo, hi, hist_off, block->const28, tick);
 
+  /* 0x4E930..0x4E97D: the x slide, mode 2 with the sign-adjusted target. */
   tx = st->track_x;
   atx = camera_abs(tx);
   if (atx < block->const10) x_off = tx;
@@ -716,13 +840,60 @@ int fifa96_camera_behavior_steady(fifa96_camera_handler_state *st,
   st->pos_x = fifa96_camera_slide(st->pos_x, tx, st->hist_x, 2, -block->c0,
                                   block->c1, x_off, block->const28, tick);
 
+  /* 0x4E97D..0x4E9A2: the FUN_0004DF34 yaw step. */
   point_z = block->class_of == 4 ? 0xB10 : -0xB10;
   yaw_delta = camera_steady_yaw_delta(st, point_z, block, tick);
   st->yaw = (int32_t)(((uint32_t)st->yaw + (uint32_t)yaw_delta) & 0xFFFFu);
 
-  st->pitch = camera_clamp_i32(st->pitch, -0x1620, 0x1620);
-  out->horizon_a = (rnd >> 3) + 0xE09;
-  out->horizon_b = (rnd >> 3) + 0xAA1;
+  /* 0x4E9A2..0x4EA9B: the class-3 yaw snap / non-class-3 mirror. */
+  st->yaw = fifa96_camera_yaw_snap(block->class_of, st->pos_x, st->pos_z,
+                                   st->track_z, st->yaw, st->ratio);
+
+  /* 0x4EA9B..0x4EACF: the native horizon is built from block[0], not a random
+   * argument: (-11 * block[0]) >> 3 + 0xE09 and the -13 sibling. The product
+   * is the native 32-bit wrap. */
+  out->horizon_a =
+      (int32_t)(((int32_t)((uint32_t)block->target0 * (uint32_t)-11)) >> 3) +
+      0xE09;
+  out->horizon_b =
+      (int32_t)(((int32_t)((uint32_t)block->target0 * (uint32_t)-13)) >> 3) +
+      0xAA1;
+
+  /* 0x4EB71..0x4EBE7: the pitch ground point is
+   * `[0x107DC8]+0x18 + (class 4 ? +block[0xC] : -block[0xC])`, clamped
+   * +-0x1620. FUN_0004E05C writes the +0x64 delta; the handler adds it to
+   * the +0x5C pitch cell. */
+  point_z = st->pos_z + (block->class_of == 4 ? block->const30
+                                              : -block->const30);
+  point_z = camera_clamp_i32(point_z, -0x1620, 0x1620);
+  diff = camera_steady_pitch_delta(st, block, point_z, tick);
+  st->pitch = (int32_t)(((uint32_t)st->pitch + (uint32_t)diff) & 0xFFFFu);
+
+  /* 0x4EBE7..0x4EC5A: the y ease. The `block[0] + 100` slope is taken only
+   * while block[0] < 300 and camera+0x18 > 0xB10; both arms use the native
+   * FUN_0004D668 rate 8 (the first arm's long division reduces to the same
+   * tick*0x10000/120 Q16 factor). */
+  target_y = block->target0;
+  if (block->target0 < 300 && st->pos_z > 0xB10) target_y += 100;
+  diff = target_y - st->pos_y;
+  if (diff != 0) {
+    factor = fifa96_camera_ramp_factor(tick, 8);
+    step = (int32_t)(((int64_t)diff * factor + 0x8000) >> 16);
+    st->pos_y += step;
+  }
+
+  /* 0x4EC5D..0x4EC87: the ratio ease toward block+0x04 at rate 8. */
+  diff = block->target1 - st->ratio;
+  if (diff != 0) {
+    factor = fifa96_camera_ramp_factor(tick, 8);
+    step = (int32_t)(((int64_t)diff * factor + 0x8000) >> 16);
+    st->ratio += step;
+  }
+
+  /* 0x4EC8A..0x4EC92: the three-dword target history copy. */
+  st->hist_x = st->track_x;
+  st->hist_y = st->track_y;
+  st->hist_z = st->track_z;
   return FIFA96_OK;
 }
 
@@ -735,7 +906,7 @@ int fifa96_camera_behavior_sidetrack(fifa96_camera_handler_state *st,
    * horizon jitter is rnd>>3 + 0xE3B/0xAD3. The class-1 +-0x4B0 fold and the
    * FUN_0004D698 writes stay leg 9. */
   st->track_y += (block->class_of == 2) ? 0x68 : -0x68;
-  st->yaw = camera_clamp_i32(st->track_z + block->const34, -0xB10, 0xB10);
+  st->yaw = camera_clamp_i32(st->track_z + block->pan, -0xB10, 0xB10);
   st->pitch = camera_clamp_i32(st->pitch, -0xE40, 0xE40);
   out->horizon_a = (rnd >> 3) + 0xE3B;
   out->horizon_b = (rnd >> 3) + 0xAD3;
@@ -776,6 +947,76 @@ static int32_t camera_atan16(int32_t x, int32_t z) {
 
 static int32_t camera_mul16(int32_t a, int32_t b) {
   return (int32_t)(((int64_t)a * (int64_t)b) >> 16);
+}
+
+/* FUN_0004C77C (`0x4C77C..0x4C7CF`): pitch is `-FUN_000A2A10(dy, horiz)`
+ * with `horiz = |dx| + |dz| - min(|dx|,|dz|)/2`. */
+static int32_t camera_atan_pitch16(int32_t dx, int32_t dy, int32_t dz) {
+  int32_t adx = camera_abs(dx);
+  int32_t adz = camera_abs(dz);
+  int32_t mn = adx < adz ? adx : adz;
+  int32_t horiz = adx + adz - (mn >> 1);
+  return (int32_t)(0u - (uint32_t)camera_atan16(dy, horiz)) & 0xFFFF;
+}
+
+/* FUN_0004E05C (`0x4E05C..0x4E222`, 153 instructions): the class-0 pitch
+ * delta. The first two looks use the staged target before/after the native
+ * `camera+0x38 = 0` write; the third uses the `(target_x, 0, point_z)` ground
+ * point. `point_z` is the caller's clamped `[0x107DC8]+0x18 -/+ block[0xC]`.
+ * The D5F4 call passes param4=1; the ratio correction and the low-altitude
+ * ground-point guard follow the native order. */
+static int32_t camera_steady_pitch_delta(fifa96_camera_handler_state *st,
+                                         const fifa96_camera_handler_block *block,
+                                         int32_t point_z, int32_t tick) {
+  int32_t dx = st->track_x - st->pos_x;
+  int32_t dz = st->track_z - st->pos_z;
+  int32_t angle1, angle2, angle3, atan1, blend, correction, prod, delta;
+  int32_t floor_y, point_z2, angle4, factor, step;
+
+  angle1 = camera_atan_pitch16(dx, st->track_y - st->pos_y, dz);
+  st->track_y = 0;   /* 0x4E091: the native permanently zeroes camera+0x38 */
+  angle2 = camera_atan_pitch16(dx, -st->pos_y, dz);
+  atan1 = (int32_t)(((uint32_t)angle1 + (uint32_t)angle2) & 0xFFFFu) >> 1;
+  atan1 += st->ratio >> 3;
+
+  angle3 = camera_atan_pitch16(st->track_x - st->pos_x, -st->pos_y,
+                                point_z - st->pos_z);
+  blend = camera_angle_blend16(
+      atan1, angle3, (int32_t)(((int64_t)st->ratio * 7) >> 2), 1);
+
+  if (st->ratio != block->target1 && st->ratio != 0) {
+    /* A2AD8/A2AEE: the product is truncated to 32 bits before the IDIV. */
+    prod = (int32_t)((uint32_t)(st->ratio - block->target1) *
+                     (uint32_t)(atan1 - angle3));
+    correction = prod / st->ratio;
+    blend = (int32_t)(((uint32_t)blend - (uint32_t)correction) & 0xFFFFu);
+  }
+
+  /* 0x4E109..: [0x107DD4] == 1 selects 0x2EE and point y = camera_y << 5;
+   * the image cell is 0, so the live arm is point y = 0x140 and the
+   * [0x108BB4] = 0x140 floor. */
+  floor_y = 0x140;
+  if (st->pos_y < floor_y) {
+    point_z2 = st->pos_z > 0 ? 0xB10 : -0xB10;
+    angle4 = camera_atan_pitch16(-st->pos_x, 0x140 - st->pos_y,
+                                 point_z2 - st->pos_z);
+    if (angle4 > 0x8000) {
+      blend = st->ratio / 2;
+    } else if ((blend - angle4) > st->ratio) {
+      blend = st->ratio + angle4;
+    }
+    blend &= 0xFFFF;
+  }
+
+  delta = (int32_t)(((uint32_t)blend - (uint32_t)st->pitch) & 0xFFFFu);
+  if (delta > 0x8000) delta -= 0x10000;
+  if (camera_abs(delta) < 30) return delta;
+
+  factor = fifa96_camera_ramp_factor(tick, block->const20);
+  step = (int32_t)(((int64_t)delta * factor + 0x8000) >> 16);
+  if (step < 0 && step > -30) step = -30;
+  else if (step > 0 && step < 30) step = 30;
+  return step;
 }
 
 /* FUN_0004DB38's pitch snap: (0x2000,0x8000) -> 0x2000 and
@@ -994,7 +1235,7 @@ static int camera_pose_handler_arm(fifa96_camera *cam, int32_t *yaw, int32_t *pi
   switch (args->selector) {
     case 0:
       if (!args->handler_block) return 0;
-      rc = fifa96_camera_behavior_steady(st, args->handler_block, args->handler_rnd,
+      rc = fifa96_camera_behavior_steady(st, args->handler_block,
                                          args->handler_tick, out);
       break;
     case 1:

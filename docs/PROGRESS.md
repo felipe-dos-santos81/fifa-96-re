@@ -4878,3 +4878,26 @@ close-out below).
   ratio-0 early return. `make check` green 124/124; M1/M2 `cmp` exact. No
   live effect (live class is still 3). Next: pitch arm, then the class-3
   snap and the remaining steady-body state.
+
+- **Phase 99 steady camera body completion (2026-11-09).** Phase 96's
+  block-0 `z=67` fixture and its class-swap wording are corrected by the fresh
+  `0x4E834` listing: class 3 takes `lo=-C[2]`, `hi=C[3]` and
+  `hist_offset=-cell18`, class 4 takes the swapped bounds; `FUN_0004D698`'s
+  strict inside branch uses the block rate and the outside branch rate 8.
+  The steady handler is now complete: `FUN_0004E248` pan/roll with the
+  `+0x34/+0x3C/+0x40` cells and the `+0x18` sub-record clamp, the two slides,
+  `FUN_0004DF34` yaw, the class-3 yaw snap (the negated `FUN_0004C7D0`
+  wrapper and the raw 32-bit target cell), `FUN_0004E05C` pitch (the two
+  look-ats, the `ratio/8` midpoint, the ratio correction and the
+  `(0,0x140,±0xB10)` low-altitude guard), the native `block[0]` horizon, the
+  y-ease/`+100` slope, the ratio ease and the target-history copy. The block
+  model carries the native writable cells and the `+0x50` record bounds; the
+  six table rows carry the `+0x1C/+0x20/+0x38/+0x3C/+0x40` values.
+  `test_camera` pins the pan-step branches, both pan/cell clamps, the slide
+  rate split and class bounds, the pitch correction and low-altitude arms,
+  both yaw-snap families (including a nonzero-dx case), the native horizon
+  and the y/ratio eases. `make check` green 124/124; M1/M2 `cmp` exact. Open:
+  the handler-table leftover-register arguments (FU351-L2c-1), the
+  `[0x107DD4]` replay pitch floor/point (FU351-L2c-2), and the live class 1/2
+  bodies that still block native class selection (FU351-L2c-3). Record:
+  FU-351 §12.

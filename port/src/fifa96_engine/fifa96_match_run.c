@@ -2121,7 +2121,10 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
    * focus triple (0x155AA4, FU351-L1), not the old derived render blend; the
    * geometry is the native 500-unit chase, with the position clamps
    * ±0x420/±0x810 and the native yaw/pitch slew. The derived envelope seeds
-   * the first frame only. Non-live tapes keep the old camera path byte-exact. */
+   * the first frame only. Non-live tapes keep the old camera path byte-exact.
+   * FU351-L2c-3: the live class stays 3 because FUN_0004E3A8/FUN_0004EC9C
+   * (classes 1/2) are still partial; fifa96_camera_view_select is ported but
+   * not wired until those bodies land. */
   if (mr->live_start) {
     if (r->render_eye_valid == 0u) match_run_render_eye_update(mr);
     fifa96_camera_handler_state *acs = &r->action_cam;

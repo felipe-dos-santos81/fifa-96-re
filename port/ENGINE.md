@@ -4952,8 +4952,11 @@ the build also produces the windowed `fifa96` target (`make game`).
     the dword +0xC {0,0,0xA7F8,0,0,0xA21C} — blocks 2/5 take FUN_0004EC9C's
     class-3 arm), wired into the FUN_000505D0 default arm through the staged
     record subset + behavior block (NULL = unported default, tape unchanged).
-    The FUN_0004E248/D698/DF34/C7D0/D668 integrators and the yaw-band
-    snap-target math stay leg 9.
+    The class-0 steady body is complete: the FUN_0004E248 pan step, the
+    FUN_0004D698 slides (strict inside block rate / outside rate 8), FUN_0004DF34
+    yaw, the 0x4E9A2 yaw snap, FUN_0004E05C pitch, the y/ratio eases and the
+    history copy are ported (FU-351 §12). The class-1/2 bodies stay leg 9;
+    the live class is still 3.
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0
