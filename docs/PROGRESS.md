@@ -5019,3 +5019,17 @@ close-out below).
   pan/record target producers; `FUN_0004F274`'s PTR/handler side effects, the
   `FUN_0003BB1C` replay call site and the `FUN_000505D0` config-record
   bookkeeping. Record: FU-351 §18.
+
+- **Phase 106 pan-target producer and phase-0xC source writer (2026-11-10).**
+  `FUN_0004B308` is ported as `fifa96_camera_view_preset` and reused by the
+  view selector. `FUN_00036208`'s `0x105FB8/0x105FC0` pan-target step is
+  ported with the staged `FUN_0004511D` input/speed, the `0x105FC8` windows
+  and the mode 0/1..4/5/6/7/8 clamps. The phase-`0xC` native
+  `0x8BC43 0x36200(3)` writer now sets `render.camera_target.source = 3`
+  in the live frame. `test_camera` pins the input bits, mode bounds and
+  device/source gates; `test_engine_live_control` pins the phase-`0xC`
+  source-3 write and the live source consumer. `make check` green 124/124;
+  M1/M2 byte-exact. Remaining: the other `0x36200` values, the source-2
+  `[0x157AA3]` record target, the source-4 `FUN_0004BCC4` lineup index,
+  `FUN_0004F274`'s PTR/handler bookkeeping, the `0x3BB1C` replay UI call
+  site and the non-live row-0x17 producer. Record: FU-351 §19.

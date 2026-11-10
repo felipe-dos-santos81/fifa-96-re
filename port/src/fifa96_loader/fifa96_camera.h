@@ -889,6 +889,29 @@ int fifa96_camera_replay_begin_gated(fifa96_camera_pose6 *pose,
  * source/index returns `focus`. The sources are staged; this function does
  * not invent the pan or record producers. Returns NULL on a NULL selected
  * pointer. */
+/* FUN_0004B308 (`0x4B308..0x4B375`): the phase/difficulty/option preset
+ * used by both FUN_0004D04C and FUN_00036208. 3 -> 1/2, 4 -> 3/4,
+ * 0x15 -> 5/6/8, else 0. */
+int32_t fifa96_camera_view_preset(int32_t phase, int32_t difficulty,
+                                  int32_t option_15b680);
+
+/* FUN_00036208 (`0x36208..0x36540`): the `0x105FB8/0x105FC0` pan target
+ * step, active only when the staged device is >= 0 and `[0x105FC4] == 1`.
+ * `input_bits`/`speed` are FUN_0004511D's low byte/high dword; `camera_z`
+ * is the `0x15774C+8` place. The mode comes from `fifa96_camera_view_preset`
+ * and the `0x105FC8` offsets are `{0x12C0, 0x2580×7, 0}`. Returns 1 when
+ * applied, 0 on the device/source gate, -FIFA96_ERR_INVALID on NULL. */
+typedef struct fifa96_camera_pan_target {
+  int32_t x, z;   /* native 0x105FB8 / 0x105FC0 */
+  int32_t dx, dz; /* native 0x14AC20 / 0x14AC1C */
+} fifa96_camera_pan_target;
+
+int fifa96_camera_pan_target_step(fifa96_camera_pan_target *target,
+                                  int32_t device, int32_t source_105fc4,
+                                  int32_t input_bits, int32_t speed,
+                                  int32_t phase, int32_t difficulty,
+                                  int32_t option_15b680, int32_t camera_z);
+
 const int32_t *fifa96_camera_target_select(
     int32_t source, int32_t force_focus, int32_t replay_active,
     int32_t record_class, const int32_t *focus, const int32_t *pan,

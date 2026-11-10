@@ -2901,6 +2901,11 @@ static void test_live_camera_target_sources(void) {
   one_granted_frame(mr);
   assert(mr->render.native_view_cam[1].track_x ==
          mr->render.render_focus_x);
+
+  /* FUN_0008BAF0 0x8BC43: the phase-0xC frame writes [0x105FC4] = 3. */
+  mr->state.phase = 0x0C;
+  one_granted_frame(mr);
+  assert(mr->render.camera_target.source == 3);
   drop_lc_fixture(&f);
 }
 

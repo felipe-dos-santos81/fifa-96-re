@@ -7858,6 +7858,9 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * camera on the controlled side's carrier (else its nearest outfield
      * record). Live-only; the M1/M2 headless tapes never set live_start. */
     if (mr->live_start) match_run_live_control_update(mr);
+    /* FUN_0008BAF0 0x8BC43: every phase-0xC frame calls FUN_00036200(3), so
+     * the camera target source is the ball slot for the period-end view. */
+    if (mr->state.phase == 0x0Cu) mr->render.camera_target.source = 3;
     /* FU-343 (P1): the live focus follow, after the entity drain and before
      * the referee/phase tail (the frame draws this camera). Non-live runs keep
      * the event/pan-only camera (M2 byte-identical). */

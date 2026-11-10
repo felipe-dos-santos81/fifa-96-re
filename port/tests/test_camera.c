@@ -2617,6 +2617,53 @@ static void test_camera_action_table(void) {
                                    &blend) == -FIFA96_ERR_INVALID);
 }
 
+static void test_camera_pan_target(void) {
+  /* FUN_00036208's input mapping, mode clamps and the 0x105FC8 offsets. */
+  fifa96_camera_pan_target pan;
+  memset(&pan, 0, sizeof pan);
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 1, 10, 0, 0, 0, 0) == 1);
+  assert(pan.x == 10 && pan.z == 0 && pan.dx == 10 && pan.dz == 0);
+  memset(&pan, 0, sizeof pan);
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 2, 10, 0, 0, 0, 0) == 1);
+  assert(pan.x == -10 && pan.dx == -10);
+  memset(&pan, 0, sizeof pan);
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 4, 10, 0, 0, 0, 0) == 1);
+  assert(pan.z == -10 && pan.dz == -10);
+  memset(&pan, 0, sizeof pan);
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 8, 10, 0, 0, 0, 0) == 1);
+  assert(pan.z == 10 && pan.dz == 10);
+  memset(&pan, 0, sizeof pan);
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 0x10, 10, 0, 0, 0, 0) == 1);
+  assert(pan.x == 0 && pan.z == 0 && pan.dx == 0 && pan.dz == 0);
+  memset(&pan, 0, sizeof pan);
+  assert(fifa96_camera_pan_target_step(&pan, -1, 1, 1, 10, 0, 0, 0, 0) == 0);
+  assert(fifa96_camera_pan_target_step(&pan, 0, 0, 1, 10, 0, 0, 0, 0) == 0);
+  assert(fifa96_camera_pan_target_step(NULL, 0, 1, 1, 10, 0, 0, 0, 0) ==
+         -FIFA96_ERR_INVALID);
+
+  /* Mode 0 clamps the 0x12C0 z window to +-0x9C0 and x to +-0x660. */
+  memset(&pan, 0, sizeof pan);
+  pan.x = 0x1000;
+  pan.z = 0x3000;
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 0, 0, 0, 0, 0, 0) == 1);
+  assert(pan.x == 0x660 && pan.z == 0x9C0);
+  assert(pan.dx == 0 && pan.dz == 0);
+
+  /* Phase 0x15 option 3 -> mode 5 (x +-0x720, z 0..0xB10). */
+  memset(&pan, 0, sizeof pan);
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 1, 10, 0x15, 0, 3, 0) == 1);
+  assert(pan.x == 0x720 && pan.z == 0 && pan.dx == 0 && pan.dz == 0);
+  /* Option 0 -> mode 6. */
+  memset(&pan, 0, sizeof pan);
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 1, 10, 0x15, 0, 0, 0) == 1);
+  assert(pan.x == 0x720 && pan.z == 0xB10);
+  /* Option 1 -> mode 8 (x +-0x630, z 0..0x9F0, the 0x7AF rail). */
+  memset(&pan, 0, sizeof pan);
+  pan.z = 0x800;
+  assert(fifa96_camera_pan_target_step(&pan, 0, 1, 0, 0, 0x15, 0, 1, 0) == 1);
+  assert(pan.x == 0 && pan.z == 0x7AF && pan.dx == 0 && pan.dz == 0);
+}
+
 static void test_camera_target_select(void) {
   /* FUN_000365B0's [0x105FC4] switch and the early replay fallback. */
   const int32_t focus[3] = {1, 2, 3};
@@ -3261,6 +3308,7 @@ int main(void) {
   test_replay_select();
   test_camera_replay_blend();
   test_camera_action_table();
+  test_camera_pan_target();
   test_camera_target_select();
   puts("test_camera: ok");
   return 0;

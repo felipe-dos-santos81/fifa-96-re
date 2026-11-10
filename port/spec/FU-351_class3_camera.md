@@ -845,3 +845,41 @@ slot, the force-focus and replay-fallback gates, and the source-0 default.
 bookkeeping (the latter is overwritten by `FUN_0004F8C8`'s start copy and
 cannot change the blend pose). The pan/record/slot-index target producers are
 not staged.
+
+## 19. FU351-L2g pan-target producer and phase-0xC source writer (2026-11-10)
+
+**Evidence.** Fresh `decompile_function` `0x4B308` (48 instructions) and
+`0x36208` (227), `read_memory 0x105FC8` = `{0x12C0, 0x2580×7, 0}` and
+`0x8BC01..0x8BC48` (`phase == 0xC` sets `0x158830 = (0x960,0,0)` then
+`EAX=3; CALL 0x36200`).
+
+**Preset helper.** `FUN_0004B308` is phase 3 -> 1/2, phase 4 -> 3/4,
+phase 0x15 -> 5/6/8, else 0, keyed by `[0x14C2F6] == 1` and
+`[0x15B680]`. It is now `fifa96_camera_view_preset`, shared by
+`fifa96_camera_view_select`.
+
+**Pan producer.** `FUN_00036208` is active only when `[0x105FB4] >= 0`
+and `[0x105FC4] == 1`. Its input low byte maps bits 1/2 to x ±speed and
+8/4 to z ±speed; bits 0x10/0x20/0x40 suppress both. The mode's
+`0x105FC8` offset builds the z window around the `0x15774C+8` place,
+then the mode arms clamp: 0 -> ±0x9C0, 1..4 -> ±0xB10, 5 -> x ±0x720
+with z 0..0xB10, 6/7 -> x ±0x720 with the same z, 8 -> x ±0x630 with
+z 0..0x9F0 and the ±0x7AF rail. The deltas zero at a bound and clamp
+±0xA0.
+
+**Landed.** `fifa96_camera_pan_target_step` is the `FUN_00036208` body
+with `FUN_0004511D`'s input/speed staged. `fifa96_camera_view_preset`
+is `FUN_0004B308`. The phase-`0xC` frame now writes
+`render.camera_target.source = 3` at the native `0x8BC43` point.
+
+**Verification.** `test_camera` pins the input bits, mode-0 x/z clamps,
+mode 5/6/8 bounds and the device/source gates. `test_engine_live_control`
+pins the phase-`0xC` source-3 write plus the live source-1/2/3/4
+consumer. `make check` **124/124**; M1/M2 byte-exact.
+
+**Remaining.** `0x36200` values other than the phase-0xC 3
+(the action-row 2 writes) are not wired; the source-2 `[0x157AA3]`
+record target and the source-4 `FUN_0004BCC4` lineup index remain
+unportable without those producers. `FUN_0004F274`'s PTR/handler
+bookkeeping and the `0x3BB1C` replay UI call site remain. The row-0x17
+`[0x10F370]` producer stays non-live (FU-201).

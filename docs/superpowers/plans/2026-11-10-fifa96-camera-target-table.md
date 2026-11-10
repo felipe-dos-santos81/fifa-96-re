@@ -23,7 +23,9 @@ and the replay sound leg with exact native evidence.
    gate.
 6. Build the 23-slot table in the engine and consume the selector in the live
    view step; test source 1/2/3/4 and source 0.
-7. `make check`, M1/M2, docs FU-351 §18, commit/push.
+7. Port `FUN_0004B308`/`FUN_00036208` and wire the phase-`0xC` source-3
+   writer.
+8. `make check`, M1/M2, docs FU-351 §18/§19, commit/push.
 
 ## Remaining
 

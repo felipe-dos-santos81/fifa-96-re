@@ -208,6 +208,18 @@ int32_t fifa96_camera_yaw_snap(int32_t class_of, int32_t pos_x, int32_t pos_z,
   return diff < 0x8000 ? target : yaw;
 }
 
+int32_t fifa96_camera_view_preset(int32_t phase, int32_t difficulty,
+                                  int32_t option_15b680) {
+  if (phase == 3) return difficulty == 1 ? 1 : 2;
+  if (phase == 4) return difficulty == 1 ? 3 : 4;
+  if (phase == 0x15) {
+    if (option_15b680 == 3) return 5;
+    if (option_15b680 == 0) return 6;
+    return 8;
+  }
+  return 0;
+}
+
 int32_t fifa96_camera_view_select(int32_t phase, int32_t option, int32_t b680,
                                   fifa96_camera_view *out) {
   /* FUN_0004B308 (phase/option/0x15B680) + FUN_0004D04C (clamp/table). */
@@ -216,10 +228,7 @@ int32_t fifa96_camera_view_select(int32_t phase, int32_t option, int32_t b680,
   static const int32_t classes[6] = {0, 1, 2, -1, -1, 3};
   int32_t preset;
   if (!out) return -FIFA96_ERR_INVALID;
-  if (phase == 3) preset = option == 1 ? 1 : 2;
-  else if (phase == 4) preset = option == 1 ? 3 : 4;
-  else if (phase == 0x15) preset = b680 == 3 ? 5 : (b680 == 0 ? 6 : 8);
-  else preset = 0;
+  preset = fifa96_camera_view_preset(phase, option, b680);
   if (preset < 0 || preset > 6) preset = 0;   /* the FUN_0004D04C clamp */
   out->preset = preset;
   out->slot = slots[preset];
@@ -719,6 +728,88 @@ static int32_t camera_clamp_i32(int32_t value, int32_t lo, int32_t hi) {
   if (value < lo) return lo;
   if (value > hi) return hi;
   return value;
+}
+
+int fifa96_camera_pan_target_step(fifa96_camera_pan_target *target,
+                                  int32_t device, int32_t source_105fc4,
+                                  int32_t input_bits, int32_t speed,
+                                  int32_t phase, int32_t difficulty,
+                                  int32_t option_15b680, int32_t camera_z) {
+  static const int32_t offsets[9] = {0x12C0, 0x2580, 0x2580, 0x2580, 0x2580,
+                                     0x2580, 0x2580, 0x2580, 0};
+  int32_t old_x, dx, dz, mode, off, lo, hi, zlo, zhi;
+  if (!target) return -FIFA96_ERR_INVALID;
+  if (device < 0 || source_105fc4 != 1) return 0;
+  old_x = target->x;
+  dx = 0;
+  dz = 0;
+  if ((input_bits & 0x70) == 0) {
+    if ((input_bits & 1) != 0) dx = speed;
+    else if ((input_bits & 2) != 0) dx = -speed;
+    if ((input_bits & 8) != 0) dz = speed;
+    else if ((input_bits & 4) != 0) dz = -speed;
+  }
+  target->x = (int32_t)((uint32_t)target->x + (uint32_t)dx);
+  target->z = (int32_t)((uint32_t)target->z + (uint32_t)dz);
+  mode = fifa96_camera_view_preset(phase, difficulty, option_15b680);
+  off = offsets[mode];
+  lo = -0x660;
+  hi = 0x660;
+  zlo = camera_z - off;
+  zhi = camera_z + off;
+  if (mode < 5) {
+    if (mode < 1) {
+      zlo = camera_clamp_i32(zlo, -0x9C0, 0x9C0);
+      zhi = camera_clamp_i32(zhi, -0x9C0, 0x9C0);
+    } else {
+      zlo = camera_clamp_i32(zlo, -0xB10, 0xB10);
+      zhi = camera_clamp_i32(zhi, -0xB10, 0xB10);
+    }
+  } else if (mode == 5) {
+    lo = -0x720;
+    hi = 0x720;
+    zlo = 0;
+    zhi = 0xB10;
+    if (dx < 0) target->x = -0x720;
+    else if (dx > 0) target->x = 0x720;
+    if (target->x < 0) old_x = -target->x;
+    else old_x = target->x;
+    if (old_x != 0x720)
+      target->z = target->z < 1 ? -0xB10 : 0xB10;
+  } else if (mode == 6) {
+    lo = -0x720;
+    hi = 0x720;
+    zlo = 0;
+    zhi = 0xB10;
+    if (dx < 0) target->x = -0x720;
+    else if (dx > 0) target->x = 0x720;
+    target->z = 0xB10;
+  } else if (mode == 7) {
+    lo = -0x720;
+    hi = 0x720;
+    zlo = 0;
+    zhi = 0xB10;
+  } else if (mode == 8) {
+    lo = -0x630;
+    hi = 0x630;
+    zlo = 0;
+    zhi = 0x9F0;
+    if (old_x < 0) old_x = -old_x;
+    if (old_x < 0x420) {
+      int32_t az = target->z < 0 ? -target->z : target->z;
+      if (az > 0x7AF) {
+        if (old_x < 0x420) target->z = target->z < 1 ? -0x7AF : 0x7AF;
+        else target->x = target->x < 1 ? -0x420 : 0x420;
+      }
+    }
+  }
+  target->x = camera_clamp_i32(target->x, lo, hi);
+  target->z = camera_clamp_i32(target->z, zlo, zhi);
+  if (target->x <= lo || target->x >= hi) dx = 0;
+  if (target->z <= zlo || target->z >= zhi) dz = 0;
+  target->dx = camera_clamp_i32(dx, -0xA0, 0xA0);
+  target->dz = camera_clamp_i32(dz, -0xA0, 0xA0);
+  return 1;
 }
 
 /* FUN_0004D5F4: hold the target angle inside the +/-ratio deadband around
