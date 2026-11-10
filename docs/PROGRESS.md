@@ -4847,7 +4847,8 @@ close-out below).
   C record; `fifa96_camera_behavior_steady` runs the z and x
   `fifa96_camera_slide` calls (the z mode/bounds class swap and the x
   sign-adjusted history offset) with the pose feed's `handler_tick`. The
-  class-3 target history is now consumed (L4 closed). The yaw/pitch arms
+  class-3 x/z target history is now consumed (L4 closed for x/z; `hist_y` has
+  no reader in the ported class-0 body). The yaw/pitch arms
   (`FUN_0004DF34`/`FUN_0004E05C`) and the class-3 snap remain the quoted
   clamp level, and the live class is still 3, so open play is unchanged.
   `test_camera` pins the block-0 x=10/z=67 result, the z history gate and the

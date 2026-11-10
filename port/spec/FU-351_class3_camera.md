@@ -308,7 +308,8 @@ carry `+0x10`, `+0x18`, `+0x28` and the `+0x50` C record
 (`c0..c3`); `fifa96_camera_behavior_steady` runs the z slide then the x slide
 (the sign-adjusted target offset), with the pose feed's `handler_tick` as the
 native `FUN_00049388` tick. The slides consume `hist_x`/`hist_z`, so the
-class-3 target-history copy now has a wired consumer (L4 closed). The
+class-3 x/z target history has a wired consumer (L4 closed for x/z;
+`hist_y` has no reader in the ported class-0 body). The
 handler's yaw/pitch arms (`FUN_0004DF34` / `FUN_0004E05C`) and the class-3
 snap remain the quoted clamp level. The live class is still 3, so this has
 no open-play effect yet; the next L2c slice ports the orientation arms and
