@@ -258,7 +258,13 @@ body remains the FU-100 §3 leg 9; only the consumer is now identified.
   selects a different class-3 target; it only gates the simulation focus.
 - **L2** remains open: the live class is still forced to 3. The native
   preset/view selection (`FUN_0004D04C`, `FUN_0004D7E8`, `[0x14E57C]`) is
-  unported.
+  unported. Entry-point evidence for the next slice: `FUN_0004D04C`'s only
+  caller is `FUN_0004CE34` (`0x4CE62`), which passes the preset from
+  `FUN_0004B308`: phase `[0x157A4A] >> 24` 3 -> 1 when
+  `[0x14C2F6] == 1` else 2; 4 -> 3/4; 0x15 -> 5/6/8; else 0.
+  `FUN_0004D04C` clamps to 0..6 and selects slot `{1,1,0,0,2,2,5}`; slot 5 is
+  class 3, slots 0/1/2 are classes 0/1/2. The live class is therefore a
+  function of the phase/preset and the options camera cell, not a constant.
 
 **Verification.** `make check` **124/124**; M1 `09b726b7…` and M2
 `41521559…` byte-exact. `test_camera::test_focus_clamp` pins the ±6000 /
