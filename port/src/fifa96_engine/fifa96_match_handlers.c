@@ -1738,6 +1738,33 @@ static void match_sp_setup_832a8(struct fifa96_match_run *mr,
  * `FUN_00083428` machine. The derived completion applies the same timer gate
  * plus draw so an armed row still resolves; the RNG width is the engine's
  * 16-bit draw (native 32-bit, cadence leg). */
+static void match_sp_build_native_path(struct fifa96_match_run *mr,
+                                       struct fifa96_match_run_record *r,
+                                       uint8_t dir) {
+  uint32_t team;
+  struct fifa96_match_team *t;
+  int32_t cell;
+  if (r->entity_id < 0) {
+    mr->sp_path_valid = 0;
+    return;
+  }
+  team = (uint32_t)r->entity_id / FIFA96_MATCH_ENTITY_RECORDS;
+  if (team >= FIFA96_MATCH_ENTITY_TEAMS) {
+    mr->sp_path_valid = 0;
+    return;
+  }
+  t = &mr->entities.team[team];
+  if (!t->sp_table_ready || t->sp_table_len == 0u) {
+    mr->sp_path_valid = 0;
+    return;
+  }
+  cell = fifa96_match_pitch_cell(mr->render.camera.pos_x,
+                                 mr->render.camera.pos_z, t->side);
+  fifa96_sp_build_path(mr->render.camera.pos_x, mr->render.camera.pos_z,
+                       t->sp_table, t->sp_table_len, cell, dir, t->side,
+                       mr->sp_path, &mr->sp_path_valid);
+}
+
 static int match_sp_receiver_cut(struct fifa96_match_run *mr,
                                  struct fifa96_match_run_record *r) {
   uint32_t team;
@@ -1777,6 +1804,9 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
   mr->sp_recv_1587ac = (int32_t)pick;
   mr->sp_b0_1587b0 = 0;
   mr->sp_b6_1587b6 = 0;
+  /* 0x839BC: the cut rebuilds the path from 0x15877F before the 0x83937
+   * camera target write. The native does not step the interpolation here. */
+  match_sp_build_native_path(mr, r, mr->sp_dir_15877f);
   /* 0x83937: [0x157AA3] = the re-picked receiver and 0x36200(2). */
   mr->render.camera_target.source = 2;
   mr->render.camera_target.record[0] = t->records[pick].pos_x;
@@ -1823,13 +1853,19 @@ static int match_sp_delivery_step(struct fifa96_match_run *mr) {
       }
       return 5;
     }
-    if (released == 0x40u && mr->sp_b3_1587b3 == 0u) return 3;
+    if (released == 0x40u && mr->sp_b3_1587b3 == 0u) {
+      match_sp_build_native_path(mr, &mr->record, mr->sp_dir_15877f);
+      return 3;
+    }
     return 0;
   }
   if (released == 0x10u) return (prev & 0x0Fu) == 0u ? 6 : 1;
   if ((released & 0x20u) != 0u)
     return (prev & 0x0Fu) != 0u ? 4 : 0;   /* the clear case is the cut */
-  if (released == 0x40u && mr->sp_b3_1587b3 == 0u) return 3;
+  if (released == 0x40u && mr->sp_b3_1587b3 == 0u) {
+    match_sp_build_native_path(mr, &mr->record, mr->sp_dir_15877f);
+    return 3;
+  }
   return 0;
 }
 
@@ -1840,6 +1876,17 @@ static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
    * delivery codes. */
   if (mr->record.has_slot != 0u && mr->live_start) {
     int code;
+    if (mr->sp_b5_1587b5 == 0u && mr->sp_dir_15877b <= 2u) {
+      match_sp_build_native_path(mr, &mr->record, mr->sp_dir_15877b);
+      (void)fifa96_sp_target_step(&mr->sp_target, mr->sp_path,
+                                  mr->sp_path_valid,
+                                  mr->render.camera.pos_x,
+                                  mr->render.camera.pos_y,
+                                  mr->render.camera.pos_z,
+                                  (int16_t)mr->record.delta);
+    } else {
+      mr->sp_path_valid = 0;
+    }
     if (match_sp_receiver_cut(mr, &mr->record)) return 0;
     code = match_sp_delivery_step(mr);
     if (code != 0) {
@@ -1849,8 +1896,29 @@ static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
     return 0;
   }
   if (mr->record.timer89 <= 0x78) return 0;
+  if (span == 0u) return 0;
   if (fifa96_rng_step(&mr->rng, &draw) != 0) return 0;
-  mr->sp_delivery = (uint8_t)((draw % span) < 3u ? 3u : 7u);
+  uint8_t dir = (uint8_t)(draw % span);
+  if (mr->live_start && mr->record.has_slot == 0u &&
+      mr->record.entity_id >= 0) {
+    uint32_t team = (uint32_t)mr->record.entity_id /
+                    FIFA96_MATCH_ENTITY_RECORDS;
+    if (team < FIFA96_MATCH_ENTITY_TEAMS) {
+      mr->entities.team[team].throw_anim_7e7 = dir;
+      if (dir < 3u) {
+        match_sp_build_native_path(mr, &mr->record, dir);
+        (void)fifa96_sp_target_step(&mr->sp_target, mr->sp_path,
+                                    mr->sp_path_valid,
+                                    mr->render.camera.pos_x,
+                                    mr->render.camera.pos_y,
+                                    mr->render.camera.pos_z,
+                                    (int16_t)mr->record.delta);
+      } else {
+        mr->sp_path_valid = 0;
+      }
+    }
+  }
+  mr->sp_delivery = (uint8_t)(dir < 3u ? 3u : 7u);
   return 1;
 }
 
