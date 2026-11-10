@@ -491,6 +491,33 @@ static void test_action_10_delivery_codes(void) {
   }
 }
 
+static void test_sp_input_tail_direction(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.live_start = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.stage92 = 2;
+  f.mr.state.phase = 3u;
+  f.mr.session_gate_14c32a = 1;
+  f.mr.sp_b0_1587b0 = 1;
+  f.mr.slot.entity = 1;
+  f.mr.slot.raw = 1;
+  f.mr.slot.prev_mapped = 0x40;
+  f.mr.slot.pressed = 0;
+  f.mr.slot.released = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_dir_15877b == 1);   /* raw bit 1 -> direction 1 */
+  assert(f.mr.sp_dir_15877f == 1);
+  f.mr.slot.raw = 0;
+  f.mr.slot.pressed = 0x80;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_b5_1587b5 == 1);    /* pressed 0xB0 toggles b5 */
+  drop_fixture(&f);
+}
+
 /* FU-157 §4.2/§5 (T1) + FU-162 §3.3.A (T3 fix): the throw-in stage-3 camera
  * cut restores the native `[0x157750] = 0x80`. Native 0x85911..0x85919
  * (`MOV EAX,0x80`; the record position MOVSD x3; `MOV [0x00157750],EAX`) then
@@ -6405,6 +6432,7 @@ int main(void) {
   test_action_10_runs_throw_in_body();
   test_action_10_receiver_cut();
   test_action_10_delivery_codes();
+  test_sp_input_tail_direction();
   test_live_throw_in_camera_y_cut();
   test_action_0e_live_jump_selector();
   test_action_11_runs_corner_body();

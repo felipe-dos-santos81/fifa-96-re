@@ -1794,9 +1794,23 @@ static int match_sp_delivery_step(struct fifa96_match_run *mr) {
   if ((mr->slot.pressed & 0x40u) != 0u) mr->sp_b3_1587b3 = 0;
   if (mr->state.phase != 8u && mr->state.phase != 9u &&
       (prev & 0x40u) != 0u) {
-    if ((raw & 8u) != 0u || (raw & 1u) != 0u || (raw & 4u) != 0u ||
-        (raw & 2u) != 0u)
+    uint8_t dir;
+    /* 0x8369A: the pressed 0xB0 bits toggle the interpolation gate. */
+    if ((mr->slot.pressed & 0xB0u) != 0u)
+      mr->sp_b5_1587b5 = mr->sp_b5_1587b5 == 0u ? 1u : 0u;
+    /* 0x836AE..0x8375A: raw 8/1/4/2 -> 0x15877B._3 and 0x15877F 3/1/2/0,
+     * then the low nibble of [param_2+0x10] is cleared. */
+    if ((raw & 8u) != 0u) dir = 3u;
+    else if ((raw & 1u) != 0u) dir = 1u;
+    else if ((raw & 4u) != 0u) dir = 2u;
+    else if ((raw & 2u) != 0u) dir = 0u;
+    else dir = 0xFFu;
+    if (dir != 0xFFu) {
+      mr->sp_dir_15877b = dir;
+      mr->sp_dir_15877f = dir;
+      mr->slot.prev_mapped &= 0xFFF0u;
       mr->sp_b3_1587b3 = 1;
+    }
   }
   if (mr->sp_b0_1587b0 == 0u) {
     /* 0x838xx: the receiver-held arm latches b0/b6 and waits for the cut. */

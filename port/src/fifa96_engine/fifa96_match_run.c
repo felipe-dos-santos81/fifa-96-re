@@ -4998,6 +4998,14 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->sp_b3_1587b3 = 0;
   mr->sp_b6_1587b6 = 0;
   mr->sp_b7_1587b7 = 0;
+  memset(&mr->sp_target, 0, sizeof mr->sp_target);
+  mr->sp_dir_15877b = 3;
+  mr->sp_dir_15877f = 3;
+  mr->sp_b5_1587b5 = 0;
+  mr->sp_path[0][0] = mr->sp_path[0][1] = 0;
+  mr->sp_path[1][0] = mr->sp_path[1][1] = 0;
+  mr->sp_path[2][0] = mr->sp_path[2][1] = 0;
+  mr->sp_path_valid = 0;
   /* FU274 §1.1: `byte[0x157821]` is the camera's `render.camera.pan_counter`
    * (cleared by reset_render's fifa96_camera_init), not a separate cell. */
   /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2): the producer gates
@@ -5294,6 +5302,14 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->sp_b3_1587b3 = 0;
   mr->sp_b6_1587b6 = 0;
   mr->sp_b7_1587b7 = 0;
+  memset(&mr->sp_target, 0, sizeof mr->sp_target);
+  mr->sp_dir_15877b = 3;
+  mr->sp_dir_15877f = 3;
+  mr->sp_b5_1587b5 = 0;
+  mr->sp_path[0][0] = mr->sp_path[0][1] = 0;
+  mr->sp_path[1][0] = mr->sp_path[1][1] = 0;
+  mr->sp_path[2][0] = mr->sp_path[2][1] = 0;
+  mr->sp_path_valid = 0;
   /* FU274 §1.1: `byte[0x157821]` is the camera's `render.camera.pan_counter`. */
   /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2) / FU-202 §6 rec (b)
    * (M2 phase-18 T3): a fresh match ACTIVATES the native situation producer —

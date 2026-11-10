@@ -17,6 +17,7 @@
 #include "fifa96_loader/fifa96_match_lifecycle.h"
 #include "fifa96_loader/fifa96_match_pace.h"
 #include "fifa96_loader/fifa96_match_state.h"
+#include "fifa96_loader/fifa96_outfield.h"
 #include "fifa96_loader/fifa96_palette.h"
 #include "fifa96_loader/fifa96_pccd.h"
 #include "fifa96_loader/fifa96_referee.h"
@@ -1411,6 +1412,17 @@ struct fifa96_match_run {
   uint8_t sp_b3_1587b3;
   uint8_t sp_b6_1587b6;
   uint8_t sp_b7_1587b7;
+  /* FU275 L266-4: the FUN_0006DAB4 path and 0x158780 interpolation cells.
+   * `sp_target` is the 0x158767/6B/6F triple; `sp_dir_15877b`/`sp_dir_15877f`
+   * are the 0x15877B._3/0x15877F direction bytes; `sp_b5_1587b5` is the
+   * 0x1587B5 interpolation gate; `sp_path`/`sp_path_valid` are the 3-point
+   * control points built from the team slot-5 table. */
+  fifa96_sp_target_state sp_target;
+  uint8_t sp_dir_15877b;
+  uint8_t sp_dir_15877f;
+  uint8_t sp_b5_1587b5;
+  int32_t sp_path[3][2];
+  uint8_t sp_path_valid;
   /* FU274 §1.1: `byte[0x157821]` -- row 0x10's far-ball re-queue gate
    * (`0x85CE4`) and the keeper predictor's pan gate (`0x739BB`/`0x7489C`) --
    * is one native cell owned by the camera block: `render.camera.pan_counter`
