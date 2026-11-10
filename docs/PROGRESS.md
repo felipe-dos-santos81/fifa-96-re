@@ -4981,16 +4981,17 @@ close-out below).
   replay-camera interpolation body is now ported. `fifa96_camera_replay_snapshot`
   is `FUN_0004CF60` (the active camera record copy that feeds the
   `0x14E470/4/8`, `0x14E4B8/C`, `0x14E4AC` target block);
-  `fifa96_camera_replay_ease` is `FUN_0004F830` with the native 32-bit product
+  `fifa96_camera_replay_cancel` is `FUN_00045069`'s high-nibble/latch-5
+  input; `fifa96_camera_replay_ease` is `FUN_0004F830` with the native 32-bit product
   truncation and the three time arms; `fifa96_camera_replay_begin` is the
   `FUN_0004F8C8` start arm with the `0x4CF7C` `ECX=0xA`/`0x1E` times
   (100/300 ticks), the six-field start snapshot and the target deltas;
   `fifa96_camera_replay_step` is the
   per-frame arm with the finish latch, the yaw/pitch 16-bit wrap/mask, the
   elapsed clamp and the staged `FUN_00045069`/view-mode cancel gate.
-  `test_camera` pins the snapshot, the ease at 0/50/100/200/300/350/400/500,
-  the start copy/deltas, the 100/300 total, the finish and NULL-start arms,
-  the cancel gate and the `0x14` exemption. `make check` green 124/124;
-  M1/M2 byte-exact. Remaining: the `0x3BB1C` call site/`0x505D0` pose switch;
-  the `0x45069` input latch and `0x37114(1)` sound request are staged.
+  `test_camera` pins the snapshot, the cancel input latch, the ease at
+  0/50/100/200/300/350/400/500, the start copy/deltas, the 100/300 total,
+  the finish and NULL-start arms, the cancel gate and the `0x14` exemption.
+  `make check` green 124/124; M1/M2 byte-exact. Remaining: the `0x3BB1C`
+  call site/`0x505D0` pose switch and the `0x37114(1)` sound request.
   Record: FU-351 §17.

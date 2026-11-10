@@ -1615,6 +1615,15 @@ static int32_t camera_div32(int32_t num, int32_t den) {
   return den == 0 ? 0 : (int32_t)((int64_t)num / (int64_t)den);
 }
 
+int32_t fifa96_camera_replay_cancel(fifa96_camera_replay_input *input) {
+  int32_t nibble;
+  if (input == NULL) return 0;
+  if (input->latch != 0) return 0;
+  nibble = input->input & 0xF0;
+  if (nibble != 0) input->latch = 5;
+  return nibble;
+}
+
 int32_t fifa96_camera_replay_ease(int32_t delta, int32_t in_time,
                                   int32_t out_time, int32_t elapsed) {
   int32_t num, den, t, q;

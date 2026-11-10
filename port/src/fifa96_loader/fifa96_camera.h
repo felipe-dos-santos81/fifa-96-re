@@ -818,6 +818,17 @@ typedef struct fifa96_camera_pose6 {
   int32_t yaw, pitch, ratio;
 } fifa96_camera_pose6;
 
+/* FUN_00045069 (`0x45069..0x450B6`): the replay-cancel input latch. While
+ * `latch` is clear, a nonzero high nibble of `input` (native `[0x1067F3]`)
+ * sets `latch = 5` and is returned (the `cancel_input` for
+ * `fifa96_camera_replay_step`); otherwise 0. */
+typedef struct fifa96_camera_replay_input {
+  uint8_t input;  /* native [0x1067F3] */
+  int32_t latch;  /* native [0x1067F4] */
+} fifa96_camera_replay_input;
+
+int32_t fifa96_camera_replay_cancel(fifa96_camera_replay_input *input);
+
 typedef struct fifa96_camera_replay_blend {
   fifa96_camera_pose6 start; /* native 0x14E4F8 */
   int32_t dx, dy, dz;        /* native 0x108BD4/D8/DC */

@@ -769,12 +769,14 @@ the target is the saved camera pose, not an unlocated producer.
 **Landed.** `fifa96_camera_pose6` and `fifa96_camera_replay_blend` mirror
 the six native record fields and the `0x14E4F8`/`0x108BD4`/
 `0x107DE0..DE8`/`[0x107DD8]` state. `fifa96_camera_replay_snapshot` is
-`FUN_0004CF60`; `fifa96_camera_replay_ease` is `FUN_0004F830`;
+`FUN_0004CF60`; `fifa96_camera_replay_cancel` is `FUN_00045069`'s
+high-nibble/latch-5 body; `fifa96_camera_replay_ease` is `FUN_0004F830`;
 `fifa96_camera_replay_begin` is the `FUN_0004CF7C` start arm with `10/30`;
 `fifa96_camera_replay_step` is the per-frame `FUN_0004F8C8` arm, with
 `cancel_input`/`view_mode` staging the gate.
 
-**Verification.** `test_camera` pins the `FUN_0004CF60` snapshot, the ease at
+**Verification.** `test_camera` pins the `FUN_0004CF60` snapshot, the
+`FUN_00045069` high-nibble/latch-5 input, the ease at
 0/50/100/200/300/350/400/500, the start copy and deltas, the 100/300 total,
 the finish latch, the NULL-start snapshot, the cancel gate, the
 `view_mode == 0x14` exemption and the invalid arguments. `make check`
@@ -785,7 +787,6 @@ byte-exact.
 
 **Remaining.** The `FUN_0004CF7C` call site (`FUN_0003BB1C`) and its
 `FUN_000505D0` config-record pose switch are not wired; the blend inputs are
-staged. `FUN_00045069`'s `[0x1067F4]` latch and the `FUN_00037114(1)`
-`0x974D8` sound request are not modelled; the cancel input is staged. The
+staged. The `FUN_00037114(1)` `0x974D8` sound request is not modelled. The
 state-`0xB` action-table consumer remains producer-blocked by the non-live
 row-0x17 installer.

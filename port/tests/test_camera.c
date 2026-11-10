@@ -2504,6 +2504,22 @@ static void test_camera_replay_blend(void) {
   assert(state.dx == 590 && state.dyaw == 0x1F00);
   assert(state.dpitch == -0x200 && state.dratio == 5700);
 
+  /* FUN_00045069: the high-nibble input latch. */
+  {
+    fifa96_camera_replay_input input;
+    memset(&input, 0, sizeof input);
+    assert(fifa96_camera_replay_cancel(&input) == 0 && input.latch == 0);
+    input.input = 0x0F;
+    assert(fifa96_camera_replay_cancel(&input) == 0 && input.latch == 0);
+    input.input = 0x10;
+    assert(fifa96_camera_replay_cancel(&input) == 0x10 && input.latch == 5);
+    input.input = 0xF0;
+    assert(fifa96_camera_replay_cancel(&input) == 0 && input.latch == 5);
+    input.latch = 0;
+    assert(fifa96_camera_replay_cancel(&input) == 0xF0 && input.latch == 5);
+    assert(fifa96_camera_replay_cancel(NULL) == 0);
+  }
+
   /* The 0x4F8C8 cancel gate: only runs while the latch is clear and the
    * view mode is not 0x14. */
   state.active = 0;

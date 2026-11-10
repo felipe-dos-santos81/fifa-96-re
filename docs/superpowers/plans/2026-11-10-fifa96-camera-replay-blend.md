@@ -19,12 +19,14 @@ Goal: port the `FUN_0004F8C8`/`FUN_0004F830` replay-camera blend and the
 ## Tasks
 
 1. Add the six-field pose and blend state.
-2. Port the `0x4CF60` snapshot, the ease and the start/step arms.
-3. Test all ease arms, snapshot, start/delta, finish, cancel and invalid args.
+2. Port the `0x4CF60` snapshot, the `0x45069` cancel latch, the ease and the
+   start/step arms.
+3. Test all ease arms, snapshot, cancel latch, start/delta, finish and invalid
+   args.
 4. `make check`, M1/M2, docs FU-351 §17, commit/push.
 
 ## Remaining
 
 - `0x3BB1C` call site and `0x505D0` config-record switch.
-- `0x45069` input latch and `0x37114(1)` sound request.
+- `0x37114(1)` sound request.
 - State-0xB action table (row-0x17 producer non-live).
