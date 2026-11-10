@@ -458,7 +458,6 @@ static void test_action_10_receiver_cut(void) {
   assert(f.mr.render.camera_target.record[0] == 0x200);   /* record 2 */
   assert(f.mr.render.camera_target.record[1] == 0);
   assert(f.mr.render.camera_target.record[2] == 0);
-  assert(f.mr.entities.team[0].records[2].has_slot == 1);
   assert(f.mr.sp_clock_157a68 == 0);
   assert(f.mr.sp_global_105fb0 == 0);
   drop_fixture(&f);
@@ -497,30 +496,36 @@ static void test_action_10_delivery_codes(void) {
 }
 
 static void test_sp_input_tail_direction(void) {
-  struct fixture f;
-  make_fixture(&f);
-  f.mr.live_start = 1;
-  f.mr.record.has_slot = 1;
-  f.mr.record.entity_id = 1;
-  f.mr.record.active = 1;
-  f.mr.record.code = 0x10;
-  f.mr.record.stage92 = 2;
-  f.mr.state.phase = 3u;
-  f.mr.session_gate_14c32a = 1;
-  f.mr.sp_b0_1587b0 = 1;
-  f.mr.slot.entity = 1;
-  f.mr.slot.raw = 1;
-  f.mr.slot.prev_mapped = 0x40;
-  f.mr.slot.pressed = 0;
-  f.mr.slot.released = 0;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
-  assert(f.mr.sp_dir_15877b == 1);   /* raw bit 1 -> direction 1 */
-  assert(f.mr.sp_dir_15877f == 1);
-  f.mr.slot.raw = 0;
-  f.mr.slot.pressed = 0x80;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
-  assert(f.mr.sp_b5_1587b5 == 1);    /* pressed 0xB0 toggles b5 */
-  drop_fixture(&f);
+  static const struct {
+    uint16_t raw;
+    uint8_t dir;
+  } cases[] = {{8, 0}, {1, 1}, {4, 2}, {2, 3}};
+  for (uint32_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+    struct fixture f;
+    make_fixture(&f);
+    f.mr.live_start = 1;
+    f.mr.record.has_slot = 1;
+    f.mr.record.entity_id = 1;
+    f.mr.record.active = 1;
+    f.mr.record.code = 0x10;
+    f.mr.record.stage92 = 2;
+    f.mr.state.phase = 3u;
+    f.mr.session_gate_14c32a = 1;
+    f.mr.sp_b0_1587b0 = 1;
+    f.mr.slot.entity = 1;
+    f.mr.slot.raw = cases[i].raw;
+    f.mr.slot.prev_mapped = 0x40;
+    f.mr.slot.pressed = 0;
+    f.mr.slot.released = 0;
+    assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+    assert(f.mr.sp_dir_15877b == cases[i].dir);
+    assert(f.mr.sp_dir_15877f == cases[i].dir);
+    f.mr.slot.raw = 0;
+    f.mr.slot.pressed = 0x80;
+    assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+    assert(f.mr.sp_b5_1587b5 == 1);    /* pressed 0xB0 toggles b5 */
+    drop_fixture(&f);
+  }
 }
 
 static void test_action_10_native_path(void) {
@@ -575,11 +580,134 @@ static void test_action_10_native_path(void) {
   assert(f.mr.camera_override_triple[0] == f.mr.render.camera.pos_x);
 
   f.mr.live_start = 0;
+  f.mr.sp_b5_1587b5 = 0;
   f.mr.sp_path_valid = 0;
   f.mr.sp_target.target[0] = 0;
+  f.mr.camera_override_157a6f = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
   assert(f.mr.sp_path_valid == 0);
   assert(f.mr.sp_target.target[0] == 0);
+  assert(f.mr.camera_override_157a6f == 0);
+  drop_fixture(&f);
+}
+
+static void test_sp_delivery_resets(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.has_slot = 1;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.stage92 = 2;
+  f.mr.state.phase = 3u;
+  f.mr.session_gate_14c32a = 1;
+  f.mr.live_start = 1;
+  f.mr.sp_b0_1587b0 = 1;
+  f.mr.sp_path_valid = 1;
+  f.mr.camera_override_157a6f = 1;
+  f.mr.slot.entity = 1;
+  f.mr.slot.released = 0x10;
+  f.mr.slot.prev_mapped = 0;
+  f.mr.slot.pressed = 0;
+  f.mr.slot.raw = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_delivery == 6u);
+  assert(f.mr.camera_override_157a6f == 0);
+  drop_fixture(&f);
+
+  /* The input tail clears the 0x41 low nibble before the delivery code
+   * reads it: the same edge is code 6, not 1. */
+  make_fixture(&f);
+  f.mr.record.has_slot = 1;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.stage92 = 2;
+  f.mr.state.phase = 3u;
+  f.mr.session_gate_14c32a = 1;
+  f.mr.live_start = 1;
+  f.mr.sp_b0_1587b0 = 1;
+  f.mr.slot.entity = 1;
+  f.mr.slot.released = 0x10;
+  f.mr.slot.prev_mapped = 0x41;
+  f.mr.slot.pressed = 0;
+  f.mr.slot.raw = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_delivery == 6u);
+  drop_fixture(&f);
+
+  /* 0x839C6/0x83AFB: the 0x40 return clears the sub-index and both
+   * direction bytes after the build. */
+  make_fixture(&f);
+  f.mr.record.has_slot = 1;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.stage92 = 2;
+  f.mr.state.phase = 3u;
+  f.mr.session_gate_14c32a = 1;
+  f.mr.live_start = 1;
+  f.mr.sp_b0_1587b0 = 1;
+  f.mr.sp_target.sub_index = 2;
+  f.mr.sp_dir_15877b = 2;
+  f.mr.sp_dir_15877f = 2;
+  f.mr.slot.entity = 1;
+  f.mr.slot.released = 0x40;
+  f.mr.slot.prev_mapped = 0;
+  f.mr.slot.pressed = 0;
+  f.mr.slot.raw = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_delivery == 3u);
+  assert(f.mr.sp_target.sub_index == 0);
+  assert(f.mr.sp_dir_15877b == 0);
+  assert(f.mr.sp_dir_15877f == 0);
+  drop_fixture(&f);
+
+  /* Gate-fail arm: b5 clears the interpolation state and restores the focus. */
+  make_fixture(&f);
+  f.mr.record.has_slot = 1;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.stage92 = 2;
+  f.mr.state.phase = 3u;
+  f.mr.session_gate_14c32a = 1;
+  f.mr.live_start = 1;
+  f.mr.sp_b0_1587b0 = 1;
+  f.mr.sp_b5_1587b5 = 1;
+  f.mr.sp_target.sub_index = 2;
+  f.mr.sp_target.accum = 3;
+  f.mr.sp_target.duration = 8;
+  f.mr.sp_target.vel_x = 5;
+  f.mr.slot.entity = 1;
+  f.mr.slot.released = 0;
+  f.mr.slot.prev_mapped = 0;
+  f.mr.slot.pressed = 0;
+  f.mr.slot.raw = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_path_valid == 0);
+  assert(f.mr.sp_target.sub_index == 0);
+  assert(f.mr.sp_target.accum == 0);
+  assert(f.mr.sp_target.vel_x == 0);
+  assert(f.mr.sp_target.target[0] == f.mr.render.camera.pos_x);
+  drop_fixture(&f);
+
+  /* FUN_000832A8 seeds the direction bytes 3/3 and b5 0. */
+  make_fixture(&f);
+  f.mr.record.has_slot = 1;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.stage92 = 1;
+  f.mr.state.phase = 3u;
+  f.mr.session_gate_14c32a = 1;
+  f.mr.live_start = 1;
+  f.mr.sp_b5_1587b5 = 1;
+  f.mr.slot.entity = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_dir_15877b == 3);
+  assert(f.mr.sp_dir_15877f == 3);
+  assert(f.mr.sp_b5_1587b5 == 0);
   drop_fixture(&f);
 }
 
@@ -6498,6 +6626,7 @@ int main(void) {
   test_action_10_receiver_cut();
   test_action_10_delivery_codes();
   test_sp_input_tail_direction();
+  test_sp_delivery_resets();
   test_action_10_native_path();
   test_live_throw_in_camera_y_cut();
   test_action_0e_live_jump_selector();

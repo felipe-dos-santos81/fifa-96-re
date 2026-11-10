@@ -5125,9 +5125,9 @@ close-out below).
   0xB0`, and the live no-slot arm stores the draw in `team+0x7E7` before the
   build. The `0x157A6F` override now drives the live camera focus through
   `camera_override_triple`, and the gate-fail arm restores the FU-71 focus.
-  The cut writes `0x157A68`/`0x105FB0` through reset-only cells and sets the
-  picked receiver `has_slot = 1`; the taker list-head clear and receiver
-  control-field clears stay FU275-L6. `test_outfield`, `test_engine_team_data`,
+  The cut writes `0x157A68`/`0x105FB0` through reset-only cells; all of
+  `FUN_000786A0` (the list link, the taker clear and the seven control-word
+  clears) stays FU275-L6. `test_outfield`, `test_engine_team_data`,
   `test_engine_match_handlers` and `test_engine_match_render` cover the
   builder, interpolation, real ISO table, live path/override and the cut.
   `make check` green 124/124; M1/M2 byte-exact. Record: FU-275 §4, FU-351 §24,

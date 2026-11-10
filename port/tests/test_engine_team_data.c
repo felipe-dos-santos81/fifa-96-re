@@ -201,7 +201,25 @@ static void test_retail_sp_table(void) {
   fifa96_sp_build_path(0, 0, entry, (uint32_t)entry_len, 0, 0, 0, path,
                        &valid);
   assert(valid == 1);
+  assert(path[1][0] == (int8_t)entry[0] * 0x26);
+  assert(path[1][1] == (int8_t)entry[1] * 0x21);
+  assert(path[2][0] == (int8_t)entry[2] * 0x26);
+  assert(path[2][1] == (int8_t)entry[3] * 0x21);
   free(entry);
+  entry = NULL;
+  entry_len = 0;
+  assert(fifa96_scene_bank_entry_load(bank, bank_len, "442sp.fmt", &entry,
+                                      &entry_len) == FIFA96_OK);
+  assert(entry != NULL && entry_len == 3588u);
+  free(entry);
+  entry = (uint8_t *)0x1;
+  entry_len = 1;
+  assert(fifa96_scene_bank_entry_load(NULL, 0, "352sp.fmt", &entry,
+                                      &entry_len) ==
+         (fifa96_err_t)-FIFA96_ERR_INVALID);
+  assert(fifa96_scene_bank_entry_load(bank, bank_len, "nope.fmt", &entry,
+                                      &entry_len) == FIFA96_ERR_NOT_FOUND);
+  assert(entry == NULL && entry_len == 0);
   fifa96_asset_free(bank);
   fifa96_asset_unmount(assets);
 }

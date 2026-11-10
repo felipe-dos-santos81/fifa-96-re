@@ -496,6 +496,12 @@ The gate-fail arm (`0x83629..0x8363D`) copies the FU-71 triple into `0x158767`
 and clears the pointer. It is the set-piece delivery mode, not a general
 animation mode.
 
+**Writers.** Fresh `get_xrefs_to 0x157A6F` = seven sites: `0x73EC7` (act-9
+reset), `0x83471` (set), `0x83635` (gate-fail clear), `0x854F4` / `0x855A3`
+(the slot/no-slot delivery clears) and `0x84156` / `0x860BF` (the row tails).
+The engine maps the set at `0x83471` and the clears at delivery, gate-fail
+and init/begin/act-9.
+
 **Landed.** `fifa96_match_run` carries `camera_override_157a6f` as a 0/1 flag
 plus `camera_override_triple[3]`; the live follow reads it through
 `fifa96_camera_focus_clamp` and otherwise keeps `camera.pos_*`.

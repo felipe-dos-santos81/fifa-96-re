@@ -5001,9 +5001,9 @@ the build also produces the windowed `fifa96` target (`make game`).
     FU-351 §24 closes the set-piece target chain: the `FUN_0006DAB4` path
     builder, the `0x158780` interpolation, the `0x15877B/7F/B5` input tail,
     the slot-5 `352sp.fmt` table and the `0x157A6F` live focus override are
-    live-only; the remaining leg is `FUN_000786A0`'s taker list-head clear
-    and the receiver control-field clears (FU275-L6). `FUN_000974D8` is a
-    bare `RET`.
+    live-only; the remaining leg is all of `FUN_000786A0` (the list link, the
+    taker clear and the seven control-word clears, FU275-L6). `FUN_000974D8`
+    is a bare `RET`.
     Row 29's source-2 store has no live entry (FU-142f/OL-48); `FUN_0004F274`
     and the `0x505D0` config-record switch are superseded by the direct view
     path, and `FUN_0003BB1C` is the replay UI loop whose camera call is

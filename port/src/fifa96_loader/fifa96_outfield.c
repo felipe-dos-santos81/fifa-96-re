@@ -1203,7 +1203,14 @@ int fifa96_sp_target_step(fifa96_sp_target_state *state,
     state->accum = (int16_t)(state->accum + delta);
     if (state->accum > 2 * state->duration) {
       state->sub_index++;
-      if (state->sub_index > 2u) state->sub_index = 1;
+      if (state->sub_index > 2u) {
+        state->sub_index = 1;
+        /* 0x834C3: the wrap copies the focus into 0x158767 before the
+         * entry-1 load. */
+        state->target[0] = focus_x;
+        state->target[1] = focus_y;
+        state->target[2] = focus_z;
+      }
       sp_target_load(state, path, state->sub_index);
     }
   }
@@ -1211,6 +1218,7 @@ int fifa96_sp_target_step(fifa96_sp_target_state *state,
   state->target[2] += state->vel_z * delta;
   diff = (int32_t)state->duration - (int32_t)state->accum;
   if (diff < 0) diff = -diff;
+  if (diff > 0x94) diff = 0x94;
   y = (int32_t)match_sp_height_table[0x94 - diff] -
       (int32_t)match_sp_height_table[0x94 - state->duration];
   state->target[1] = y < 0 ? 0 : y;

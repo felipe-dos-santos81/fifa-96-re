@@ -525,9 +525,9 @@ All six tasks landed on `main`:
 - `76d7e76` — live path build at `0x83441`/`0x839BC`/`0x83AF1`/`0x85572`
   and the per-frame step.
 - `b23b486` — `0x157A6F` live camera-focus override.
-- final — `FUN_000786A0` visible half, `0x157A68`/`0x105FB0` resets, docs.
+- final — `0x157A68`/`0x105FB0` resets, direction-map/site/reset corrections,
+  docs.
 
 `make check` **124/124**; M1/M2 `cmp` exact; windowed smoke `124` (timeout)
-with no error. The remaining set-piece leg is FU275-L6: the taker list-head
-clear and the receiver control-field clears. FU-275 §4, FU-351 §24 and FU154
-R2-L2 record the closure.
+with no error. The remaining set-piece leg is all of FU275-L6
+(`FUN_000786A0`). FU-275 §4, FU-351 §24 and FU154 R2-L2 record the closure.

@@ -1690,6 +1690,10 @@ static void match_sp_setup_832a8(struct fifa96_match_run *mr,
   uint32_t team;
   mr->sp_flag_158784 = 0;
   r->timer89 = 0;
+  /* 0x832B0..0x832C0: the native seed. */
+  mr->sp_dir_15877b = 3;
+  mr->sp_dir_15877f = 3;
+  mr->sp_b5_1587b5 = 0;
   if (r->entity_id >= 0) team = (uint32_t)r->entity_id / FIFA96_MATCH_ENTITY_RECORDS;
   else team = FIFA96_MATCH_ENTITY_TEAMS;
   if (team < FIFA96_MATCH_ENTITY_TEAMS) {
@@ -1730,14 +1734,8 @@ static void match_sp_setup_832a8(struct fifa96_match_run *mr,
   if (r->has_slot == 0u) mr->render.camera_target.source = 0;
 }
 
-/* `FUN_00085498` probe, derived completion (L13 leg for the slot arm). The
- * native no-slot arm (record slot empty and the staged 0x1587B0 latch set by
- * `FUN_000832A8`) fires once when the 0x78 timer is crossed, draws
- * `FUN_00092AC8() % span` into the record's `+0x7E7` and latches the delivery
- * row `[0x1587B4]` 3 (| >= 3) or 7; the slot arm runs the input-driven
- * `FUN_00083428` machine. The derived completion applies the same timer gate
- * plus draw so an armed row still resolves; the RNG width is the engine's
- * 16-bit draw (native 32-bit, cadence leg). */
+/* `FUN_0006DAB4` at the live probe: build the three-point path from the team
+ * slot-5 table and the camera grid cell. */
 static void match_sp_build_native_path(struct fifa96_match_run *mr,
                                        struct fifa96_match_run_record *r,
                                        uint8_t dir) {
@@ -1804,15 +1802,9 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
   mr->sp_recv_1587ac = (int32_t)pick;
   mr->sp_b0_1587b0 = 0;
   mr->sp_b6_1587b6 = 0;
-  /* 0x786A0's visible half: the picked receiver takes the list-head flag, so
-   * the next FUN_0008DB6C pick excludes it. The taker's list-head clear and
-   * the receiver control-field clears stay FU275-L6. */
-  t->records[pick].has_slot = 1;
   mr->sp_clock_157a68 = 0;     /* FUN_0004C374 (called twice) */
   mr->sp_global_105fb0 = 0;    /* FUN_000361A4 */
-  /* 0x839BC: the cut rebuilds the path from 0x15877F before the 0x83937
-   * camera target write. The native does not step the interpolation here. */
-  match_sp_build_native_path(mr, r, mr->sp_dir_15877f);
+  /* 0x786A0's list move is not modeled; all of it stays FU275-L6. */
   /* 0x83937: [0x157AA3] = the re-picked receiver and 0x36200(2). */
   mr->render.camera_target.source = 2;
   mr->render.camera_target.record[0] = t->records[pick].pos_x;
@@ -1821,25 +1813,27 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
   return 1;
 }
 
-static int match_sp_delivery_step(struct fifa96_match_run *mr) {
-  uint16_t released = mr->slot.released;
-  uint16_t prev = mr->slot.prev_mapped;
+static void match_sp_input_tail(struct fifa96_match_run *mr) {
   uint16_t raw = mr->slot.raw;
+  uint16_t prev = mr->slot.prev_mapped;
   /* 0x83664/0x83693: the pressed 0x40 clears b3; the raw direction bits set
    * it while the phase is not 8/9 and the 0x40 map bit is held. */
   if ((mr->slot.pressed & 0x40u) != 0u) mr->sp_b3_1587b3 = 0;
-  if (mr->state.phase != 8u && mr->state.phase != 9u &&
-      (prev & 0x40u) != 0u) {
+  if (mr->state.phase == 8u || mr->state.phase == 9u ||
+      (prev & 0x40u) == 0u) {
+    /* 0x837DD..0x837E4: not held and raw zero ends the preview. */
+    if (raw == 0u) mr->sp_dir_15877b = 3u;
+  } else {
     uint8_t dir;
     /* 0x8369A: the pressed 0xB0 bits toggle the interpolation gate. */
     if ((mr->slot.pressed & 0xB0u) != 0u)
       mr->sp_b5_1587b5 = mr->sp_b5_1587b5 == 0u ? 1u : 0u;
-    /* 0x836AE..0x8375A: raw 8/1/4/2 -> 0x15877B._3 and 0x15877F 3/1/2/0,
-     * then the low nibble of [param_2+0x10] is cleared. */
-    if ((raw & 8u) != 0u) dir = 3u;
+    /* 0x83723/0x83755/0x83786/0x837B5: raw 8/1/4/2 -> 0/1/2/3, then the
+     * low nibble of [param_2+0x10] is cleared. */
+    if ((raw & 8u) != 0u) dir = 0u;
     else if ((raw & 1u) != 0u) dir = 1u;
     else if ((raw & 4u) != 0u) dir = 2u;
-    else if ((raw & 2u) != 0u) dir = 0u;
+    else if ((raw & 2u) != 0u) dir = 3u;
     else dir = 0xFFu;
     if (dir != 0xFFu) {
       mr->sp_dir_15877b = dir;
@@ -1848,6 +1842,18 @@ static int match_sp_delivery_step(struct fifa96_match_run *mr) {
       mr->sp_b3_1587b3 = 1;
     }
   }
+  /* 0x836F7: the per-team throw-anim byte clears before the delivery arms. */
+  if (mr->record.entity_id >= 0) {
+    uint32_t team = (uint32_t)mr->record.entity_id /
+                    FIFA96_MATCH_ENTITY_RECORDS;
+    if (team < FIFA96_MATCH_ENTITY_TEAMS)
+      mr->entities.team[team].throw_anim_7e7 = 0;
+  }
+}
+
+static int match_sp_delivery_step(struct fifa96_match_run *mr) {
+  uint16_t released = mr->slot.released;
+  uint16_t prev = mr->slot.prev_mapped;
   if (mr->sp_b0_1587b0 == 0u) {
     /* 0x838xx: the receiver-held arm latches b0/b6 and waits for the cut. */
     if (released == 0x10u) return 2;
@@ -1861,6 +1867,9 @@ static int match_sp_delivery_step(struct fifa96_match_run *mr) {
     }
     if (released == 0x40u && mr->sp_b3_1587b3 == 0u) {
       match_sp_build_native_path(mr, &mr->record, mr->sp_dir_15877f);
+      mr->sp_target.sub_index = 0;   /* 0x158780 */
+      mr->sp_dir_15877b = 0;         /* 0x15877E */
+      mr->sp_dir_15877f = 0;         /* 0x15877F */
       return 3;
     }
     return 0;
@@ -1870,6 +1879,9 @@ static int match_sp_delivery_step(struct fifa96_match_run *mr) {
     return (prev & 0x0Fu) != 0u ? 4 : 0;   /* the clear case is the cut */
   if (released == 0x40u && mr->sp_b3_1587b3 == 0u) {
     match_sp_build_native_path(mr, &mr->record, mr->sp_dir_15877f);
+    mr->sp_target.sub_index = 0;   /* 0x158780 */
+    mr->sp_dir_15877b = 0;         /* 0x15877E */
+    mr->sp_dir_15877f = 0;         /* 0x15877F */
     return 3;
   }
   return 0;
@@ -1889,6 +1901,13 @@ static void match_sp_stage_camera_override(struct fifa96_match_run *mr) {
   }
 }
 
+/* `FUN_00085498` probe. The native no-slot arm (record slot empty and the
+ * staged 0x1587B0 latch set by `FUN_000832A8`) fires once when the 0x78 timer
+ * is crossed, draws `FUN_00092AC8() % span` into `team+0x7E7` and latches the
+ * delivery row `[0x1587B4]` 3 (| >= 3) or 7; the slot arm runs the
+ * input-driven `FUN_00083428` machine. The derived completion applies the same
+ * timer gate plus draw so an armed row still resolves; the RNG width is the
+ * engine's 16-bit draw (native 32-bit, cadence leg). */
 static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
   uint16_t draw = 0;
   /* The native input machine is not live-only, but the M2 characterization
@@ -1906,12 +1925,19 @@ static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
                                   (int16_t)mr->record.delta);
     } else {
       mr->sp_path_valid = 0;
+      (void)fifa96_sp_target_step(&mr->sp_target, mr->sp_path, 0,
+                                  mr->render.camera.pos_x,
+                                  mr->render.camera.pos_y,
+                                  mr->render.camera.pos_z,
+                                  (int16_t)mr->record.delta);
     }
     match_sp_stage_camera_override(mr);
+    match_sp_input_tail(mr);
     if (match_sp_receiver_cut(mr, &mr->record)) return 0;
     code = match_sp_delivery_step(mr);
     if (code != 0) {
       mr->sp_delivery = (uint8_t)code;
+      mr->camera_override_157a6f = 0;   /* 0x854F4 slot-arm clear */
       return 1;
     }
     return 0;
@@ -1928,17 +1954,15 @@ static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
       mr->entities.team[team].throw_anim_7e7 = dir;
       if (dir < 3u) {
         match_sp_build_native_path(mr, &mr->record, dir);
-        (void)fifa96_sp_target_step(&mr->sp_target, mr->sp_path,
-                                    mr->sp_path_valid,
-                                    mr->render.camera.pos_x,
-                                    mr->render.camera.pos_y,
-                                    mr->render.camera.pos_z,
-                                    (int16_t)mr->record.delta);
       } else {
         mr->sp_path_valid = 0;
       }
+      mr->sp_target.sub_index = 0;   /* 0x85577 */
+      mr->sp_dir_15877b = 0;         /* 0x8557D */
+      mr->sp_dir_15877f = 0;         /* 0x85583 */
     }
   }
+  mr->camera_override_157a6f = 0;    /* 0x855A3 no-slot clear */
   mr->sp_delivery = (uint8_t)(dir < 3u ? 3u : 7u);
   return 1;
 }

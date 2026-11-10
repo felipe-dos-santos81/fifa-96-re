@@ -296,7 +296,8 @@ struct fifa96_match_team {
   uint8_t sp_table[FIFA96_MATCH_SP_TABLE_BYTES];
   uint32_t sp_table_len;    /* entry bytes */
   uint8_t sp_table_ready;   /* 1 when the entry loaded */
-  uint8_t throw_anim_7e7;   /* native team+0x7E7: the draw remainder / dir */
+  uint8_t throw_anim_7e7;   /* native team+0x7E7: the no-slot draw remainder,
+                             * written before the path build */
 };
 
 /* FU-120 §2 ball record plus the FU-139 §3.1 staging block. The update chain

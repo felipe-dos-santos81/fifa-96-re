@@ -1909,6 +1909,20 @@ static void test_sp_target_step(void) {
   assert(fifa96_sp_target_step(&st, path, 1, 0, 0x50, 0, 1) == 1);
   assert(st.sub_index == 1);
   assert(st.accum == 1);
+  assert(st.target[1] > 0);          /* the 0x10F3C4 height arc */
+  assert(fifa96_sp_duration_from_metric(0x640) == 0x94);
+  assert(fifa96_sp_duration_from_metric(0) == 3);
+  st.sub_index = 1;
+  st.duration = 8;
+  st.accum = 16;
+  assert(fifa96_sp_target_step(&st, path, 1, 0, 0x50, 0, 1) == 1);
+  assert(st.sub_index == 2);
+  st.target[0] = 1005;
+  st.accum = 16;
+  st.duration = 8;
+  assert(fifa96_sp_target_step(&st, path, 1, 0, 0x50, 0, 1) == 1);
+  assert(st.sub_index == 1);
+  assert(st.target[0] == 2);          /* focus reset + entry-1 velocity */
   assert(fifa96_sp_target_step(&st, path, 0, 7, 9, 11, 1) == 0);
   assert(st.sub_index == 0 && st.target[0] == 7 && st.target[1] == 9 &&
          st.target[2] == 11);

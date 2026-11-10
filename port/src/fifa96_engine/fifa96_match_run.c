@@ -2834,7 +2834,7 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
 #define MATCH_RUN_POST_BANK "Npost.fsh"
 
 /* FU275 L266-7: the slot-5 `.fmt` names from flat 0x107370 (indices 5, 11,
- * 17, 23, 29; the subagent read the retail bank at 3588 bytes each). */
+ * 17, 23, 29; the retail bank reads 3588 bytes each). */
 static const char *const match_sp_fmt_names[5] = {
     "352sp.fmt", "442sp.fmt", "swsp.fmt", "424sp.fmt", "433sp.fmt",
 };
@@ -5688,6 +5688,9 @@ int fifa96_match_run_set_formation(struct fifa96_match_run *mr, uint32_t side,
   if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
   mr->formation[side] = id;
+  /* FUN_0008EA70 -> FUN_0007412C -> FUN_0006D9C4 reloads the per-team
+   * `FUN_0004C384(form*6+5)` table on a formation change. */
+  match_run_formation_sp_seed_team(mr, side, id);
   return 0;
 }
 

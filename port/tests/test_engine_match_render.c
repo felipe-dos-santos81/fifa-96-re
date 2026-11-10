@@ -1477,6 +1477,11 @@ static void test_live_start_gate_and_eye(void) {
 static void test_live_camera_override_focus(void) {
   struct live_fixture f;
   live_fixture_make(&f);
+  assert(f.mr.entities.team[0].sp_table_ready == 1);
+  assert(f.mr.entities.team[1].sp_table_ready == 1);
+  assert(fifa96_match_run_set_formation(&f.mr, 0, 3) == 0);
+  assert(f.mr.entities.team[0].sp_table_ready == 1);
+  assert(f.mr.entities.team[0].sp_table_len == 3588u);
   f.mr.camera_override_triple[0] = 0x123;
   f.mr.camera_override_triple[1] = 0x456;
   f.mr.camera_override_triple[2] = 0x789;
@@ -3058,9 +3063,9 @@ int main(void) {
   test_ball_row_dormant();
   test_engine_match_step_renders();
   test_live_start_gate_and_eye();
-  test_live_camera_override_focus();
   test_view_addend_cardinals();
   if (live_file_exists(LIVE_ISO_PATH)) {
+    test_live_camera_override_focus();
     test_live_begin_formation_pitch_and_kit();
     test_live_matchup_formations();
     test_live_real_team_kits();
