@@ -802,3 +802,57 @@ enum {
   FIFA96_CAMERA_REPLAY_BALL = 3,   /* 0x107B28 */
 };
 int fifa96_camera_replay_select(uint32_t index, int32_t *kind, int32_t *sub);
+
+/* FU351-L2d: FUN_0004CF7C's replay-camera transition body. The native
+ * FUN_0004F8C8 copies the saved start pose into the camera, computes the
+ * six deltas to the target pose, then interpolates with FUN_0004F830 at
+ * `param_4*10` in-ticks and `param_5*10` out-ticks. FUN_0004CF7C passes
+ * ECX=0xA and 0x1E, so the transition is 100/300 ticks. The target pose is
+ * the staged `0x14E470/4/8` + `0x14E4B8/C` + `0x14E4AC` block; the native
+ * producers of those globals stay the replay-camera leg. */
+#define FIFA96_CAMERA_REPLAY_IN_TICKS 10
+#define FIFA96_CAMERA_REPLAY_OUT_TICKS 30
+
+typedef struct fifa96_camera_pose6 {
+  int32_t x, y, z;
+  int32_t yaw, pitch, ratio;
+} fifa96_camera_pose6;
+
+typedef struct fifa96_camera_replay_blend {
+  fifa96_camera_pose6 start; /* native 0x14E4F8 */
+  int32_t dx, dy, dz;        /* native 0x108BD4/D8/DC */
+  int32_t dyaw, dpitch;      /* native 0x108BE0/E4, signed 16-bit deltas */
+  int32_t dratio;            /* native 0x108BE8 */
+  int32_t elapsed;           /* native 0x107DE0 */
+  int32_t in_time;           /* native 0x107DE4 */
+  int32_t out_time;          /* native 0x107DE8 */
+  int32_t active;            /* native [0x107DD8] */
+} fifa96_camera_replay_blend;
+
+/* FUN_0004F830: the native integer ease. `elapsed < in_time` is
+ * `delta*elapsed^2/(2*in*out)`, `in_time <= elapsed <= out_time` is
+ * `delta*(2*elapsed-in)/(2*out)`, and `elapsed > out_time` is
+ * `delta - delta*(in+out-elapsed)^2/(2*in*out)`. Products are truncated to
+ * 32 bits before the signed divide, as in the native EAX-only chain. A
+ * zero denominator returns 0 (the native would fault; no live caller passes
+ * one). */
+int32_t fifa96_camera_replay_ease(int32_t delta, int32_t in_time,
+                                  int32_t out_time, int32_t elapsed);
+
+/* FUN_0004F8C8's start arm with the FUN_0004CF7C 10/30 in/out constants.
+ * `start` may be NULL (the native then snapshots `pose`); `target` is
+ * required. Copies the start pose into `pose`, stores the deltas, clears
+ * elapsed and sets the active latch. Returns FIFA96_OK. */
+int fifa96_camera_replay_begin(fifa96_camera_pose6 *pose,
+                               const fifa96_camera_pose6 *start,
+                               const fifa96_camera_pose6 *target,
+                               fifa96_camera_replay_blend *state);
+
+/* FUN_0004F8C8's per-frame arms. `tick` is FUN_00049388; `cancel_input` is
+ * the FUN_00045069 high-nibble result and `view_mode` the FUN_00053D50
+ * value. Returns 1 when the transition has finished (or the cancel gate
+ * fired), 0 while it is still blending. The yaw/pitch writes mask to the
+ * native low 16 bits (the 0x5A/0x5E high-word clears). */
+int fifa96_camera_replay_step(fifa96_camera_pose6 *pose, int32_t tick,
+                              int32_t cancel_input, int32_t view_mode,
+                              fifa96_camera_replay_blend *state);

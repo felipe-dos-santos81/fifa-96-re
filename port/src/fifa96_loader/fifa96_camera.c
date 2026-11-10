@@ -1607,6 +1607,104 @@ int fifa96_camera_replay_select(uint32_t index, int32_t *kind, int32_t *sub) {
   }
 }
 
+static int32_t camera_mul32(int32_t a, int32_t b) {
+  return (int32_t)((uint32_t)a * (uint32_t)b);
+}
+
+static int32_t camera_div32(int32_t num, int32_t den) {
+  return den == 0 ? 0 : (int32_t)((int64_t)num / (int64_t)den);
+}
+
+int32_t fifa96_camera_replay_ease(int32_t delta, int32_t in_time,
+                                  int32_t out_time, int32_t elapsed) {
+  int32_t num, den, t, q;
+  if (elapsed < in_time) {
+    num = camera_mul32(delta, camera_mul32(elapsed, elapsed));
+    den = camera_mul32(2, camera_mul32(out_time, in_time));
+    return camera_div32(num, den);
+  }
+  if (out_time < elapsed) {
+    t = (int32_t)((uint32_t)out_time + (uint32_t)in_time -
+                  (uint32_t)elapsed);
+    num = camera_mul32(delta, camera_mul32(t, t));
+    den = camera_mul32(2, camera_mul32(out_time, in_time));
+    q = camera_div32(num, den);
+    return delta - q;
+  }
+  num = camera_mul32(delta, (int32_t)(2u * (uint32_t)elapsed -
+                                     (uint32_t)in_time));
+  den = camera_mul32(2, out_time);
+  return camera_div32(num, den);
+}
+
+int fifa96_camera_replay_begin(fifa96_camera_pose6 *pose,
+                               const fifa96_camera_pose6 *start,
+                               const fifa96_camera_pose6 *target,
+                               fifa96_camera_replay_blend *state) {
+  int32_t d;
+  if (!pose || !target || !state) return -FIFA96_ERR_INVALID;
+  if (start != NULL) *pose = *start;
+  state->start = *pose;
+  state->dx = target->x - pose->x;
+  state->dy = target->y - pose->y;
+  state->dz = target->z - pose->z;
+  d = (target->yaw - pose->yaw) & 0xFFFF;
+  if (d > 0x8000) d -= 0x10000;
+  state->dyaw = d;
+  d = (target->pitch - pose->pitch) & 0xFFFF;
+  if (d > 0x8000) d -= 0x10000;
+  state->dpitch = d;
+  state->dratio = target->ratio - pose->ratio;
+  state->elapsed = 0;
+  state->in_time = FIFA96_CAMERA_REPLAY_IN_TICKS * 10;
+  state->out_time = FIFA96_CAMERA_REPLAY_OUT_TICKS * 10;
+  state->active = 1;   /* FUN_0004CF7C 0x4D037 */
+  return FIFA96_OK;
+}
+
+int fifa96_camera_replay_step(fifa96_camera_pose6 *pose, int32_t tick,
+                              int32_t cancel_input, int32_t view_mode,
+                              fifa96_camera_replay_blend *state) {
+  int32_t total;
+  if (!pose || !state) return -FIFA96_ERR_INVALID;
+  total = state->out_time + state->in_time;
+  if (total <= state->elapsed) {
+    state->active = 0;
+    return 1;
+  }
+  if (!state->active && cancel_input != 0 && view_mode != 0x14) {
+    state->elapsed = 0;
+    state->in_time = 0;
+    state->out_time = 0;
+    state->active = 0;
+    return 1;
+  }
+  state->elapsed += tick;
+  if (total < state->elapsed) state->elapsed = total;
+  pose->x = state->start.x +
+            fifa96_camera_replay_ease(state->dx, state->in_time,
+                                      state->out_time, state->elapsed);
+  pose->y = state->start.y +
+            fifa96_camera_replay_ease(state->dy, state->in_time,
+                                      state->out_time, state->elapsed);
+  pose->z = state->start.z +
+            fifa96_camera_replay_ease(state->dz, state->in_time,
+                                      state->out_time, state->elapsed);
+  pose->yaw = (state->start.yaw +
+               fifa96_camera_replay_ease(state->dyaw, state->in_time,
+                                         state->out_time, state->elapsed)) &
+              0xFFFF;
+  pose->pitch = (state->start.pitch +
+                 fifa96_camera_replay_ease(state->dpitch, state->in_time,
+                                           state->out_time,
+                                           state->elapsed)) &
+                0xFFFF;
+  pose->ratio = state->start.ratio +
+                fifa96_camera_replay_ease(state->dratio, state->in_time,
+                                          state->out_time, state->elapsed);
+  return 0;
+}
+
 /* The default-arm handler dispatch (FUN_000505D0's `(*&0x108B80)[iVar6]`).
  * The engine needs the staged camera-record subset + behavior block; without
  * them the arm stays unported (0) and the tape is unchanged. */

@@ -2428,6 +2428,95 @@ static void test_replay_select(void) {
   assert(fifa96_camera_replay_select(0, &kind, NULL) == -FIFA96_ERR_INVALID);
 }
 
+static void test_camera_replay_blend(void) {
+  /* FUN_0004F8C8 / FUN_0004F830 with the FUN_0004CF7C 0xA/0x1E times:
+   * in_time = 100, out_time = 300, total 400 ticks. */
+  fifa96_camera_pose6 pose = {100, 200, 300, 0x1000, 0x2000, 4000};
+  const fifa96_camera_pose6 start = {0, 0, 0, 0, 0, 0};
+  const fifa96_camera_pose6 target = {600, 0, 0, 0x2000, 0, 6000};
+  fifa96_camera_replay_blend state;
+  memset(&state, 0, sizeof state);
+
+  assert(fifa96_camera_replay_ease(600, 100, 300, 0) == 0);
+  assert(fifa96_camera_replay_ease(600, 100, 300, 50) == 25);
+  assert(fifa96_camera_replay_ease(600, 100, 300, 100) == 100);
+  assert(fifa96_camera_replay_ease(600, 100, 300, 200) == 300);
+  assert(fifa96_camera_replay_ease(600, 100, 300, 300) == 500);
+  assert(fifa96_camera_replay_ease(600, 100, 300, 350) == 575);
+  assert(fifa96_camera_replay_ease(600, 100, 300, 400) == 600);
+  assert(fifa96_camera_replay_ease(600, 100, 300, 500) == 500);
+  assert(fifa96_camera_replay_ease(600, 0, 0, 0) == 0);
+
+  assert(fifa96_camera_replay_begin(&pose, &start, &target, &state) ==
+         FIFA96_OK);
+  assert(pose.x == 0 && pose.y == 0 && pose.z == 0);
+  assert(pose.yaw == 0 && pose.pitch == 0 && pose.ratio == 0);
+  assert(state.start.x == 0 && state.dx == 600 && state.dyaw == 0x2000);
+  assert(state.dpitch == 0 && state.dratio == 6000);
+  assert(state.in_time == 100 && state.out_time == 300 && state.elapsed == 0);
+  assert(state.active == 1);
+
+  assert(fifa96_camera_replay_step(&pose, 100, 0, 0, &state) == 0);
+  assert(state.elapsed == 100);
+  assert(pose.x == 100 && pose.y == 0 && pose.z == 0);
+  assert(pose.yaw == 0x0555 && pose.pitch == 0 && pose.ratio == 1000);
+
+  assert(fifa96_camera_replay_step(&pose, 100, 0, 0, &state) == 0);
+  assert(state.elapsed == 200);
+  assert(pose.x == 300 && pose.yaw == 0x1000 && pose.pitch == 0);
+  assert(pose.ratio == 3000);
+
+  assert(fifa96_camera_replay_step(&pose, 100, 0, 0, &state) == 0);
+  assert(state.elapsed == 300);
+  assert(pose.x == 500 && pose.yaw == 0x1AAA && pose.pitch == 0);
+  assert(pose.ratio == 5000);
+
+  assert(fifa96_camera_replay_step(&pose, 100, 0, 0, &state) == 0);
+  assert(state.elapsed == 400);
+  assert(pose.x == 600 && pose.y == 0 && pose.z == 0);
+  assert(pose.yaw == 0x2000 && pose.pitch == 0 && pose.ratio == 6000);
+  assert(fifa96_camera_replay_step(&pose, 1, 0, 0, &state) == 1);
+  assert(state.active == 0);
+
+  /* A NULL start snapshots the current pose before computing the deltas. */
+  memset(&pose, 0, sizeof pose);
+  pose.x = 10;
+  pose.y = 20;
+  pose.z = 30;
+  pose.yaw = 0x100;
+  pose.pitch = 0x200;
+  pose.ratio = 300;
+  memset(&state, 0, sizeof state);
+  assert(fifa96_camera_replay_begin(&pose, NULL, &target, &state) ==
+         FIFA96_OK);
+  assert(state.start.x == 10 && state.start.yaw == 0x100);
+  assert(state.dx == 590 && state.dyaw == 0x1F00);
+  assert(state.dpitch == -0x200 && state.dratio == 5700);
+
+  /* The 0x4F8C8 cancel gate: only runs while the latch is clear and the
+   * view mode is not 0x14. */
+  state.active = 0;
+  state.elapsed = 0;
+  assert(fifa96_camera_replay_step(&pose, 1, 1, 0, &state) == 1);
+  assert(state.in_time == 0 && state.out_time == 0);
+  assert(state.elapsed == 0 && state.active == 0);
+  assert(fifa96_camera_replay_begin(&pose, &start, &target, &state) ==
+         FIFA96_OK);
+  state.active = 0;
+  state.elapsed = 0;
+  assert(fifa96_camera_replay_step(&pose, 1, 1, 0x14, &state) == 0);
+  assert(state.elapsed == 1 && state.in_time == 100);
+
+  assert(fifa96_camera_replay_begin(NULL, &start, &target, &state) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_replay_begin(&pose, &start, NULL, &state) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_replay_step(NULL, 0, 0, 0, &state) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_replay_step(&pose, 0, 0, 0, NULL) ==
+         -FIFA96_ERR_INVALID);
+}
+
 static void test_behavior_table(void) {
   /* First-hand 0x10896C (504 B) rows {target0, target1, class, field3(+0xC),
    * +0x10, +0x18, +0x24, +0x28, const30, const34, sub-record pointer(+0x50)}:
@@ -3029,6 +3118,7 @@ int main(void) {
   test_rate_event();
   test_camera_height_producer();
   test_replay_select();
+  test_camera_replay_blend();
   puts("test_camera: ok");
   return 0;
 }

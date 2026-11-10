@@ -4974,7 +4974,10 @@ the build also produces the windowed `fifa96` target (`make game`).
     with FUN_00036544's +-0x720/+-0xB10 clamp (FU-351 §15). The pose-feed
     computed-call arguments are closed: FUN_0004B8D4's side axis plus the
     `0x1577C2` lead word drive `FUN_0004E248`, and the `0x51047` ECX guard
-    is the staged `handler_skip` (FU-351 §16).
+    is the staged `handler_skip` (FU-351 §16). The replay camera blend body is
+    ported too: `FUN_0004F8C8`/`FUN_0004F830` with the `0x4CF7C` 100/300-tick
+    start, six-field deltas, finish latch and staged cancel gate (FU-351 §17);
+    the replay target globals and call site remain open.
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

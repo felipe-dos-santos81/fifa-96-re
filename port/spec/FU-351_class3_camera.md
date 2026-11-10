@@ -723,3 +723,61 @@ zero-guard skip, and the pose-step `+17/-17` effects.
 (`[0x107DD8]=1`, the `FUN_0004F8C8` downstream) is still unported, as are
 the alternate `[0x105FC4]` target sources and the non-live row-0x17
 action-camera installer.
+
+## 17. FU351-L2d replay blend body (2026-11-10)
+
+**Evidence.** Fresh `decompile_function`/`disassemble_function` `0x4F8C8`
+(202 instructions), `0x4F830` (67), `0x4CF7C` (63), `0x45069` (30) and
+`0x37114` (14). Fresh `read_memory`: `0x14E470..0x14E488` = 0,
+`0x14E4AC` = 0, `0x14E4B8/0x14E4BC` = 0, `0x1067F3/4` = 0,
+`0x107DE0/DE4/DE8` = 0, `0x107DD8` = 0.
+
+**Erratum (quoted).** FU351 §16 says the `FUN_0004CF7C` replay driver is
+still unported. The `FUN_0004F8C8`/`FUN_0004F830` blend body and the
+`0x4CF7C` start constants are now ported; the remaining part is the replay
+target producer/call site, not the interpolation.
+
+**Native shape.**
+
+- `FUN_0004F8C8(camera, start, target, in, out)` copies `start` into the
+  camera when non-NULL, snapshots it at `0x14E4F8`, and computes six
+  deltas to `target` at `0x108BD4..0x108BE8`. Yaw/pitch deltas wrap through
+  `&0xFFFF` and take the `>0x8000` negative arm. With no `start`, the
+  current camera is snapshotted instead.
+- The target arm sets `0x107DE4 = in*10`, `0x107DE8 = out*10`,
+  `0x107DE0 = 0` and returns false. `FUN_0004CF7C` passes `ECX=0xA` and
+  `0x1E`, so the transition is 100/300 ticks.
+- Per-frame, `FUN_0004F8C8` returns true once `in+out <= elapsed` and clears
+  `[0x107DD8]`; otherwise it adds `FUN_00049388`, clamps to `in+out`, and
+  writes `start + FUN_0004F830(delta)`. Yaw/pitch store a dword then clear
+  `+0x5A`/`+0x5E`, i.e. the low 16 bits.
+- `FUN_0004F830` is the integer ease: `delta*t^2/(2*in*out)` for
+  `t < in`, `delta*(2*t-in)/(2*out)` for `in <= t <= out`, and
+  `delta - delta*(in+out-t)^2/(2*in*out)` for `t > out`. Each native
+  product is the low 32-bit EAX result before the signed `IDIV`.
+- The `0x4FA36..0x4FA80` gate runs only while `[0x107DD8] == 0`:
+  `FUN_00045069`'s high-nibble result plus `FUN_00053D50() != 0x14` zeroes
+  the times/elapsed/latch and returns true. `FUN_00045069` also latches
+  `[0x1067F4] = 5`; `FUN_00037114(1)` issues the `0x974D8` sound request.
+
+**Landed.** `fifa96_camera_pose6` and `fifa96_camera_replay_blend` mirror
+the six native record fields and the `0x14E4F8`/`0x108BD4`/
+`0x107DE0..DE8`/`[0x107DD8]` state. `fifa96_camera_replay_ease` is
+`FUN_0004F830`; `fifa96_camera_replay_begin` is the `FUN_0004CF7C`
+start arm with `10/30`; `fifa96_camera_replay_step` is the per-frame
+`FUN_0004F8C8` arm, with `cancel_input`/`view_mode` staging the gate.
+
+**Verification.** `test_camera` pins the ease at 0/50/100/200/300/350/400/
+500, the start copy and deltas, the 100/300 total, the finish latch, the
+NULL-start snapshot, the cancel gate, the `view_mode == 0x14` exemption and
+the invalid arguments. `make check` **124/124**; M1
+`09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` and M2
+`41521559b2d9beee1890836deea9679f2384d84e0037657d47c3528263f8e75e`
+byte-exact.
+
+**Remaining.** The replay target globals `0x14E470/4/8`, `0x14E4B8/C` and
+`0x14E4AC` and the `FUN_0004CF7C` call site/`FUN_000505D0` pose switch are
+still unstaged. `FUN_00045069`'s `[0x1067F4]` latch and the
+`FUN_00037114(1)` `0x974D8` sound request are not modelled; the cancel input
+is staged. The state-`0xB` action-table consumer remains producer-blocked by
+the non-live row-0x17 installer.
