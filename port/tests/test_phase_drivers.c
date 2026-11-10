@@ -277,6 +277,7 @@ static void test_phase_period_end(void) {
   fifa96_action_phase_period_end_out out;
   assert(fifa96_action_phase_period_end(0, 0, 0, 0, 1, 0x10, 0x11, 0, 0, p0000, &out) == FIFA96_OK);
   assert(out.phase == 0x0Cu && out.side == 1u && out.act == 0x0Bu);
+  assert(out.camera_source == 0u);
   assert(fifa96_action_phase_period_end(1, 0, 3, 1, 0, 0x10, 0x11, 0, 0, p0000, &out) == FIFA96_OK);
   assert(out.phase == 0x0Cu && out.side == 0u && out.act == 0x0Bu);
   assert(fifa96_action_phase_period_end(2, 0, 0, 0, 1, 0, 0, 0, 0, p0000, &out) == FIFA96_OK);
@@ -296,10 +297,13 @@ static void test_phase_period_end(void) {
   assert(out.phase == 0x14u && out.side == 0x22u);
   assert(fifa96_action_phase_period_end(1, 1, 1, 1, 7, 0x21, 0x22, 0, 0, p0000, &out) == FIFA96_OK);
   assert(out.phase == 0x13u && out.side == 7u);
+  assert(out.camera_source == 3u);          /* 0x8BA97 FUN_00036200(3) */
   assert(fifa96_action_phase_period_end(1, 1, 1, 1, 7, 0x21, 0x22, 0, 0, p0010, &out) == FIFA96_OK);
   assert(out.phase == 0x14u && out.side == 0x21u);
+  assert(out.camera_source == 0u);
   assert(fifa96_action_phase_period_end(1, 1, 1, 1, 7, 0x21, 0x22, 0, 0, p0001, &out) == FIFA96_OK);
   assert(out.phase == 0x14u && out.side == 0x22u);
+  assert(out.camera_source == 0u);
   assert(fifa96_action_phase_period_end(4, 1, 0, 0, 3, 0x21, 0x22, 5, 5, p0000, &out) == FIFA96_OK);
   assert(out.phase == 0x13u && out.side == 0x22u);
   assert(fifa96_action_phase_period_end(4, 1, 0, 0, 3, 0x21, 0x22, 6, 5, p0000, &out) == FIFA96_OK);

@@ -1261,6 +1261,7 @@ fifa96_err_t fifa96_action_phase_period_end(
   uint8_t edx;
   uint8_t phase = 0x13u;
   if (!probe || !out) return -FIFA96_ERR_INVALID;
+  out->camera_source = 0u;
   if (extra_time == 0u) {
     out->act = 0x0Bu;
     out->side = 0u;
@@ -1291,6 +1292,9 @@ fifa96_err_t fifa96_action_phase_period_end(
   } else if (probe[edx] != 0u) {
     phase = 0x14u;
   }
+  /* 0x8BA97: the tied-score/period<4 arm survives the two 0x12250 probes,
+   * so the native issues FUN_00036200(3) before the act tail. */
+  if (edx == 3u) out->camera_source = 3u;
   out->phase = phase;
   out->act = 0x0Cu;
   if (edx == 0u) {

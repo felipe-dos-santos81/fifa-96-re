@@ -5075,9 +5075,11 @@ close-out below).
   `0x75805`/`0x75841` source-0 resets. Row 29's body now records its
   `0x875B1` source-2 write, though its entry stays unwired (FU-142f/OL-48).
   The remaining source-2 site is the unported set-piece staging `0x83937`.
-  `test_engine_match_handlers`, `test_engine_match_act` and
-  `test_arm_bodies` pin the new targets. `make check` green 124/124; M1/M2
-  byte-exact. Record: FU-351 §22.
+  `test_engine_match_handlers`, `test_engine_match_act`,
+  `test_phase_drivers` and `test_arm_bodies` pin the new targets. The
+  extra-time chooser now carries the `0x8BA97` source 3 on its
+  tied-score/no-probe arm. `make check` green 124/124; M1/M2 byte-exact.
+  Record: FU-351 §22.
 
 - **Phase 110 source-4 replay target writer (2026-11-10).** The replay state
   now carries the `0x157B02`/`0x157B16` goal ring and the `0x15A99E` activity

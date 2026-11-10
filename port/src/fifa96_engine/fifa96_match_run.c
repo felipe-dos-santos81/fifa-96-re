@@ -6004,6 +6004,8 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
                                           mr->score[(side ^ 1u) & 1u], side, 0u, 0u, 0u,
                                           0u, probe, &out);
       if (rc != FIFA96_OK) return rc;
+      if (out.camera_source != 0u)
+        mr->render.camera_target.source = out.camera_source;
       if (out.phase != FIFA96_ACTION_PHASE_NONE) {
         rc = fifa96_match_run_write_phase(mr, out.phase);
         if (rc != 0) return rc;
@@ -6052,6 +6054,8 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
                                         mr->score[(side ^ 1u) & 1u], side, 0u, 0u, 0u,
                                         0u, probe, &out);
     if (rc != FIFA96_OK) return rc;
+    if (out.camera_source != 0u)
+      mr->render.camera_target.source = out.camera_source;
     if (out.phase != FIFA96_ACTION_PHASE_NONE) {
       rc = fifa96_match_run_write_phase(mr, out.phase);
       if (rc != 0) return rc;

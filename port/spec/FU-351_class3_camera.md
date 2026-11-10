@@ -981,7 +981,7 @@ preceding `EAX`; `0` restores the focus, `2` the current/selected record,
 | `0x89FC3` | phase 0x19 head | 2 | wired, `rec_first` |
 | `0x895B8`/`0x895F2` | restart terminal | 0 | wired, focus reset |
 | `0x8B864` | phase 0x20 stage 2 | 0 | wired after the situation-1 dispatch |
-| `0x8BA97` | `FUN_0008B9CC` extra-time setup | 3 | setup site not separately ported; the phase-0xC source-3 writer covers the engine period-end path |
+| `0x8BA97` | `FUN_0008B9CC` extra-time setup | 3 | wired through the chooser `camera_source` on the tied-score/no-probe arm |
 | `0x875B1` | row 29 stage 0 | 2 | body writes `target_source = 2`; entry is unwired (FU-142f/OL-48) |
 | `0x83937` | `FUN_00083428` set-piece staging | 2 | body unported (L266-4) |
 | `0x4B204`/`0x4B283` | `FUN_0004B100` init | 0 | reset default |
@@ -1003,16 +1003,17 @@ the phase-0x20 situation-1 re-dispatch.
 record, the row-0x25 team record-0 target, the keeper closedown edge bit
 0x50 and the keeper claim edge bit 0x10 focus resets. `test_engine_match_act`
 pins the phase-0x18 rec_second, phase-0x19 rec_first, the restart focus
-reset and the phase-0x20 stage-2 reset. `test_arm_bodies` pins the row-29
-`target_source = 2` body write. `make check` **124/124**; M1/M2 byte-exact
-(non-live tapes never read `camera_target`).
+reset and the phase-0x20 stage-2 reset. `test_phase_drivers` pins the
+`0x8BA97` source-3 `camera_source` on the tied-score/no-probe arm.
+`test_arm_bodies` pins the row-29 `target_source = 2` body write. `make
+check` **124/124**; M1/M2 byte-exact (non-live tapes never read
+`camera_target`).
 
 **Remaining.** The source-2 write inside the unported set-piece staging
 (`0x83937`) stays with its owner body; row 29's source-2 store is on the
-unwired row-29 entry. The `0x8BA97` extra-time-setup source-3 site inside
-`FUN_0008B9CC` is not separately ported (the engine's derived period-end
-chooser writes the phase-0xC source 3 instead). The source-4 replay
-producer remains FU-351 §21.
+unwired row-29 entry. The source-4 replay target writer is FU-351 §23; its
+non-goal `FUN_0008ED40` activity updates and the `0x515A6`/`0x3BB1C` replay
+UI trigger remain.
 
 ## 23. FU351-L2k source-4 replay target writer (2026-11-10)
 

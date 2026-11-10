@@ -688,7 +688,7 @@ typedef struct fifa96_action_phase_period_end_out {
   uint8_t phase; /* 0x0C/0x13/0x14, or NONE when the native writes no phase */
   uint8_t side;  /* side byte passed to `FUN_000740A0` */
   uint8_t act;   /* `FUN_000888FC` act id (0x0B no extra, 0x0C extra) */
-  uint8_t reserved;
+  uint8_t camera_source; /* 0x36200(3) equal-score/no-probe arm, else 0 */
 } fifa96_action_phase_period_end_out;
 
 /* The derived `FUN_0008B9CC` (`0x8B9CC..0x8BAEF`) period-change chooser.
@@ -705,9 +705,10 @@ typedef struct fifa96_action_phase_period_end_out {
  * `0x12230(1)` (EDX=1 pick), `[2]` = `0x12250(0)`, `[3]` = `0x12250(1)`.
  * A non-zero probe upgrades the extra-time phase from 0x13 to 0x14.
  *
- * Native side paths not modelled: the `FUN_00036200(3)` camera call on the
- * equal-score/period<4/no-probe arm, the post-call `FUN_000888FC` act body,
- * and the `FUN_0004B02C` period-4 caller's `[0x157AC2]=4` write.
+ * The `FUN_00036200(3)` camera call on the equal-score/period<4/no-probe
+ * arm is carried as `camera_source`; the post-call `FUN_000888FC` act body
+ * remains a caller side, and the `FUN_0004B02C` period-4 caller's
+ * `[0x157AC2]=4` write stays with that caller.
  * `probe == NULL` -> -FIFA96_ERR_INVALID (hardening: the native reads an
  * unported helper result). */
 fifa96_err_t fifa96_action_phase_period_end(
