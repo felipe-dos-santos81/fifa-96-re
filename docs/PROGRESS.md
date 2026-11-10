@@ -5038,10 +5038,11 @@ close-out below).
   signed-stage >2 pre-dispatch now carry the native `[0x157AA3] = rec` +
   `0x36200(2)` result. `fifa96_arm_record` gained `target_source`; the
   engine maps it to `render.camera_target.source = 2` and stages the current
-  record's `pos_x/pos_y/pos_z` as the `0x14C454` triple. The row-28/29
-  base-pointer stores stay unwired because their target is `[rec+0]`
-  (`[nearest+0]`), not the record position. `test_engine_match_handlers`
-  pins arm 2 and the pre-dispatch. `make check` green 124/124; M1/M2
+  record's `pos_x/pos_y/pos_z` as the `0x14C454` triple. Row-28 arm 0's
+  `[0x157AA3] = [rec+0]` store is wired to the team record-0 triple; row 29's
+  `[nearest+0]` store stays unwired because row 29 has no live entry
+  (FU-142f/OL-48). `test_engine_match_handlers` pins row-2A arm 2, the
+  pre-dispatch and row-28 arm 0. `make check` green 124/124; M1/M2
   byte-exact. Remaining: source-4 `FUN_0004BCC4`, `FUN_0004F274`
   bookkeeping, `0x3BB1C` replay UI and the non-live row-0x17 producer.
   Record: FU-351 §20.

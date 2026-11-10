@@ -799,7 +799,14 @@ static void test_action_28_runs_body(void) {
   f.mr.record.delta = 0;
   f.mr.record.scratch_a2 = 0;
   f.mr.record.anim_id = 0;               /* OL-80 selector input */
+  f.mr.entities.team[0].records[0].pos_x = 0x321;
+  f.mr.entities.team[0].records[0].pos_y = 0x54;
+  f.mr.entities.team[0].records[0].pos_z = -0x765;
   assert(fifa96_match_dispatch_action(&f.mr, 0x28) == FIFA96_OK);
+  assert(f.mr.render.camera_target.source == 2);
+  assert(f.mr.render.camera_target.record[0] == 0x321);
+  assert(f.mr.render.camera_target.record[1] == 0x54);
+  assert(f.mr.render.camera_target.record[2] == -0x765);
   assert(f.mr.record.target_x == 0x100 + 133);
   assert(f.mr.record.target_z == 0x200 + 55);
   assert(f.mr.record.stage92 == 1);    /* arm 0 latch + arm 1 wait */

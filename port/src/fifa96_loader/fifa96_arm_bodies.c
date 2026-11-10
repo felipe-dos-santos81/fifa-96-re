@@ -277,9 +277,9 @@ fifa96_err_t fifa96_arm_28_step(struct fifa96_arm_record *rec, uint8_t arm) {
    * epilogue, and > 3 also exits. */
   if (arm > 3u) return FIFA96_OK;
   if (arm == 0u) {
-    /* 0x87147: [0x157AA3] = [rec+0] (unmodeled cross-record store, OL-57);
-     * 0x87154: the 0x36200 stub with native EAX=2 (no-op, OL-51). */
-    (void)fifa96_arm_stub_36200();
+    /* 0x87147: [0x157AA3] = [rec+0] (the team base, so the target is the
+     * team's record-0 triple); 0x87154: 0x36200(2). */
+    rec->target_source = 2;
     rec->target.x = rec->global_10f364;                     /* 0x87159..0x87166 */
     rec->target.z = rec->global_10f368;
     /* 0x87169..0x87181: below mode 4, a side-0 team negates the z target. */

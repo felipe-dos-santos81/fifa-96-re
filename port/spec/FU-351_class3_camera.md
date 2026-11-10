@@ -893,17 +893,18 @@ arm 2 and the signed-stage >2 pre-dispatch both set `[0x157AA3] = rec`,
 returns that triple.
 
 **Landed.** `fifa96_arm_record` carries `target_source`; the row-2A
-pre-dispatch and arm 2 set it to 2. `fifa96_match_action_2A` maps it to
-`render.camera_target.source = 2` and stages the current record's
-`pos_x/pos_y/pos_z` as the `0x14C454` triple. The other row-2A arms keep
-the previous source.
+pre-dispatch and arm 2 set it to 2, and row-28 arm 0 sets it to 2 for the
+`[rec+0]` team-base store. `fifa96_match_action_2A` stages the current
+record's `pos_x/pos_y/pos_z`; `fifa96_match_action_28` stages
+`team[side].records[0]` (the team+0x59 base). Both set
+`render.camera_target.source = 2`.
 
-**Verification.** `test_engine_match_handlers` pins arm 2 and the
-signed-stage >2 pre-dispatch (`source == 2` and the three record cells).
+**Verification.** `test_engine_match_handlers` pins row-2A arm 2 and the
+signed-stage >2 pre-dispatch, plus row-28 arm 0's team-record-0 target.
 `make check` **124/124**; M1/M2 byte-exact.
 
-**Remaining.** Row-28/29 `[0x157AA3] = [rec+0]`/`[nearest+0]` target
-the record's base pointer, not this record's position; they stay unwired.
-The source-4 `FUN_0004BCC4` lineup index, `FUN_0004F274` PTR/handler
+**Remaining.** Row 29's `[nearest+0]` store is on the unwired row-29
+entry (FU-142f/OL-48), so there is no live caller to attach. The
+source-4 `FUN_0004BCC4` lineup index, `FUN_0004F274` PTR/handler
 bookkeeping and the `0x3BB1C` replay UI call site remain. The row-0x17
 `[0x10F370]` producer stays non-live (FU-201).
