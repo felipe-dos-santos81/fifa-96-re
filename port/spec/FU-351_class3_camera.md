@@ -989,7 +989,7 @@ preceding `EAX`; `0` restores the focus, `2` the current/selected record,
 | `0x744D6`/`0x744E8` | `FUN_000744D4` | 0 | reset default |
 | `0x75125`/`0x75165` | keeper closedown | 0 | wired from `out.ui` bits 0x20/0x40 |
 | `0x757E0`/`0x75805`/`0x75841` | keeper claim | 0 | wired from `out.ui` bits 0x10/0x40/0x80 |
-| `0x8339B` | `FUN_000832A8` | 0 | unported set-piece staging |
+| `0x8339B` | `FUN_000832A8` no-slot arm | 0 | wired from `match_sp_setup_832a8`; the slot-arm staging stays a leg |
 | `0x92E36` | `FUN_00092E2C` | 0 | reset default |
 
 **Landed.** Rows 0x14/0x25, phases 0x18/0x19, the restart terminal and the
@@ -1000,8 +1000,9 @@ phase 0x18 uses `contact_kind == 3 ? rec_first : rec_second`; phase 0x19 uses
 the phase-0x20 situation-1 re-dispatch.
 
 **Verification.** `test_engine_match_handlers` pins the row-0x14 current
-record, the row-0x25 team record-0 target, the keeper closedown edge bit
-0x50 and the keeper claim edge bit 0x10 focus resets. `test_engine_match_act`
+record, the row-0x25 team record-0 target, the row-0x10 no-slot `0x8339B`
+focus reset, the keeper closedown edge bit 0x50 and the keeper claim edge
+bit 0x10 focus resets. `test_engine_match_act`
 pins the phase-0x18 rec_second, phase-0x19 rec_first, the restart focus
 reset and the phase-0x20 stage-2 reset. `test_phase_drivers` pins the
 `0x8BA97` source-3 `camera_source` on the tied-score/no-probe arm.
@@ -1009,11 +1010,11 @@ reset and the phase-0x20 stage-2 reset. `test_phase_drivers` pins the
 check` **124/124**; M1/M2 byte-exact (non-live tapes never read
 `camera_target`).
 
-**Remaining.** The source-2 write inside the unported set-piece staging
-(`0x83937`) stays with its owner body; row 29's source-2 store is on the
-unwired row-29 entry. The source-4 replay target writer is FU-351 §23; its
-non-goal `FUN_0008ED40` activity updates and the `0x515A6`/`0x3BB1C` replay
-UI trigger remain.
+**Remaining.** The source-2 write inside the unported input-driven set-piece
+machine (`0x83937`, `FUN_00083428`) stays with its owner body; row 29's
+source-2 store is on the unwired row-29 entry. The source-4 replay target
+writer is FU-351 §23; its non-goal `FUN_0008ED40` activity updates and the
+`0x515A6`/`0x3BB1C` replay UI trigger remain.
 
 ## 23. FU351-L2k source-4 replay target writer (2026-11-10)
 

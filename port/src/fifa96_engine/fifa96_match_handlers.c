@@ -1689,6 +1689,10 @@ static void match_sp_setup_832a8(struct fifa96_match_run *mr,
                                  struct fifa96_match_run_record *r) {
   mr->sp_flag_158784 = 0;
   r->timer89 = 0;
+  /* 0x83332/0x8339B: the no-slot arm's 0x36200(0) restores the focus. The
+   * slot arm's 0x361B0 pan request and the full 0x1587xx staging block stay
+   * with the FUN_000832A8 owner leg. */
+  if (r->has_slot == 0u) mr->render.camera_target.source = 0;
 }
 
 /* `FUN_00085498` probe, derived completion (L13 leg for the slot arm). The

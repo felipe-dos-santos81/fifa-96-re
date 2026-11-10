@@ -5078,8 +5078,10 @@ close-out below).
   `test_engine_match_handlers`, `test_engine_match_act`,
   `test_phase_drivers` and `test_arm_bodies` pin the new targets. The
   extra-time chooser now carries the `0x8BA97` source 3 on its
-  tied-score/no-probe arm. `make check` green 124/124; M1/M2 byte-exact.
-  Record: FU-351 §22.
+  tied-score/no-probe arm, and the set-piece no-slot arm writes `0x8339B`
+  source 0. The only remaining `0x36200` site is `0x83937` inside the
+  unported `FUN_00083428` input machine. `make check` green 124/124; M1/M2
+  byte-exact. Record: FU-351 §22.
 
 - **Phase 110 source-4 replay target writer (2026-11-10).** The replay state
   now carries the `0x157B02`/`0x157B16` goal ring and the `0x15A99E` activity

@@ -356,9 +356,11 @@ static void test_action_10_runs_throw_in_body(void) {
   f.mr.goal_snap_x = 0x100;
   f.mr.goal_snap_y = 0;
   f.mr.goal_snap_z = 0x400;
+  f.mr.render.camera_target.source = 2;
 
   /* first dispatch: stage 0 placement -> stage 1 setup -> stage 2 probe wait */
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.render.camera_target.source == 0);   /* 0x8339B no-slot */
   assert(f.mr.record.stage92 == 2u);
   assert(f.mr.record.controlled == 1);
   assert(f.mr.record.helper_request == 1);        /* FUN_0007876C request */
