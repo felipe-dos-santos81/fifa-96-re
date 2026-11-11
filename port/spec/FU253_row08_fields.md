@@ -335,3 +335,21 @@ W24-5's FU252-L4 (which this slice completes with the §3.2 writer census).
 Concerns: (1) `FUN_0006E8E8`'s `+0x8E` write semantics/base (FU253-L4);
 (2) the OL-19/OL-22/OL-34 legs are inherited definitions, not re-derived this
 slice (§4). No census change.
+
+---
+
+## Erratum (2026-11-11) — FU253-L2's `out.events` `0x8ED40` sink is now wired
+
+FU253-L2 lists the `out.events`/`event_code`/`event_sound` sinks
+(`0x8ED40`/`0x8F188`/`0x92820`/`0x974F0`/`0x651F0`, OL-82/OL-27) among the
+unported row-08 sinks. The row-08 scan-hit `0x8ED40` pair is now wired:
+
+- `0x813CD` (the `CALL 0x8ED40` in §2.4's `0x813C3` row, delta `+2`) — **dead**
+  while `user_row_byte` is staged 0 (OL-82),
+- `0x813F5` (the `CALL 0x8ED40` in the `0x813EE`/`0x813F5` row, delta `+2`).
+
+The other FU253-L2 sinks (`0x8F188`, `0x92820`, `0x974F0`, `0x651F0`, plus
+`0x6E598` and `0x7A490`) remain unported, so the leg stays open on them.
+
+Closure record and the full site census: `port/spec/FU72_ring_stats.md`,
+§ "Closure (2026-11-11) — the engine activity wiring".

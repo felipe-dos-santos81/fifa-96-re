@@ -365,3 +365,20 @@ untouched.
 > still dispatches row 0x0C a second time, matching the native installer +
 > machine-tail pair. The live `0x80F61` gate remains producer-blocked
 > (`desc_16`/`[rec+0x24]`), so row 0x0D stays dispatch-NULL.
+
+---
+
+## Erratum (2026-11-11) — FU256-L4's `0x8ED40` sink is now wired
+
+FU256-L4 lists `0x8ED40` among the arm-1 helpers/sinks that are "all named,
+unported, **not** install gates". The row-09 arm-1 pair is now wired:
+
+- `0x80D6C` — the controlled arm (`byte[[ctl+0x28]] == 0x4A`), delta `+2`,
+- `0x80D99` — the acting record (both else arms), delta `+2`.
+
+The other sinks in FU256-L4 remain unported — `0x8F188` (event ring, session
+gate `[0x14C32A]`/`[0x14C312]`, FU-155), `0x92820` (OL-27), `0x7A490` (OL-62)
+and `0x8A3FC` — so the leg stays open on them.
+
+Closure record and the full site census: `port/spec/FU72_ring_stats.md`,
+§ "Closure (2026-11-11) — the engine activity wiring".

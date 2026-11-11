@@ -12260,7 +12260,8 @@ The run now carries the native 2x16 activity table
 value / max triple), keyed by the replay roster id. `fifa96_match_stats_add`
 applies the native 2x weight (`fifa96_stats_weight(delta, 0, 0)`; the
 `+0x8D` writer census found no match-setup store, so the 1.25x branch stays a
-leg) and publishes the max on the sign-extended low word (`0x8EDC2`).
+leg) and publishes the max on the sign-extended low word
+(`0x8EDD5`/`0x8EDD8`).
 `fifa96_match_run_stats_add` resolves `side*11 + pitch` to the native block
 `(team+0x826 ^ side_swap) & 1`, accumulates, and mirrors the value into
 `render.replay.activity_count` so the source-4 selector reads it unchanged.

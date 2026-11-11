@@ -214,3 +214,20 @@ legs L1-L5; FU186 legs L1-L7.
   through the action table (`0x1106E0[0x1B]=0x76D28`); body `0x76D28..0x77727`
   (RET), next row `0x1C` at `0x77728`. Recorded for the byte-exact boundary; no
   under- or over-read in this derivation.
+
+---
+
+## Erratum (2026-11-11) — the stage-2-wide `0x8ED40` sub-installs are now wired
+
+§1's stage-2-wide description names the `0x8F188`/`0x8ED40` sub-installs (codes
+2/3/5/6/0x19) among the unported body. The `0x8ED40` part is now wired at the
+same sites FU302's erratum records: `0x77451` (+0x64), `0x77493` (tracked +5)
+and `0x7749F` (+0x19); `0x774B2` (+5) is dead because the `0x71C94` seat's
+`0x700F4` zeroes `word[0x1577C2]`, and the shared self call covers it.
+
+Still unported: `0x8F188`, and the row-1B `0x7759C` fall-through tail pair
+`0x775FD`/`0x77613` (FU285-L8) — the whole stage-2 wide body is otherwise
+FU285's bounded slice, unchanged.
+
+Closure record and the full site census: `port/spec/FU72_ring_stats.md`,
+§ "Closure (2026-11-11) — the engine activity wiring".

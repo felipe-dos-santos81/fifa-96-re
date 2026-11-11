@@ -639,3 +639,19 @@ port; both are corrected with fresh bytes re-read this session:
    tail now advances B to stage 1, the unported stage-1 arm means B waits
    there instead of re-fouling — the intended bounded behavior, carried by
    L4.
+
+---
+
+## Erratum (2026-11-11) — FU169-L2's `0x8ED40` sink is now wired
+
+FU169-L2 lists `FUN_0008ED40(rec, -3)` (the action-0x0B arm-1 impact
+accumulator, called at `0x81BB7`) as one of the unported arm-1 side effects.
+The stats slice now wires that call at its target address **`0x81BBE`**
+(`fifa96_match_action_0B` arm-1 tail, delta `-3`): the run accumulates the
+weighted delta into the 2 x 16 activity table and republishes the max triple.
+The rest of FU169-L2's sinks remain unported — `FUN_00092040(0xC8, side)`,
+`FUN_000651F0(4|1)`, `FUN_000974F0(0x258)` and `FUN_0008F188` (the `0xA1`/`0xA2`
+speech arms) — so the leg stays open on them.
+
+Closure record and the full site census: `port/spec/FU72_ring_stats.md`,
+§ "Closure (2026-11-11) — the engine activity wiring".

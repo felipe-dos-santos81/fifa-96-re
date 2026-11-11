@@ -40,8 +40,8 @@ static int32_t match_run_replay_roster_id(const struct fifa96_match_run *mr,
 /* FU-72/`FUN_0008ED40`: the 2 x 16 activity table. `reset` is the native
  * clear; `add` walks one block's slots for the key, accumulates the weighted
  * delta and updates the max triple (the native compare is on the sign-extended
- * low word, `0x8EDC2`). The modeled weight base `+0x8D` is always 0, so the
- * live arm is the native `2x`. */
+ * low word, `0x8EDD5`/`0x8EDD8`). The modeled weight base `+0x8D` is always
+ * 0, so the live arm is the native `2x`. */
 void fifa96_match_stats_reset(struct fifa96_match_stats *s) {
   if (!s) return;
   for (uint32_t side = 0; side < 2u; side++)
@@ -62,7 +62,8 @@ int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
     if (s->key[block][slot] != key) continue;
     s->value[block][slot] += fifa96_stats_weight(delta, 0, 0);
     {
-      /* The native max compares the sign-extended low word (`0x8EDC2`). */
+      /* The native max compares the sign-extended low word
+       * (`0x8EDD5`/`0x8EDD8`). */
       int16_t v = (int16_t)s->value[block][slot];
       if (v > (int16_t)s->max_value) {
         s->max_value = v;

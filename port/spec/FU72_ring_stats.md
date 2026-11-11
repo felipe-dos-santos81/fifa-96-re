@@ -541,7 +541,7 @@ superseded; the xref output is the census.
 - `fifa96_match_stats_add` walks the block for the key, accumulates
   `fifa96_stats_weight(delta, 0, 0)` (the native 2x arm; `+0x8D` has no
   writer and stays 0) and publishes the max when the sign-extended low word
-  exceeds it (`0x8EDC2`).
+  exceeds it (`0x8EDD5`/`0x8EDD8`).
 - `fifa96_match_run_stats_add(entity_id, delta)` resolves
   `side = entity_id / 11`, `pitch = entity_id % 11`, the native block
   `(team+0x826 ^ [0x157ABE]) & 1` (via `team.side` and the staged
@@ -593,6 +593,10 @@ superseded; the xref output is the census.
   `test_replay_target_consumes_stats` (source-4 selection from a non-goal
   stat).
 - `make check` 124/124; M1/M2 `cmp` exact. No golden was re-pinned.
+- Max-compare bytes re-read fresh (`disassemble_bytes 0x8EDB8..0x8EDF9`,
+  2026-11-11): the accumulate is `0x8EDC2 ADD [EDX+0x15A99E],EBP`, the
+  sign-extend/compare is `0x8EDD5 MOVSX EDX,AX` / `0x8EDD8 CMP EDX,ECX`
+  (`JLE 0x8EDFE`), and the publish is `0x8EDDC..0x8EDF3`.
 
 ### Legs
 

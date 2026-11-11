@@ -278,6 +278,11 @@ static void test_bridge_hands_off_appearance(void) {
       14, 1, 12, 6, 2, 15, 13, 3, 9, 0, 10};
   static const uint8_t ger_start[FIFA96_MATCH_ENTITY_RECORDS] = {
       5, 7, 13, 9, 0, 12, 3, 10, 2, 6, 11};
+  /* The bridge re-keys the activity table AFTER staging the order; a begin-
+   * only seed would leave slot 0 keyed 0, not the staged roster id. */
+  for (int slot = 0; slot < (int)FIFA96_PCCD_ROSTER_COUNT; slot++)
+    assert(mr->stats.key[0][slot] == mr->roster_order[0][slot]);
+  assert(mr->stats.key[0][0] == bra_start[0]);   /* 14, not the pre-order 0 */
   for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++) {
     assert(mr->sub_lineup[0][pitch] == bra_start[pitch]);
     assert(mr->sub_lineup[1][pitch] == ger_start[pitch]);

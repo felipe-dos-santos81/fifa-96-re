@@ -429,3 +429,23 @@ keeper-CPU leg register); FU296 (the seam).
 Wave review adjudicated FU301-L6's reading correct. Quoted correction: "the seat's BX height is camY-derived (`SI = dword[0x157750]`, nothing writes ESI through `0x77420`), so L10's 'BX = jitter' is superseded; the port must use the camY-derived height, not jitter, and the §6 seat-call discussion aligns accordingly."
 
 **Verdict:** GO with correction — FU301-L6 adjudicated correct; L10's "BX = jitter" superseded; the port uses the camY-derived height (`SI = dword[0x157750]`, nothing writes ESI through `0x77420`).
+
+---
+
+## Erratum (2026-11-11) — FU302-L4's `0x8ED40` sinks are now wired
+
+FU302-L4 says the install-tree sinks `0x8F188`/`0x8ED40`/`0x974DC` are
+themselves unported. The `0x8ED40` calls in the tree are now wired:
+
+- `0x77451` (`0x8ED40(rec, 0x64)`, the `EDI == 0` install arm),
+- `0x77493` (`0x8ED40(tracked, 5)`, the `[0x1577CA] != 0` companion),
+- `0x7749F` (`0x8ED40(rec, 0x19)`, the same arm's exit value),
+- `0x774B2` (`0x8ED40(rec, 5)`, the `p < 0` arm) is **dead**: the `0x71C94`
+  seat's `0x700F4` zeroes `word[0x1577C2]`, so `p` is always 0 and the
+  `JL 0x774A6` path is unreachable; the shared self call covers the value.
+
+`0x8F188` and `0x974DC` remain unported, so FU302-L4 stays open on them (and
+on the `EDI` flag / install-selection tree it names).
+
+Closure record and the full site census: `port/spec/FU72_ring_stats.md`,
+§ "Closure (2026-11-11) — the engine activity wiring".
