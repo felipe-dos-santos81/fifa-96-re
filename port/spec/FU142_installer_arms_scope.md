@@ -3526,3 +3526,34 @@ producer at 0 and the gate un-fired. Event/sound sinks, descriptor bytes and
 the 0x79B1C snap residue remain OL-82. M1/M2 are byte-identical; census
 unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live, 6 blocked,
 action 38/45, phase 25/35**; `make check` **112/112**.
+
+## Row-29 entry closure (2026-11-11)
+
+**Result: row 29 has no live entry; closed as unreachable.** The body
+`0x874E4..0x87738` stays ported as `fifa96_arm_29_step`; it is not counted as
+wired.
+
+Fresh Ghidra on `/FIFA96.EXE`:
+
+- `read_memory 0x1106E0` (0x120 B): slot `0x29` is `0x874E4`
+  (`0x1106E0 + 0x29*4 = 0x110784`); the table is the only reference.
+- `get_xrefs_to 0x874E4` = **1** — the data reference at `0x110784`.
+- `get_xrefs_to 0x110784` = **0**; `search_instructions` operand `0x110784`
+  = **0**.
+- `search_instructions` operand `0x1106E0` = **1** — `ADD EAX,0x1106E0` at
+  `0x7DA77` inside `FUN_0007D9A4` (the read-only table index).
+- `search_instructions MOV EDX,0x29` = **1** — `0x1F53C` in
+  `FUN_0001F440`; the next call is `0x13600(EAX=0x6B)`, not `0x7D9A4`.
+  `MOV DL,0x29` = **0**.
+- `get_function_xrefs 0x7D9A4` = **77** callers, the same census as FU-142f;
+  none passes `0x29`.
+- The body's self-install at `0x87531 MOV EDX,0x3` / `0x8753C CALL 0x7D9A4`
+  installs code `3`, never `0x29`.
+
+The table slot is never written and no dispatcher caller supplies `0x29`, so
+the action-table entry cannot be reached. The `0x2B` dead-entry precedent
+applies: keep the body and its tests, leave the row unwired, and do not count
+it. No code or test changed; the port/wired census is unchanged.
+
+Gate on the docs-only tree: `make check` **124/124**, M1/M2 byte-exact
+(`1e2dcc6` code state).

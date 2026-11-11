@@ -5018,7 +5018,8 @@ the build also produces the windowed `fifa96` target (`make game`).
     receiver id and the post-cut receiver-slot gate keep the next set-piece
     frame in the live arm; `flag_157ab0` is cleared at resolution/reset. See
     FU-275 §5, the FU315 final-review closure and phase 113 in PROGRESS.
-    Row 29's source-2 store has no live entry (FU-142f/OL-48); `FUN_0004F274`
+    Row 29's source-2 store has no live entry (FU-142f/OL-48); the 2026-11-11
+    census closes the entry as unreachable (FU-142 row-29 closure). `FUN_0004F274`
     and the `0x505D0` config-record switch are superseded by the direct view
     path, and `FUN_0003BB1C` is the replay UI loop whose camera call is
     already ported (FU-351 §21).

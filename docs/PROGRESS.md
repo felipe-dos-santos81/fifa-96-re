@@ -5175,3 +5175,16 @@ close-out below).
   three-replay byte-stable determinism message. Windowed smoke used
   `timeout 20s env DISPLAY=:1 make game`, exited `124` as expected, with no
   error in `/tmp/opencode/game-smoke-slot-move-fix.log`. No golden was re-pinned.
+
+- **Phase 114 row-29 entry closure (2026-11-11).** The action-table slot
+  `0x1106E0[0x29] = 0x874E4` is the only reference to the row-29 body; fresh
+  Ghidra gives `get_xrefs_to 0x874E4` = 1 (the table data), `get_xrefs_to
+  0x110784` = 0, `search_instructions` operand `0x110784` = 0, and the table
+  base `0x1106E0` appears only in the dispatcher's read `ADD EAX,0x1106E0`
+  (`0x7DA77`). The sole `MOV EDX,0x29` is `0x1F53C` in the non-match
+  `FUN_0001F440`, whose next call is `0x13600`, not `0x7D9A4`;
+  `MOV DL,0x29` has no match. The body self-installs code `3`
+  (`0x87531`/`0x8753C`), never `0x29`. Row 29 is closed as unreachable; the
+  ported `fifa96_arm_29_step` body stays and is not counted as wired. No code
+  or test changed. Record: FU-142 row-29 closure. Gate on the docs-only tree:
+  `make check` 124/124 and M1/M2 byte-exact (`1e2dcc6` code state).

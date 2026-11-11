@@ -305,6 +305,19 @@ negative path; the deliverable is the evidence section and the closure record.
   update (`wired` +1).
 - `make check`, M1/M2 exact.
 
+### 7.4 Closure (2026-11-11) — **closed unreachable**
+
+Fresh Ghidra closed the row-29 entry: `0x1106E0[0x29] = 0x874E4` is the only
+reference to the body; `get_xrefs_to 0x874E4` = 1 (the table data),
+`get_xrefs_to 0x110784` = 0, `search_instructions` operand `0x110784` = 0, and
+the table base `0x1106E0` appears only in `FUN_0007D9A4`'s read
+`ADD EAX,0x1106E0` (`0x7DA77`). The sole `MOV EDX,0x29` is `0x1F53C` in the
+non-match `FUN_0001F440` (next call `0x13600`, not `0x7D9A4`); `MOV DL,0x29`
+has no match. The body self-installs code `3` (`0x87531`/`0x8753C`), never
+`0x29`. The body stays ported as `fifa96_arm_29_step`, is not counted as
+wired, and no code/test changed. Record: FU-142 row-29 closure; gate
+**124/124**, M1/M2 byte-exact, smoke `124`.
+
 ## 8. Slice 3 — `FUN_0008ED40` activity wiring
 
 ### 8.1 Native contract
