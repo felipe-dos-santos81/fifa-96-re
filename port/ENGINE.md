@@ -12288,3 +12288,44 @@ golden was re-pinned and no completion number moved (no new body or dispatch
 row). Legs: the 1.25x branch, the `FUN_0008ECC4` `+4` counter path, the
 `[0x157ABE]` producer (OL-72), the 23 unwired sites and the recorded-frame
 replay ring. Record: FU-72 closure, FU-351 §23.1, design §8.5.
+
+## Phase 116 — replay trigger and overlay (2026-11-11)
+
+The live replay now arms from the host. `fifa96_match_run_replay_begin`
+implements the `FUN_00064270` arm: it stores state `0x81`
+(`FIFA96_MATCH_REPLAY_ARMED`), sets `hud_armed`, clears `phase_counter`,
+`cursor` and `camera_index`, and selects camera record 0. It stores `0x81`
+only — the native has no `0x80` store, and the `0x80` promotion in
+`fifa96_match_run_replay_step` stays a defensive path with no producer. The
+native gate `[0x109AB0]` (the allocated recorded-frame buffer,
+`FUN_00063EBC`) is modeled by the live, unpaused, `MATCH_SCREEN_ACTIVE` run;
+the buffer itself is a leg. `FIFA96_ENGINE_KEY_REPLAY` (SDL3 `R`, gamepad
+`BACK`) is the trigger: the MATCH dispatch arms on its 0→1 edge through the
+`match_replay_held` latch (reset by the frontend bridge) and only outside the
+replay family, so it never re-arms. The key does not enter the FU-61 action
+word.
+
+While the `0x80` family bit is set, `fifa96_match_run_input` maps the host
+keys to the native button word — Return `1` play/pause, Down `2` slow, Left
+`4` step back, Right `8` step forward, C `0x20` camera cycle, Esc `0x80`
+exit — and accumulates the rising edges in `input_buttons` until the
+granted-frame body consumes them. `fifa96_match_run_frame` calls
+`fifa96_match_run_replay_step` once per granted frame with that word and
+`state.frame_delta` (the `FUN_000510DC` state-1 `FUN_000642FC` call), then
+clears the word. The live ESC pause block is guarded by the replay family, so
+ESC exits the replay through `fifa96_match_run_replay_exit` instead of
+pausing the match; the exit clears the HUD arm and restores camera source 0 /
+index -1.
+
+`test_replay_begin_and_step` pins the arm, the first-step PLAY and source-4
+target, the button walk, the exit and the overlay rows (`ROW_NONE` while
+armed, `ROW_HUD` at PLAY); `test_replay_begin_edges` pins the begin gate;
+`test_replay_input_edges` pins the edge accumulation and the live clear;
+`test_engine_replay_key_arms` pins the R edge, the release, the suppressed ESC
+pause and the eventual exit. `make check` **124/124**; M1/M2 `cmp` exact;
+windowed smoke `124`. No golden was re-pinned and no completion number moved
+(no new body or dispatch row). Legs: the `FUN_0004B100` mode-7 →
+`FUN_000510DC` → `FUN_00064270` request path, the recorded-frame ring
+(`FUN_00063D34`/`CBC`/`FUN_0006428C`) and pause drain, the live-match
+world/clock freeze, the `0x5865C` pre-arm audio, and the `FUN_0003BB1C`
+match-screen UI loop. Record: FU-351 §23.2, design §9.5.

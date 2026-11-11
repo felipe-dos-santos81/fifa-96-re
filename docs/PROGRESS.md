@@ -5214,3 +5214,30 @@ close-out below).
   completion-number movement (no new body or dispatch row). Record: FU-72
   closure, FU-351 §23.1, design §8.5. Commits: `ccff133`, `0ee32ed`,
   `93087af`, `9776269`, `5300b9a`, `5b4564e`, `99c5c4c`.
+
+- **Phase 116 replay trigger and overlay (2026-11-11).** The live replay arms
+  from the host. `fifa96_match_run_replay_begin` is the `FUN_00064270` arm: it
+  stores state `0x81` (never `0x80` — the native has no such store),
+  `hud_armed = 1`, `phase_counter = 0`, `cursor = 0`, `camera_index = 0` and
+  camera record 0. The native buffer gate `[0x109AB0]` (`FUN_00063EBC`) is
+  modeled by the live, unpaused, ACTIVE run; the recorded-frame buffer itself
+  stays a leg. `FIFA96_ENGINE_KEY_REPLAY` (SDL3 `R`, gamepad `BACK`) arms on
+  its 0→1 edge through the `match_replay_held` latch (reset by the frontend
+  bridge), only outside the replay family. In the `0x80` family,
+  `fifa96_match_run_input` maps Return `1`, Down `2`, Left `4`, Right `8`,
+  C `0x20`, Esc `0x80`, accumulating rising edges in `input_buttons` until the
+  granted-frame body consumes them; `fifa96_match_run_frame` calls
+  `fifa96_match_run_replay_step` once per granted frame with the word and
+  `state.frame_delta`. ESC is routed to the replay exit (state 0, HUD arm
+  cleared, camera source 0 / index -1) while the family is active instead of
+  pausing the match. `test_replay_begin_and_step` pins the arm, the first-step
+  PLAY and source-4 target, the button walk, the exit and the overlay rows
+  (`ROW_NONE` while armed, `ROW_HUD` at PLAY); `test_replay_begin_edges`,
+  `test_replay_input_edges` and `test_engine_replay_key_arms` pin the gates,
+  the edge accumulation and the R/ESC routing. **Gate:** `make check`
+  124/124; M1/M2 byte-exact; windowed smoke `124`. No golden re-pin and no
+  completion-number movement (no new body or dispatch row). Legs: the
+  `FUN_0004B100` mode-7 → `FUN_000510DC` → `FUN_00064270` request path, the
+  recorded-frame ring and pause drain, the world/clock freeze, the `0x5865C`
+  pre-arm audio, and the `FUN_0003BB1C` match-screen UI loop. Record: FU-351
+  §23.2, ENGINE Phase 116, design §9.5.

@@ -1073,6 +1073,66 @@ the `FUN_0007A490` tail; FU-72's closure section lists them. The fresh
 row-1A three and the `FUN_0007A490` two). The rebuild/trigger legs named in
 §23 are unchanged.
 
+### 23.2 Erratum (2026-11-11) — the replay trigger (§9 closure)
+
+§23's "the `0x3BB1C` UI loop still gate[s] the replay trigger in the host" is
+superseded for the trigger, the state machine and the overlay. The native arm
+`FUN_00064270` (`0x64270`) is `if ([0x109AB0] != 0) { FUN_0005865C();
+[0x109A98] = 0x81; }` (FU-111 §4, FU-116 §1). `fifa96_match_run_replay_begin`
+stores **`0x81` only** — the native has no `MOV [0x109A98],0x80` producer and
+none is invented — and stages `hud_armed`, `phase_counter = 0`, `cursor = 0`,
+`camera_index = 0` plus `fifa96_match_run_replay_camera_set(0)`.
+
+**Buffer-gate model.** `[0x109AB0]` is the allocated recorded-frame buffer
+(`FUN_00063EBC`). The engine has no frame ring yet, so `begin`'s modeled gate
+is the live, unpaused, `FIFA96_MATCH_SCREEN_ACTIVE` run; the buffer's own
+size/count gate is the recorded-frame-ring leg.
+
+**Trigger.** `FIFA96_ENGINE_KEY_REPLAY` (14) is SDL3 `R` / gamepad `BACK`. The
+MATCH dispatch arms on its 0→1 edge (`match_replay_held` latch, reset by the
+frontend bridge) and only while the run is ACTIVE, unpaused and outside the
+replay family. The key never enters the FU-61 action word.
+
+**Button map.** While the state family bit `0x80` is set,
+`fifa96_match_run_input` maps the host keys onto the native button word:
+Return/CONFIRM → `1`, Down → `2`, Left → `4`, Right → `8`, C/PASS → `0x20`,
+Esc/QUIT → `0x80`. Rising edges accumulate in `input_buttons` across polls and
+persist until the granted-frame body consumes the word, so a tap followed by a
+non-granted step is not lost and a held key produces no new edge.
+
+**Per-frame step.** `fifa96_match_run_frame` calls
+`fifa96_match_run_replay_step(mr, input_buttons, state.frame_delta)` at the top
+of each granted-frame iteration and then clears the word — the `FUN_000510DC`
+state-1 `FUN_000642FC` call (FU-116 §1).
+
+**ESC exit.** The engine's live ESC pause block is guarded by the replay
+family, so while the replay is active ESC stages `0x80` and leaves through
+`fifa96_match_run_replay_exit` (`FUN_00064E8C`'s reachable stores: state 0,
+`[0x109AC4]` arm cleared, camera source 0 / index -1) instead of pausing the
+match.
+
+**Verification.** `test_replay_begin_and_step` pins the arm state, the
+first-step PLAY and source-4 target, the button walk and the exit reset, and
+its overlay assertions pin `ROW_NONE` while armed and `ROW_HUD` at PLAY
+through `fifa96_match_run_replay_row` (the armed state has no row; the
+`FUN_00064C34` row additionally needs the `hud_armed`/`[0x109AC4]` arm).
+`test_replay_input_edges` pins the edge accumulation and the live clear;
+`test_replay_begin_edges` pins the begin gate;
+`test_engine_replay_key_arms` pins the R edge, the release, the ESC
+suppression and the eventual exit. `make check` **124/124**; M1/M2
+byte-exact; windowed smoke `124`. No completion number moved: no new native
+body and no dispatch row.
+
+**Legs.** The native request path `FUN_0004B100` mode 7 → `FUN_000513EC`/
+`FUN_00053BB8` → `FUN_00051270`/`0x51370`/`0x512B0` → `FUN_000510DC` →
+`FUN_00064270` is not wired (the host key is the trigger); the recorded-frame
+ring (`FUN_00063D34`/`FUN_00063CBC`/`FUN_0006428C`) and the pause drain
+`[0x9AA8]` are absent; the live-match world/clock freeze is not modeled; the
+`0x5865C` pre-arm audio call is not invoked; and the full `FUN_0003BB1C`
+match-screen menu/scoreboard/audio loop stays a separate UI slice. The `0x80`
+state promotion in `replay_step` remains a defensive path with no native
+producer.
+
 ## 24. FU351-L2l set-piece target chain closure (2026-11-10)
 
 **Erratum (quoted).** §22's "Remaining" paragraph says the `0x158780`

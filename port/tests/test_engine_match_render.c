@@ -2719,10 +2719,13 @@ static void test_replay_begin_and_step(void) {
   assert(r->state == FIFA96_MATCH_REPLAY_ARMED);   /* the 0x64270 arm */
   assert(r->hud_armed == 1);
   assert(r->cursor == 0 && r->camera_index == 0);
+  assert(fifa96_match_run_replay_row(&mr) == FIFA96_MATCH_REPLAY_ROW_NONE);
   assert(fifa96_match_run_replay_step(&mr, 0, 0) == 0);
   assert(r->state == FIFA96_MATCH_REPLAY_PLAY);    /* first step -> 0x82 */
   assert(mr.render.camera_target.source == 4);
   assert(mr.render.camera_target.index == 7);      /* the 0,1,0 ring */
+  /* The armed HUD row appears at PLAY; the armed state itself has no row. */
+  assert(fifa96_match_run_replay_row(&mr) == FIFA96_MATCH_REPLAY_ROW_HUD);
 
   assert(fifa96_match_run_replay_step(&mr, 1, 0) == 0);
   assert(r->state == FIFA96_MATCH_REPLAY_PAUSE);

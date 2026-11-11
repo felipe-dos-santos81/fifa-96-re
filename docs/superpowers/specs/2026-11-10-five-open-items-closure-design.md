@@ -494,6 +494,43 @@ recorded-frame replay ring.
 - Non-live tapes: no replay trigger, M1/M2 unchanged.
 - `make check`, M1/M2 exact, smoke.
 
+### 9.5 Closure record (2026-11-11)
+
+Landed as planned:
+
+- `fifa96_match_run_replay_begin` stores the `FUN_00064270` arm (`0x81`) for
+  a live, unpaused, ACTIVE run, with `hud_armed = 1`, `phase_counter = 0`,
+  `cursor = 0`, `camera_index = 0` and camera record 0. No `0x80` store is
+  invented; the `0x80` promotion in the step stays a defensive path.
+- The `[0x109AB0]` buffer gate is modeled by the live-run gate; the
+  recorded-frame ring it guards is a leg.
+- `FIFA96_ENGINE_KEY_REPLAY` (SDL3 `R`, gamepad `BACK`) arms from the MATCH
+  dispatch on a 0→1 edge (`match_replay_held`, reset by the bridge), only
+  outside the replay family. It never enters the FU-61 action word.
+- `fifa96_match_run_input` maps the replay keys to the native word inside the
+  `0x80` family — Return `1`, Down `2`, Left `4`, Right `8`, C `0x20`,
+  Esc `0x80` — and accumulates rising edges in `input_buttons` until the
+  granted-frame body consumes them.
+- `fifa96_match_run_frame` runs `fifa96_match_run_replay_step` once per
+  granted frame with the word and `state.frame_delta` (`FUN_000510DC` state 1
+  → `FUN_000642FC`), then clears the word.
+- ESC is routed to the replay exit while the family is active, so it no
+  longer pauses the match; the exit clears the HUD arm and restores camera
+  source 0 / index -1.
+- Tests: `test_replay_begin_and_step` (arm, first-step PLAY, source-4 target,
+  button walk, exit, and the overlay rows `ROW_NONE` armed / `ROW_HUD` at
+  PLAY), `test_replay_begin_edges`, `test_replay_input_edges` and
+  `test_engine_replay_key_arms`. `make check` 124/124; M1/M2 byte-exact;
+  windowed smoke 124. No golden re-pin, no completion-number movement.
+
+Remaining legs: the native request path `FUN_0004B100` mode 7 →
+`FUN_000513EC`/`FUN_00053BB8` → `FUN_00051270`/`0x51370`/`0x512B0` →
+`FUN_000510DC` → `FUN_00064270` (the host key is the trigger), the
+recorded-frame ring (`FUN_00063D34`/`FUN_00063CBC`/`FUN_0006428C`) and the
+pause drain `[0x9AA8]`, the live-match world/clock freeze, the `0x5865C`
+pre-arm audio, and the full `FUN_0003BB1C` match-screen menu/scoreboard/audio
+loop.
+
 ## 10. Slice 5 — `FUN_00047298` 23-descriptor pool
 
 ### 10.1 Native contract
