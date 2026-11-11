@@ -785,16 +785,18 @@ _Static_assert(FIFA96_OUTFIELD_SELECT_RECORDS == FIFA96_MATCH_ENTITY_RECORDS,
  * comparison reproduces the native unstaged-pointer reject edge (Task 1).
  *
  * Apply, native order (`0x7D332..0x7D34C`):
- *   - `fifa96_action_duel_swap` (`0x786A0`) moves the record-visible `has_slot`;
- *   - only when the swap really moved the engine slot — pre-swap `slot.entity ==
- *     rec` **and** `rec.has_slot != 0` — rebind `slot.entity` (the `0x786A0`
- *     `[[slot]] = to` store) and run the moved block's clears: the `0x786A0`
- *     tail via `fifa96_control_slot_merge_reset` (words +4/+6/+8/+A/+C/+14/+16)
- *     plus the `0x78B00` `+0x24` byte. If the record held no slot the native
- *     swap is a no-op and `0x78B00([result+0x20])` reads NULL;
  *   - `[team+0x7CB] = 0` (`0x7D33B`) unconditionally on a switch result; the
  *     helper co-sets `clear_team_7cb`/`slot_clear` with `switched`, and the
- *     binder consumes both flags instead of the `switched` shortcut.
+ *     binder consumes both flags instead of the `switched` shortcut;
+ *   - `fifa96_match_run_slot_move` (`0x786A0`) runs the native from-held
+ *     (`slot.entity == rec`, the `[rec+0x20]` pointer) / to-free precondition,
+ *     moves the record-visible `has_slot` pair, the `[[slot]] = to` store and
+ *     the dirs, and runs the moved block's clears: the `0x786A0` tail via
+ *     `fifa96_control_slot_merge_reset` (words +4/+6/+8/+A/+C/+14/+16) plus
+ *     the `0x78B00` `+0x24` byte. If the record is not the pointer owner the
+ *     native call is a no-op and `0x78B00([result+0x20])` reads NULL.
+ * The `0x7D33B` clear sits before the move because the two cells are disjoint
+ * and the brief keeps the native store order in the binder.
  * FU75-L4.5a (tail ordering): the frame seam snapshots `chase.unbound` from
  * `e->has_slot` before the scan, while the native `0x7CD03` reads `[rec+0x20]`
  * after this call; a switch frame can defer the code-8 chase install one
@@ -804,13 +806,11 @@ _Static_assert(FIFA96_OUTFIELD_SELECT_RECORDS == FIFA96_MATCH_ENTITY_RECORDS,
 int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id) {
   struct fifa96_match_team *team;
   struct fifa96_match_entity *e;
-  struct fifa96_match_entity *to;
   fifa96_outfield_select_state s;
   fifa96_outfield_select_out out;
   fifa96_action_duel_candidate mates[FIFA96_OUTFIELD_SELECT_RECORDS];
   uint32_t t;
   uint32_t i;
-  uint8_t slot_owned;
   if (mr == NULL || id < 0 ||
       id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
     return 0;
@@ -861,32 +861,16 @@ int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id) {
       out.new_controlled >=
           (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
     return out.ret;
-  to = &mr->entities
-            .team[(uint32_t)out.new_controlled / FIFA96_MATCH_ENTITY_RECORDS]
-            .records[(uint32_t)out.new_controlled % FIFA96_MATCH_ENTITY_RECORDS];
-  /* The native 0x786A0 reads the rec's `+0x20`; the engine slot must be the one
-   * bound to this record for the block move to be representable. */
-  slot_owned = (uint8_t)((mr->slot.entity == id && e->has_slot != 0) ? 1u : 0u);
-  {
-    fifa96_action_duel_slot from;
-    fifa96_action_duel_slot to_slot;
-    from.has_slot = e->has_slot;
-    to_slot.has_slot = to->has_slot;
-    if (fifa96_action_duel_swap(&from, &to_slot) == FIFA96_OK) {
-      e->has_slot = from.has_slot;
-      to->has_slot = to_slot.has_slot;
-    }
-  }
   /* 0x7D33B: the team `+0x7CB` clear runs before the 0x7D348 slot clear (the
    * two cells are disjoint). The helper co-sets `clear_team_7cb` with
    * `switched`, so consuming the flag is behavior-identical and keeps the
    * advisory field honest. */
   if (out.clear_team_7cb != 0) team->timer7cb = 0;        /* 0x7D33B */
-  if (slot_owned != 0 && out.slot_clear != 0) {
-    mr->slot.entity = out.new_controlled;                 /* 0x786A0 [[slot]] */
-    (void)fifa96_control_slot_merge_reset(&mr->slot);     /* 0x786A0 tail */
-    mr->slot.byte24 = 0;                                  /* 0x78B00 +0x24 */
-  }
+  /* 0x7D348: the 0x786A0 hand-off (owner, back-pointer, dirs, seven tail
+   * words) plus the 0x78B00 `+0x24` clear. The helper applies the native
+   * from-held/to-free precondition itself. */
+  if (out.slot_clear != 0)
+    (void)fifa96_match_run_slot_move(mr, id, out.new_controlled, 1);
   return out.ret;
 }
 
@@ -1068,19 +1052,11 @@ static int match_input_handler(uint32_t handler, void *context) {
                     .team[(uint32_t)team->target / FIFA96_MATCH_ENTITY_RECORDS]
                     .records[(uint32_t)team->target % FIFA96_MATCH_ENTITY_RECORDS];
       if (target->has_slot != 0) return 1;
-      {
-        fifa96_action_duel_slot from;
-        fifa96_action_duel_slot to;
-        from.has_slot = e->has_slot;
-        to.has_slot = target->has_slot;
-        if (fifa96_action_duel_swap(&from, &to) != FIFA96_OK) return 1;
-        e->has_slot = from.has_slot;
-        target->has_slot = to.has_slot;
-        /* FUN_000786A0 moves the slot block with the record pointer; the
-         * engine's single-slot model rebinds it (the FU-70 0x57C64 block
-         * belongs to one entity at a time). */
-        if (c->mr->slot.entity == c->id) c->mr->slot.entity = team->target;
-      }
+      /* 0x7CDB4: FUN_000786A0(rec, EBX). The helper owns the whole move — the
+       * record-visible `has_slot` pair, the engine slot rebind (the FU-70
+       * 0x57C64 block belongs to one entity at a time), the dirs and the seven
+       * tail words. */
+      (void)fifa96_match_run_slot_move(c->mr, c->id, team->target, 0);
       team->timer7cb = (uint32_t)team->target;   /* same id-0 sentinel caveat */
       team->timer820 = 0x3C;
       return 1;

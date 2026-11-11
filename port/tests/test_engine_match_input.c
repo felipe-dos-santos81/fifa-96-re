@@ -710,6 +710,7 @@ static void test_control_switch_moves_slot(void) {
   struct fifa96_match_entity *owner;
   struct fifa96_match_entity *mate;
   int32_t new_controlled;
+  int i;
   stage_select_common(&mr);
   owner = &mr.entities.team[0].records[3];
   mate = &mr.entities.team[0].records[4];
@@ -738,6 +739,23 @@ static void test_control_switch_moves_slot(void) {
   assert(mr.entities.team[0].timer820 == 0x38);/* the per-frame decay ran */
   /* `0x7D1D4` rewrites the slot binding, never `[0x157A83]`. */
   assert(mr.entities.controlled == 1);
+
+  /* The 0x786A0 block carries the dirs (+0x20/+0x21) with the slot. The frame
+   * path above cannot stage them: the FU-70 slot update rewrites anim_b/anim_c
+   * from the mapped pad sample on every granted frame, and a PASS release
+   * carries no direction. This binder-only call stages them; the skip_98 flags
+   * make record 4 the only search candidate, so the dir-shifted triple cannot
+   * change the pick. */
+  stage_select_common(&mr);
+  for (i = 1; i < (int)FIFA96_MATCH_ENTITY_RECORDS; i++)
+    if (i != 4) mr.entities.team[0].records[i].skip_98 = 1;
+  mr.slot.anim_b = 0x31;
+  mr.slot.anim_c = 0x32;
+  assert(fifa96_match_run_select_step(&mr, 3) == 1);
+  assert(mr.slot.entity == 4);
+  assert(mate->has_slot == 1 && owner->has_slot == 0);
+  assert(mate->dir_x == 0x31 && mate->dir_z == 0x32);
+  assert(owner->dir_x == 0 && owner->dir_z == 0);
 }
 
 /* The self path: when the slot record is the controlled actor the handler
@@ -776,14 +794,16 @@ static void test_control_switch_self_returns_zero(void) {
 /* The 0x78B00 clear is tied to the actual slot move: a record without the
  * slot (a contrived direct-binder call — the machine's 0x7CB0D gate keeps it
  * unreachable from the frame) runs the search and reports the switch result,
- * but the 0x786A0 from-held precondition fails, so neither the `slot.entity`
- * rebind nor the moved-block clears run. `0x7D33B` still clears `+0x7CB`. */
+ * but the 0x786A0 from-held precondition (`[rec+0x20]`, the engine
+ * `slot.entity`) fails, so neither the `slot.entity` rebind nor the
+ * moved-block clears run. `0x7D33B` still clears `+0x7CB`. */
 static void test_control_switch_non_slot_does_not_clear(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *non_slot;
   stage_select_common(&mr);
   non_slot = &mr.entities.team[0].records[3];
   non_slot->has_slot = 0;
+  mr.slot.entity = -1;   /* the block is unbound: record 3 is not the holder */
   mr.slot.pressed = 0x11;
   mr.slot.released = 0x22;
   mr.slot.held = 0x33;
@@ -795,7 +815,7 @@ static void test_control_switch_non_slot_does_not_clear(void) {
   assert(fifa96_match_run_select_step(&mr, 3) == 1);
   assert(non_slot->has_slot == 0);
   assert(mr.entities.team[0].records[4].has_slot == 0);
-  assert(mr.slot.entity == 3);
+  assert(mr.slot.entity == -1);
   assert(mr.slot.pressed == 0x11 && mr.slot.released == 0x22);
   assert(mr.slot.held == 0x33);
   assert(mr.slot.reserved_08[0] == 0x44 && mr.slot.reserved_08[2] == 0x55);

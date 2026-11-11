@@ -2751,15 +2751,11 @@ static int fifa96_match_action_18(struct fifa96_match_run *mr) {
       rc = fifa96_action_duel_search(&sin, cands, FIFA96_MATCH_ENTITY_RECORDS, &found);
       if (rc != FIFA96_OK) return rc;
       if (found >= 0) {
-        fifa96_action_duel_slot from;
-        fifa96_action_duel_slot to;
-        struct fifa96_match_entity *target = &mr->entities.team[team].records[found];
-        from.has_slot = e->has_slot;
-        to.has_slot = target->has_slot;
-        rc = fifa96_action_duel_swap(&from, &to);
-        if (rc != FIFA96_OK) return rc;
-        e->has_slot = from.has_slot;
-        target->has_slot = to.has_slot;
+        int32_t target_id =
+            (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)found);
+        /* 0x786A0: the full native hand-off (owner, back-pointer, dirs and
+         * the seven tail words move together). */
+        (void)fifa96_match_run_slot_move(mr, id, target_id, 0);
         mr->record.has_slot = e->has_slot;
       }
     }

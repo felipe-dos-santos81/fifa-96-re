@@ -3470,6 +3470,11 @@ static void test_action_18_runs_body(void) {
   f.mr.entities.team[0].records[1].pos_x = 0x210;
   f.mr.entities.team[0].records[1].pos_z = 0x200;
   f.mr.entities.team[0].records[1].has_slot = 0;
+  f.mr.slot.entity = 0;
+  f.mr.slot.anim_b = 0x11;
+  f.mr.slot.anim_c = 0x22;
+  f.mr.slot.pressed = 0x40;
+  f.mr.slot.byte24 = 0x77;
   assert(fifa96_match_dispatch_action(&f.mr, 0x18) == FIFA96_OK);
   assert(f.mr.record.timer7b == 2);       /* word[+0x7B] = 2 (0x849B7) */
   assert(f.mr.record.timer89 == 0);
@@ -3477,6 +3482,13 @@ static void test_action_18_runs_body(void) {
   assert(f.mr.entities.team[0].records[0].skip_9a == 1);  /* +0x9A latch */
   assert(f.mr.entities.team[0].records[0].has_slot == 0);
   assert(f.mr.entities.team[0].records[1].has_slot == 1); /* SWAP moved it */
+  assert(f.mr.slot.entity == 1);                       /* 0x786A0 [[slot]] */
+  assert(f.mr.entities.team[0].records[1].dir_x == 0x11);
+  assert(f.mr.entities.team[0].records[1].dir_z == 0x22);
+  assert(f.mr.entities.team[0].records[0].dir_x == 0);
+  assert(f.mr.slot.pressed == 0);                      /* the seven-word tail */
+  assert(f.mr.slot.byte24 == 0x77);                    /* row 18 has no 0x78B00 */
+  assert(f.mr.record.has_slot == 0);
   assert(f.mr.entities.team[0].records[0].code == 0x18);  /* rejected install */
   drop_fixture(&f);
 
