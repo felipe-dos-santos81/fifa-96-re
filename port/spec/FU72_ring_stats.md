@@ -489,3 +489,32 @@ live in FU-142 Appendix L.
   `fifa96_match_run_add_goal` remains the plain increment for the unported
   gameplay paths. The M2 tape's goal step runs the derived source and stays
   byte-identical (FU-142 L.6/L.8).
+
+## Erratum (2026-11-11) — the `8ED40` weight base is the formation layout
+
+Fresh `decompile_function 0x8ED40` shows the weight base is
+`iVar2 = *(int *)(*param_1 + 0x7AE)` — the formation layout pointer
+`team+0x7AE = &0x11033A + id*0x1D` (`FUN_0006D9C4`), not the team block
+header. The compare is:
+
+```
+if ((int8)[layout+9] < (int8)[entity+0x8D]) {
+    if ((int)[entity+0x8A]>>24 <= ([layout+6]>>24) + ([layout+0xD]>>24))
+        value += value >> 2;
+} else {
+    value *= 2;
+}
+```
+
+`[layout+6]>>24` is raw byte `+9`; `[layout+0xD]>>24` is raw byte `+0x10`.
+Fresh `read_memory 0x11033A` (5 x 0x1D) gives raw `+9` = 3,4,4,4,4 and raw
+`+0x10` = 5,4,4,2,3 for formation ids 0..4. The engine already carries the
+parsed row behind `fifa96_match_formation_layout`; a raw-byte view is the
+missing piece.
+
+The `+0x8D` side is an open identity question: the pool's `active` is 0/1,
+while the native compare against 3/4 means the 1.25x branch is unreachable
+for a boolean. The first task of the stats slice is the `+0x8D` writer/rank
+census; do not wire the weight until it is settled. The table/weight key
+(`[[entity+4]]`), the 2x16 layout, the max publish and the 29 call sites are
+otherwise unchanged from §2.2.

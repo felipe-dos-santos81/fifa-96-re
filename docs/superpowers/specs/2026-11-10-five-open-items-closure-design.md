@@ -324,10 +324,12 @@ wired, and no code/test changed. Record: FU-142 row-29 closure; gate
 
 `FUN_0008ED40(entity, value)` (71 instructions; FU-67 §3.6):
 
-- Weight: `AL = (int8)[entity+0x8D]`, `AH = (int8)[team+0x9]`; if
+- Weight: `AL = (int8)[entity+0x8D]`, `AH = (int8)[[[entity]+0x7AE]+9]`; if
   `AL > AH`, then `value += value >> 2` when
-  `([entity+0x8A] >> 24) <= ([team+6] >> 24) + ([team+0xD] >> 24)`, else
-  unchanged; if `AL <= AH`, `value *= 2`.
+  `([entity+0x8A] >> 24) <= ([[[entity]+0x7AE]+6] >> 24) +
+  ([[[entity]+0x7AE]+0xD] >> 24)`, else unchanged; if `AL <= AH`,
+  `value *= 2`. The base is the formation layout pointer `team+0x7AE`, not
+  the team block header (erratum below).
 - Block: `xor = (side ^ [0x57ABE]) & 1`.
 - Table: `0x5A998`, 2 blocks × 16 slots, stride `0xA`; key `[[entity+4]]`,
   word counter `+4`, dword value `+6`.
@@ -345,12 +347,15 @@ wired, and no code/test changed. Record: FU-142 row-29 closure; gate
 - The run has no stats table. `fifa96_match_run_replay_target` builds
   `activity.id[side][slot]` from `roster_order` and `activity.count` from
   `render.replay.activity_count`; only goal events bump those counts.
-- The team struct starts at `+0x826`; the native team header bytes `+0x9` and
-  `+0x10` (the weight thresholds) are not modeled. The native reads them as
-  the high bytes of dwords `+0x6` and `+0xD`, i.e. `[team+6] >> 24` = byte
-  `+0x9` and `[team+0xD] >> 24` = byte `+0x10`; the rank compare uses byte
-  `+0x9`, and the class gate uses `+0x9 + +0x10`. The two-byte view is the
-  same data as the dword view, not a contradiction.
+- **Erratum (2026-11-11, fresh decompile).** The weight base is
+  `[[entity]+0x7AE]`, the formation layout pointer `0x11033A + id*0x1D`, not
+  `team+0x9`/`team+0x10`. The raw layout bytes are `+9` (row 0 = 3; rows 1..4
+  = 4) and `+0x10` (5/4/4/2/3), already available behind
+  `fifa96_match_formation_layout`. The `+0x8D` compare is therefore a
+  rank/class compare against a formation slot count, not the boolean `active`
+  projection; with `active` 0/1 the 1.25x branch is unreachable. The first
+  task of the slice is the `+0x8D` writer/identity census and a raw-layout
+  view; do not wire the weight until that is settled.
 
 ### 8.3 Required behavior
 
@@ -369,10 +374,11 @@ wired, and no code/test changed. Record: FU-142 row-29 closure; gate
   keep the native `key` field per slot; initialize the keys from the same
   `roster_order` ids the replay target uses. This avoids depending on the
   native pointer identity while keeping `fifa96_stats_accumulate` usable.
-- Add the two team threshold bytes (native `team+0x9`, `team+0x10`) to
-  `struct fifa96_match_team`, or record them as an explicit staged value if
-  their writer cannot be located. The first task of the slice is the writer
-  census; a zero stage is allowed only with a numbered leg.
+- Add the raw formation-layout view (`+9`, `+0x10`) to the team/run model,
+  sourced from `0x11033A + id*0x1D` (the existing
+  `fifa96_match_formation_layout` already parses the row). Resolve the native
+  `+0x8D` rank before wiring the weight; a zero stage is allowed only with a
+  numbered leg.
 - Add an engine helper `match_run_stats_add(mr, entity_id, delta)` that:
   resolves the side/slot, computes `rank_above` and `class_in_range` from the
   record/team fields, calls `fifa96_stats_weight`, and accumulates into the
