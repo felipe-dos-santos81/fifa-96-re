@@ -49,6 +49,7 @@
 #include "fifa96_loader/fifa96_bigf.h"
 #include "fifa96_loader/fifa96_err.h"
 #include "fifa96_loader/fifa96_font.h"
+#include "fifa96_loader/fifa96_match_remap_native.h"
 #include "fifa96_loader/fifa96_record.h"
 
 /* FNV-1a over the 320x240 indexed canvas + 768-byte palette (fifa96_surface_hash):
@@ -3161,6 +3162,79 @@ static void test_live_halftime_panel_flag_gate(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* The native FUN_00047298 builder: five static templates, 23 outputs, the
+ * crossed class/table pairing, the extra class-4 block and blanking. */
+static void test_remap_native_pool(void) {
+  uint8_t pool[FIFA96_MATCH_REMAP_BLOCKS][FIFA96_MATCH_REMAP_BYTES];
+  uint8_t class_a[2][11];
+  uint8_t class_b[2][11];
+  memset(class_a, 0, sizeof class_a);
+  memset(class_b, 0, sizeof class_b);
+
+  fifa96_match_remap_build(pool, class_a, class_b, 0, 0);
+  assert(pool[0][0] == 0x00);                 /* native byte 0 */
+  /* Five template classes: home GK (2), home outfield (0), away GK (3),
+   * away outfield (1), extra (4). */
+  assert(pool[0][0x50] == 0xC0);              /* home GK, row 14 */
+  assert(pool[0][0x52] == 0xC0);
+  assert(pool[1][0x50] == 0xBD);              /* home outfield, row 0 */
+  assert(pool[1][0x52] == 0xBC);
+  /* Sample every band group: 48, 59, 70, 81, 119, 19 (shorts), 26
+   * (torso) and the band-101 second pass. */
+  assert(pool[1][0x5B] == 0xBD && pool[1][0x5D] == 0xBC);  /* 48 */
+  assert(pool[1][0xA5] == 0x00 && pool[1][0xA6] == 0x00);  /* 59 */
+  assert(pool[1][0x66] == 0xBD && pool[1][0x68] == 0xBC);  /* 70 */
+  assert(pool[1][0x8A] == 0xBD && pool[1][0x8C] == 0xBC);  /* 81 */
+  assert(pool[1][0x89] == 0x00);                           /* 119 */
+  assert(pool[1][0xCB] == 0x00);                           /* 19 shorts */
+  assert(pool[1][0xD4] == 0x00);                           /* 26 torso */
+  assert(pool[1][0x75] == 0xFA && pool[1][0x76] == 0xFB);  /* 101 2nd pass */
+  assert(pool[1][0xC2] == 0xC0 && pool[1][0xC3] == 0xBE &&
+         pool[1][0xC4] == 0xBB);              /* 15 collar/eye band */
+  assert(pool[1][0x4E] == 0xBB);
+  assert(pool[11][0x50] == 0x00);             /* away GK, row 15 */
+  assert(pool[12][0x50] == 0xBD);             /* away outfield, row 0 */
+  assert(pool[22][0x00] == 0x00);
+  assert(pool[22][0x50] == 0x00 && pool[22][0x51] == 0x00); /* extra row 13 */
+  assert(pool[22][0x75] == 0xE8 && pool[22][0x76] == 0xE9); /* extra 2nd pass */
+  /* The extra is hardcoded class_a 2 / class_b 2. */
+  assert(pool[22][0xD7] == 0xF0 && pool[22][0xDA] == 0x43);
+  assert(pool[22][0xDB] == 0xE4 && pool[22][0xE3] == 0xEC);
+
+  /* class_a 0 -> skin F6..FD and the 0xE3 clear;
+   * class_b 3 -> hair D7..DA. */
+  class_a[0][1] = 0;
+  class_b[0][1] = 3;
+  fifa96_match_remap_build(pool, class_a, class_b, 0, 0);
+  assert(pool[1][0xD7] == 0xD7 && pool[1][0xDA] == 0xDA);
+  assert(pool[1][0xDB] == 0xF6 && pool[1][0xE2] == 0xFD);
+  assert(pool[1][0xE3] == 0x00);
+
+  /* class_b 2 -> hair F0..F2,0x43; class_a 0 keeps the F6 skin. */
+  class_b[0][1] = 2;
+  fifa96_match_remap_build(pool, class_a, class_b, 0, 0);
+  assert(pool[1][0xD7] == 0xF0 && pool[1][0xDA] == 0x43);
+  assert(pool[1][0xDB] == 0xF6 && pool[1][0xE3] == 0x00);
+
+  /* class_a 3 -> skin DB..E3; class_b 0 -> hair 0x00. */
+  class_a[0][1] = 3;
+  class_b[0][1] = 0;
+  fifa96_match_remap_build(pool, class_a, class_b, 0, 0);
+  assert(pool[1][0xD7] == 0x00 && pool[1][0xDB] == 0xDB);
+  assert(pool[1][0xE3] == 0xE3);
+
+  /* Home gate 9 blanks home 0..10 only. */
+  memset(class_a, 0, sizeof class_a);
+  memset(class_b, 0, sizeof class_b);
+  fifa96_match_remap_build(pool, class_a, class_b, 1, 0);
+  for (int i = 0xD7; i <= 0xE3; i++) assert(pool[0][i] == 0xFF);
+  assert(pool[11][0xD7] == 0x00);
+  /* Away gate 0xD blanks away 11..21 only. */
+  fifa96_match_remap_build(pool, class_a, class_b, 0, 1);
+  assert(pool[11][0xD7] == 0xFF);
+  assert(pool[0][0xD7] == 0x00);
+}
+
 int main(void) {
   test_init_resets_render_state();
   test_null_and_disabled();
@@ -3200,6 +3274,7 @@ int main(void) {
   test_replay_step_machine();
   test_replay_target();
   test_replay_target_consumes_stats();
+  test_remap_native_pool();
   test_replay_begin_and_step();
   test_replay_begin_edges();
   test_replay_input_edges();

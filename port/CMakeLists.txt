@@ -85,6 +85,9 @@ add_library(fifa96_pccd src/fifa96_loader/fifa96_pccd.c)
 target_compile_options(fifa96_pccd PRIVATE ${FIFA96_ENGINE_SAN_FLAGS})
 target_link_options(fifa96_pccd INTERFACE ${FIFA96_ENGINE_SAN_LINK})
 
+add_library(fifa96_match_remap_native src/fifa96_loader/fifa96_match_remap_native.c)
+target_include_directories(fifa96_match_remap_native PUBLIC include PRIVATE src)
+
 add_library(fifa96_kvgt src/fifa96_loader/fifa96_kvgt.c)
 target_link_libraries(fifa96_kvgt PRIVATE fifa96_record)
 add_executable(test_kvgt tests/test_kvgt.c)
@@ -481,7 +484,7 @@ target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror
 target_link_options(fifa96_engine INTERFACE ${FIFA96_ENGINE_SAN_LINK})
 target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing fifa96_vgt_player
                                           fifa96_frontend fifa96_sprite fifa96_record fifa96_bigf
-                                          fifa96_pccd
+                                          fifa96_pccd fifa96_match_remap_native
                                           fifa96_font fifa96_match_lifecycle
                                           fifa96_match_pace fifa96_match_state fifa96_input
                                           fifa96_control fifa96_camera fifa96_projection
