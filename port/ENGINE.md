@@ -12252,3 +12252,38 @@ M1/M2 `cmp` exact. Non-live tapes are unchanged. Record: FU-351 §7.
 is `(-353,434,0)`. Phase 92: "geometry, tick and clamps are unchanged" —
 this phase corrects all three. Phase 91's FU351-L4 history copy is now
 ported; FU351-L1/L2/L5 remain open.
+
+## Phase 115 — `FUN_0008ED40` activity wiring (2026-11-11)
+
+The run now carries the native 2x16 activity table
+(`struct fifa96_match_stats`: key / `+4` word counter storage / `+6` dword
+value / max triple), keyed by the replay roster id. `fifa96_match_stats_add`
+applies the native 2x weight (`fifa96_stats_weight(delta, 0, 0)`; the
+`+0x8D` writer census found no match-setup store, so the 1.25x branch stays a
+leg) and publishes the max on the sign-extended low word (`0x8EDC2`).
+`fifa96_match_run_stats_add` resolves `side*11 + pitch` to the native block
+`(team+0x826 ^ side_swap) & 1`, accumulates, and mirrors the value into
+`render.replay.activity_count` so the source-4 selector reads it unchanged.
+`fifa96_match_run_stats_seed` re-keys at begin, the act-9 reset, and the
+frontend bridge after `roster_order` is staged — the re-key that keeps a
+permuted line-up's stats on the pitch slot the selector reads.
+
+Twelve native addresses are wired: row 1A `0x7694F/0x76A04/0x76A35`, row 1B
+`0x77451/0x77493/0x7749F` (the dead `0x774B2` is covered by the shared call;
+its p term is always 0 because the `0x71C94` seat's `0x700F4` zeroes
+`word[0x1577C2]`), row 09 `0x80D6C/0x80D99`, row 08 `0x813CD` (dead while
+`user_row_byte` is staged 0, OL-82) /`0x813F5`, and row 0B `0x81BBE`. The
+fresh `get_xrefs_to 0x8ED40` census is **35**, not the 29 in FU-72 §2.2; the
+remaining 23 are 19 in unported camera/announce/row-1C-tail bodies, the two
+row-1B `0x7759C` tail calls (`0x775FD`/`0x77613`, FU285-L8) and the two
+`FUN_0007A490` tail calls (`0x7ADD2`/`0x7AE04`).
+
+`test_stats_table_add` pins the 2x weight, the max triple, the miss and the
+NULL edge; `test_stats_permuted_roster_order` pins the bridge re-key and the
+pitch-slot mirror; the row-1A/1B/08/09/0B tests pin each wired delta; and
+`test_replay_target_consumes_stats` pins source-4 selection from a non-goal
+stat. `make check` **124/124**; M1/M2 `cmp` exact; windowed smoke `124`. No
+golden was re-pinned and no completion number moved (no new body or dispatch
+row). Legs: the 1.25x branch, the `FUN_0008ECC4` `+4` counter path, the
+`[0x157ABE]` producer (OL-72), the 23 unwired sites and the recorded-frame
+replay ring. Record: FU-72 closure, FU-351 §23.1, design §8.5.

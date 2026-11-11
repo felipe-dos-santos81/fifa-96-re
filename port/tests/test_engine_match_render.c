@@ -2694,6 +2694,40 @@ static void test_replay_target(void) {
   assert(r->goal_roster[0] == 3);
 }
 
+/* FU-72/FU-351 §23: the source-4 selector consumes the run's stats table via
+ * the mirrored `activity_count`. `fifa96_match_run_stats_seed` keys pitch slot
+ * i with `match_run_replay_roster_id(i)`; a non-goal +60 on pitch slot 4 beats
+ * the selected event's 0x32 bump, so the chooser must pick slot 4 even though
+ * roster 7 is the scoring-run player. */
+static void test_replay_target_consumes_stats(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  struct fifa96_match_run_replay *r = &mr.render.replay;
+  for (int side = 0; side < 2; side++) {
+    for (int slot = 0; slot < 16; slot++) mr.roster_order[side][slot] = slot;
+    mr.roster_order_ok[side] = 1;
+  }
+  fifa96_match_run_stats_seed(&mr);
+  mr.score[0] = 2;
+  mr.score[1] = 1;
+  r->goal_count = 3;
+  r->goal_side[0] = 0;
+  r->goal_roster[0] = 5;
+  r->goal_side[1] = 1;
+  r->goal_roster[1] = 3;
+  r->goal_side[2] = 0;
+  r->goal_roster[2] = 7;                    /* the bumped event player */
+  assert(fifa96_match_run_stats_add(&mr, 4, 30) == 1);  /* 30 * 2 = 60 */
+  assert(mr.stats.value[0][4] == 60);
+  assert(r->activity_count[0][4] == 60);    /* the wrapper mirror */
+  assert(fifa96_match_run_replay_target(&mr) == 1);
+  assert(mr.render.camera_target.source == 4);
+  assert(mr.render.camera_target.index == 4);   /* beats the 0x32 bump */
+  assert(r->activity_count[0][4] == 60);
+  assert(r->activity_count[0][7] == 0x32);      /* event bump only */
+  fifa96_match_run_init(&mr);
+}
+
 static void test_replay_camera_set(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -3054,6 +3088,7 @@ int main(void) {
   test_replay_state_helpers();
   test_replay_step_machine();
   test_replay_target();
+  test_replay_target_consumes_stats();
   test_replay_camera_set();
   test_sub_marks_and_numbers();
   test_overlay_rows_and_timeout();

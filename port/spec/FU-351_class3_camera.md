@@ -1056,6 +1056,23 @@ are not wired, so the table only carries goal-event bumps; the native
 the replay trigger in the host. The selector body and the goal ring are
 exact; those legs are the remaining source-4 fidelity work.
 
+### 23.1 Erratum (2026-11-11) — the non-goal activity wiring
+
+§23's "35 native call sites are not wired" is superseded for the ported
+handlers. The run now carries the native 2x16 table
+(`struct fifa96_match_stats`), the 2x-weight `fifa96_stats_weight` path, the
+max triple and the `render.replay.activity_count` mirror; a non-goal stat now
+feeds the source-4 selector (`test_replay_target_consumes_stats`). Twelve
+native addresses are wired: row 1A `0x7694F/0x76A04/0x76A35`, row 1B
+`0x77451/0x77493/0x7749F` (plus the dead `0x774B2` shared call), row 09
+`0x80D6C/0x80D99`, row 08 `0x813CD` (dead while `user_row_byte` is staged 0)
+/`0x813F5`, and row 0B `0x81BBE`. The remaining 23 sites are 19 in unported
+camera/announce/row-1C-tail bodies, 2 in the row-1B `0x7759C` tail and 2 in
+the `FUN_0007A490` tail; FU-72's closure section lists them. The fresh
+`get_xrefs_to 0x8ED40` census is 35 (the earlier 29 omitted `0x775FD`, the
+row-1A three and the `FUN_0007A490` two). The rebuild/trigger legs named in
+§23 are unchanged.
+
 ## 24. FU351-L2l set-piece target chain closure (2026-11-10)
 
 **Erratum (quoted).** §22's "Remaining" paragraph says the `0x158780`

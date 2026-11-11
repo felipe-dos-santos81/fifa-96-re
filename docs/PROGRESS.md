@@ -5188,3 +5188,29 @@ close-out below).
   ported `fifa96_arm_29_step` body stays and is not counted as wired. No code
   or test changed. Record: FU-142 row-29 closure. Gate on the docs-only tree:
   `make check` 124/124 and M1/M2 byte-exact (`1e2dcc6` code state).
+
+- **Phase 115 `FUN_0008ED40` activity wiring (2026-11-11).** The run now
+  carries the native 2x16 activity table (`struct fifa96_match_stats`, key /
+  `+4` counter storage / `+6` value / max triple) keyed by the replay roster
+  id. `fifa96_match_stats_add` applies the native 2x weight
+  (`fifa96_stats_weight(delta, 0, 0)`; the `+0x8D` writer census found no
+  match-setup store, so the 1.25x branch stays a leg) and publishes the max on
+  the sign-extended low word. `fifa96_match_run_stats_add` resolves the
+  entity (`side*11 + pitch`) to the native block
+  `(team+0x826 ^ side_swap) & 1`, accumulates, and mirrors into
+  `render.replay.activity_count`; `fifa96_match_run_stats_seed` re-keys at
+  begin, the act-9 reset, and the frontend bridge after `roster_order` lands
+  (the permuted-line-up fix). Twelve native addresses are wired: row 1A
+  `0x7694F/0x76A04/0x76A35`, row 1B `0x77451/0x77493/0x7749F` (plus the dead
+  `0x774B2` shared call), row 09 `0x80D6C/0x80D99`, row 08
+  `0x813CD` (dead while `user_row_byte` is staged 0) /`0x813F5`, and row 0B
+  `0x81BBE`. The fresh `get_xrefs_to 0x8ED40` census is **35**, not 29; the
+  remaining 23 are 19 in unported camera/announce/row-1C-tail bodies, the two
+  row-1B `0x7759C` tail calls and the two `FUN_0007A490` tail calls.
+  `test_replay_target_consumes_stats` pins source-4 selection from a non-goal
+  stat; `test_stats_table_add`, `test_stats_permuted_roster_order` and the
+  row 1A/1B/08/09/0B assertions cover the rest. **Gate:** `make check`
+  124/124; M1/M2 byte-exact; windowed smoke `124`. No golden re-pin and no
+  completion-number movement (no new body or dispatch row). Record: FU-72
+  closure, FU-351 §23.1, design §8.5. Commits: `ccff133`, `0ee32ed`,
+  `93087af`, `9776269`, `5300b9a`, `5b4564e`, `99c5c4c`.

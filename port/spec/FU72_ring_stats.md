@@ -521,3 +521,82 @@ is the live weight and the `1.25x` branch is unreachable; keep the 1.25x
 branch as a numbered leg until a writer is found. The stats slice can wire
 the `2x` weight now. The table/weight key (`[[entity+4]]`), the 2x16 layout,
 the max publish and the 29 call sites are otherwise unchanged from §2.2.
+
+## Closure (2026-11-11) — the engine activity wiring
+
+### The fresh census is 35, not 29
+
+`get_xrefs_to 0x8ED40` returns **35** direct call sites. The §2.2 list of 29
+omitted `0x775FD` (the row-1B tail) and five sites in ported bodies:
+`0x7694F/0x76A04/0x76A35` (the row-1A event ladder) and
+`0x7ADD2/0x7AE04` (`FUN_0007A490`). The earlier "29 call sites" statement is
+superseded; the xref output is the census.
+
+### Landed engine model
+
+- `struct fifa96_match_stats` (`fifa96_match_run.h`): 2 blocks x 16 slots,
+  key `[[entity+4]]` projected as the replay roster id, the `+4` word counter
+  as storage (only `FUN_0008ECC4` bumps it; that accessor is unported), the
+  `+6` dword value and the max triple (`[0x5AFB0]`/`[0x5AFB4]`/`[0x5B434]`).
+- `fifa96_match_stats_add` walks the block for the key, accumulates
+  `fifa96_stats_weight(delta, 0, 0)` (the native 2x arm; `+0x8D` has no
+  writer and stays 0) and publishes the max when the sign-extended low word
+  exceeds it (`0x8EDC2`).
+- `fifa96_match_run_stats_add(entity_id, delta)` resolves
+  `side = entity_id / 11`, `pitch = entity_id % 11`, the native block
+  `(team+0x826 ^ [0x157ABE]) & 1` (via `team.side` and the staged
+  `side_swap`), the slot by key search, and mirrors the value into
+  `render.replay.activity_count[block][slot]` so the source-4 selector reads
+  it unchanged.
+- `fifa96_match_run_stats_seed` re-keys the table from
+  `match_run_replay_roster_id`. It runs at begin, at the act-9 reset, and in
+  `fifa96_match_bridge_from_frontend` **after** the bridge stages
+  `roster_order` (that staging happens after begin; without the re-key a
+  permuted line-up accumulated into the order-id slot while the selector read
+  the pitch slot).
+
+### Wired native sites (12 addresses)
+
+| Native | Owner | Delta | Note |
+|---|---|---|---|
+| `0x7694F` | `fifa96_match_action_1A` | `+0x64` | phase-0x10 event arm |
+| `0x76A04` | `fifa96_match_action_1A` | `+0xA` | bounce arm |
+| `0x76A35` | `fifa96_match_action_1A` | `+5` | final event arm |
+| `0x77451` | `match_1b_deep_pan` | `+0x64` | phase-0x10 arm |
+| `0x77493` | `match_1b_deep_pan` | `+5` | tracked companion |
+| `0x7749F` | `match_1b_deep_pan` | `+0x19` | p >= 0 arm |
+| `0x774B2` | `match_1b_deep_pan` | `+5` | **dead**: the `0x71C94` seat's `0x700F4` zeroes `word[0x1577C2]`, so `p` is always 0 and `JL 0x774A6` is unreachable; the shared self call covers it |
+| `0x80D6C` | `match_row09_arm1` | `+2` | controlled `byte[[ctl+0x28]] == 0x4A` arm |
+| `0x80D99` | `match_row09_arm1` | `+2` | acting record (both else arms) |
+| `0x813CD` | `fifa96_match_action_08` | `+2` | user arm; **dead** while `user_row_byte` is staged 0 (OL-82) |
+| `0x813F5` | `fifa96_match_action_08` | `+2` | record arm (scan hit) |
+| `0x81BBE` | `fifa96_match_action_0B` | `-3` | arm-1 impact tail |
+
+### Remaining sites (23)
+
+- 19 in unported bodies: `0x70F44`/`0x70FCE` (`FUN_00070DE0`), the six
+  `FUN_0007131C` sites, `0x72DE3`/`0x72ED1` (`FUN_00072AC4`), the four
+  `FUN_00072478` sites, the four row-1C tail sites
+  (`0x77DFD`/`0x77E38`/`0x77E4E`/`0x77E61`, the `0x779DE..0x77E8B` block)
+  and `0x8AD54` (`FUN_0008A938`).
+- 2 in the unported row-1B `0x7759C..0x77631` fall-through tail
+  (`0x775FD`/`0x77613`, FU285-L8).
+- 2 in the unported `FUN_0007A490` tail (`0x7ADD2`/`0x7AE04`, the
+  `0x7ADC4..0x7AE37` block; `fifa96_ball_pair_stage_tail` covers
+  `0x7A8D1..0x7A934` only).
+
+### Verification
+
+- Tests: `test_stats_table_add` (2x weight, max, miss, NULL),
+  `test_stats_permuted_roster_order` (the bridge re-key and the pitch-slot
+  mirror), the row-1A/1B/08/09/0B handler assertions, and
+  `test_replay_target_consumes_stats` (source-4 selection from a non-goal
+  stat).
+- `make check` 124/124; M1/M2 `cmp` exact. No golden was re-pinned.
+
+### Legs
+
+The 1.25x branch (no `+0x8D` writer), the `FUN_0008ECC4` `+4` counter path,
+the `[0x157ABE]` producer (OL-72; the seed keys by team index and the wrapper
+blocks by `team.side ^ side_swap`), the 23 remaining call sites above, and
+the recorded-frame replay ring remain open.

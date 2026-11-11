@@ -411,6 +411,36 @@ wired, and no code/test changed. Record: FU-142 row-29 closure; gate
 - A non-live tape check: stats writes must not change M1/M2.
 - `make check`, M1/M2 exact, smoke.
 
+### 8.5 Closure record (2026-11-11)
+
+Landed as planned:
+
+- `struct fifa96_match_stats` is the run's 2x16 table (key / `+4` counter
+  storage / `+6` value / max triple). Keys are the replay roster id.
+- `fifa96_match_stats_add` applies `fifa96_stats_weight(delta, 0, 0)` (2x;
+  `+0x8D` stays 0) and publishes the max on the sign-extended low word.
+- `fifa96_match_run_stats_add` resolves the entity to the block/slot,
+  accumulates and mirrors into `render.replay.activity_count`;
+  `fifa96_match_run_stats_seed` runs at begin, the act-9 reset, and in the
+  frontend bridge after `roster_order` is staged (the re-key that keeps a
+  permuted line-up on the pitch slot).
+- Wired 12 native addresses: row 1A `0x7694F/0x76A04/0x76A35`, row 1B
+  `0x77451/0x77493/0x7749F` (the dead `0x774B2` is covered by the shared
+  call), row 09 `0x80D6C/0x80D99`, row 08 `0x813CD` (dead while
+  `user_row_byte` is staged 0) /`0x813F5`, row 0B `0x81BBE`.
+- The remaining 23 sites are 19 in unported bodies (the camera/announce
+  family, the row-1C `0x779DE..0x77E8B` tail and `0x8AD54`), the two row-1B
+  `0x7759C` tail calls and the two `FUN_0007A490` tail calls. The fresh
+  `get_xrefs_to 0x8ED40` census is 35, not 29; the difference is `0x775FD`,
+  the row-1A three and the `FUN_0007A490` two.
+- Tests: the table/weight test, the permuted-order re-key test, the row
+  1A/1B/08/09/0B assertions and the replay-consumption test. `make check`
+  124/124; M1/M2 byte-exact. No golden re-pin.
+
+Remaining legs: the 1.25x branch (no `+0x8D` writer), the `FUN_0008ECC4`
+counter path, the `[0x157ABE]` signal (OL-72), the 23 unwired sites, and the
+recorded-frame replay ring.
+
 ## 9. Slice 4 — replay trigger (`0x515A6`/`0x3BB1C`)
 
 ### 9.1 Native contract
