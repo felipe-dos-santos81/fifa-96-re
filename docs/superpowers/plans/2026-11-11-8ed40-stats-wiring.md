@@ -262,41 +262,85 @@ git commit -m "feat(engine): accumulate row-1B activity"
 
 ---
 
-### Task 3: Wire the row-09/0B sites
+### Task 3: Wire the row-09/08/0B sites
 
 **Files:**
-- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` (row 09 arm 1 and row 0B arm 1)
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` (row-09 arm-1 event path, row-08 handler, row-0B arm 1)
 - Test: `port/tests/test_engine_match_handlers.c`
 
 **Interfaces:**
 - Consumes: `fifa96_match_run_stats_add` from Task 1.
-- Produces: the row-09/0B `+2` / `-3` activity values.
+- Produces: the row-09 `+2`, row-08 `+2` and row-0B `-3` activity values.
 
-- [ ] **Step 1: Write the failing row-09/0B stats assertions**
+Fresh-byte scope (Task 1 review correction):
+- `0x80D6C`/`0x80D99` are the **row-09 arm-1 event path**
+  (`match_row09_arm1`'s `0x80D18` block), not the target block.
+  `0x80D6C` is `8ED40([0x157A83], 2)` (the controlled record, when its
+  `byte[[ctl+0x28]] == 0x4A`); `0x80D99` is `8ED40(EBP, 2)` (the acting
+  record, on the `[0x157A83] == NULL` / anim != 0x4A arms).
+- `0x813CD`/`0x813F5` are **row-08's scan-hit arm** (`0x813A2`, inside
+  `0x81068..0x814AF`), not row 09. The ported `fifa96_outfield_row08_step`
+  exposes the branch as `out.events` + `out.user_row_4a`; the handler
+  `fifa96_match_action_08` has the controlled id and the acting id.
+  `0x813CD` is `8ED40(user, 2)`; `0x813F5` is `8ED40(rec, 2)`. The user arm is
+  unreachable in the current model because `s.user_row_byte` is staged 0
+  (OL-82) — wire it, but record it as a dead arm until the byte has a producer.
+- `0x81BBE` is `8ED40(EBP, -3)` on the row-0B arm-1 impact tail.
 
-Extend `test_action_09_arm1_installs` and `test_action_0b_duel_chain_installs_row_5e` with a `stats.value` assertion for the acting record's key. The native deltas are `+2` (`0x80D6C`/`0x80D99`/`0x813CD`/`0x813F5`) and `-3` (`0x81BBE`).
+- [ ] **Step 1: Write the failing stats assertions**
+
+Row 09: add `test_action_09_arm1_stats` (do not extend
+`test_action_09_arm1_installs`, whose first dispatch takes the target block).
+Stage the `0x80D18` event path: `state.phase = 2`, `record.entity_id = 1`,
+`active = 1`, `stage92 = 1`, `anim_id = 0x11`, `frame = 2`, `face7d = 0`,
+`desc_c = 0`, `desc_16 = 0`, `render.camera.pos_y = 0`,
+`team[0].records[1].lane_x = 0`, `lane_z = 0`, `cam_dz6f = 0`, `bound = 0`,
+`entities.ball.pos_counter_f = 0`, `team[1].target = NONE`.
+
+- Acting arm: `entities.controlled = FIFA96_MATCH_ENTITY_NONE`; assert
+  `match09_event_id == 0x5D` and `stats.value[0][1] == 4` (`+2 * 2`).
+- Controlled arm (fresh fixture): `entities.controlled = 2`,
+  `team[0].records[2].anim_id = 0x4A`; assert `match09_event_id == 0x67`,
+  `stats.value[0][2] == 4` and `stats.value[0][1] == 0`.
+
+Row 08: extend `test_action_08_stage_flag_15877d`'s first dispatch (the
+projection hit) with `stats.value[0][0] == 4` and
+`render.replay.activity_count[0][0] == 4`.
+
+Row 0B: extend `test_action_0b_duel_chain_installs_row_5e` after the third
+dispatch (arm 1) with `stats.value[0][1] == -6` (`-3 * 2`).
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `cmake --build build --target test_engine_match_handlers -j"$(nproc)" && ./build/test_engine_match_handlers`
-Expected: FAIL — the stats value is still 0.
+Expected: FAIL — the stats values are still 0.
 
 - [ ] **Step 3: Add the calls**
 
-In `fifa96_match_action_09`:
+In `match_row09_arm1`, on both `0x80D8D` else arms (controlled present with
+anim != 0x4A, and controlled absent):
+```c
+(void)fifa96_match_run_stats_add(mr, r->entity_id, 2);   /* 0x80D99 */
+```
+and in the `ctl != NULL && ctl->anim_id == 0x4Au` arm, before the event store:
+```c
+(void)fifa96_match_run_stats_add(mr, controlled, 2);     /* 0x80D6C */
+```
 
-- in the `ctl->anim_id == 0x4A` branch that sets `match09_event_id = 0x67`
-  (`0x80D50..0x80D7C`), call
-  `(void)fifa96_match_run_stats_add(mr, controlled, 2);`
-- in the else branch that sets `match09_event_id = 0x5D`
-  (`0x80D8D..0x80DA5`), call
-  `(void)fifa96_match_run_stats_add(mr, r->entity_id, 2);`
-- the target-block pair `0x813CD`/`0x813F5` is the same `+2`; wire it only if
-  the engine’s target block carries the matching `0x813A2` branch, otherwise
-  record the pair as a leg.
+In `fifa96_match_action_08`, after `fifa96_outfield_row08_step` returns:
+```c
+if (out.events != 0) {
+  if (out.user_row_4a != 0u)
+    (void)fifa96_match_run_stats_add(mr, controlled, 2); /* 0x813CD (dead, OL-82) */
+  else
+    (void)fifa96_match_run_stats_add(mr, id, 2);         /* 0x813F5 */
+}
+```
 
-In `fifa96_match_action_0B`, before the `0x81BB7..0x81BBE` impact tail, call
-`(void)fifa96_match_run_stats_add(mr, r->entity_id, -3);`.
+In `fifa96_match_action_0B`, before the `0x81BB7..0x81BBE` impact tail:
+```c
+(void)fifa96_match_run_stats_add(mr, r->entity_id, -3);  /* 0x81BBE */
+```
 
 - [ ] **Step 4: Run the test**
 
@@ -307,7 +351,7 @@ Expected: PASS.
 
 ```bash
 git add port/src/fifa96_engine/fifa96_match_handlers.c port/tests/test_engine_match_handlers.c
-git commit -m "feat(engine): accumulate row-09/0B activity"
+git commit -m "feat(engine): accumulate row-09/08/0B activity"
 ```
 
 ---
