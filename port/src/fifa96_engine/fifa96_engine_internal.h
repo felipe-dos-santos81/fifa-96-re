@@ -42,6 +42,10 @@ struct fifa96_engine {
    * held key with state 1 every poll, so the pause toggle acts on the 0->1
    * transition only (otherwise holding ESC would flap pause). */
   uint8_t match_esc_held;
+  /* FU-351 (Task 2): the R/BACK level latch for the replay trigger edge. The
+   * SDL backend re-presents a held key every poll, so the arm acts on the
+   * 0->1 transition only. */
+  uint8_t match_replay_held;
   /* P8: CONFIRM/DECLINE (pad A/B) are menu keys first and match KICK/PASS
    * second. The backend re-presents held keys, so the raw down state is
    * tracked across every mode; a key must first be released after a menu or

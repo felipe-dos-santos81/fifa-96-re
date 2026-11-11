@@ -2766,6 +2766,33 @@ static void test_replay_begin_edges(void) {
   fifa96_match_run_init(&mr);
 }
 
+/* The replay input path maps the host keys to the native button word on
+ * rising edges and the frame body consumes the edge exactly once. */
+static void test_replay_input_edges(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  fifa96_platform_key keys[3] = {
+      {FIFA96_ENGINE_KEY_CONFIRM, 1},
+      {FIFA96_ENGINE_KEY_RIGHT, 1},
+      {FIFA96_ENGINE_KEY_QUIT, 1},
+  };
+  assert(fifa96_match_run_input(&mr, keys, 3) == 0);
+  assert(mr.render.replay.input_buttons == (1u | 8u | 0x80u));
+  /* A held poll produces no new edge. */
+  assert(fifa96_match_run_input(&mr, keys, 3) == 0);
+  assert(mr.render.replay.input_buttons == 0);
+  assert(mr.render.replay.input_buttons_held == (1u | 8u | 0x80u));
+  /* Live state clears the seam. */
+  mr.render.replay.state = FIFA96_MATCH_REPLAY_LIVE;
+  assert(fifa96_match_run_input(&mr, keys, 3) == 0);
+  assert(mr.render.replay.input_buttons == 0);
+  assert(mr.render.replay.input_buttons_held == 0);
+  fifa96_match_run_init(&mr);
+}
+
 /* FU-72/FU-351 §23: the source-4 selector consumes the run's stats table via
  * the mirrored `activity_count`. `fifa96_match_run_stats_seed` keys pitch slot
  * i with `match_run_replay_roster_id(i)`; a non-goal +60 on pitch slot 4 beats
@@ -3163,6 +3190,7 @@ int main(void) {
   test_replay_target_consumes_stats();
   test_replay_begin_and_step();
   test_replay_begin_edges();
+  test_replay_input_edges();
   test_replay_camera_set();
   test_sub_marks_and_numbers();
   test_overlay_rows_and_timeout();

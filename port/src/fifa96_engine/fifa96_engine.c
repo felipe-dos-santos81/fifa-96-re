@@ -398,10 +398,18 @@ int fifa96_engine_step(struct fifa96_engine *e) {
         e->match_halftime_hold = 0;
       }
     }
+    const int replay_down = engine_keys_down(keys, n, FIFA96_ENGINE_KEY_REPLAY);
+    const int replay_edge = replay_down && !e->match_replay_held;
+    e->match_replay_held = (uint8_t)(replay_down != 0);
+    if (e->match && replay_edge &&
+        e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE && !e->match->paused &&
+        !fifa96_match_run_replay_family(&e->match->render.replay))
+      (void)fifa96_match_run_replay_begin(e->match);
     if (e->match)
       (void)fifa96_match_run_input(e->match, match_keys, match_count);
     if (e->match && e->match->live_start) {
-      if (esc_edge) {
+      if (esc_edge &&
+          !fifa96_match_run_replay_family(&e->match->render.replay)) {
         if (e->match->sub_menu_open) {
           (void)fifa96_match_run_pause_sub(e->match, FIFA96_MATCH_RUN_SUB_BACK);
         } else if (e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE) {

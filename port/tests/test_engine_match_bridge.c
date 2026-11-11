@@ -209,6 +209,28 @@ static void test_engine_step_wires_bridge(void) {
   drop_fixture(f);
 }
 
+/* The MATCH dispatch arms the replay from R; a second R while armed does
+ * not re-arm, and the trigger is ignored outside ACTIVE play. */
+static void test_engine_replay_key_arms(void) {
+  const fifa96_platform_key tape[] = {
+      {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
+      {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
+      {FIFA96_ENGINE_KEY_REPLAY, 1},  {FIFA96_ENGINE_KEY_REPLAY, 0},
+  };
+  struct fixture f = make_fixture(tape, sizeof tape / sizeof tape[0], NULL);
+  assert(fifa96_engine_step(f.engine) == 0);   /* DECLINE -> panel */
+  assert(fifa96_engine_step(f.engine) == 0);   /* release */
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM -> bridge */
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
+  assert(f.engine->match_run.render.replay.state == FIFA96_MATCH_REPLAY_LIVE);
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM release */
+  assert(fifa96_engine_step(f.engine) == 0);   /* R -> the 0x81 arm */
+  assert(f.engine->match_run.render.replay.state == FIFA96_MATCH_REPLAY_ARMED);
+  assert(fifa96_engine_step(f.engine) == 0);   /* release: stays in the family */
+  assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  drop_fixture(f);
+}
+
 /* G1 live staging: with the retail ISO mounted, a successful bridge begin
  * stages the derived default match art pair (FU-86 §1/§2: /ART/PLAYART.PVI as
  * the 91-bank player animation container and /ART/GAMEART0.PVI as the match
@@ -300,6 +322,7 @@ int main(void) {
   test_frontend_confirm_is_not_startable();
   test_bridge_starts_and_rebegins();
   test_engine_step_wires_bridge();
+  test_engine_replay_key_arms();
   test_bridge_stages_render_with_iso();
   test_bridge_hands_off_appearance();
   puts("test_engine_match_bridge OK");

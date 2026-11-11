@@ -35,3 +35,6 @@
 /* Phase 77 derived live contest key (SDL3 T, pad RB). Queues a deliberate
  * human contact attempt; it is not an FU-61 action word either. */
 #define FIFA96_ENGINE_KEY_TACKLE 13
+/* FU-351 §9: the instant-replay trigger (SDL3 R, gamepad BACK). It never
+ * enters the FU-61 action word; the engine MATCH dispatch arms the replay. */
+#define FIFA96_ENGINE_KEY_REPLAY 14

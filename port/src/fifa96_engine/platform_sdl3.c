@@ -31,7 +31,7 @@
  * plus the pause substitution (S), manual switch (Q) and tackle (T) keys;
  * stopping at PASS (9) made a held V / pad West a one-shot pulse, so the engine derived a
  * release on the next poll instead of holding 0x40. */
-#define SDL3_HELD_CODES (FIFA96_ENGINE_KEY_TACKLE + 1)
+#define SDL3_HELD_CODES (FIFA96_ENGINE_KEY_REPLAY + 1)
 
 struct sdl_state {
   SDL_Window *win;
@@ -162,6 +162,7 @@ int fifa96_platform_sdl3_map_scancode(int scancode) {
     case SDL_SCANCODE_S:         return FIFA96_ENGINE_KEY_SUBST;
     case SDL_SCANCODE_Q:         return FIFA96_ENGINE_KEY_SWITCH;
     case SDL_SCANCODE_T:         return FIFA96_ENGINE_KEY_TACKLE;
+    case SDL_SCANCODE_R:         return FIFA96_ENGINE_KEY_REPLAY;
     case SDL_SCANCODE_ESCAPE:    return FIFA96_ENGINE_KEY_QUIT;
     default:                     return 0;
   }
@@ -184,6 +185,7 @@ int fifa96_platform_sdl3_map_button(int b) {
     case SDL_GAMEPAD_BUTTON_NORTH:      return FIFA96_ENGINE_KEY_SUBST;
     case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return FIFA96_ENGINE_KEY_SWITCH;
     case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return FIFA96_ENGINE_KEY_TACKLE;
+    case SDL_GAMEPAD_BUTTON_BACK:      return FIFA96_ENGINE_KEY_REPLAY;
     case SDL_GAMEPAD_BUTTON_START:      return FIFA96_ENGINE_KEY_QUIT;
     default:                            return 0;
   }

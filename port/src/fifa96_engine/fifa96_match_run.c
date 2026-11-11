@@ -555,6 +555,29 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
   int switch_down = 0;
   int tackle_down = 0;
   if (!mr) return -FIFA96_ERR_INVALID;
+  if (fifa96_match_run_replay_family(&mr->render.replay)) {
+    uint8_t held = 0;
+    if (keys) {
+      for (size_t i = 0; i < count; i++) {
+        if (keys[i].state != 1) continue;
+        switch (keys[i].raw_code) {
+          case FIFA96_ENGINE_KEY_CONFIRM: held |= 1u; break;
+          case FIFA96_ENGINE_KEY_DOWN:    held |= 2u; break;
+          case FIFA96_ENGINE_KEY_LEFT:    held |= 4u; break;
+          case FIFA96_ENGINE_KEY_RIGHT:   held |= 8u; break;
+          case FIFA96_ENGINE_KEY_PASS:    held |= 0x20u; break;
+          case FIFA96_ENGINE_KEY_QUIT:    held |= 0x80u; break;
+          default: break;
+        }
+      }
+    }
+    mr->render.replay.input_buttons =
+        (uint8_t)(held & (uint8_t)~mr->render.replay.input_buttons_held);
+    mr->render.replay.input_buttons_held = held;
+    return 0;
+  }
+  mr->render.replay.input_buttons = 0;
+  mr->render.replay.input_buttons_held = 0;
   if (keys) {
     for (size_t i = 0; i < count; i++) {
       uint8_t code = 0;
@@ -8006,6 +8029,10 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * most one frame today; the loop keeps one update per grant if that ever
    * changes. */
   for (uint32_t i = 0; i < granted; i++) {
+    if (fifa96_match_run_replay_family(&mr->render.replay))
+      (void)fifa96_match_run_replay_step(mr, mr->render.replay.input_buttons,
+                                         (int32_t)mr->state.frame_delta);
+    mr->render.replay.input_buttons = 0;
     /* FU-143 §10/§11 (M2 playable-match Task 2 / OL-84 residual): the act-1
      * (phase-0x17 handler FUN_00088DC8) stage-1 derived remainder. The native
      * body ticks the shared timeline timer [0x58818] by the frame delta and at
