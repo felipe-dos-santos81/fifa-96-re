@@ -512,9 +512,12 @@ Fresh `read_memory 0x11033A` (5 x 0x1D) gives raw `+9` = 3,4,4,4,4 and raw
 parsed row behind `fifa96_match_formation_layout`; a raw-byte view is the
 missing piece.
 
-The `+0x8D` side is an open identity question: the pool's `active` is 0/1,
-while the native compare against 3/4 means the 1.25x branch is unreachable
-for a boolean. The first task of the stats slice is the `+0x8D` writer/rank
-census; do not wire the weight until it is settled. The table/weight key
-(`[[entity+4]]`), the 2x16 layout, the max publish and the 29 call sites are
-otherwise unchanged from §2.2.
+The `+0x8D` writer census finds **no store** to `[rec+0x8D]` or the covering
+dword `[rec+0x8A]` in the analyzed match setup: `search_instructions` returns
+only reads/CMP/LEA for `+ 0x8d]` and no writes for `+ 0x8a]`; the team block
+is zeroed by `FUN_00073D10`, and `FUN_0006D9C4` writes `rec+0x90` (role), not
+`+0x8D`. In the modeled match the byte therefore stays 0, so the `2x` branch
+is the live weight and the `1.25x` branch is unreachable; keep the 1.25x
+branch as a numbered leg until a writer is found. The stats slice can wire
+the `2x` weight now. The table/weight key (`[[entity+4]]`), the 2x16 layout,
+the max publish and the 29 call sites are otherwise unchanged from §2.2.

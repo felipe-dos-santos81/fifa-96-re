@@ -353,9 +353,12 @@ wired, and no code/test changed. Record: FU-142 row-29 closure; gate
   = 4) and `+0x10` (5/4/4/2/3), already available behind
   `fifa96_match_formation_layout`. The `+0x8D` compare is therefore a
   rank/class compare against a formation slot count, not the boolean `active`
-  projection; with `active` 0/1 the 1.25x branch is unreachable. The first
-  task of the slice is the `+0x8D` writer/identity census and a raw-layout
-  view; do not wire the weight until that is settled.
+  projection. The writer census finds no store to `[rec+0x8D]` or the covering
+  dword `[rec+0x8A]` in the analyzed match setup (the team block is zeroed by
+  `FUN_00073D10`; `FUN_0006D9C4` writes `rec+0x90`, not `+0x8D`), so the
+  modeled byte stays 0: the **2x** branch is the live weight and the 1.25x
+  branch is a numbered leg until a writer is found. The slice wires the 2x
+  weight now.
 
 ### 8.3 Required behavior
 
@@ -376,9 +379,10 @@ wired, and no code/test changed. Record: FU-142 row-29 closure; gate
   native pointer identity while keeping `fifa96_stats_accumulate` usable.
 - Add the raw formation-layout view (`+9`, `+0x10`) to the team/run model,
   sourced from `0x11033A + id*0x1D` (the existing
-  `fifa96_match_formation_layout` already parses the row). Resolve the native
-  `+0x8D` rank before wiring the weight; a zero stage is allowed only with a
-  numbered leg.
+  `fifa96_match_formation_layout` already parses the row). Stage the record
+  `+0x8D` as 0 (the writer census found no match-setup store) and wire the
+  **2x** weight; keep the 1.25x branch as a numbered leg until a writer is
+  found.
 - Add an engine helper `match_run_stats_add(mr, entity_id, delta)` that:
   resolves the side/slot, computes `rank_above` and `class_in_range` from the
   record/team fields, calls `fifa96_stats_weight`, and accumulates into the
