@@ -328,3 +328,35 @@ moved from stop 702 / 27 frames / x `-0x90` to stop 850 / 175 / `-0x736`, and
 `cross_ok` event. Those are plausible native consequences, but they require a
 dedicated probe re-characterization; the engine keeps the explicit `out.tail`
 leg rather than a silent partial port.
+
+## Closure (2026-11-10) — FU315-L2 closed by the slot-move helper
+
+**FU315-L2 is closed.** `FUN_000786A0` (`0x786A0..0x786EB`, the §3.1 hand-off)
+is ported as `fifa96_match_run_slot_move`
+(`port/src/fifa96_engine/fifa96_match_run.c`, declared in
+`fifa96_match_run.h`): `mr->slot.entity` is the native `[rec+0x20]` pointer and
+`has_slot` its record-visible projection, so the pointer moves, the slot
+back-pointer follows, the donor is cleared, the seven control words are cleared
+(`fifa96_control_slot_merge_reset`) and `slot.byte24` is cleared only at the
+`0x78B00` caller. `slot.anim_b`/`anim_c` stay in the block (the block moves
+wholesale) and are projected onto the new holder, with the donor's record dirs
+zeroed — so the follow (`0x71E5B`) and the pan (`0x7F03C`) dereference a
+pointer-faithful dir source after a hand-off, which is what §4.2 recorded as
+missing.
+
+Adopted at four call sites: row 18 (`0x84AD0`, the §4.2 delta —
+`fifa96_match_action_18`), row `0x7CD60` (`match_input_handler`), the
+`0x7D1D4` binder (`fifa96_match_run_select_step`, `clear_byte24 = 1`) and the
+`0x838EF` set-piece receiver cut (`match_sp_receiver_cut`, `clear_byte24 = 0`).
+Commits `45090c0` (helper), `034045d` (row 18 / `0x7CD60` / `0x7D1D4`) and
+`e9469f1` (receiver cut).
+
+**Callers that remain unwired** (no invented bodies): `0x74CD2` (the dead
+`0x74CB8` helper, 0 xrefs), `0x75451` and `0x76053` (keeper restart arms with
+no engine body), `0x938F0` (`FUN_00093890`, the slot↔record walk, FU-70) and
+`0x83AA0` (the second `FUN_00083428` receiver branch; the port's
+`match_sp_receiver_cut` models the `0x838EF` arm only, so this site has no
+distinct engine branch). None of the four is counted as wired.
+
+The §4.2 bullet "`fifa96_match_action_18` swaps only the boolean" is superseded
+by this closure and kept verbatim above.

@@ -233,6 +233,22 @@ The three unported caller bodies (`0x74CD2`, `0x75451`, `0x76053`) and
   the consumer, not to the native state move.
 - `make check`, M1/M2 exact, smoke.
 
+### 6.5 Closure (2026-11-10) — **closed**
+
+Slice 1 is closed. `fifa96_match_run_slot_move` is the full `0x786A0` body and
+is adopted at row 18 (`0x84AD0`), `0x7CD60`, `0x7D1D4` (`clear_byte24 = 1`) and
+the `0x838EF` set-piece receiver cut (`clear_byte24 = 0`);
+`test_slot_move_helper` plus the row-18, `0x7D1D4` and receiver-cut assertions
+pin the move, the no-op edges, the dirs and `byte24`. The three unported
+callers (`0x74CD2`, `0x75451`, `0x76053`) are recorded here and get no code;
+`0x938F0` (`FUN_00093890`) stays FU-70 and the second `FUN_00083428` site
+`0x83AA0` has no distinct engine branch — none of them is counted as wired.
+
+Commits: `45090c0` (helper), `034045d` (row 18 / `0x7CD60` / `0x7D1D4`),
+`e9469f1` (receiver cut), plus this record commit. `make check` 124/124, M1/M2
+byte-exact, windowed smoke clean. Record: FU-275 §4, the FU315 closure section,
+`port/ENGINE.md` FU-351 §24.
+
 ## 7. Slice 2 — row-29 entry closure
 
 ### 7.1 Native contract

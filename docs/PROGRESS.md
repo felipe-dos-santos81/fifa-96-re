@@ -5132,3 +5132,24 @@ close-out below).
   builder, interpolation, real ISO table, live path/override and the cut.
   `make check` green 124/124; M1/M2 byte-exact. Record: FU-275 §4, FU-351 §24,
   FU154 R2-L2. Commits: `307dcea`, `ea5cb6d`, `d35de09`, `76d7e76`, `b23b486`.
+
+- **Phase 113 slot-block move closure (2026-11-10).** `FUN_000786A0`
+  (`0x786A0..0x786EB`) is ported as `fifa96_match_run_slot_move`
+  (`fifa96_match_run.c`): `mr->slot.entity` is the native `[rec+0x20]` pointer
+  and `has_slot` its record-visible projection, so a move sets the owner and
+  the slot back-pointer, clears the donor, runs the seven control-word
+  `fifa96_control_slot_merge_reset` tail, keeps `slot.anim_b`/`anim_c` (the
+  block moves wholesale) and projects the dirs onto the new holder while
+  zeroing the donor's record dirs. It no-ops on NULL, a donor that is not the
+  pointer owner, an occupied destination, a self move and out-of-range ids;
+  `clear_byte24` is set only at the `0x78B00` caller. Adopted at row 18
+  (`0x84AD0`), row `0x7CD60`, the `0x7D1D4` binder
+  (`fifa96_match_run_select_step`) and the `0x838EF` set-piece receiver cut,
+  which closes FU315-L2. `test_slot_move_helper` plus the row-18, `0x7D1D4`
+  and receiver-cut assertions in `test_engine_match_handlers` and
+  `test_engine_match_input` pin the move, the no-op edges, the dirs and
+  `byte24`. The unported callers stay outside the subset and are not counted
+  wired: `0x74CD2`, `0x75451`, `0x76053` (no engine body), `0x938F0`
+  (`FUN_00093890`, FU-70) and `0x83AA0` (no distinct engine branch).
+  `make check` green 124/124; M1/M2 byte-exact. Record: FU-275 §4, FU315
+  closure, FU-351 §24. Commits: `45090c0`, `034045d`, `e9469f1`.

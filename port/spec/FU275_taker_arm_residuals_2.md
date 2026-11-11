@@ -582,9 +582,25 @@ resets, the gate-fail reset and the `0x832A8` seed.
 `test_engine_match_render` pins the override consumer and the per-team table
 seed. `make check` **124/124**; M1/M2 `cmp` exact.
 
-**Remaining.** All of `FUN_000786A0` (the taker list-head clear, the receiver
-list link and the seven control-word clears) is not modeled and stays
-**FU275-L6**. The partial receiver `has_slot = 1` write was removed: it left
-two slot holders without the taker clear, a state the native never reaches.
-The slot-3 `form*6+3` table and the exact per-team `+0x7E8` block layout are
-not needed by this chain; they stay legs if a future consumer reads them.
+**Remaining.** Closed (2026-11-10): `FUN_000786A0` is the helper
+`fifa96_match_run_slot_move` (`fifa96_match_run.c`) — the full `0x786A0` body
+(the `[rec+0x20]` pointer move, the slot back-pointer, the donor clear and the
+seven control-word clears via `fifa96_control_slot_merge_reset`), with the
+dirs kept in the block and projected onto the new holder. It is adopted at row
+18 (`0x84AD0`), `0x7CD60`, `0x7D1D4` (`clear_byte24 = 1`, the `0x78B00`
+caller) and the `0x838EF` set-piece receiver cut. The callers with no engine
+body stay outside the ported subset and are **not** wired: `0x74CD2` (the dead
+`0x74CB8` helper), `0x75451` and `0x76053` (keeper restart arms); `0x938F0`
+(`FUN_00093890`) stays FU-70; and the second `FUN_00083428` set-piece site
+`0x83AA0` has no distinct engine branch (the port's `match_sp_receiver_cut` is
+the `0x838EF` arm only). **FU315-L2 is closed** (see the closure section in
+`port/spec/FU315_r2l6_claim_chain.md`).
+
+*Erratum (tag collision, recorded not rewritten):* this paragraph and
+`port/ENGINE.md` track the `0x786A0` leg as **FU275-L6**, while the numbered
+register above defines FU275-L6 as the `[0x14C32A]` gate leg. Two different
+cells share the tag; the closure above is the `0x786A0` one. The partial
+receiver `has_slot = 1` write was removed: it left two slot holders without the
+taker clear, a state the native never reaches. The slot-3 `form*6+3` table and
+the exact per-team `+0x7E8` block layout are not needed by this chain; they
+stay legs if a future consumer reads them.
