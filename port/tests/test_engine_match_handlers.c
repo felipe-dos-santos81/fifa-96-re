@@ -6606,6 +6606,49 @@ static void test_ol83_type8_readers_see_record_type(void) {
   drop_fixture(&f);
 }
 
+static void test_slot_move_helper(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *from = &f.mr.entities.team[0].records[1];
+  struct fifa96_match_entity *to = &f.mr.entities.team[0].records[2];
+  from->has_slot = 1;
+  to->has_slot = 0;
+  from->dir_x = 3;
+  from->dir_z = 4;
+  f.mr.slot.entity = 1;
+  f.mr.slot.anim_b = 7;
+  f.mr.slot.anim_c = 8;
+  f.mr.slot.pressed = 0x10;
+  f.mr.slot.released = 0x20;
+  f.mr.slot.held = 0x40;
+  f.mr.slot.byte24 = 0x77;
+  f.mr.record.entity_id = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.dir_x = 3;
+  f.mr.record.dir_z = 4;
+
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 2, 1) == 1);
+  assert(from->has_slot == 0 && to->has_slot == 1);
+  assert(f.mr.slot.entity == 2);
+  assert(to->dir_x == 7 && to->dir_z == 8);
+  assert(from->dir_x == 0 && from->dir_z == 0);
+  assert(f.mr.slot.pressed == 0 && f.mr.slot.released == 0 &&
+         f.mr.slot.held == 0);
+  assert(f.mr.slot.byte24 == 0);
+  assert(f.mr.record.has_slot == 0 && f.mr.record.dir_x == 0);
+  assert(f.mr.record.dir_z == 0);
+
+  /* The native no-ops: from is not the holder, the destination holds, self. */
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 0, 0) == 0);
+  from->has_slot = 0;
+  to->has_slot = 1;
+  f.mr.slot.entity = 1;
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 2, 0) == 0);
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 1, 0) == 0);
+  assert(fifa96_match_run_slot_move(NULL, 1, 2, 0) == -FIFA96_ERR_INVALID);
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -6731,6 +6774,7 @@ int main(void) {
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();
+  test_slot_move_helper();
   test_seam_runs_wired_handler();
   test_period_setup_mode1_dispatches_sit0();
   test_period_setup_mode1_extra_time_sit8();

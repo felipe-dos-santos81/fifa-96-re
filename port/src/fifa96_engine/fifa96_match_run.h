@@ -1818,6 +1818,15 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
  * self and no-slot cases without a second match drive. */
 int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id);
 
+/* FU275-L6 / FU315-L2: the full FUN_000786A0 hand-off. `mr->slot.entity`
+ * is the native [rec+0x20] pointer; `has_slot` is its record-visible
+ * projection. Moves the block's owner and back-pointer, clears the donor and
+ * the seven tail words, keeps the dirs (the block moves wholesale), and clears
+ * slot +0x24 only when `clear_byte24` (the 0x78B00 caller). Returns 1 moved,
+ * 0 native no-op, -FIFA96_ERR_INVALID on NULL. */
+int fifa96_match_run_slot_move(struct fifa96_match_run *mr, int32_t from_id,
+                               int32_t to_id, int clear_byte24);
+
 /* M2 phase-10 T2 (FU-148 §12/§13): stage the native front-end options block
  * (13 dwords 0x105274..0x1052A4, edited by FUN_0001C728 / queried by
  * FUN_0001CAEC) and rebuild the run's eight consumed config cells

@@ -890,6 +890,51 @@ int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id) {
   return out.ret;
 }
 
+int fifa96_match_run_slot_move(struct fifa96_match_run *mr, int32_t from_id,
+                               int32_t to_id, int clear_byte24) {
+  struct fifa96_match_entity *from;
+  struct fifa96_match_entity *to;
+  uint32_t from_team, from_index, to_team, to_index;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (from_id < 0 || to_id < 0 || from_id == to_id) return 0;
+  if (from_id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) ||
+      to_id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  from_team = (uint32_t)from_id / FIFA96_MATCH_ENTITY_RECORDS;
+  from_index = (uint32_t)from_id % FIFA96_MATCH_ENTITY_RECORDS;
+  to_team = (uint32_t)to_id / FIFA96_MATCH_ENTITY_RECORDS;
+  to_index = (uint32_t)to_id % FIFA96_MATCH_ENTITY_RECORDS;
+  from = &mr->entities.team[from_team].records[from_index];
+  to = &mr->entities.team[to_team].records[to_index];
+  /* 0x786A2/0x786AC: from must be the native pointer owner, to must be free. */
+  if (mr->slot.entity != from_id) return 0;
+  if (to->has_slot != 0 || mr->slot.entity == to_id) return 0;
+  /* 0x786B0..0x786B5: the pointer moves; the slot back-pointer follows. */
+  mr->slot.entity = to_id;
+  from->has_slot = 0;
+  to->has_slot = 1;
+  /* 0x786BF..0x786E3: the seven tail words. The native clears the moved
+   * block; the block is the engine's single slot. */
+  (void)fifa96_control_slot_merge_reset(&mr->slot);
+  if (clear_byte24) mr->slot.byte24 = 0;
+  /* The dirs live in the block (+0x20/+0x21), so they survive the move; the
+   * per-record copies are projections and must follow. */
+  to->dir_x = (int8_t)mr->slot.anim_b;
+  to->dir_z = (int8_t)mr->slot.anim_c;
+  from->dir_x = 0;
+  from->dir_z = 0;
+  if (mr->record.entity_id == from_id) {
+    mr->record.has_slot = 0;
+    mr->record.dir_x = 0;
+    mr->record.dir_z = 0;
+  } else if (mr->record.entity_id == to_id) {
+    mr->record.has_slot = 1;
+    mr->record.dir_x = (int8_t)mr->slot.anim_b;
+    mr->record.dir_z = (int8_t)mr->slot.anim_c;
+  }
+  return 1;
+}
+
 static void match_input_install(struct match_input_ctx *c, uint8_t code, uint8_t invoke) {
   if (fifa96_match_entities_install(c->e, (uint8_t)c->mr->state.phase, code, 0) == 1 &&
       invoke != 0)
