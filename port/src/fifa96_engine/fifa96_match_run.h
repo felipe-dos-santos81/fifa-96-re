@@ -844,7 +844,9 @@ enum fifa96_match_run_sub_action {
  * keys the slots by the replay roster id (`match_run_replay_roster_id`), so
  * `render.replay.activity_count` and the source-4 selector share the same key.
  * `max_value`/`max_key`/`max_block` mirror the native max triple (the compare
- * is on the sign-extended low word). */
+ * is on the sign-extended low word). `count` is the native `+4` word; the
+ * `FUN_0008ED40` path never bumps it — only `FUN_0008ECC4` does — so it stays
+ * storage for that unported accessor path (FU-72 §2.3 leg). */
 #define FIFA96_MATCH_STATS_SLOTS 16u
 struct fifa96_match_stats {
   int32_t key[2][FIFA96_MATCH_STATS_SLOTS];

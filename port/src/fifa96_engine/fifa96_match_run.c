@@ -78,6 +78,11 @@ int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
 void fifa96_match_run_stats_seed(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_stats_reset(&mr->stats);
+  /* The seed blocks are the team indices. `fifa96_match_run_stats_add` keys
+   * the same blocks as `(team+0x826 ^ [0x57ABE]) & 1`; `entities_init` sets
+   * `team+0x826 = team index` and `side_swap` is staged 0 (OL-72), so the two
+   * agree today. When a `[0x57ABE]` producer lands, seed block b must use the
+   * roster of the team whose `side` is `b ^ side_swap`. */
   for (uint32_t side = 0; side < 2u; side++)
     for (uint32_t slot = 0; slot < FIFA96_MATCH_STATS_SLOTS; slot++)
       mr->stats.key[side][slot] = match_run_replay_roster_id(mr, side, slot);
