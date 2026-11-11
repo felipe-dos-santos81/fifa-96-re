@@ -209,13 +209,15 @@ static void test_engine_step_wires_bridge(void) {
   drop_fixture(f);
 }
 
-/* The MATCH dispatch arms the replay from R; a second R while armed does
- * not re-arm, and the trigger is ignored outside ACTIVE play. */
+/* The MATCH dispatch arms the replay from R, the release stays in the replay
+ * family, and while the family is active ESC exits the replay instead of
+ * pausing the match. */
 static void test_engine_replay_key_arms(void) {
   const fifa96_platform_key tape[] = {
       {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
       {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
       {FIFA96_ENGINE_KEY_REPLAY, 1},  {FIFA96_ENGINE_KEY_REPLAY, 0},
+      {FIFA96_ENGINE_KEY_QUIT, 1},    {FIFA96_ENGINE_KEY_QUIT, 0},
   };
   struct fixture f = make_fixture(tape, sizeof tape / sizeof tape[0], NULL);
   assert(fifa96_engine_step(f.engine) == 0);   /* DECLINE -> panel */
@@ -228,6 +230,20 @@ static void test_engine_replay_key_arms(void) {
   assert(f.engine->match_run.render.replay.state == FIFA96_MATCH_REPLAY_ARMED);
   assert(fifa96_engine_step(f.engine) == 0);   /* release: stays in the family */
   assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(fifa96_engine_step(f.engine) == 0);   /* QUIT down: ESC is replay exit */
+  assert(f.engine->match_run.paused == 0);     /* the live ESC pause is suppressed */
+  assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(fifa96_engine_step(f.engine) == 0);   /* QUIT up */
+  /* The frame body consumes the staged 0x80 on the pace grant, not every step,
+   * so poll a bounded number of steps until the replay family clears. */
+  int loops = 0;
+  while (fifa96_match_run_replay_family(&f.engine->match_run.render.replay) &&
+         loops < 8) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    loops++;
+  }
+  assert(!fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(f.engine->match_run.paused == 0);
   drop_fixture(f);
 }
 

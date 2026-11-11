@@ -2767,7 +2767,10 @@ static void test_replay_begin_edges(void) {
 }
 
 /* The replay input path maps the host keys to the native button word on
- * rising edges and the frame body consumes the edge exactly once. */
+ * rising edges, and the word accumulates those edges across polls until the
+ * granted-frame body consumes it (the frame body's `input_buttons = 0` seam;
+ * exercised end-to-end by test_engine_match_bridge's ESC loop, not here — a
+ * pace-grant-dependent frame call would make this unit test flaky). */
 static void test_replay_input_edges(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -2781,7 +2784,13 @@ static void test_replay_input_edges(void) {
   };
   assert(fifa96_match_run_input(&mr, keys, 3) == 0);
   assert(mr.render.replay.input_buttons == (1u | 8u | 0x80u));
-  /* A held poll produces no new edge. */
+  /* A held poll produces no new edge: the word is unchanged (the edge
+   * persists until the frame body consumes it). */
+  assert(fifa96_match_run_input(&mr, keys, 3) == 0);
+  assert(mr.render.replay.input_buttons == (1u | 8u | 0x80u));
+  assert(mr.render.replay.input_buttons_held == (1u | 8u | 0x80u));
+  /* Simulate the frame consume, then a held poll has no new edge. */
+  mr.render.replay.input_buttons = 0;
   assert(fifa96_match_run_input(&mr, keys, 3) == 0);
   assert(mr.render.replay.input_buttons == 0);
   assert(mr.render.replay.input_buttons_held == (1u | 8u | 0x80u));

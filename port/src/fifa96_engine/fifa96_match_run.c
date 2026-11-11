@@ -571,7 +571,7 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
         }
       }
     }
-    mr->render.replay.input_buttons =
+    mr->render.replay.input_buttons |=
         (uint8_t)(held & (uint8_t)~mr->render.replay.input_buttons_held);
     mr->render.replay.input_buttons_held = held;
     return 0;

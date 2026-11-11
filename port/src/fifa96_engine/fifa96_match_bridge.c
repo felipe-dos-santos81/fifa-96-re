@@ -32,6 +32,7 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
   if (rc != 0) return rc;
   eng->match_esc_held = 0;   /* FU-343 P4: fresh pause edge latch */
   eng->match_menu_held = 0;  /* P15: fresh substitution-menu edge latch */
+  eng->match_replay_held = 0; /* FU-351: fresh replay-trigger edge latch */
   /* P6: stage the Team Select handout before begin. begin explicitly resets
    * formation[] and seeds the kickoff placement, so the real per-side ids must
    * already be in the run; the post-begin set_formation below stays the live

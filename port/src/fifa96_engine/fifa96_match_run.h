@@ -306,9 +306,12 @@ struct fifa96_match_run_replay {
   uint8_t goal_roster[FIFA96_CAMERA_REPLAY_EVENTS];
   uint8_t goal_count;
   int32_t activity_count[2][FIFA96_CAMERA_REPLAY_SLOTS];
-  /* The replay input seam: the native button word's rising edge for this
-   * input poll (1 play/pause, 2 slow, 4 step back, 8 step forward, 0x20
-   * camera, 0x80 exit). `input_buttons_held` is the previous poll's level. */
+  /* The replay input seam: the native button word (1 play/pause, 2 slow,
+   * 4 step back, 8 step forward, 0x20 camera, 0x80 exit). Rising edges
+   * accumulate into `input_buttons` across polls and persist until the
+   * granted-frame body consumes them (it clears the word after
+   * `fifa96_match_run_replay_step`); `input_buttons_held` is the previous
+   * poll's level, so a held key produces no new edge. */
   uint8_t input_buttons;
   uint8_t input_buttons_held;
 };
@@ -1850,6 +1853,11 @@ void fifa96_match_run_stats_seed(struct fifa96_match_run *mr);
  * the live control follow. The FU-70 control slot is NOT touched here: its
  * update runs once per granted frame inside fifa96_match_run_frame (FU-70
  * §1.1).
+ * While the replay family is active this instead maps the host keys onto the
+ * replay button word (`input_buttons`), accumulating rising edges across
+ * polls until the granted-frame body consumes the word after
+ * `fifa96_match_run_replay_step` (so a tap followed by a non-granted step is
+ * not lost); the live seam fields are cleared when the family is inactive.
  * Returns 0, or -FIFA96_ERR_INVALID when `mr` is NULL; NULL `keys` and
  * `count == 0` are tolerated as a no-input poll. */
 int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_key *keys,
