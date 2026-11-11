@@ -6321,7 +6321,9 @@ static void test_action_1c_live_route(void) {
  * `[0x157C2C]` cell 0 installs anim 0 (row flags bit 0 = 1, so the stage-3
  * +0x44 arm advances) and the event ladder picks id 9 (camera.speed 0 < 7)
  * with the anim select 0xF (camera.speed < 8). The final stage is 4. A stub
- * leaves these untouched. */
+ * leaves these untouched. The id-9 arm carries no `0x8ED40` (the fresh
+ * xref census puts the row's three sites at 0x7694F/0x76A04/0x76A35), so the
+ * stats table stays empty here. */
 static void test_action_1a_runs_body(void) {
   struct fixture f;
   make_fixture(&f);
@@ -6343,6 +6345,83 @@ static void test_action_1a_runs_body(void) {
   assert(f.mr.record.target_z == 0x333);
   assert(f.mr.match1a_event_id == 9u);    /* camera.speed 0 < 7 */
   assert(f.mr.match1a_anim == 0x0Fu);     /* camera.speed 0 < 8 */
+  assert(f.mr.stats.value[0][0] == 0);    /* the id-9 arm has no 0x8ED40 */
+  drop_fixture(&f);
+}
+
+/* Task 3b: the row-1A event ladder's three `0x8ED40` sites. A fresh xref
+ * census of `0x8ED40` finds them inside the event block, one per arm:
+ * `0x7694F` `8ED40(rec, 0x64)` on the phase-0x10 arm (event 5), `0x76A04`
+ * `8ED40(rec, 0xA)` on the bounce arm (event 1) and `0x76A35`
+ * `8ED40(rec, 5)` on the final else arm (event 0). The `0x5C` (event 4),
+ * `follow < 7` (event 9) and `0x2D` (event 7) arms carry no sink. Fresh
+ * fixtures keep the table from accumulating across the arms; `roster_order_ok`
+ * is 0 so the stats key is the pitch slot and entity 0 lands in `[0][0]`. */
+static void test_action_1a_stats(void) {
+  struct fixture f;
+
+  /* phase 0x10 -> the `0x7694F` arm (`event_id = 5`). */
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0x10u;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0x33;
+  f.mr.record.delta = 0;
+  f.mr.record.pos_x = 0x111;
+  f.mr.record.pos_y = 0x22;
+  f.mr.record.pos_z = 0x333;
+  f.mr.record.target_x = 0;
+  f.mr.record.target_z = 0;
+  assert(fifa96_match_action_1A(&f.mr) == FIFA96_OK);
+  assert(f.mr.match1a_event_id == 5u);           /* 0x76936 */
+  assert(f.mr.stats.value[0][0] == 200);         /* 0x64 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 200);   /* the mirror */
+  drop_fixture(&f);
+
+  /* follow >= 7 + the bounce gates -> the `0x76A04` arm (`event_id = 1`). */
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0x33;
+  f.mr.record.delta = 0;
+  f.mr.record.pos_x = 0x111;
+  f.mr.record.pos_y = 0x22;
+  f.mr.record.pos_z = 0x333;
+  f.mr.record.target_x = 0;
+  f.mr.record.target_z = 0;
+  f.mr.global_157c2c = 0;                        /* neither the 0x5C nor 0x2D arm */
+  f.mr.render.camera.speed = 8;                  /* follow >= 7 */
+  f.mr.render.camera.event_param = 0x100;        /* > 0xF0 */
+  f.mr.bounce_15759f = 0x421;                    /* |.| > 0x420 */
+  f.mr.bounce_1575d0 = 0;                        /* |.| < 0xF0 */
+  f.mr.bounce_1575cc = 0x2D1;                    /* > 0x2D0 */
+  assert(fifa96_match_action_1A(&f.mr) == FIFA96_OK);
+  assert(f.mr.match1a_event_id == 1u);           /* 0x76998 */
+  assert(f.mr.stats.value[0][0] == 20);          /* 0xA * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 20);
+  drop_fixture(&f);
+
+  /* phase 0, follow >= 7, the bounce gates closed -> the final else
+   * (`0x76A35`, `event_id = 0`). */
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0x33;
+  f.mr.record.delta = 0;
+  f.mr.record.pos_x = 0x111;
+  f.mr.record.pos_y = 0x22;
+  f.mr.record.pos_z = 0x333;
+  f.mr.record.target_x = 0;
+  f.mr.record.target_z = 0;
+  f.mr.global_157c2c = 0;
+  f.mr.render.camera.speed = 8;
+  f.mr.render.camera.event_param = 0;            /* not > 0xF0 */
+  assert(fifa96_match_action_1A(&f.mr) == FIFA96_OK);
+  assert(f.mr.match1a_event_id == 0u);           /* the else arm */
+  assert(f.mr.stats.value[0][0] == 10);          /* 5 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 10);
   drop_fixture(&f);
 }
 
@@ -7083,6 +7162,7 @@ int main(void) {
   test_action_1c_live_route();
   test_action_1b_stage1_rotation_steering();
   test_action_1a_runs_body();
+  test_action_1a_stats();
   test_action_16_runs_body();
   test_action_16_stage0_gate();
   test_action_16_stage2_reset();

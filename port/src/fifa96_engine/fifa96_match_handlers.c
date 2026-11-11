@@ -5766,9 +5766,13 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr) {
     }
     /* 0x7690C: the `dword[0x157750] > 0x20 && word[0x1577BE] > 0xA` sink pair
      * (`0x974DC(4)`/`0x974F0(0x4B0)`) is FU300-L3; no state to fake. */
+    /* The ladder's three `0x8ED40` stat sites (0x7694F/0x76A04/0x76A35) are
+     * wired to `fifa96_match_run_stats_add` before each `event_id` store; the
+     * 0x5C/9/0x2D arms carry no sink, so they do not accumulate. */
     {
       uint8_t event_id;
       if (mr->state.phase == 0x10u) {                 /* 0x76936 */
+        (void)fifa96_match_run_stats_add(mr, r->entity_id, 0x64); /* 0x7694F */
         event_id = 5u;                                /* 0x8ED40(rec,0x64,0x20) leg */
       } else if (mr->global_157c2c == 0x5Cu) {        /* 0x76960 */
         event_id = 4u;
@@ -5780,10 +5784,12 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr) {
                  (mr->bounce_1575d0 < 0 ? -mr->bounce_1575d0
                                         : mr->bounce_1575d0) < 0xF0 &&
                  mr->bounce_1575cc > 0x2D0) {
+        (void)fifa96_match_run_stats_add(mr, r->entity_id, 0xA); /* 0x76A04 */
         event_id = 1u;                                /* 0x8ED40(rec,0xA,0x20) leg */
       } else if (mr->global_157c2c == 0x2Du) {        /* 0x76A12 */
         event_id = 7u;
       } else {
+        (void)fifa96_match_run_stats_add(mr, r->entity_id, 5);   /* 0x76A35 */
         event_id = 0u;                                /* 0x8ED40(rec,5,0x20) leg */
       }
       mr->match1a_event_id = event_id;                /* 0x76A3E 0x8F188 leg */
