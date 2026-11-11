@@ -239,17 +239,19 @@ tables.
    (`get_xrefs_to 0x14BF9C` = 0); the consumer remains a numbered leg.
 6. **Source maps.** `0x106B00` is 28 pointers (4 groups x 7 patterns) into
    the shared `0x106A1C..0x106B00` region (0xE4 bytes), not 16 pointers with
-   seven-entry maps. A band reads `len+1` overlapping bytes from its
-   pointer.
+   seven-entry maps. The source index is the map's fixed first byte plus the
+   advancing offset: `template[map[off] + map[off+k+1]]` for k=0..len-1.
+   This is base+offset, not a sliding `map[k]+map[k+1]`.
 7. **Second pass.** For each band whose row entry is 2, the first pass
    zeroes `template[dest]`; the second pass (`0x476B8..0x4775C`) uses map
-   index 1 (`0x106B08` = group*7+1) and writes
-   `out[0x1068E4[dest+k]] = template[map1[k]+map1[k+1]]`.
+   index 2 (`0x106B08` = group*7+2) and writes
+   `out[0x1068E4[dest+k]] = template[map1[off1] + map1[off1+k+1]]`.
 8. **Special branch.** The `0x107080[class] > 0x15` guard at `0x47762` is
    unreachable for classes 0..4 (rows 0/0/14/15/13). It is not an exercised
    path; keep it as a comment or a numbered leg.
 9. **Team kit overlay.** The native block's kit bands are default shade
-   bytes (`0xBD/0xBB` for class 0), not the live team destinations
+   bytes (`0xBD/0xBC` for the class-0 shirt bands; the shorts/torso/socks
+   bands are zero), not the live team destinations
    `37/48/59/70/81/92`. The port's `remap_team` must still be applied over
    the six kit source bands after the native block is copied; dropping it
    replaces the live kit colors with shades. Apply it to all 22 visible
@@ -282,11 +284,15 @@ tables.
       `ED..F5`.
     - Germany pitch 2 (hair '0' / skin '1'): `D7..DA`, `DB..E3`.
     - Germany pitch 4 (hair '0' / skin '2'): `EB EC FC FD`, `DB..E3`.
-    The old `[0x75]` assertions (`0xE8`/`0xDF`/`0xF1`) are retired; the
-    native template gives `0x00` there for the five classes.
+    The old `[0x75]` assertions (`0xE8`/`0xDF`/`0xF1`) are retired. The native
+    `0x75` is the second-pass skin byte (`FA/FB` for class 0, `E8/E9` for the
+    extra); the module test pins it, the engine tests do not.
 13. **Template bytes for the five classes** (independent of the player
-    classes): home GK `[0x50] = 0xC0`; home outfield `[0x50] = 0xBD`,
-    `[0x52] = 0xBB`, `[0xC2..0xC4] = C0 BB 00`, `[0x4E] = 0x00`; away GK
-    `[0x50] = 0x00`; away outfield `[0x50] = 0xBD`; extra `[0x50] = 0x00`,
-    `[0x51] = 0xBB`, `[0xD7..0xDA] = F0 F1 F2 43`,
-    `[0xDB..0xE3] = E4..EC`.
+    classes): home GK `[0x50] = 0xC0`, `[0x52] = 0xC0`; home outfield
+    `[0x50] = 0xBD`, `[0x52] = 0xBC`, `[0xC2..0xC4] = C0 BE BB`,
+    `[0x4E] = 0xBB`, `[0x75..0x76] = FA FB`; away GK `[0x50] = 0x00`;
+    away outfield `[0x50] = 0xBD`; extra `[0x50] = 0x00`,
+    `[0x51] = 0x00`, `[0x75..0x76] = E8 E9`,
+    `[0xD7..0xDA] = F0 F1 F2 43`, `[0xDB..0xE3] = E4..EC`.
+    The class-0 shorts/torso/socks bands are native zeros; the team-kit
+    overlay fills them.

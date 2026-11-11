@@ -27,7 +27,7 @@
 1. **Native class pairing** — `0x4C00C` (port `roster_hair_code`) drives the `0x1070E4` skin base and the `0xE3` clear; `0x4C098` (port `roster_skin_code`) drives the `0x1070D4` hair ramp. The old test values (`0xD7=0`, `0xDB=0xDB` for roster 5) are the non-native pairing and must change.
 2. **Team kit overlay** — the native kit bands are default shades (`0xBD/0xBB`), not team destinations. `remap_entity[side][pitch][0x50]` must remain the team slot (`37`/`70`) while `[0x75]` is the native `0x00`.
 3. **Five templates / 23 outputs** — home GK, home outfield, away GK, away outfield and the extra must each hit their own template row (classes 2/0/3/1/4); the extra is never dropped.
-4. **Table transcription** — 12 bands, 28 map pointers into the 0xE4-byte region, and rows 0/13/14/15; the in-place band order and the second pass must be transcribed, not approximated.
+4. **Table transcription** — 12 bands, 28 map pointers into the 0xE4-byte region, and rows 0/13/14/15; the base+offset map reads (`map[off] + map[off+k+1]`), the in-place band order and the second-pass index 2 must be transcribed, not approximated.
 5. **Existing test bytes** — `test_live_substitution_rebuilds_remap`, `test_live_real_team_kits` and `test_live_native_order_appearance` all contain old non-native values; update every one.
 6. **Live-only** — M1/M2 never call the builder; the goldens stay byte-exact.
 
@@ -59,7 +59,7 @@ Use the Ghidra MCP on `/FIFA96.EXE`:
   - `0x106962` (0x8E) — the static base template copied five times.
   - `0x106C00` (0x300) — 16 rows of 12 pattern ints; transcribe rows 0, 13, 14, 15 (the selector uses 0/0/14/15/13).
   - `0x106B70` (0x90) — 12 `{dest, len, group}` entries.
-  - `0x106B00` (0x70) — 28 map pointers (4 groups × 7 patterns); `0x106A1C` (0xE4) — the shared map region the pointers index.
+  - `0x106B00` (0x70) — 28 map pointers (4 groups × 7 patterns); `0x106A1C` (0xE4) — the shared map region the pointers index. The first pass uses `group*7 + pattern`; the second pass uses `group*7 + 2`. Each map is `[base][offset...]`, and the source is `base + offset`.
   - `0x1068E4` (0x8E) — the output map for the 0x7E copy and the second pass.
   - `0x1070D4` (16) — four 4-byte ramps; class 2 ends `0x43`.
   - `0x1070E4` (0x24) — the four skin bases `F6/ED/E4/DB` (the builder adds 0..8).
@@ -87,26 +87,27 @@ static void test_remap_native_pool(void) {
   /* Five template classes: home GK (2), home outfield (0), away GK (3),
    * away outfield (1), extra (4). */
   assert(pool[0][0x50] == 0xC0);              /* home GK, row 14 */
+  assert(pool[0][0x52] == 0xC0);
   assert(pool[1][0x50] == 0xBD);              /* home outfield, row 0 */
-  assert(pool[1][0x52] == 0xBB);
+  assert(pool[1][0x52] == 0xBC);
   /* Sample every band group: 48, 59, 70, 81, 119, 19 (shorts), 26
    * (torso) and the band-101 second pass. */
-  assert(pool[1][0x5B] == 0xBD && pool[1][0x5D] == 0xBB);  /* 48 */
-  assert(pool[1][0xA5] == 0xC0 && pool[1][0xA6] == 0xBB);  /* 59 */
-  assert(pool[1][0x66] == 0xBD && pool[1][0x68] == 0xBB);  /* 70 */
-  assert(pool[1][0x8A] == 0xBD && pool[1][0x8C] == 0xBB);  /* 81 */
-  assert(pool[1][0x89] == 0xBE);                           /* 119 */
-  assert(pool[1][0xCB] == 0xBB);                           /* 19 shorts */
-  assert(pool[1][0xD4] == 0xC0);                           /* 26 torso */
-  assert(pool[1][0x76] == 0xF7);                           /* 101 second pass */
-  assert(pool[1][0xC2] == 0xC0 && pool[1][0xC3] == 0xBB &&
-         pool[1][0xC4] == 0x00);              /* 15 collar/eye band */
-  assert(pool[1][0x4E] == 0x00);
-  assert(pool[1][0x75] == 0x00);              /* native template, not 0xE8 */
+  assert(pool[1][0x5B] == 0xBD && pool[1][0x5D] == 0xBC);  /* 48 */
+  assert(pool[1][0xA5] == 0x00 && pool[1][0xA6] == 0x00);  /* 59 */
+  assert(pool[1][0x66] == 0xBD && pool[1][0x68] == 0xBC);  /* 70 */
+  assert(pool[1][0x8A] == 0xBD && pool[1][0x8C] == 0xBC);  /* 81 */
+  assert(pool[1][0x89] == 0x00);                           /* 119 */
+  assert(pool[1][0xCB] == 0x00);                           /* 19 shorts */
+  assert(pool[1][0xD4] == 0x00);                           /* 26 torso */
+  assert(pool[1][0x75] == 0xFA && pool[1][0x76] == 0xFB);  /* 101 2nd pass */
+  assert(pool[1][0xC2] == 0xC0 && pool[1][0xC3] == 0xBE &&
+         pool[1][0xC4] == 0xBB);              /* 15 collar/eye band */
+  assert(pool[1][0x4E] == 0xBB);
   assert(pool[11][0x50] == 0x00);             /* away GK, row 15 */
   assert(pool[12][0x50] == 0xBD);             /* away outfield, row 0 */
   assert(pool[22][0x00] == 0x00);
-  assert(pool[22][0x50] == 0x00 && pool[22][0x51] == 0xBB); /* extra row 13 */
+  assert(pool[22][0x50] == 0x00 && pool[22][0x51] == 0x00); /* extra row 13 */
+  assert(pool[22][0x75] == 0xE8 && pool[22][0x76] == 0xE9); /* extra 2nd pass */
   /* The extra is hardcoded class_a 2 / class_b 2. */
   assert(pool[22][0xD7] == 0xF0 && pool[22][0xDA] == 0x43);
   assert(pool[22][0xDB] == 0xE4 && pool[22][0xE3] == 0xEC);
@@ -172,8 +173,9 @@ the native class pairing. In the C file:
   - Process the 12 bands in table order (37, 48, 59, 70, 81, 92, 101, 110,
     119, 15, 19, 26); the in-place reads depend on that order.
   - If `row[j] == 2`: `t[dest] = 0`; else for `k = 0..len-1`:
-    `t[dest + k] = t[map[off + k] + map[off + k + 1]]`, where `off =
-    remap_map_ptr[group * 7 + row[j]]`.
+    `t[dest + k] = t[remap_maps[off] + remap_maps[off + k + 1]]`, where
+    `off = remap_map_ptr[group * 7 + row[j]]` (base+offset; the first byte
+    is fixed, the following bytes advance).
 - Build the 23 outputs:
   - `out = identity 0..255`.
   - `t = templates[template_class(i)]` (copy; the skin writes mutate `t`).
@@ -188,8 +190,8 @@ the native class pairing. In the C file:
     set `out[0xD7..0xE3] = 0xFF` and `t[6..0xE] = 0xFF`.
   - Second pass (using the same `row` as the descriptor's template class):
     for each band `j` with `row[j] == 2`, use
-    `off1 = remap_map_ptr[group * 7 + 1]`, and for `k = 0..len-1`:
-    `out[remap_map8e[dest + k]] = t[remap_maps[off1 + k] + remap_maps[off1 + k + 1]]`.
+    `off1 = remap_map_ptr[group * 7 + 2]`, and for `k = 0..len-1`:
+    `out[remap_map8e[dest + k]] = t[remap_maps[off1] + remap_maps[off1 + k + 1]]`.
   - The `0x107080[class] > 0x15` special branch is unreachable for classes
     0..4; leave a comment and record it as a leg (do not test it).
 - The class assignment is fixed: `i == 0` -> 2, `1..10` -> 0, `i == 11` ->
@@ -244,7 +246,6 @@ remap-byte assertions.
   /* roster 0: class_a 0 (skin F6..FD, 0xE3 clear), class_b 2
    * (hair F0..F2,0x43). The team kit overlay keeps the shirt slot. */
   assert(r->remap_entity[0][1][0x50] == 37);
-  assert(r->remap_entity[0][1][0x75] == 0x00);
   assert(r->remap_entity[0][1][0xD7] == 0xF0);
   assert(r->remap_entity[0][1][0xDA] == 0x43);
   assert(r->remap_entity[0][1][0xDB] == 0xF6);
@@ -269,7 +270,6 @@ remap-byte assertions.
    * memcmp(remap_entity, remap_team) no longer holds: only the six kit
    * source bands come from remap_team; the rest is the native block. */
   assert(r->remap_entity[0][1][0x50] == r->remap_team[0][0x50]);
-  assert(r->remap_entity[0][1][0x75] == 0x00);
   assert(r->remap_entity[0][1][0xD7] == 0x00);
   assert(r->remap_entity[0][1][0xDB] == 0xDB);
   assert(r->remap_entity[0][1][0xE3] == 0xE3);
@@ -279,7 +279,6 @@ remap-byte assertions.
   assert(r->remap_entity[0][1][0xDA] == 0x43);
   assert(r->remap_entity[0][1][0xDB] == 0xF6);
   assert(r->remap_entity[0][1][0xE3] == 0x00);
-  assert(r->remap_entity[0][1][0x75] == 0x00);
   assert(r->remap_entity[0][2][0xD7] == 0x00);
   assert(r->remap_entity[0][2][0xDB] == 0xDB);
   assert(r->remap_entity[0][2][0xE3] == 0xE3);
