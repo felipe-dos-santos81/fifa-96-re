@@ -6820,6 +6820,21 @@ static void test_slot_move_helper(void) {
   drop_fixture(&f);
 }
 
+static void test_stats_table_add(void) {
+  struct fifa96_match_stats s;
+  fifa96_match_stats_reset(&s);
+  s.key[0][3] = 7;
+  assert(fifa96_match_stats_add(&s, 0, 7, 100) == 1);
+  assert(s.value[0][3] == 200);          /* the native 2x weight */
+  assert(s.max_value == 200 && s.max_key == 7 && s.max_block == 0);
+  assert(fifa96_match_stats_add(&s, 0, 7, -25) == 1);
+  assert(s.value[0][3] == 150);          /* -25 * 2 */
+  assert(fifa96_match_stats_add(&s, 0, 0x99, 5) == 0);
+  assert(fifa96_match_stats_add(NULL, 0, 7, 1) == 0);
+  fifa96_match_stats_reset(&s);
+  assert(s.value[0][3] == 0 && s.key[0][3] == FIFA96_MATCH_ENTITY_NONE);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -6957,6 +6972,7 @@ int main(void) {
   test_formation_sort_orders_and_counts();
   test_formation_arm_dormant_until_matrices();
   test_situation_producer_live_at_begin();
+  test_stats_table_add();
   puts("test_engine_match_handlers OK");
   return 0;
 }

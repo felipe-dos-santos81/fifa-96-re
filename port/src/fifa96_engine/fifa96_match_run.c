@@ -15,6 +15,7 @@
 #include "fifa96_loader/fifa96_outfield.h"
 #include "fifa96_loader/fifa96_projection.h"
 #include "fifa96_loader/fifa96_record.h"
+#include "fifa96_loader/fifa96_ring_stats.h"
 #include "fifa96_loader/fifa96_scene.h"
 #include "fifa96_loader/fifa96_sprite.h"
 
@@ -30,6 +31,79 @@ static int match_run_offside_reception_at(struct fifa96_match_run *mr,
                                           const struct fifa96_ref_metric *metric,
                                           int32_t camera_ref, uint8_t mirror,
                                           uint8_t *offside);
+
+/* FU-72/`FUN_0008ED40`: the replay roster id (definition with the replay
+ * helpers below). The stats seeding/wrapper above need it. */
+static int32_t match_run_replay_roster_id(const struct fifa96_match_run *mr,
+                                          uint32_t side, uint32_t slot);
+
+/* FU-72/`FUN_0008ED40`: the 2 x 16 activity table. `reset` is the native
+ * clear; `add` walks one block's slots for the key, accumulates the weighted
+ * delta and updates the max triple (the native compare is on the sign-extended
+ * low word, `0x8EDC2`). The modeled weight base `+0x8D` is always 0, so the
+ * live arm is the native `2x`. */
+void fifa96_match_stats_reset(struct fifa96_match_stats *s) {
+  if (!s) return;
+  for (uint32_t side = 0; side < 2u; side++)
+    for (uint32_t slot = 0; slot < FIFA96_MATCH_STATS_SLOTS; slot++) {
+      s->key[side][slot] = FIFA96_MATCH_ENTITY_NONE;
+      s->count[side][slot] = 0;
+      s->value[side][slot] = 0;
+    }
+  s->max_value = 0;
+  s->max_key = FIFA96_MATCH_ENTITY_NONE;
+  s->max_block = 0;
+}
+
+int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
+                           int32_t key, int32_t delta) {
+  if (!s || block > 1u) return 0;
+  for (uint32_t slot = 0; slot < FIFA96_MATCH_STATS_SLOTS; slot++) {
+    if (s->key[block][slot] != key) continue;
+    s->value[block][slot] += fifa96_stats_weight(delta, 0, 0);
+    {
+      /* The native max compares the sign-extended low word (`0x8EDC2`). */
+      int16_t v = (int16_t)s->value[block][slot];
+      if (v > (int16_t)s->max_value) {
+        s->max_value = v;
+        s->max_key = key;
+        s->max_block = (uint16_t)block;
+      }
+    }
+    return 1;
+  }
+  return 0;
+}
+
+static void match_run_stats_seed(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  fifa96_match_stats_reset(&mr->stats);
+  for (uint32_t side = 0; side < 2u; side++)
+    for (uint32_t slot = 0; slot < FIFA96_MATCH_STATS_SLOTS; slot++)
+      mr->stats.key[side][slot] = match_run_replay_roster_id(mr, side, slot);
+}
+
+int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
+                               int32_t delta) {
+  uint32_t side, pitch, slot;
+  if (!mr || entity_id < 0 ||
+      entity_id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  side = (uint32_t)entity_id / FIFA96_MATCH_ENTITY_RECORDS;
+  pitch = (uint32_t)entity_id % FIFA96_MATCH_ENTITY_RECORDS;
+  slot = pitch;
+  if (mr->roster_order_ok[side] != 0) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_STATS_SLOTS; i++)
+      if (mr->stats.key[side][i] ==
+          match_run_replay_roster_id(mr, side, pitch)) { slot = i; break; }
+  }
+  if (fifa96_match_stats_add(&mr->stats, side, mr->stats.key[side][slot],
+                             delta) == 0)
+    return 0;
+  if (slot < FIFA96_CAMERA_REPLAY_SLOTS)
+    mr->render.replay.activity_count[side][slot] = mr->stats.value[side][slot];
+  return 1;
+}
 /* FU-70 §1.2 slot tables (flat 0x11064E direction map and the animation chain
  * T1 0x10E1DC -> T2 0x10E1EC / T3 0x10E1F5). */
 static const uint8_t match_run_slot_map[16] = {
@@ -5091,6 +5165,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   memset(mr->roster_name, 0, sizeof mr->roster_name);
   memset(mr->roster_number, 0, sizeof mr->roster_number);
   match_run_sub_roster_reset(mr);
+  fifa96_match_stats_reset(&mr->stats);   /* FU-72: no inherited activity */
   mr->live_restart_pending = 0;
   mr->live_halftime_pending = 0;
   mr->live_halftime_frames = 0;
@@ -5174,6 +5249,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   memset(mr->roster_name, 0, sizeof mr->roster_name);
   memset(mr->roster_number, 0, sizeof mr->roster_number);
   match_run_sub_roster_reset(mr);
+  match_run_stats_seed(mr);            /* FU-72: key by the replay roster id */
   mr->live_restart_pending = 0;
   mr->live_halftime_pending = 0;
   mr->live_halftime_frames = 0;
@@ -5871,6 +5947,7 @@ int fifa96_match_run_act9_reset(struct fifa96_match_run *mr) {
   mr->entities.ball.pos_counter_f = 0;  /* 0x15872F */
   /* 0x73ED2 CALL 0x7A028: the ball-pair block 0x158730..0x158746, flags 0x20,
    * code 2 (the exact `FUN_0007A028` clear). */
+  match_run_stats_seed(mr);                /* FU-72: keys follow the roster reset */
   return (int)fifa96_ball_pair_clear(&mr->entities.ball.pair);
 }
 
@@ -8628,6 +8705,7 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   mr->running = 0;
   mr->paused = 0;               /* FU-343 P4: fresh pause/POST state on reuse */
   match_run_sub_menu_reset(mr); /* P15: no stale menu across runs */
+  fifa96_match_stats_reset(&mr->stats); /* FU-72: a reused run starts clean */
   mr->post_timer = 0;
   mr->post_skip = 0;
   /* FU-343 P3 fix: clear the live-only mode and its one-shot stage flags so a
@@ -9406,7 +9484,9 @@ int fifa96_match_run_replay_blink_step(struct fifa96_match_run_replay *replay,
 static int32_t match_run_replay_roster_id(const struct fifa96_match_run *mr,
                                           uint32_t side, uint32_t slot) {
   if (mr->roster_order_ok[side] != 0) return (int32_t)mr->roster_order[side][slot];
-  if (mr->sub_lineup_ready != 0 &&
+  /* `sub_lineup` maps the 11 pitch records only; the bench slots 11..15 keep
+   * their own slot id (the previous unguarded read was out of bounds). */
+  if (mr->sub_lineup_ready != 0 && slot < FIFA96_MATCH_ENTITY_RECORDS &&
       mr->sub_lineup[side][slot] < FIFA96_CAMERA_REPLAY_SLOTS)
     return (int32_t)mr->sub_lineup[side][slot];
   return (int32_t)slot;

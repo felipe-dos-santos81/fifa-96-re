@@ -839,6 +839,22 @@ enum fifa96_match_run_sub_action {
   FIFA96_MATCH_RUN_SUB_BACK
 };
 
+/* FU-72/`FUN_0008ED40`: the native activity table, 2 blocks x 16 slots with a
+ * 0xA stride (key `[[entity+4]]`, word counter +4, dword value +6). The engine
+ * keys the slots by the replay roster id (`match_run_replay_roster_id`), so
+ * `render.replay.activity_count` and the source-4 selector share the same key.
+ * `max_value`/`max_key`/`max_block` mirror the native max triple (the compare
+ * is on the sign-extended low word). */
+#define FIFA96_MATCH_STATS_SLOTS 16u
+struct fifa96_match_stats {
+  int32_t key[2][FIFA96_MATCH_STATS_SLOTS];
+  uint16_t count[2][FIFA96_MATCH_STATS_SLOTS];
+  int32_t value[2][FIFA96_MATCH_STATS_SLOTS];
+  int32_t max_value;
+  int32_t max_key;
+  uint16_t max_block;
+};
+
 struct fifa96_match_run {
   struct fifa96_match_lifecycle lc;
   struct fifa96_match_pace pace;
@@ -1758,6 +1774,10 @@ struct fifa96_match_run {
    * init/begin like the other per-match counters. */
   uint64_t dispatched_ok;
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
+  /* FU-72/`FUN_0008ED40`: the run's native activity table (keyed by the
+   * replay roster id; see the struct contract above). Seeded by begin and the
+   * act-9 reset, cleared by init/end so a reused run starts clean. */
+  struct fifa96_match_stats stats;
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
    * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/
@@ -1777,6 +1797,25 @@ struct fifa96_match_run {
  * next begin) before re-initialization; a direct re-init leaves the arena
  * unreachable and leaks it. NULL is a no-op. */
 void fifa96_match_run_init(struct fifa96_match_run *mr);
+
+/* FU-72/`FUN_0008ED40`: reset the activity table (every key to
+ * FIFA96_MATCH_ENTITY_NONE, counters/values 0, max triple 0/NONE/0). NULL is a
+ * no-op. */
+void fifa96_match_stats_reset(struct fifa96_match_stats *s);
+
+/* Accumulate `delta` into the slot of `block` whose key equals `key`, applying
+ * the native weight (`fifa96_stats_weight(delta, 0, 0)` = the modeled `2x`
+ * arm) and publishing the max triple when the new low word exceeds it.
+ * Returns 1 on a hit, 0 on NULL, an out-of-range block or no matching key. */
+int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
+                           int32_t key, int32_t delta);
+
+/* The engine wrapper: resolve `entity_id` (`side*11 + pitch`) to the table
+ * slot keyed by the replay roster id, accumulate, and mirror the slot value
+ * into `render.replay.activity_count` so the source-4 selector reads it
+ * unchanged. Returns 1 on a hit, 0 for NULL/out-of-range/no matching key. */
+int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
+                               int32_t delta);
 
 /* One match input poll: fold the engine key presses in `keys` (codes 1..11;
  * state == 1 only) into the FU-61 keyboard-handler code byte (directions

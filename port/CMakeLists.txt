@@ -489,7 +489,7 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
                                           fifa96_match_display fifa96_action_handlers fifa96_keeper
                                           fifa96_ball_pairing fifa96_arm_helpers fifa96_arm_bodies
                                           fifa96_animation fifa96_outfield fifa96_palette
-                                          fifa96_referee fifa96_settings
+                                          fifa96_referee fifa96_settings fifa96_ring_stats
                                           fifa96_sfx fifa96_bnk fifa96_eacs fifa96_mixer)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
