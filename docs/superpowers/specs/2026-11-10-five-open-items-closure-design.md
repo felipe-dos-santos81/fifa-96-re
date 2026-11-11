@@ -531,6 +531,11 @@ pause drain `[0x9AA8]`, the live-match world/clock freeze, the `0x5865C`
 pre-arm audio, and the full `FUN_0003BB1C` match-screen menu/scoreboard/audio
 loop.
 
+**Signature erratum.** The §9.3 sketch `fifa96_match_run_replay_begin(mr,
+trigger)` is landed as `fifa96_match_run_replay_begin(mr)`: the native
+mode-7/`FUN_000510DC` request path is still a leg, so a `trigger` argument
+would be unused under `-Werror`; the host key is the live producer.
+
 ## 10. Slice 5 — `FUN_00047298` 23-descriptor pool
 
 ### 10.1 Native contract
