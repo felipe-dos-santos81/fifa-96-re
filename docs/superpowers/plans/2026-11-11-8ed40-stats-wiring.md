@@ -190,9 +190,41 @@ git commit -m "feat(engine): add the native activity stats table"
 - Consumes: `fifa96_match_run_stats_add` from Task 1.
 - Produces: the row-1B self/tracked activity values.
 
+Fresh-byte scope (Task 1 review correction):
+- The ported first path (`0x77428..0x774D2`) has three live self arms —
+  `0x77451` (`8ED40(rec, 0x64)`), `0x7749F` (`8ED40(rec, 0x19)`) and the
+  tracked companion `0x77493` (`8ED40(tracked, 5)`) — plus the `0x774B2`
+  `8ED40(rec, 5)` arm.
+- The `0x774B2` arm is **dead** in the shipped image: the `0x77423` seat calls
+  `0x71C94`, which calls `0x700F4`, and `0x700F4` zeroes `word[0x1577C0]` /
+  `word[0x1577C2]` (`0x701e5..0x701ec`). The install tree's `p =
+  word[0x1577C2] * dword[0x157754]` is therefore always 0 and the `JL
+  0x774A6` arm is unreachable. Wire the self call from `stat_id` anyway (the
+  same call covers the dead value 5); record the dead arm, do not fabricate a
+  test for it.
+- The second set of calls (`0x775FD`/`0x77613` in the `0x7759C..0x77631`
+  fall-through tail) is inside the **unported** FU285-L8 tail; it stays a
+  numbered leg. Do not wire it.
+
 - [ ] **Step 1: Write the failing row-1B stats assertions**
 
-In `test_action_1b_wide_route_binds_pan` (`port/tests/test_engine_match_handlers.c:5520`), after the dispatch, add an assertion on `f.mr.stats.value[0][<key>]` for the record's side/key. Use the fixture's `stat_id`/`stat_tracked` branch; if the fixture's branch is not deterministic, add a focused `test_action_1b_stats` with the same staging and assert the value is non-zero for the self key.
+Extend `test_action_1b_wide_route_binds_pan`
+(`port/tests/test_engine_match_handlers.c:5520`): after the dispatch, assert
+the wide route's `p >= 0` arm accumulated the tracked `+5` and self `+0x19`,
+both at 2x, into the acting pitch slot:
+
+```c
+assert(f.mr.stats.value[0][0] == 60);   /* (5 + 0x19) * 2 */
+assert(f.mr.render.replay.activity_count[0][0] == 60);
+```
+
+The seat set `cam->tracked = r->entity_id` (`0x71D27`), so both native calls
+hit the same entity; 60 pins both calls (5-only would read 10, self-only 50).
+
+Add a focused `test_action_1b_stats_phase10` cloned from the wide fixture with
+`f.mr.state.phase = 0x10u` (the head still fails: it requires 0x0D) and
+`sign_match == 0`; assert `match1b_stat_id == 0x64`, `stats.value[0][0] ==
+200` (`0x64 * 2`) and `activity_count[0][0] == 200`.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -201,16 +233,20 @@ Expected: FAIL — the stats value is still 0.
 
 - [ ] **Step 3: Add the two calls**
 
-In the `match1b_stat_id` block, after `stat_id`/`stat_tracked` are computed and before/after `mr->match1b_stat_id = stat_id;`:
+In the `match1b_stat_id` block, after `stat_id`/`stat_tracked` are computed and
+before they are stored in `mr->match1b_*`, emit them in native order (the
+tracked `0x77493` precedes the self `0x7749F`):
 
 ```c
-if (stat_id != 0xFFu)
-  (void)fifa96_match_run_stats_add(mr, r->entity_id, (int32_t)stat_id);
 if (stat_tracked != 0u && cam->tracked != FIFA96_CAMERA_TRACKED_NONE)
   (void)fifa96_match_run_stats_add(mr, cam->tracked, 5);
+if (stat_id != 0xFFu)
+  (void)fifa96_match_run_stats_add(mr, r->entity_id, (int32_t)stat_id);
 ```
 
-The self call covers `0x77451` (+0x64), `0x7749F` (+0x19) and `0x774B2`/`0x77613` (+5); the tracked call covers `0x77493`/`0x77613` (+5).
+The single self call covers `0x77451` (+0x64), `0x7749F` (+0x19) and the dead
+`0x774B2` (+5); the tracked call covers `0x77493` (+5). The `0x775FD`/`0x77613`
+pair stays in the FU285-L8 tail leg.
 
 - [ ] **Step 4: Run the test**
 
