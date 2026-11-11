@@ -75,7 +75,7 @@ int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
   return 0;
 }
 
-static void match_run_stats_seed(struct fifa96_match_run *mr) {
+void fifa96_match_run_stats_seed(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_stats_reset(&mr->stats);
   for (uint32_t side = 0; side < 2u; side++)
@@ -85,23 +85,30 @@ static void match_run_stats_seed(struct fifa96_match_run *mr) {
 
 int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
                                int32_t delta) {
-  uint32_t side, pitch, slot;
+  uint32_t side, block, pitch, slot;
   if (!mr || entity_id < 0 ||
       entity_id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
     return 0;
   side = (uint32_t)entity_id / FIFA96_MATCH_ENTITY_RECORDS;
   pitch = (uint32_t)entity_id % FIFA96_MATCH_ENTITY_RECORDS;
+  /* Native block = `(team+0x826 ^ [0x57ABE]) & 1` (`0x8ED83..0x8ED95`). The
+   * modeled `side_swap` is staged 0 (`[0x57ABE]` producer unported, OL-72), so
+   * the display block equals the team index the table was seeded by. */
+  block = ((uint32_t)mr->entities.team[side].side ^ mr->side_swap) & 1u;
   slot = pitch;
   if (mr->roster_order_ok[side] != 0) {
     for (uint32_t i = 0; i < FIFA96_MATCH_STATS_SLOTS; i++)
-      if (mr->stats.key[side][i] ==
+      if (mr->stats.key[block][i] ==
           match_run_replay_roster_id(mr, side, pitch)) { slot = i; break; }
   }
-  if (fifa96_match_stats_add(&mr->stats, side, mr->stats.key[side][slot],
+  if (fifa96_match_stats_add(&mr->stats, block, mr->stats.key[block][slot],
                              delta) == 0)
     return 0;
+  /* The replay selector indexes `activity_count` by the pitch/order slot, so
+   * the table slot (seeded key at slot i = `match_run_replay_roster_id(i)`)
+   * is also the pitch slot. */
   if (slot < FIFA96_CAMERA_REPLAY_SLOTS)
-    mr->render.replay.activity_count[side][slot] = mr->stats.value[side][slot];
+    mr->render.replay.activity_count[block][slot] = mr->stats.value[block][slot];
   return 1;
 }
 /* FU-70 §1.2 slot tables (flat 0x11064E direction map and the animation chain
@@ -5249,7 +5256,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   memset(mr->roster_name, 0, sizeof mr->roster_name);
   memset(mr->roster_number, 0, sizeof mr->roster_number);
   match_run_sub_roster_reset(mr);
-  match_run_stats_seed(mr);            /* FU-72: key by the replay roster id */
+  fifa96_match_run_stats_seed(mr);    /* FU-72: key by the replay roster id */
   mr->live_restart_pending = 0;
   mr->live_halftime_pending = 0;
   mr->live_halftime_frames = 0;
@@ -5947,7 +5954,7 @@ int fifa96_match_run_act9_reset(struct fifa96_match_run *mr) {
   mr->entities.ball.pos_counter_f = 0;  /* 0x15872F */
   /* 0x73ED2 CALL 0x7A028: the ball-pair block 0x158730..0x158746, flags 0x20,
    * code 2 (the exact `FUN_0007A028` clear). */
-  match_run_stats_seed(mr);                /* FU-72: keys follow the roster reset */
+  fifa96_match_run_stats_seed(mr);        /* FU-72: keys follow the roster reset */
   return (int)fifa96_ball_pair_clear(&mr->entities.ball.pair);
 }
 

@@ -111,6 +111,11 @@ int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
       }
     }
   }
+  /* The order above is staged after `fifa96_match_run_begin` seeded the
+   * activity table with the pre-order keys, and the stats slot must track the
+   * pitch slot the replay selector reads (`activity_count[side][pitch]`).
+   * Re-key now, before any frame can accumulate; the table is still empty. */
+  fifa96_match_run_stats_seed(mr);
   eng->match_halftime_steps = 0;
   eng->match_halftime_pressed = 0;
   eng->match_halftime_hold = 0;

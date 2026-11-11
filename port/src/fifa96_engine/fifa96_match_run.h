@@ -1817,6 +1817,15 @@ int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
 int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
                                int32_t delta);
 
+/* Re-key the activity table from the current roster binding: every block/slot
+ * key becomes `match_run_replay_roster_id(side, slot)`, which is the engine's
+ * projection of the native `*[entity+4]` key. Called from begin and the act-9
+ * reset; the frontend bridge calls it again after it stages `roster_order`
+ * (that staging happens after begin, and the table slot must track the pitch
+ * slot the replay selector reads). The table is cleared by the re-key, so it
+ * must run before any frame accumulates. NULL is a no-op. */
+void fifa96_match_run_stats_seed(struct fifa96_match_run *mr);
+
 /* One match input poll: fold the engine key presses in `keys` (codes 1..11;
  * state == 1 only) into the FU-61 keyboard-handler code byte (directions
  * 0x1/0x2/0x4/0x8 = up/down/right/left, buttons 0x10 kick / 0x20 pass), pass

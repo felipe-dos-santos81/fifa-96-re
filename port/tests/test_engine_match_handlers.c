@@ -6835,6 +6835,31 @@ static void test_stats_table_add(void) {
   assert(s.value[0][3] == 0 && s.key[0][3] == FIFA96_MATCH_ENTITY_NONE);
 }
 
+/* The live bridge stages `roster_order` after `begin`, so the table must be
+ * re-keyed before frames accumulate; otherwise a permuted line-up accumulates
+ * into the order-id slot while the replay selector reads the pitch slot. */
+static void test_stats_permuted_roster_order(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t side = 0; side < 2u; side++)
+    for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++)
+      f.mr.roster_order[side][slot] = (uint8_t)slot;
+  f.mr.roster_order[0][0] = 1;   /* pitch slot 0 -> roster id 1 */
+  f.mr.roster_order[0][1] = 0;   /* pitch slot 1 -> roster id 0 */
+  f.mr.roster_order_ok[0] = 1;
+  fifa96_match_run_stats_seed(&f.mr);
+  assert(f.mr.stats.key[0][0] == 1 && f.mr.stats.key[0][1] == 0);
+  assert(fifa96_match_run_stats_add(&f.mr, 0 * 11 + 0, 100) == 1);
+  assert(f.mr.stats.value[0][0] == 200);            /* the 2x weight */
+  assert(f.mr.stats.value[0][1] == 0);              /* not the order-id slot */
+  assert(f.mr.render.replay.activity_count[0][0] == 200);
+  assert(f.mr.render.replay.activity_count[0][1] == 0);
+  assert(fifa96_match_run_stats_add(&f.mr, 0 * 11 + 1, 50) == 1);
+  assert(f.mr.stats.value[0][1] == 100);
+  assert(f.mr.render.replay.activity_count[0][1] == 100);
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -6973,6 +6998,7 @@ int main(void) {
   test_formation_arm_dormant_until_matrices();
   test_situation_producer_live_at_begin();
   test_stats_table_add();
+  test_stats_permuted_roster_order();
   puts("test_engine_match_handlers OK");
   return 0;
 }
