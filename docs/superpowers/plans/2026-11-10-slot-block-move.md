@@ -104,7 +104,7 @@ Expected: FAIL — implicit declaration of `fifa96_match_run_slot_move` (or a li
 In `fifa96_match_run.h`, after the `fifa96_match_run_select_step` declaration, add:
 
 ```c
-/* FU-275 L266-? / FU-315 L2: the full FUN_000786A0 hand-off. `mr->slot.entity`
+/* FU275-L6 / FU315-L2: the full FUN_000786A0 hand-off. `mr->slot.entity`
  * is the native [rec+0x20] pointer; `has_slot` is its record-visible
  * projection. Moves the block's owner and back-pointer, clears the donor and
  * the seven tail words, keeps the dirs (the block moves wholesale), and clears
