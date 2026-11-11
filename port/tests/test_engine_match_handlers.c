@@ -449,8 +449,14 @@ static void test_action_10_receiver_cut(void) {
   assert(f.mr.record.stage92 == 2u);
   assert(f.mr.render.camera_target.source != 2);
 
-  /* Second 0x20 edge: FUN_0008DE8C re-picks the free receiver and the
-   * 0x83937 branch stages source 2 with that record's position. */
+  /* Second 0x20 edge: FUN_0008DE8C re-picks the free receiver, 0x838EF hands
+   * the slot to it (0x786A0) and the 0x83937 branch stages source 2 with that
+   * record's position. */
+  f.mr.slot.entity = 1;
+  f.mr.slot.anim_b = 0x21;
+  f.mr.slot.anim_c = 0x22;
+  f.mr.slot.pressed = 0x10;
+  f.mr.slot.byte24 = 0x55;
   f.mr.sp_clock_157a68 = 0x123;
   f.mr.sp_global_105fb0 = 0x456;
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
@@ -460,6 +466,13 @@ static void test_action_10_receiver_cut(void) {
   assert(f.mr.render.camera_target.record[2] == 0);
   assert(f.mr.sp_clock_157a68 == 0);
   assert(f.mr.sp_global_105fb0 == 0);
+  assert(f.mr.slot.entity == 2);                       /* the picked receiver */
+  assert(f.mr.entities.team[0].records[2].has_slot == 1);
+  assert(f.mr.entities.team[0].records[1].has_slot == 0);
+  assert(f.mr.entities.team[0].records[2].dir_x == 0x21);
+  assert(f.mr.entities.team[0].records[2].dir_z == 0x22);
+  assert(f.mr.slot.pressed == 0);
+  assert(f.mr.slot.byte24 == 0x55);
   drop_fixture(&f);
 }
 

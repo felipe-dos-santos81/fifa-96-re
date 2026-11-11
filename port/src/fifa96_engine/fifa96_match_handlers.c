@@ -1804,7 +1804,11 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
   mr->sp_b6_1587b6 = 0;
   mr->sp_clock_157a68 = 0;     /* FUN_0004C374 (called twice) */
   mr->sp_global_105fb0 = 0;    /* FUN_000361A4 */
-  /* 0x786A0's list move is not modeled; all of it stays FU275-L6. */
+  /* 0x838EF: FUN_000786A0(taker, picked receiver). The native no-ops when the
+   * taker is not the pointer owner; the camera target still follows the pick. */
+  (void)fifa96_match_run_slot_move(
+      mr, r->entity_id,
+      (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)pick), 0);
   /* 0x83937: [0x157AA3] = the re-picked receiver and 0x36200(2). */
   mr->render.camera_target.source = 2;
   mr->render.camera_target.record[0] = t->records[pick].pos_x;
