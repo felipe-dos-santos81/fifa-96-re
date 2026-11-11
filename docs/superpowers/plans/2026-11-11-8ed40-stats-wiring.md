@@ -164,7 +164,7 @@ int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
 }
 ```
 
-Call `match_run_stats_seed(mr)` after the roster order is staged in `fifa96_match_run_begin` and in the act-9 reset; call `fifa96_match_stats_reset(&mr->stats)` in `fifa96_match_run_init`/`end` so a reused run starts clean.
+Call `match_run_stats_seed(mr)` after the roster order is staged in `fifa96_match_run_begin` and in the act-9 reset; call `fifa96_match_stats_reset(&mr->stats)` in `fifa96_match_run_init`/`end` so a reused run starts clean. `match_run_replay_roster_id` is defined later in the file; add a static forward declaration above the seed helper if the compiler needs it.
 
 - [ ] **Step 5: Run the test**
 
