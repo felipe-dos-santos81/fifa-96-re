@@ -5163,8 +5163,9 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
   (void)fifa96_camera_set_tracked(cam, r->entity_id);
 
   /* The install selection (`0x77428..0x774D2`, the EDI consumer). The sinks
-   * (`0x8F188` event ring, `0x8ED40` stat accumulator, `0x974DC` sound) are
-   * unported (OL-27/OL-82); their computed arguments are recorded. After the
+   * `0x8F188` event ring and `0x974DC` sound are unported (OL-27/OL-82) and
+   * their computed arguments are recorded; the `0x8ED40` stat accumulator IS
+   * wired below (its arguments are both recorded and accumulated). After the
    * seat `[0x1577CA]` is the record, so the `0x8ED40(tracked, 5)` companion is
    * always present on the p >= 0 arm. */
   {
@@ -5192,6 +5193,19 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
         event_id = 0u;                                    /* 0x8F188(0, rec, 0x20) */
       }
     }
+    /* The `0x8ED40` stat accumulator (= `fifa96_match_run_stats_add`) is now
+     * wired for this tree's live calls, in native order: the tracked
+     * `0x77493` (`0x8ED40(tracked, 5)`) precedes the self `0x7749F`
+     * (`0x8ED40(rec, 0x19)`). The single self call also serves the
+     * `0x77451` (+0x64) arm and the p < 0 `stat_id = 5` arm. The `0x774B2`
+     * `8ED40(rec, 5)` arm is dead in the shipped image: the `0x77423` seat's
+     * `0x700F4` zeroes `word[0x1577C2]`, so its `p` term is always 0 and the
+     * `JL 0x774A6` branch is unreachable — no separate call is emitted. The
+     * `0x775FD`/`0x77613` pair stays in the unported FU285-L8 tail. */
+    if (stat_tracked != 0u && cam->tracked != FIFA96_CAMERA_TRACKED_NONE)
+      (void)fifa96_match_run_stats_add(mr, cam->tracked, 5);
+    if (stat_id != 0xFFu)
+      (void)fifa96_match_run_stats_add(mr, r->entity_id, (int32_t)stat_id);
     mr->match1b_event_id = event_id;
     mr->match1b_stat_id = stat_id;
     mr->match1b_stat_tracked = stat_tracked;
@@ -5424,8 +5438,9 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
      *    `0x74584` folds + the `[[rec+4]+9]` descriptor term) are PORTED
      *    (phase-28 T6/T7 / FU301+FU302, `match_1b_deep_pan`, incl. the
      *    `0x7720E [0x157C58]` re-place arm); the sink bodies
-     *    (`0x8F188`/`0x8ED40`/`0x974DC`, OL-27/OL-82 / FU302-L5) stay legs
-     *    with their computed arguments recorded;
+     *    (`0x8F188`/`0x974DC`, OL-27/OL-82 / FU302-L5) stay legs with their
+     *    computed arguments recorded (the `0x8ED40` stat calls are wired in
+     *    `match_1b_deep_pan`);
      *  - `0x774C0` terminal: `0x974DC(4)` (sink, FU285-L1) + `[0x157C55]=1`. */
     if (mr->keeper_latch[1] == 0u) {                             /* 0x76FC7 */
       if (actor_is_rec == 0u) {                                  /* 0x76FD5 (mutual exclusion) */

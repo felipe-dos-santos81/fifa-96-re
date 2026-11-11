@@ -5555,8 +5555,48 @@ static void test_action_1b_wide_route_binds_pan(void) {
   assert(f.mr.match1b_sign_match == 0);
   assert(f.mr.match1b_event_id == 3);        /* 0x8F188(3, rec, 0x20) */
   assert(f.mr.match1b_stat_id == 0x19);      /* 0x8ED40(rec, 0x19) */
+  /* The p >= 0 install arm emits the tracked `+5` (`0x77493`) and the self
+   * `+0x19` (`0x7749F`) into the same acting pitch slot: the seat bound
+   * `[0x1577CA] = rec` (`0x71D27`), so both `0x8ED40` calls hit entity 0. The
+   * table weight is 2x, and 60 pins both calls (5-only would read 10,
+   * 0x19-only 50). */
+  assert(f.mr.stats.value[0][0] == 60);   /* (5 + 0x19) * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 60);
   assert(f.mr.state.phase == 0);             /* no emit: not-controlled -> 0x19 */
   assert(e->code == 0x19u);
+  drop_fixture(&f);
+}
+
+/* FU-72/FU-302: the phase-`0x10` + sign-match-0 install arm (`0x77428..0x77456`)
+ * requests `0x8ED40(rec, 0x64)`; the head still fails (it requires 0x0D), so the
+ * wide route runs with the same seat. The stats table takes the 2x weight. */
+static void test_action_1b_stats_phase10(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0x10u;             /* not 0x0D -> the head gate fails */
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 1;
+  f.mr.record.anim_id = 0x36;           /* the 0x7701C [0x34,0x3A] band */
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.has_ball = 0;
+  f.mr.record.controlled = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  f.mr.keeper_latch[1] = 0;             /* 0x157C55 clear */
+  f.mr.global_157c5c = 0;               /* the latch clear -> the wide route */
+  f.mr.render.camera.pos_y = 0x30;      /* Block D: > 0x20 -> the pan block */
+  f.mr.keeper_cam_z = 0x30;             /* Block F sign +; the tree's sign_match 0 */
+  e->lane_x = 0;                        /* the 0x7700E rush gate passes */
+  e->bound = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
+  assert(f.mr.render.camera.tracked == 0);   /* 0x71D27 the seat bind */
+  assert(f.mr.match1b_sign_match == 0);
+  assert(f.mr.match1b_stat_id == 0x64);      /* 0x8ED40(rec, 0x64) */
+  assert(f.mr.stats.value[0][0] == 200);     /* 0x64 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 200);
   drop_fixture(&f);
 }
 
@@ -6964,6 +7004,7 @@ int main(void) {
   test_action_1b_stage0_latch_partial_clear();
   test_action_1b_stage1_anim_table();
   test_action_1b_wide_route_binds_pan();
+  test_action_1b_stats_phase10();
   test_action_1b_replace_self_actor_reaches_emit();
   test_action_1b_mutual_exclusion_skips_wide();
   test_action_1c_runs_body();
