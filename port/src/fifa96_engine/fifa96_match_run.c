@@ -9505,6 +9505,25 @@ static int32_t match_run_replay_roster_id(const struct fifa96_match_run *mr,
   return (int32_t)slot;
 }
 
+int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_replay *r;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running || mr->paused ||
+      mr->lc.screen != FIFA96_MATCH_SCREEN_ACTIVE)
+    return -FIFA96_ERR_STATE;
+  /* FUN_00064270 stores 0x81 when the replay buffer [0x109AB0] is allocated
+   * (FUN_00063EBC). The engine's recorded-frame buffer is a later leg, so the
+   * live ACTIVE run is the modeled gate; no 0x80 store exists in the native. */
+  r = &mr->render.replay;
+  r->state = FIFA96_MATCH_REPLAY_ARMED;
+  r->hud_armed = 1;
+  r->phase_counter = 0;
+  r->cursor = 0;
+  r->camera_index = 0;
+  (void)fifa96_match_run_replay_camera_set(mr, 0);
+  return FIFA96_OK;
+}
+
 int fifa96_match_run_replay_target(struct fifa96_match_run *mr) {
   struct fifa96_match_run_replay *r;
   fifa96_camera_replay_target target;

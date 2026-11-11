@@ -306,6 +306,11 @@ struct fifa96_match_run_replay {
   uint8_t goal_roster[FIFA96_CAMERA_REPLAY_EVENTS];
   uint8_t goal_count;
   int32_t activity_count[2][FIFA96_CAMERA_REPLAY_SLOTS];
+  /* The replay input seam: the native button word's rising edge for this
+   * input poll (1 play/pause, 2 slow, 4 step back, 8 step forward, 0x20
+   * camera, 0x80 exit). `input_buttons_held` is the previous poll's level. */
+  uint8_t input_buttons;
+  uint8_t input_buttons_held;
 };
 
 /* The R2 row gate (fresh 0x565BC decompile + the predicate bodies):
@@ -327,6 +332,12 @@ uint32_t fifa96_match_run_replay_progress(const struct fifa96_match_run_replay *
  * caption draws (counts 0..9, or the >= 0x14 reset frame), 0 in 10..19. */
 int fifa96_match_run_replay_blink_step(struct fifa96_match_run_replay *replay,
                                        int32_t tick);
+
+/* FUN_00064270: arm the replay (state 0x81) for a live, unpaused, ACTIVE
+ * run. The native buffer gate [0x109AB0] is modeled by the live-run gate
+ * (the recorded-frame ring is a later leg). Returns 0, -FIFA96_ERR_INVALID
+ * on NULL, -FIFA96_ERR_STATE when the run is not running/ACTIVE or paused. */
+int fifa96_match_run_replay_begin(struct fifa96_match_run *mr);
 
 /* The reachable FUN_000642FC subset: the 0x80 -> 0x81 promotion, the 0x81 arm
  * (reset cursor/camera + selector 0), the button mapping (1 toggles

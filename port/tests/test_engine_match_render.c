@@ -2694,6 +2694,78 @@ static void test_replay_target(void) {
   assert(r->goal_roster[0] == 3);
 }
 
+/* FU-351 §9.4: the host trigger arms the native replay state (0x81, never
+ * 0x80); the first step runs the 0x81 arm to PLAY and the source-4 target
+ * writer, and the native button word drives pause/camera/step/slow/exit. */
+static void test_replay_begin_and_step(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  struct fifa96_match_run_replay *r = &mr.render.replay;
+  mr.running = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  for (int side = 0; side < 2; side++) {
+    for (int slot = 0; slot < 16; slot++) mr.roster_order[side][slot] = slot;
+    mr.roster_order_ok[side] = 1;
+  }
+  fifa96_match_run_stats_seed(&mr);
+  mr.score[0] = 2;
+  mr.score[1] = 1;
+  r->goal_count = 3;
+  r->goal_side[0] = 0; r->goal_roster[0] = 5;
+  r->goal_side[1] = 1; r->goal_roster[1] = 3;
+  r->goal_side[2] = 0; r->goal_roster[2] = 7;
+
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_ARMED);   /* the 0x64270 arm */
+  assert(r->hud_armed == 1);
+  assert(r->cursor == 0 && r->camera_index == 0);
+  assert(fifa96_match_run_replay_step(&mr, 0, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);    /* first step -> 0x82 */
+  assert(mr.render.camera_target.source == 4);
+  assert(mr.render.camera_target.index == 7);      /* the 0,1,0 ring */
+
+  assert(fifa96_match_run_replay_step(&mr, 1, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PAUSE);
+  assert(fifa96_match_run_replay_step(&mr, 1, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+
+  assert(fifa96_match_run_replay_step(&mr, 0x20, 0) == 0);
+  assert(r->camera_index == 1);
+  assert(fifa96_match_run_replay_step(&mr, 8, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_STEP_FWD);
+  assert(fifa96_match_run_replay_step(&mr, 0, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(fifa96_match_run_replay_step(&mr, 4, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_STEP_BACK);
+  assert(fifa96_match_run_replay_step(&mr, 0, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(fifa96_match_run_replay_step(&mr, 2, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_SLOW);
+
+  assert(fifa96_match_run_replay_step(&mr, 0x80, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_LIVE);    /* the exit arm */
+  assert(r->hud_armed == 0);
+  assert(mr.render.camera_target.source == 0);
+  assert(mr.render.camera_target.index == -1);
+  fifa96_match_run_init(&mr);
+}
+
+static void test_replay_begin_edges(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_replay_begin(NULL) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_replay_begin(&mr) == -FIFA96_ERR_STATE);
+  mr.running = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_OVER;
+  assert(fifa96_match_run_replay_begin(&mr) == -FIFA96_ERR_STATE);
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.paused = 1;
+  assert(fifa96_match_run_replay_begin(&mr) == -FIFA96_ERR_STATE);
+  mr.paused = 0;
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  fifa96_match_run_init(&mr);
+}
+
 /* FU-72/FU-351 §23: the source-4 selector consumes the run's stats table via
  * the mirrored `activity_count`. `fifa96_match_run_stats_seed` keys pitch slot
  * i with `match_run_replay_roster_id(i)`; a non-goal +60 on pitch slot 4 beats
@@ -3089,6 +3161,8 @@ int main(void) {
   test_replay_step_machine();
   test_replay_target();
   test_replay_target_consumes_stats();
+  test_replay_begin_and_step();
+  test_replay_begin_edges();
   test_replay_camera_set();
   test_sub_marks_and_numbers();
   test_overlay_rows_and_timeout();
