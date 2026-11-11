@@ -4015,10 +4015,9 @@ static int fifa96_match_action_0B(struct fifa96_match_run *mr) {
       return FIFA96_OK;
     }
     mr->entities.team[team].duel_7d7++;              /* 0x81B80/0x81B83 */
+    /* 0x81B89..0x81BB7: the `%10` event 0xA1 request (FU169-L2) belongs here,
+     * before the native `8ED40(rec, -3)` at 0x81BBE. */
     (void)fifa96_match_run_stats_add(mr, r->entity_id, -3); /* 0x81BBE */
-    /* 0x81B89..0x81BB7: the `%10` event 0xA1 request (FU169-L2).
-     * 0x81BB7/0x81BBE: FUN_0008ED40(rec, -3) impact accumulator, wired above
-     * (FU169-L2). */
     point[0] = found->pos_x;
     point[1] = found->pos_y;
     point[2] = found->pos_z;

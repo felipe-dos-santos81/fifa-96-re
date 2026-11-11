@@ -294,8 +294,11 @@ Row 09: add `test_action_09_arm1_stats` (do not extend
 Stage the `0x80D18` event path: `state.phase = 2`, `record.entity_id = 1`,
 `active = 1`, `stage92 = 1`, `anim_id = 0x11`, `frame = 2`, `face7d = 0`,
 `desc_c = 0`, `desc_16 = 0`, `render.camera.pos_y = 0`,
-`team[0].records[1].lane_x = 0`, `lane_z = 0`, `cam_dz6f = 0`, `bound = 0`,
-`entities.ball.pos_counter_f = 0`, `team[1].target = NONE`.
+`team[0].records[1].lane_x = 0`, `lane_z = 0`, `cam_dz6f = 1`, `bound = 0`,
+`entities.ball.pos_counter_f = 0`, `team[1].target = NONE`. (`cam_dz6f = 1`,
+not 0: `fifa96_entity_angle(0,0)` returns `0x80`, which meets the `0x39`
+threshold and takes the target block; the `(0,1)` pair makes the fold
+`angle - face7d = 0`, below it.)
 
 - Acting arm: `entities.controlled = FIFA96_MATCH_ENTITY_NONE`; assert
   `match09_event_id == 0x5D` and `stats.value[0][1] == 4` (`+2 * 2`).
