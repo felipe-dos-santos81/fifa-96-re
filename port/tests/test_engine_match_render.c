@@ -1657,19 +1657,23 @@ static void test_live_substitution_rebuilds_remap(void) {
   struct fifa96_match_run *mr = &f.mr;
   struct fifa96_match_run_render *r = &mr->render;
 
-  /* Stage the starting map: pitch 1 is roster 0 (skin '3' -> class 2 base
-   * 0xE4, hair '4' -> class 0). */
+  /* Stage the starting map: pitch 1 is roster 0 (skin '3' / hair '4'). */
   mr->sub_lineup[0][1] = 0;
   mr->roster_skin_code[0][0] = '3';
   mr->roster_hair_code[0][0] = '4';
   assert(fifa96_match_run_stage_pitch(mr, f.engine) == 0);
-  assert(r->remap_entity[0][1][0xDB] == 0xE4);
-  assert(r->remap_entity[0][1][0x75] == 0xE8);
-  assert(r->remap_entity[0][1][0xD7] == 0x00);
-  assert(r->remap_entity[0][2][0xDB] == 0xF6);   /* untouched default */
+  /* roster 0: class_a 0 (skin F6..FD, 0xE3 clear), class_b 2
+   * (hair F0..F2,0x43). The team kit overlay keeps the shirt slot. */
+  assert(r->remap_entity[0][1][0x50] == 37);
+  assert(r->remap_entity[0][1][0xD7] == 0xF0);
+  assert(r->remap_entity[0][1][0xDA] == 0x43);
+  assert(r->remap_entity[0][1][0xDB] == 0xF6);
+  assert(r->remap_entity[0][1][0xE3] == 0x00);
+  assert(r->remap_entity[0][2][0xD7] == 0x00);   /* unassigned default */
+  assert(r->remap_entity[0][2][0xDB] == 0xDB);
+  assert(r->remap_entity[0][2][0xE3] == 0xE3);
 
-  /* Substitute roster 5 (skin '1' -> class 3 base 0xDB, hair '4' -> class 0)
-   * onto pitch 1. */
+  /* Substitute roster 5 onto pitch 1. */
   mr->roster_pos[0][0] = 'D';
   mr->roster_pos[0][5] = 'M';
   mr->roster_skin_code[0][5] = '1';
@@ -1683,11 +1687,13 @@ static void test_live_substitution_rebuilds_remap(void) {
   assert(fifa96_match_run_pause_sub_apply(mr, 1, 5) == 1);
   assert(mr->sub_lineup[0][1] == 5);
 
-  assert(r->remap_entity[0][1][0xDB] == 0xDB);
-  assert(r->remap_entity[0][1][0x75] == 0xDF);
-  assert(r->remap_entity[0][1][0xD7] == 0x00);
-  assert(r->remap_entity[0][2][0xDB] == 0xF6);   /* pitch 2 unchanged */
-  assert(r->remap_entity[0][2][0xD7] == 0xD7);
+  /* roster 5: class_a 0 (skin F6), class_b 3 (hair D7..DA). */
+  assert(r->remap_entity[0][1][0x50] == 37);
+  assert(r->remap_entity[0][1][0xD7] == 0xD7);
+  assert(r->remap_entity[0][1][0xDB] == 0xF6);
+  assert(r->remap_entity[0][1][0xE3] == 0x00);
+  assert(r->remap_entity[0][2][0xD7] == 0x00);
+  assert(r->remap_entity[0][2][0xDB] == 0xDB);
 
   live_fixture_drop(&f);
 }
@@ -1818,19 +1824,26 @@ static void test_live_real_team_kits(void) {
                          (int)r->palette[(81 + i) * 3 + c]);
   assert(shirt_diff > 0 && shorts_diff > 0);
 
-  /* Per-pitch tables: the default is class 0 / hair 3, and a staged roster
-   * mapping composes the player's own classes (skin '3' -> class 2 base 0xE4,
-   * hair '0' -> class 3). Re-stage after setting the mapping. */
-  assert(memcmp(r->remap_entity[0][1], r->remap_team[0], 256) == 0);
+  /* Native appearance + team-kit overlay. The old
+   * memcmp(remap_entity, remap_team) no longer holds: only the six kit
+   * source bands come from remap_team; the rest is the native block. */
+  assert(r->remap_entity[0][1][0x50] == r->remap_team[0][0x50]);
+  assert(r->remap_entity[0][1][0xD7] == 0x00);
+  assert(r->remap_entity[0][1][0xDB] == 0xDB);
+  assert(r->remap_entity[0][1][0xE3] == 0xE3);
   f.mr.sub_lineup[0][1] = 0;
   f.mr.roster_skin_code[0][0] = '3';
   f.mr.roster_hair_code[0][0] = '4';
   assert(fifa96_match_run_stage_pitch(&f.mr, f.engine) == 0);
-  assert(r->remap_entity[0][1][0xDB] == 0xE4);
-  assert(r->remap_entity[0][1][0x75] == 0xE8);
-  assert(r->remap_entity[0][1][0xD7] == 0x00);   /* hair class 0 */
-  assert(r->remap_entity[0][2][0xDB] == 0xF6);   /* unassigned -> default */
-  assert(r->remap_entity[0][2][0xD7] == 0xD7);
+  /* roster 0 (hair '4' / skin '3'): class_a 0, class_b 2. */
+  assert(r->remap_entity[0][1][0xD7] == 0xF0);
+  assert(r->remap_entity[0][1][0xDA] == 0x43);
+  assert(r->remap_entity[0][1][0xDB] == 0xF6);
+  assert(r->remap_entity[0][1][0xE3] == 0x00);
+  assert(r->remap_entity[0][2][0xD7] == 0x00);
+  assert(r->remap_entity[0][2][0xDB] == 0xDB);
+  assert(r->remap_entity[0][2][0xE3] == 0xE3);
+  assert(r->remap_entity[1][1][0x50] == 70);   /* away overlay */
   assert(r->palette[0xE4 * 3] > r->palette[0xE4 * 3 + 1]);
   assert(r->palette[0xE4 * 3 + 1] > r->palette[0xE4 * 3 + 2]);
   /* The marking slot stays pure white and the HUD scan selects it. */
@@ -1869,19 +1882,16 @@ static void test_live_native_order_appearance(void) {
   mr->roster_hair_code[1][0] = '0';
   mr->roster_skin_code[1][0] = '2';
   assert(fifa96_match_run_stage_pitch(mr, f.engine) == 0);
-  /* Brazil: Taffarel hair class 2 (0xF0 ramp), skin class 1 (0xED base);
-   * Branco hair class 1 (0xEB ramp). */
-  assert(r->remap_entity[0][0][0xD7] == 0xF0);
-  assert(r->remap_entity[0][0][0xDB] == 0xED);
-  assert(r->remap_entity[0][0][0x75] == 0xF1);
-  assert(r->remap_entity[0][1][0xD7] == 0xEB);
-  assert(r->remap_entity[0][1][0xDB] == 0xF6);
-  /* Germany: pitch 2 Schulz (skin class 3, 0xDB base); pitch 4 Buchwald
-   * (skin class 1, 0xED base). Both hair '0' -> class 3 ramp 0xD7. */
+  /* Native pairing: class_a = 0x4C00C (port hair code), class_b =
+   * 0x4C098 (port skin code). */
+  assert(r->remap_entity[0][0][0xD7] == 0xEB);   /* skin '2' -> class_b 1 */
+  assert(r->remap_entity[0][0][0xDB] == 0xE4);   /* hair '1' -> class_a 2 */
+  assert(r->remap_entity[0][1][0xD7] == 0x00);   /* skin default '4' -> class_b 0 */
+  assert(r->remap_entity[0][1][0xDB] == 0xED);   /* hair '2' -> class_a 1 */
   assert(r->remap_entity[1][2][0xD7] == 0xD7);
   assert(r->remap_entity[1][2][0xDB] == 0xDB);
-  assert(r->remap_entity[1][4][0xD7] == 0xD7);
-  assert(r->remap_entity[1][4][0xDB] == 0xED);
+  assert(r->remap_entity[1][4][0xD7] == 0xEB);   /* skin '2' -> class_b 1 */
+  assert(r->remap_entity[1][4][0xDB] == 0xDB);   /* hair '0' -> class_a 3 */
   live_fixture_drop(&f);
 }
 

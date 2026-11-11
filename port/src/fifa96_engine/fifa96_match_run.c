@@ -12,6 +12,7 @@
 #include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_bigf.h"
 #include "fifa96_loader/fifa96_entity_update.h"
+#include "fifa96_loader/fifa96_match_remap_native.h"
 #include "fifa96_loader/fifa96_outfield.h"
 #include "fifa96_loader/fifa96_projection.h"
 #include "fifa96_loader/fifa96_record.h"
@@ -11244,42 +11245,61 @@ static void match_run_apply_player_remap(uint8_t remap[256],
   remap[0x4E] = 0x00;
 }
 
-/* Phase-86 / FU-348: build one remap per pitch record from the current
- * sub_lineup. The base team table carries the default skin class 0 / hair
- * class 3; each assigned roster slot overlays its native PCCD classes. This is
- * the portable projection of the FUN_00047298 template pass; the caller owns
- * the destination so the stage path can stay atomic and the substitution path
- * can rebuild the committed table in place. */
+/* Phase-86 / FU-348: build one remap per pitch record from the native
+ * FUN_00047298 23-block pool, then overlay the six kit source bands from the
+ * team table so the shirt/shorts/socks follow the live kit while the
+ * skin/hair ramps (0xD7..0xE3) stay native. `remap_team` is still derived by
+ * match_run_apply_player_remap (the legacy helpers below); the caller owns the
+ * destination so the stage path can stay atomic and the substitution path can
+ * rebuild the committed table in place. */
+static void match_run_overlay_team_kit(uint8_t dst[256],
+                                       const uint8_t team[256]) {
+  static const uint8_t bands[][2] = {
+      {0x50, 0x65}, {0x8A, 0x9D}, {0xCC, 0xD6},
+      {0xC5, 0xCB}, {0x66, 0x70}, {0x9E, 0xA8},
+  };
+  for (size_t i = 0; i < sizeof bands / sizeof bands[0]; i++)
+    memcpy(dst + bands[i][0], team + bands[i][0],
+           (size_t)(bands[i][1] - bands[i][0] + 1));
+}
+
 static void match_run_build_entity_remaps(
     const struct fifa96_match_run *mr,
     const uint8_t remap_team[2][256],
-    uint8_t remap_entity[2][FIFA96_MATCH_ENTITY_RECORDS][256]) {
-  for (int side = 0; side < 2; side++) {
-    int shirt = side == 0 ? MATCH_RUN_KIT_SHIRT_HOME : MATCH_RUN_KIT_SHIRT_AWAY;
-    int shorts = side == 0 ? MATCH_RUN_KIT_SHORTS_HOME : MATCH_RUN_KIT_SHORTS_AWAY;
-    int socks = side == 0 ? MATCH_RUN_KIT_SOCKS_HOME : MATCH_RUN_KIT_SOCKS_AWAY;
+    uint8_t remap_entity[2][FIFA96_MATCH_ENTITY_RECORDS][256],
+    uint8_t remap_extra[256]) {
+  uint8_t pool[FIFA96_MATCH_REMAP_BLOCKS][FIFA96_MATCH_REMAP_BYTES];
+  uint8_t class_a[2][11];
+  uint8_t class_b[2][11];
+  for (int side = 0; side < 2; side++)
     for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++) {
-      uint8_t *rm = remap_entity[side][pitch];
-      memcpy(rm, remap_team[side], 256);
-      uint8_t hair_code = '0';
+      uint8_t hair_code = '0';   /* the existing default */
       uint8_t skin_code = '4';
       uint8_t roster = mr->sub_lineup[side][pitch];
       if (roster < FIFA96_PCCD_ROSTER_COUNT) {
         hair_code = mr->roster_hair_code[side][roster];
         skin_code = mr->roster_skin_code[side][roster];
       }
-      uint8_t hair_class = match_run_hair_class(hair_code);
-      uint8_t skin_class = match_run_skin_class(skin_code, hair_class);
-      match_run_apply_player_remap(rm, shirt, shorts, socks, skin_class,
-                                   hair_class);
+      class_a[side][pitch] = match_run_hair_class(hair_code);
+      class_b[side][pitch] =
+          match_run_skin_class(skin_code, class_a[side][pitch]);
     }
-  }
+  fifa96_match_remap_build(pool, class_a, class_b, 0, 0);  /* gates: leg */
+  for (int side = 0; side < 2; side++)
+    for (int pitch = 0; pitch < (int)FIFA96_MATCH_ENTITY_RECORDS; pitch++) {
+      uint8_t *dst = remap_entity[side][pitch];
+      memcpy(dst, pool[side * FIFA96_MATCH_ENTITY_RECORDS + pitch], 256);
+      match_run_overlay_team_kit(dst, remap_team[side]);
+      dst[0] = 0xFF;   /* the port's source-0 render key (native is 0x00) */
+    }
+  memcpy(remap_extra, pool[22], 256);
 }
 
 static void match_run_rebuild_entity_remaps(struct fifa96_match_run *mr) {
   if (!mr || !mr->render.team_remap_ready) return;
   match_run_build_entity_remaps(mr, mr->render.remap_team,
-                                mr->render.remap_entity);
+                                mr->render.remap_entity,
+                                mr->render.remap_extra);
 }
 
 static int match_run_stage_live_kit(struct fifa96_match_run *mr,
@@ -11299,6 +11319,7 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
   uint8_t palette[768];
   uint8_t remap_team[2][256];
   uint8_t remap_entity[2][FIFA96_MATCH_ENTITY_RECORDS][256];
+  uint8_t remap_extra_local[256];
   int have_team = 0;
   int have_sys = 0;
   struct fifa96_match_run_render *r = &mr->render;
@@ -11381,7 +11402,8 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
       remap_team[side][i] = (uint8_t)(i == 0 ? 0xFF : i);
     match_run_apply_player_remap(remap_team[side], shirt, shorts, socks, 0, 3);
   }
-  match_run_build_entity_remaps(mr, remap_team, remap_entity);
+  match_run_build_entity_remaps(mr, remap_team, remap_entity,
+                                remap_extra_local);
   if (mr->matchup_active && mr->matchup.kit_ready) {
     /* P6: the selected kit triples select PALteam frame 2*(idx/16) and ramp
      * idx%16 (the native FUN_0004808C mapping). Brazil kit 0 (26,4,7) =
@@ -11434,6 +11456,7 @@ static int match_run_stage_live_kit(struct fifa96_match_run *mr,
   memcpy(r->palette, palette, sizeof r->palette);
   memcpy(r->remap_team, remap_team, sizeof r->remap_team);
   memcpy(r->remap_entity, remap_entity, sizeof r->remap_entity);
+  memcpy(r->remap_extra, remap_extra_local, sizeof r->remap_extra);
   r->team_remap_ready = 1;
   /* FU-343 (P4): the final live palette is now installed; derive the HUD body
    * and 0xFE shade from it (the stage-time PALsys frame-2 values are stale). */

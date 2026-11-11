@@ -595,6 +595,7 @@ struct fifa96_match_run_render {
    * native 0x14C360 lineup matrix is unported); sprite draws select this
    * table for the live 22 player slots. */
   uint8_t remap_entity[2][FIFA96_MATCH_ENTITY_RECORDS][256];
+  uint8_t remap_extra[256];  /* FUN_00047298's 23rd block (consumer leg) */
   /* Live ball art translation. The retail GAMEART0 `ball.fsh` uses palette
    * index 0 for the black outline and 0xFF for transparency; the generic
    * FU-85 remap keys index 0 out (a 16-bit sprite convention), which punched
