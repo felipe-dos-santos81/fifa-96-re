@@ -359,6 +359,71 @@ git commit -m "feat(engine): accumulate row-09/08/0B activity"
 
 ---
 
+### Task 3b: Wire the row-1A event-block sites
+
+**Files:**
+- Modify: `port/src/fifa96_engine/fifa96_match_handlers.c` (`fifa96_match_action_1A` event block, `0x7690C..0x76A3C`)
+- Test: `port/tests/test_engine_match_handlers.c`
+
+**Interfaces:**
+- Consumes: `fifa96_match_run_stats_add` from Task 1.
+- Produces: the row-1A `+0x64`, `+0xA` and `+5` activity values.
+
+Fresh `get_xrefs_to 0x8ED40` finds three sites in the ported row-1A event block
+(the FU-72 §2.2 list omitted them, and the fresh census is 35 sites, not 29):
+- `0x7694F` — `8ED40(rec, 0x64)` on the `state.phase == 0x10` arm
+  (`event_id = 5`);
+- `0x76A04` — `8ED40(rec, 0xA)` on the `camera.event_param > 0xF0` bounce arm
+  (`event_id = 1`);
+- `0x76A35` — `8ED40(rec, 5)` on the final else arm (`event_id = 0`).
+The `0x76960` (`[0x157C2C] == 0x5C`, event 4), `0x7697A` (`follow < 7`,
+event 9) and `0x76A12` (`[0x157C2C] == 0x2D`, event 7) arms have no `8ED40`.
+
+- [ ] **Step 1: Write the failing row-1A stats assertions**
+
+Extend `test_action_1a_runs_body` (the `follow < 7` arm) with
+`assert(f.mr.stats.value[0][0] == 0);` — that arm has no `0x8ED40`.
+
+Add `test_action_1a_stats` with three fresh fixtures:
+- `state.phase = 0x10`, the existing body staging → `match1a_event_id == 5`
+  and `stats.value[0][0] == 200` (`0x64 * 2`).
+- `state.phase = 0`, `camera.speed = 8` (follow >= 7),
+  `camera.event_param = 0x100`, `bounce_15759f = 0x421`,
+  `bounce_1575d0 = 0`, `bounce_1575cc = 0x2D1`, `global_157c2c = 0` →
+  `match1a_event_id == 1` and `stats.value[0][0] == 20` (`0xA * 2`).
+- `state.phase = 0`, `camera.speed = 8`, `camera.event_param = 0`,
+  `global_157c2c = 0` → `match1a_event_id == 0` and
+  `stats.value[0][0] == 10` (`5 * 2`).
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `cmake --build build --target test_engine_match_handlers -j"$(nproc)" && ./build/test_engine_match_handlers`
+Expected: FAIL — the stats values are still 0.
+
+- [ ] **Step 3: Add the calls**
+
+In the event-block branch chain, before each `event_id` store:
+```c
+(void)fifa96_match_run_stats_add(mr, r->entity_id, 0x64);  /* 0x7694F */
+(void)fifa96_match_run_stats_add(mr, r->entity_id, 0xA);   /* 0x76A04 */
+(void)fifa96_match_run_stats_add(mr, r->entity_id, 5);     /* 0x76A35 */
+```
+Only the phase-0x10, bounce and final-else arms get a call.
+
+- [ ] **Step 4: Run the test**
+
+Run: `cmake --build build --target test_engine_match_handlers -j"$(nproc)" && ./build/test_engine_match_handlers`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add port/src/fifa96_engine/fifa96_match_handlers.c port/tests/test_engine_match_handlers.c
+git commit -m "feat(engine): accumulate row-1A activity"
+```
+
+---
+
 ### Task 4: Replay consumption, docs and gate
 
 **Files:**
@@ -382,7 +447,7 @@ exercised) with a key matching `match_run_replay_roster_id`, then assert
 
 - [ ] **Step 2: Update the records**
 
-- FU-72: record the table/weight/wired sites and the remaining `8ED40` sites in unported bodies (the camera `0x70DE0`/`0x7131C`/`0x72AC4`/`0x72478` family, the row-1C branches, the `0x8AD54` announce and any site whose enclosing body is not ported).
+- FU-72: record the table/weight/wired sites and the remaining `8ED40` sites. A fresh `get_xrefs_to 0x8ED40` finds **35** direct calls, not the 29 in §2.2 — the list omitted `0x775FD`, `0x7694F`/`0x76A04`/`0x76A35` (row 1A) and `0x7ADD2`/`0x7AE04` (`FUN_0007A490`). After Task 3b, 12 addresses are wired (including the dead `0x774B2` and the OL-82-dead `0x813CD`); the remaining 23 are: 19 in unported camera/announce/row-1C bodies (`0x70F44`/`0x70FCE`, six `0x7131C`, `0x72DE3`/`0x72ED1`, four `0x72478`, four `0x77DFD`/`0x77E38`/`0x77E4E`/`0x77E61`, `0x8AD54`), 2 in the unported row-1B `0x7759C` tail (`0x775FD`/`0x77613`), and 2 in the unported `FUN_0007A490` tail (`0x7ADD2`/`0x7AE04`). Record the corrected census as a §2.2 erratum.
 - FU-351 §23: replace “non-goal `FUN_0008ED40` updates remain” with the wired count and the remaining sites.
 - ENGINE and PROGRESS: phase 115 with the table, the 2x weight, the wired sites, the remaining legs and the gate.
 - Design §8: mark the slice closed or partially closed with the remaining legs.
