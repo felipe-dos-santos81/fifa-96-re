@@ -11997,6 +11997,12 @@ native possession staging `0x7A490`, row-05 target algebra
 `0x7F3A1..0x7F57B`, native vertical ball staging, the ball-pair OL-52/OL-62
 row provenance and the class-3 camera integrator remain open legs.
 
+The native `FUN_00047298` 23-descriptor pool (Task 1; the phase-117 closure)
+records two legs: fresh `get_xrefs_to 0x14BF9C` returns 0 refs, so the 23rd
+pool slot has no proved consumer; and the builder's `0x107080[class] > 0x15`
+special branch is unreachable for the five template classes (selectors
+0/0/14/15/13, all < 0x16) and is intentionally omitted.
+
 ## Phase 87 — substitution remap rebuild; ball-vector/vertical re-read (2026-11-09)
 
 **Symptom.** A pause substitution changed `sub_lineup[side][pitch]` but the

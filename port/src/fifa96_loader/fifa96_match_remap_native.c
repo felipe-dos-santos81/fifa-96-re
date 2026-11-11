@@ -205,5 +205,9 @@ void fifa96_match_remap_build(uint8_t pool[FIFA96_MATCH_REMAP_BLOCKS]
               t[remap_maps[off1] + remap_maps[off1 + k + 1]];
       }
     }
+
+    /* The native 0x47762 special branch (0x107080[class] > 0x15) is
+     * unreachable for the five template classes -- their selectors are
+     * 0/0/14/15/13, all < 0x16 -- so it is intentionally omitted (open leg). */
   }
 }
