@@ -1719,10 +1719,18 @@ static void match_sp_setup_832a8(struct fifa96_match_run *mr,
                             r->pos_x, r->pos_z, t->side,
                             mr->entities.ball.x, mr->entities.ball.z,
                             mr->sp_triple_15879c);
-    mr->sp_recv_1587ac = fifa96_sp_pick_receiver(
-        cand, FIFA96_MATCH_ENTITY_RECORDS, r->active, chosen,
-        t->search_gate, (int16_t)mr->sp_triple_15879c[0],
-        (int16_t)mr->sp_triple_15879c[2], 0);
+    {
+      int32_t picked = fifa96_sp_pick_receiver(
+          cand, FIFA96_MATCH_ENTITY_RECORDS, r->active, chosen,
+          t->search_gate, (int16_t)mr->sp_triple_15879c[0],
+          (int16_t)mr->sp_triple_15879c[2], 0);
+      /* 0x8330A stores the receiver's global record id, not its team-local
+       * index; the local index is used only for team-record projections. */
+      mr->sp_recv_1587ac =
+          picked < 0 ? FIFA96_MATCH_ENTITY_NONE
+                     : (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS +
+                                 (uint32_t)picked);
+    }
     /* 0x8336C/0x83388 latch the staging word; the b6/b7 tail is the row's
      * param_2 byte, which the derived call sites do not carry. */
     mr->sp_b0_1587b0 = 1;
@@ -1731,7 +1739,11 @@ static void match_sp_setup_832a8(struct fifa96_match_run *mr,
   }
   /* 0x83332/0x8339B: the no-slot arm's 0x36200(0) restores the focus. The
    * slot arm's 0x361B0 pan request stays with the FUN_000832A8 owner leg. */
-  if (r->has_slot == 0u) mr->render.camera_target.source = 0;
+  if (r->has_slot == 0u) {
+    mr->render.camera_target.source = 0;
+  } else {
+    mr->flag_157ab0 = 1;                 /* 0x83358: the set-piece slot arm */
+  }
 }
 
 /* `FUN_0006DAB4` at the live probe: build the three-point path from the team
@@ -1797,9 +1809,12 @@ static int match_sp_receiver_cut(struct fifa96_match_run *mr,
   int32_t picked = fifa96_sp_pick_receiver(
       cand, FIFA96_MATCH_ENTITY_RECORDS, r->active, chosen, t->search_gate,
       (int16_t)mr->sp_triple_15879c[0], (int16_t)mr->sp_triple_15879c[2], 0);
+  mr->sp_recv_1587ac =
+      picked < 0 ? FIFA96_MATCH_ENTITY_NONE
+                 : (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS +
+                             (uint32_t)picked);
   if (picked < 0 || t->records[picked].has_slot != 0u) return 1;
   pick = (uint32_t)picked;
-  mr->sp_recv_1587ac = (int32_t)pick;
   mr->sp_b0_1587b0 = 0;
   mr->sp_b6_1587b6 = 0;
   mr->sp_clock_157a68 = 0;     /* FUN_0004C374 (called twice) */
@@ -1865,6 +1880,10 @@ static int match_sp_delivery_step(struct fifa96_match_run *mr) {
       if ((prev & 0x0Fu) == 0u) {
         mr->sp_b0_1587b0 = 1;
         mr->sp_b6_1587b6 = 1;
+        /* 0x83AA0: the receiver-held 0x20 arm returns the slot to the taker
+         * after latching b0/b6 (the native FUN_000786A0 call). */
+        (void)fifa96_match_run_slot_move(mr, mr->sp_recv_1587ac,
+                                         mr->record.entity_id, 0);
         return 0;
       }
       return 5;
@@ -1914,10 +1933,21 @@ static void match_sp_stage_camera_override(struct fifa96_match_run *mr) {
  * engine's 16-bit draw (native 32-bit, cadence leg). */
 static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
   uint16_t draw = 0;
+  uint8_t receiver_has_slot = 0;
+  if (mr->sp_recv_1587ac >= 0 &&
+      mr->sp_recv_1587ac <
+          (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    uint32_t team = (uint32_t)mr->sp_recv_1587ac / FIFA96_MATCH_ENTITY_RECORDS;
+    uint32_t index = (uint32_t)mr->sp_recv_1587ac % FIFA96_MATCH_ENTITY_RECORDS;
+    receiver_has_slot = mr->entities.team[team].records[index].has_slot;
+  }
   /* The native input machine is not live-only, but the M2 characterization
    * tape keeps the derived timer/draw arm; the live path runs the native
-   * delivery codes. */
-  if (mr->record.has_slot != 0u && mr->live_start) {
+   * delivery codes. A post-cut taker has no slot of its own: the receiver's
+   * slot plus a clear b0 latch is the second native entry into this arm. */
+  if (mr->live_start &&
+      (mr->record.has_slot != 0u ||
+       (mr->sp_b0_1587b0 == 0u && receiver_has_slot != 0u))) {
     int code;
     if (mr->sp_b5_1587b5 == 0u && mr->sp_dir_15877b <= 2u) {
       match_sp_build_native_path(mr, &mr->record, mr->sp_dir_15877b);
@@ -1980,6 +2010,7 @@ static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
 static int match_sp_resolve(struct fifa96_match_run *mr, uint8_t set_offside_timer) {
   int rc;
   if (set_offside_timer != 0) mr->referee.offside_suppress = 0x12C;
+  mr->flag_157ab0 = 0;       /* the set-piece outfield skip ends at resolution */
   rc = fifa96_match_run_situation(mr, 0x0Bu);
   return rc;
 }
@@ -2760,7 +2791,6 @@ static int fifa96_match_action_18(struct fifa96_match_run *mr) {
         /* 0x786A0: the full native hand-off (owner, back-pointer, dirs and
          * the seven tail words move together). */
         (void)fifa96_match_run_slot_move(mr, id, target_id, 0);
-        mr->record.has_slot = e->has_slot;
       }
     }
     if (out.reset != 0) match_row_reset(mr, e);

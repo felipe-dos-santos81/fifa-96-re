@@ -5009,6 +5009,15 @@ the build also produces the windowed `fifa96` target (`make game`).
     body), `0x938F0` (`FUN_00093890`, FU-70) and the second `FUN_00083428`
     site `0x83AA0` (no distinct engine branch). `FUN_000974D8`
     is a bare `RET`.
+    **Final-review erratum / closure (2026-11-11):** the preceding four-site /
+    five-unwired wording is historical. `0x83AA0` is now ported as the
+    return-to-taker hand-off in `match_sp_delivery_step`, so the honest count
+    is **5 adopted / 4 unwired**: `0x84AD0`, `0x7CDB4`, `0x7D336`, `0x838EF`,
+    `0x83AA0` adopted; `0x74CD2`, `0x75451`, `0x76053`, `0x938F0` unwired.
+    The helper enforces one slot owner and clears pending merges. The global
+    receiver id and the post-cut receiver-slot gate keep the next set-piece
+    frame in the live arm; `flag_157ab0` is cleared at resolution/reset. See
+    FU-275 §5, the FU315 final-review closure and phase 113 in PROGRESS.
     Row 29's source-2 store has no live entry (FU-142f/OL-48); `FUN_0004F274`
     and the `0x505D0` config-record switch are superseded by the direct view
     path, and `FUN_0003BB1C` is the replay UI loop whose camera call is

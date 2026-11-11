@@ -582,25 +582,67 @@ resets, the gate-fail reset and the `0x832A8` seed.
 `test_engine_match_render` pins the override consumer and the per-team table
 seed. `make check` **124/124**; M1/M2 `cmp` exact.
 
-**Remaining.** Closed (2026-11-10): `FUN_000786A0` is the helper
-`fifa96_match_run_slot_move` (`fifa96_match_run.c`) — the full `0x786A0` body
-(the `[rec+0x20]` pointer move, the slot back-pointer, the donor clear and the
-seven control-word clears via `fifa96_control_slot_merge_reset`), with the
-dirs kept in the block and projected onto the new holder. It is adopted at row
-18 (`0x84AD0`), `0x7CD60`, `0x7D1D4` (`clear_byte24 = 1`, the `0x78B00`
-caller) and the `0x838EF` set-piece receiver cut. The callers with no engine
-body stay outside the ported subset and are **not** wired: `0x74CD2` (the dead
-`0x74CB8` helper), `0x75451` and `0x76053` (keeper restart arms); `0x938F0`
-(`FUN_00093890`) stays FU-70; and the second `FUN_00083428` set-piece site
-`0x83AA0` has no distinct engine branch (the port's `match_sp_receiver_cut` is
-the `0x838EF` arm only). **FU315-L2 is closed** (see the closure section in
-`port/spec/FU315_r2l6_claim_chain.md`).
+**Remaining.** All of `FUN_000786A0` (the taker list-head clear, the receiver
+list link and the seven control-word clears) is not modeled and stays
+**FU275-L6**. The partial receiver `has_slot = 1` write was removed: it left
+two slot holders without the taker clear, a state the native never reaches.
+The slot-3 `form*6+3` table and the exact per-team `+0x7E8` block layout are
+not needed by this chain; they stay legs if a future consumer reads them.
 
-*Erratum (tag collision, recorded not rewritten):* this paragraph and
-`port/ENGINE.md` track the `0x786A0` leg as **FU275-L6**, while the numbered
-register above defines FU275-L6 as the `[0x14C32A]` gate leg. Two different
-cells share the tag; the closure above is the `0x786A0` one. The partial
-receiver `has_slot = 1` write was removed: it left two slot holders without the
-taker clear, a state the native never reaches. The slot-3 `form*6+3` table and
-the exact per-team `+0x7E8` block layout are not needed by this chain; they
-stay legs if a future consumer reads them.
+## 5. Slot-block move closure (2026-11-10; final review closure 2026-11-11)
+
+**Closure / erratum to §4.** The §4 **Remaining** paragraph is the historical
+record above, restored verbatim; this section supersedes its unported verdict.
+`FUN_000786A0` is ported as `fifa96_match_run_slot_move` in
+`fifa96_match_run.c`: the pointer and back-pointer move, the donor and seven
+control-word clears, the block-owned direction bytes, and the staged-record
+projection. A successful move also clears every other record's `has_slot`,
+`dir_x` and `dir_z` in both teams and cancels `entities.slot_merge`, preserving
+the engine's single-owner invariant. No-op calls leave staged input and record
+projections untouched; `clear_byte24` remains caller-controlled.
+
+The **five adopted sites** are:
+
+- `0x84AD0` — row 18 (`fifa96_match_action_18`);
+- `0x7CDB4` — the `0x7CD60` long-ball handler (`match_input_handler`);
+- `0x7D336` — `FUN_0007D1D4` (`fifa96_match_run_select_step`,
+  `clear_byte24 = 1`);
+- `0x838EF` — the `FUN_00083428` receiver cut (`match_sp_receiver_cut`,
+  `clear_byte24 = 0`);
+- `0x83AA0` — the **return-to-taker hand-off** in the receiver-held
+  `released & 0x20` / previous-low-nibble-zero branch of
+  `match_sp_delivery_step` (`clear_byte24 = 0`). The branch latches b0/b6 and
+  then calls the helper from `sp_recv_1587ac` back to `record.entity_id`, in
+  the native order.
+
+The **four unwired callers** remain outside the ported subset: `0x74CD2`
+(the dead `0x74CB8` helper), `0x75451` and `0x76053` (keeper restart arms with
+no engine body), and `0x938F0` (`FUN_00093890`, the slot↔record walk, FU-70).
+No handler is invented for them. The earlier “4 adopted / 5 unwired /
+`0x83AA0` absent” wording is superseded; the honest count is **5 adopted / 4
+unwired**.
+
+The final-review set-piece fixes are part of this closure: `sp_recv_1587ac`
+is the global `team*11 + pick` id (or `FIFA96_MATCH_ENTITY_NONE`), the
+`0x83358` slot-arm latch drives `flag_157ab0`, and `match_sp_probe_85498`
+enters the live receiver arm when the taker has a slot **or** b0 is clear and
+the valid receiver record has the slot. The outfield seam consumes that flag
+and receiver id for the native `0x7CACD` skip; resolution and the live
+set-piece reset clear the flag. The post-cut `0x10` delivery is therefore `2`,
+not the AI RNG `3`/`7`, and the neutral `0x20` return moves the slot back to
+the taker.
+
+*Erratum (FU275-L6 tag collision, recorded not rewritten):* the numbered
+register above defines **FU275-L6** as the `[0x14C32A]` gate leg, while this
+closure and `port/ENGINE.md` use the same tag for the `0x786A0` slot-move leg.
+The closure above is the `0x786A0` one; the collision is not silently renamed.
+The partial receiver `has_slot = 1` write was removed because it left two slot
+holders without the taker clear. The slot-3 `form*6+3` table and exact
+per-team `+0x7E8` layout remain legs until a consumer needs them.
+
+**Verification.** `test_action_10_receiver_cut` now covers the post-cut receiver
+gate and the `0x83AA0` return; `test_action_10_receiver_id_global` covers the
+team-1 global id. `test_slot_move_helper` covers stale holders, pending merges,
+all no-op sentinels, `clear_byte24 = 0`, and a staged destination. The full
+gate and golden results are recorded in the phase-113 final-review closure in
+`docs/PROGRESS.md` and the task report.

@@ -957,8 +957,9 @@ struct fifa96_match_run {
    *  - `flag_157aab` = byte `[0x157AAB]` (the reset's 0xFF sentinel);
    *  - `camera_height_157a6d` = word `[0x157A6D]`, the camera height anchor
    *    (`0xB0`/`0xA0`; the height-branch consumer is OL-T11-79);
-   *  - `flag_157ab0` = byte `[0x157AB0]`, the outfield released-arm gate
-   *    (producer unported, OL-72);
+   *  - `flag_157ab0` = byte `[0x157AB0]`, the outfield released-arm gate;
+   *    the set-piece slot arm sets it and resolution/reset clears it (other
+   *    native producers remain OL-72);
    *  - `camera_override_157a6f` = dword `[0x157A6F]`, the animation-camera
    *    override pointer. The engine now uses it as a 0/1 flag; when set,
    *    `camera_override_triple` is the `0x158767` triple the live focus
@@ -1406,8 +1407,9 @@ struct fifa96_match_run {
   uint8_t sp_flag_158784;
   uint8_t sp_delivery;
   /* FU275 L266-1/L266-4: the FUN_000832A8 staging cells. The target triple
-   * is the `0x15879C` copy; `sp_recv_1587ac` is the picked receiver record,
-   * and b0/b6/b7 are the `0x1587B0/6/7` latches the 0x83937 branch reads. */
+   * is the `0x15879C` copy; `sp_recv_1587ac` is the picked receiver's global
+   * record id (`team*11 + pick`, or NONE), and b0/b6/b7 are the
+   * `0x1587B0/6/7` latches the 0x83937 branch reads. */
   int32_t sp_triple_15879c[3];
   int32_t sp_recv_1587ac;
   uint8_t sp_b0_1587b0;
@@ -1803,17 +1805,19 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
  * `camera.pos_y`, `0x157788/8C/90` = `camera.anchor_x/y/z`, the `0x1577C0/C2`
  * words = `camera.vel_x/vel_z`, the slot `+0x20/+0x21` bytes =
  * `slot.anim_b/anim_c`), calls `fifa96_outfield_select_step`, and applies the
- * result: the `0x786A0` `fifa96_action_duel_swap` on the two records'
- * `has_slot`; when the pre-swap `slot.entity == id` and `rec.has_slot != 0`,
- * the `slot.entity` rebind plus the moved block's `0x786A0` tail
- * (`fifa96_control_slot_merge_reset`) and the `0x78B00` `+0x24` byte; and
- * `[team+0x7CB] = 0` (`team->timer7cb`) on any switch result. `[0x1587A8]` /
- * `[0x1587AC]` have no engine cell (their native set-piece producers are
- * unported, OL-72/OL-68), so `spawn_id`/`recv_id` stage `NONE`.
+ * result: the pointer-authoritative `fifa96_match_run_slot_move` (`0x786A0`)
+ * when the destination is free and `slot.entity == id`; it moves the slot
+ * back-pointer and the `has_slot`/dir projections, runs the moved block's
+ * `0x786A0` tail (`fifa96_control_slot_merge_reset`), and clears the `0x78B00`
+ * `+0x24` byte for this caller. It also clears stale holders and any pending
+ * slot merge, and updates the staged record when it names either endpoint.
+ * `[team+0x7CB] = 0` (`team->timer7cb`) on any switch result. The selection
+ * binder's `[0x1587A8]` / `[0x1587AC]` inputs still stage `NONE`; the separate
+ * set-piece receiver id is carried by `mr->sp_recv_1587ac`.
  *
  * Two callers mirror the native two: the released-row `0x7D1D4` case in the
- * input seam and the `0x7CB03` direct-arm consumer (latent while `[0x157AB0]`
- * is staged 0). Returns the native handler return 0/1 (1 stops the row scan);
+ * input seam and the `0x7CB03` direct-arm consumer (gated by the set-piece
+ * `[0x157AB0]` latch). Returns the native handler return 0/1 (1 stops the row scan);
  * an out-of-range `id` returns 0. Exposed so the engine fixture can pin the
  * self and no-slot cases without a second match drive. */
 int fifa96_match_run_select_step(struct fifa96_match_run *mr, int32_t id);

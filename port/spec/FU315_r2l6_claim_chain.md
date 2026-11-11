@@ -362,3 +362,24 @@ as the design census; a fresh `get_xrefs_to 0x74CB8` returns **0**.
 
 The §4.2 bullet "`fifa96_match_action_18` swaps only the boolean" is superseded
 by this closure and kept verbatim above.
+
+### Final-review closure (2026-11-11) — five adopted / four unwired
+
+The preceding closure's “four call sites” and its inclusion of `0x83AA0` among
+the unwired callers are superseded, not rewritten. The native `0x83AA0` branch
+is now identified and ported as the **return-to-taker hand-off**: after the
+receiver cut, a neutral `released & 0x20` edge with a zero previous low nibble
+latches b0/b6 and calls
+`fifa96_match_run_slot_move(mr, mr->sp_recv_1587ac, mr->record.entity_id, 0)`.
+The five adopted sites are therefore `0x84AD0`, `0x7CDB4`, `0x7D336`,
+`0x838EF` and `0x83AA0`. Only `0x74CD2`, `0x75451`, `0x76053` and `0x938F0`
+(FU-70) remain unwired.
+
+The helper now also clears every stale record projection in both teams and
+cancels a pending `slot_merge` after a successful move. The set-piece receiver
+id is global (`team*11 + pick`), and the post-cut `FUN_00085498` receiver gate
+uses that record's slot when b0 is clear, preventing the next frame from
+falling into the AI RNG arm. `test_action_10_receiver_cut`,
+`test_action_10_receiver_id_global` and `test_slot_move_helper` pin these
+closures; the full gate and byte-exact golden results are in the phase-113
+final-review record.

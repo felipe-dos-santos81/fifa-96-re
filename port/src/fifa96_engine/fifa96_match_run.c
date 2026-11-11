@@ -779,9 +779,9 @@ _Static_assert(FIFA96_OUTFIELD_SELECT_RECORDS == FIFA96_MATCH_ENTITY_RECORDS,
  * = the signed `camera.vel_x`/`vel_z` leads; the slot `+0x20`/`+0x21` bytes =
  * `slot.anim_b`/`anim_c` (the same source as the `match_run_dispatch_entity`
  * frame-staging block's `r->dir_x = mr->slot.anim_b; r->dir_z =
- * mr->slot.anim_c`). `[0x1587A8]`/`[0x1587AC]` have no engine cell
- * (their native writers `FUN_000832A8`/the set-piece tails are unported), so
- * both stage `NONE` — the named OL-72/OL-68 residual; the derived `NONE/NONE`
+ * mr->slot.anim_c`). The selection binder's `[0x1587A8]`/`[0x1587AC]`
+ * inputs stage `NONE` (the set-piece receiver id is instead carried by
+ * `mr->sp_recv_1587ac` for the outfield skip); the derived `NONE/NONE`
  * comparison reproduces the native unstaged-pointer reject edge (Task 1).
  *
  * Apply, native order (`0x7D332..0x7D34C`):
@@ -907,6 +907,19 @@ int fifa96_match_run_slot_move(struct fifa96_match_run *mr, int32_t from_id,
   to->dir_z = (int8_t)mr->slot.anim_c;
   from->dir_x = 0;
   from->dir_z = 0;
+  /* There is one engine slot block. Heal every stale projection, not just the
+   * donor, and cancel a queued merge so its drain cannot overwrite this move. */
+  for (uint32_t team = 0; team < FIFA96_MATCH_ENTITY_TEAMS; team++) {
+    for (uint32_t index = 0; index < FIFA96_MATCH_ENTITY_RECORDS; index++) {
+      int32_t id = (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + index);
+      struct fifa96_match_entity *e = &mr->entities.team[team].records[index];
+      if (id == to_id) continue;
+      e->has_slot = 0;
+      e->dir_x = 0;
+      e->dir_z = 0;
+    }
+  }
+  mr->entities.slot_merge = FIFA96_MATCH_ENTITY_NONE;
   if (mr->record.entity_id == from_id) {
     mr->record.has_slot = 0;
     mr->record.dir_x = 0;
@@ -1118,8 +1131,8 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
               id == mr->entities.team[team].chosen)
                  ? 1u
                  : 0u;
-  s.flag_157ab0 = 0;            /* [0x157AB0] producer unported (OL-72) */
-  s.is_1578ac = 0;              /* [0x1587AC] unmodeled (OL-72) */
+  s.flag_157ab0 = mr->flag_157ab0;
+  s.is_1578ac = (mr->sp_recv_1587ac >= 0 && id == mr->sp_recv_1587ac) ? 1u : 0u;
   s.forced.is_team_controlled =
       (id == mr->entities.team[team].target) ? 1u : 0u;
   s.forced.is_team_second = (id == mr->entities.team[team].second) ? 1u : 0u;
@@ -1174,10 +1187,9 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
     return -FIFA96_ERR_INVALID;
   /* 0x7CB03: the direct-arm pre-gate calls `FUN_0007D1D4` and jumps straight to
    * the 0x7CC82 tail (`0x7CB01..0x7CB08`), replacing the row scan. The gate is
-   * live only when `[0x157AB0] != 0`; that cell has no engine producer and is
-   * staged 0 (OL-72), so `out.direct_arm` is latent today. The consumer is
-   * wired to the same binder the released-row handler uses, so the arm lands
-   * with its producer. */
+   * live when the set-piece setup has latched `[0x157AB0]`; the receiver id
+   * supplies the native 0x7CACD exclusion while that set piece is active. The
+   * consumer is wired to the same binder the released-row handler uses. */
   if (out.direct_arm != 0) (void)fifa96_match_run_select_step(mr, id);
   /* The native tail (step 5) runs after the input-row scan (step 3) and so
    * gates on the post-install `byte[+0x91]`; the loader state is the entry
@@ -3314,6 +3326,7 @@ static void match_run_live_setpiece_reset(struct fifa96_match_run *mr) {
   mr->live_sp_frames = 0;
   mr->live_sp_taker = FIFA96_MATCH_ENTITY_NONE;
   mr->live_sp_aim_x = 0;
+  mr->flag_157ab0 = 0;       /* the set-piece outfield skip ends with the row */
 }
 
 static int32_t match_run_live_setpiece_find_taker(const struct fifa96_match_run *mr,

@@ -5153,3 +5153,25 @@ close-out below).
   (`FUN_00093890`, FU-70) and `0x83AA0` (no distinct engine branch).
   `make check` green 124/124; M1/M2 byte-exact. Record: FU-275 §4, FU315
   closure, FU-351 §24. Commits: `45090c0`, `034045d`, `e9469f1`.
+
+- **Phase 113 final-review closure (2026-11-11).** The earlier phase-113
+  paragraph is retained as the historical record; its four-adopted/five-unwired
+  count and “`0x83AA0` no distinct engine branch” verdict are superseded. The
+  native `0x83AA0` site is the return-to-taker hand-off and is now wired in
+  `match_sp_delivery_step`. The final count is **5 adopted / 4 unwired**:
+  `0x84AD0`, `0x7CDB4`, `0x7D336`, `0x838EF`, `0x83AA0` adopted; `0x74CD2`,
+  `0x75451`, `0x76053`, `0x938F0` (FU-70) unwired. The helper clears all stale
+  slot projections and pending merges after a successful move. Receiver ids are
+  global (`team*11 + pick`), the post-cut `FUN_00085498` receiver gate selects
+  delivery `2` rather than the AI RNG arm, and `flag_157ab0` is cleared at
+  resolution/reset. `test_action_10_receiver_cut`,
+  `test_action_10_receiver_id_global` and `test_slot_move_helper` cover the
+  return hand-off, global id, single-owner invariant and all no-op/byte24
+  edges. FU-275 §4 was restored and §5 appended; FU315, FU-351 §24 and design
+  §6.5 carry matching closure errata.
+  **Gate:** `make check` exited `0`, **100% tests passed, 0 tests failed out of
+  124** (`Total Test time (real) = 248.35 sec`); M1 `cmp` exited `0` with
+  `test_engine_m1 OK`; M2 `cmp` exited `0` with `test_engine_m2 OK` and the
+  three-replay byte-stable determinism message. Windowed smoke used
+  `timeout 20s env DISPLAY=:1 make game`, exited `124` as expected, with no
+  error in `/tmp/opencode/game-smoke-slot-move-fix.log`. No golden was re-pinned.

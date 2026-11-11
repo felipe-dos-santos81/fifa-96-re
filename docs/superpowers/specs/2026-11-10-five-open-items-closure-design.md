@@ -249,6 +249,26 @@ Commits: `45090c0` (helper), `034045d` (row 18 / `0x7CD60` / `0x7D1D4`),
 byte-exact, windowed smoke clean. Record: FU-275 §4, the FU315 closure section,
 `port/ENGINE.md` FU-351 §24.
 
+### 6.5.1 Final-review closure / erratum (2026-11-11)
+
+The closure above is retained as the phase record, but its “four adopted” and
+“`0x83AA0` has no distinct engine branch” statements are superseded. Fresh
+review evidence identifies `0x83AA0` as the return-to-taker hand-off. The
+`b0 == 0` / `released & 0x20` / previous-low-nibble-zero branch now calls
+`fifa96_match_run_slot_move(mr, mr->sp_recv_1587ac, mr->record.entity_id, 0)`
+after the b0/b6 stores. The slot-block slice is therefore **5 adopted / 4
+unwired**: adopted `0x84AD0`, `0x7CDB4`, `0x7D336`, `0x838EF`, `0x83AA0`;
+unwired `0x74CD2`, `0x75451`, `0x76053`, `0x938F0` (FU-70).
+
+The final wave also makes the helper single-owner (all other record projections
+and `slot_merge` are cleared after a move), stores the receiver as a global id,
+and repairs the post-cut receiver gate and `0x157AB0` outfield skip lifecycle.
+The redundant row-18 staged `has_slot` write is removed. Tests cover the
+receiver delivery `2`, the return-to-taker state, global team-1 ids, no-op
+sentinel preservation, stale holders, pending merges, `clear_byte24 = 0`, and a
+staged destination. Exact gate output is recorded in the phase-113 final-review
+closure and the task report.
+
 ## 7. Slice 2 — row-29 entry closure
 
 ### 7.1 Native contract

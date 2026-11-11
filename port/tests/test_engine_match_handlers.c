@@ -473,6 +473,62 @@ static void test_action_10_receiver_cut(void) {
   assert(f.mr.entities.team[0].records[2].dir_z == 0x22);
   assert(f.mr.slot.pressed == 0);
   assert(f.mr.slot.byte24 == 0x55);
+  assert(f.mr.sp_recv_1587ac == 2);             /* the global receiver id */
+  assert(f.mr.flag_157ab0 == 1);               /* 0x83358 slot-arm latch */
+
+  /* The next frame still has the taker's staged record, but the receiver owns
+   * the slot. The native receiver gate must select delivery 2, not the AI draw. */
+  f.mr.record.timer89 = 0x79;
+  f.mr.slot.released = 0x10;
+  f.mr.slot.prev_mapped = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_delivery == 2u);
+  assert(f.mr.flag_157ab0 == 0);               /* resolution ends the skip */
+
+  /* 0x83AA0: a neutral 0x20 release hands the slot back to the taker. */
+  f.mr.state.phase = 3u;
+  f.mr.record.stage92 = 2;
+  f.mr.record.timer89 = 0;
+  f.mr.record.has_slot = 0;
+  f.mr.slot.entity = 2;
+  f.mr.entities.team[0].records[1].has_slot = 0;
+  f.mr.entities.team[0].records[2].has_slot = 1;
+  f.mr.sp_b0_1587b0 = 0;
+  f.mr.sp_b6_1587b6 = 0;
+  f.mr.slot.released = 0x20;
+  f.mr.slot.prev_mapped = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.slot.entity == 1);
+  assert(f.mr.entities.team[0].records[2].has_slot == 0);
+  assert(f.mr.entities.team[0].records[1].has_slot == 1);
+  assert(f.mr.sp_b0_1587b0 == 1 && f.mr.sp_b6_1587b6 == 1);
+  drop_fixture(&f);
+}
+
+static void test_action_10_receiver_id_global(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &f.mr.entities.team[1].records[i];
+    e->active = 1;
+    e->pos_x = i == 2 ? 0 : 0x7000;
+    e->pos_z = 0;
+    e->has_slot = 0;
+    e->skip_98 = 0;
+    e->skip_9a = 0;
+  }
+  f.mr.record.entity_id = 12;             /* team 1, record 1 */
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.stage92 = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.delta = 0;
+  f.mr.state.phase = 3u;
+  f.mr.session_gate_14c32a = 1;
+  f.mr.entities.team[1].records[1].has_slot = 1;
+  f.mr.slot.entity = 12;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.sp_recv_1587ac == 13);       /* team 1, record 2: not local 2 */
   drop_fixture(&f);
 }
 
@@ -6634,12 +6690,18 @@ static void test_ol83_type8_readers_see_record_type(void) {
 static void test_slot_move_helper(void) {
   struct fixture f;
   make_fixture(&f);
+  struct fifa96_match_entity *stale = &f.mr.entities.team[0].records[0];
   struct fifa96_match_entity *from = &f.mr.entities.team[0].records[1];
   struct fifa96_match_entity *to = &f.mr.entities.team[0].records[2];
+  struct fifa96_match_entity *staged_to = &f.mr.entities.team[0].records[3];
   from->has_slot = 1;
   to->has_slot = 0;
   from->dir_x = 3;
   from->dir_z = 4;
+  stale->has_slot = 1;                 /* a stale second holder must be healed */
+  stale->dir_x = 9;
+  stale->dir_z = 10;
+  f.mr.entities.slot_merge = 0;         /* a pending merge must not drain later */
   f.mr.slot.entity = 1;
   f.mr.slot.anim_b = 7;
   f.mr.slot.anim_c = 8;
@@ -6657,19 +6719,103 @@ static void test_slot_move_helper(void) {
   assert(f.mr.slot.entity == 2);
   assert(to->dir_x == 7 && to->dir_z == 8);
   assert(from->dir_x == 0 && from->dir_z == 0);
+  assert(stale->has_slot == 0 && stale->dir_x == 0 && stale->dir_z == 0);
+  assert(f.mr.entities.slot_merge == FIFA96_MATCH_ENTITY_NONE);
   assert(f.mr.slot.pressed == 0 && f.mr.slot.released == 0 &&
          f.mr.slot.held == 0);
   assert(f.mr.slot.byte24 == 0);
   assert(f.mr.record.has_slot == 0 && f.mr.record.dir_x == 0);
   assert(f.mr.record.dir_z == 0);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      int32_t id = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + i);
+      const struct fifa96_match_entity *e = &f.mr.entities.team[t].records[i];
+      if (id != 2) assert(e->has_slot == 0 && e->dir_x == 0 && e->dir_z == 0);
+    }
+  }
 
-  /* The native no-ops: from is not the holder, the destination holds, self. */
-  assert(fifa96_match_run_slot_move(&f.mr, 1, 0, 0) == 0);
+  /* Every native no-op preserves the staged input and record projections. */
+  f.mr.slot.pressed = 0x11;
+  f.mr.slot.byte24 = 0x66;
+  f.mr.record.dir_x = 5;
+  f.mr.record.dir_z = 6;
+  from->dir_x = 5;
+  from->dir_z = 6;
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 0, 0) == 0); /* from not owner */
+  assert(f.mr.slot.pressed == 0x11 && f.mr.slot.byte24 == 0x66);
+  assert(f.mr.record.dir_x == 5 && f.mr.record.dir_z == 6);
+  assert(from->dir_x == 5 && from->dir_z == 6);
+
   from->has_slot = 0;
   to->has_slot = 1;
   f.mr.slot.entity = 1;
-  assert(fifa96_match_run_slot_move(&f.mr, 1, 2, 0) == 0);
-  assert(fifa96_match_run_slot_move(&f.mr, 1, 1, 0) == 0);
+  f.mr.slot.pressed = 0x12;
+  f.mr.slot.byte24 = 0x67;
+  f.mr.record.dir_x = 7;
+  f.mr.record.dir_z = 8;
+  from->dir_x = 7;
+  from->dir_z = 8;
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 2, 0) == 0); /* destination held */
+  assert(f.mr.slot.pressed == 0x12 && f.mr.slot.byte24 == 0x67);
+  assert(f.mr.record.dir_x == 7 && f.mr.record.dir_z == 8);
+  assert(from->dir_x == 7 && from->dir_z == 8);
+
+  f.mr.slot.pressed = 0x13;
+  f.mr.slot.byte24 = 0x68;
+  f.mr.record.dir_x = 9;
+  f.mr.record.dir_z = 10;
+  from->dir_x = 9;
+  from->dir_z = 10;
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 1, 0) == 0); /* self move */
+  assert(f.mr.slot.pressed == 0x13 && f.mr.slot.byte24 == 0x68);
+  assert(f.mr.record.dir_x == 9 && f.mr.record.dir_z == 10);
+  assert(from->dir_x == 9 && from->dir_z == 10);
+
+  f.mr.slot.pressed = 0x14;
+  f.mr.slot.byte24 = 0x69;
+  f.mr.record.dir_x = 11;
+  f.mr.record.dir_z = 12;
+  from->dir_x = 11;
+  from->dir_z = 12;
+  assert(fifa96_match_run_slot_move(&f.mr, -1, 2, 0) == 0); /* low id */
+  assert(f.mr.slot.pressed == 0x14 && f.mr.slot.byte24 == 0x69);
+  assert(f.mr.record.dir_x == 11 && f.mr.record.dir_z == 12);
+  assert(from->dir_x == 11 && from->dir_z == 12);
+
+  f.mr.slot.pressed = 0x15;
+  f.mr.slot.byte24 = 0x6A;
+  f.mr.record.dir_x = 13;
+  f.mr.record.dir_z = 14;
+  from->dir_x = 13;
+  from->dir_z = 14;
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 22, 0) == 0); /* high id */
+  assert(f.mr.slot.pressed == 0x15 && f.mr.slot.byte24 == 0x6A);
+  assert(f.mr.record.dir_x == 13 && f.mr.record.dir_z == 14);
+  assert(from->dir_x == 13 && from->dir_z == 14);
+
+  /* clear_byte24 = 0 preserves the byte; a staged destination is updated too. */
+  staged_to->has_slot = 0;
+  f.mr.slot.entity = 1;
+  f.mr.slot.anim_b = 9;
+  f.mr.slot.anim_c = 10;
+  f.mr.slot.pressed = 0x16;
+  f.mr.slot.released = 0x20;
+  f.mr.slot.held = 0x40;
+  f.mr.slot.byte24 = 0x6B;
+  f.mr.entities.slot_merge = 0;
+  f.mr.record.entity_id = 3;
+  f.mr.record.has_slot = 0;
+  f.mr.record.dir_x = 1;
+  f.mr.record.dir_z = 2;
+  assert(fifa96_match_run_slot_move(&f.mr, 1, 3, 0) == 1);
+  assert(f.mr.slot.entity == 3 && staged_to->has_slot == 1);
+  assert(staged_to->dir_x == 9 && staged_to->dir_z == 10);
+  assert(f.mr.slot.byte24 == 0x6B);
+  assert(f.mr.slot.pressed == 0 && f.mr.slot.released == 0 &&
+         f.mr.slot.held == 0);
+  assert(f.mr.record.has_slot == 1 && f.mr.record.dir_x == 9 &&
+         f.mr.record.dir_z == 10);
+  assert(f.mr.entities.slot_merge == FIFA96_MATCH_ENTITY_NONE);
   assert(fifa96_match_run_slot_move(NULL, 1, 2, 0) == -FIFA96_ERR_INVALID);
   drop_fixture(&f);
 }
@@ -6692,6 +6838,7 @@ int main(void) {
   test_action_1E_runs_claim_place();
   test_action_10_runs_throw_in_body();
   test_action_10_receiver_cut();
+  test_action_10_receiver_id_global();
   test_action_10_delivery_codes();
   test_sp_input_tail_direction();
   test_sp_delivery_resets();
