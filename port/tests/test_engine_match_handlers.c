@@ -3262,6 +3262,8 @@ static void test_action_08_stage_flag_15877d(void) {
   f.mr.process_15877d = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
   assert(f.mr.process_15877d == 1);   /* the projection hit's 0x8141C */
+  assert(f.mr.stats.value[0][0] == 4);                    /* 0x813F5: 2 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 4);   /* the mirror */
   drop_fixture(&f);
 
   make_fixture(&f);
@@ -4520,6 +4522,7 @@ static void test_action_0b_duel_chain_installs_row_5e(void) {
   f.mr.record.frame = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
   assert(f.mr.record.stage92 == 2u);
+  assert(f.mr.stats.value[0][1] == -6);                /* 0x81BBE: -3 * 2 */
   assert(f.mr.entities.team[0].duel_7d7 == 1u);        /* 0x81B83 */
   assert(f.mr.referee.contact_kind == 2u);             /* the registrar kind */
   assert(f.mr.referee.rec_first == 1);                 /* A = the initiator */
@@ -5306,6 +5309,70 @@ static void test_action_09_arm1_installs(void) {
   assert(tgt->stage92 == 0u);                /* deferred, stage 0 */
   assert(f.mr.match09_event_id == 0x5Du);    /* 0x80F4B event 0x5D */
   assert(f.mr.record.stage92 == 2u);         /* 0x80F82 advance */
+  drop_fixture(&f);
+}
+
+/* Row 09 arm 1's `0x80D18` event path and its `0x8ED40` pair (fresh-byte
+ * scope, `docs/superpowers/plans/2026-11-11-8ed40-stats-wiring.md` Task 3):
+ * `0x80D6C` is `8ED40([0x157A83], 2)` on the controlled record when its
+ * `byte[[ctl+0x28]] == 0x4A`; `0x80D99` is `8ED40(EBP, 2)` on the acting
+ * record for the `[0x157A83] == NULL` / anim != 0x4A arms. The `0x8DD70` fold
+ * is staged with `lane_z` 0 / `cam_dz6f` 1 (angle 0 = `face7d`), not the
+ * degenerate (0,0) pair: `entity_angle(0,0)` is 0x80 and `0x80 >= 0x39`
+ * takes the target block, never the event path. */
+static void test_action_09_arm1_stats(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  e = &f.mr.entities.team[0].records[1];
+  e->lane_x = 0;
+  e->lane_z = 0;
+  e->cam_dz6f = 1;
+  e->bound = 0;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x11u;
+  f.mr.record.frame = 2;
+  f.mr.record.face7d = 0;
+  f.mr.record.desc_c = 0;
+  f.mr.record.desc_16 = 0;
+  f.mr.entities.ball.pos_counter_f = 0;
+  f.mr.render.camera.pos_y = 0;
+  f.mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.match09_event_id == 0x5Du);    /* 0x80D9E..0x80DA5 */
+  assert(f.mr.stats.value[0][1] == 4);       /* 0x80D99: 2 * 2 */
+  drop_fixture(&f);
+
+  /* the controlled arm: `[0x157A83]` present with `byte[[ctl+0x28]] == 0x4A`
+   * takes the 0x67 event and the `0x80D6C` stat on the controlled record. */
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  e = &f.mr.entities.team[0].records[1];
+  e->lane_x = 0;
+  e->lane_z = 0;
+  e->cam_dz6f = 1;
+  e->bound = 0;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 1;
+  f.mr.record.anim_id = 0x11u;
+  f.mr.record.frame = 2;
+  f.mr.record.face7d = 0;
+  f.mr.record.desc_c = 0;
+  f.mr.record.desc_16 = 0;
+  f.mr.entities.ball.pos_counter_f = 0;
+  f.mr.render.camera.pos_y = 0;
+  f.mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.controlled = 2;
+  f.mr.entities.team[0].records[2].anim_id = 0x4Au;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.match09_event_id == 0x67u);    /* 0x80D71..0x80D7C */
+  assert(f.mr.stats.value[0][2] == 4);       /* 0x80D6C: 2 * 2 */
+  assert(f.mr.stats.value[0][1] == 0);       /* not the acting record */
   drop_fixture(&f);
 }
 
@@ -6999,6 +7066,7 @@ int main(void) {
   test_action_09_clear_branch_detaches();
   test_action_09_arm1_head_gates();
   test_action_09_arm1_installs();
+  test_action_09_arm1_stats();
   test_action_09_arm2_reselect();
   test_action_09_arm3_snap_and_reset();
   test_action_09_stage_above_range_tail();

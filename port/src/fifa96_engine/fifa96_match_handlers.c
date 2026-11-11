@@ -3575,6 +3575,16 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
   s.rng = &mr->rng;
   rc = fifa96_outfield_row08_step(&s, &out);
   if (rc != FIFA96_OK) return rc;
+  /* The scan-hit arm's `0x8ED40` pair (fresh-byte scope, `0x813A2` block):
+   * `0x813CD` is `8ED40(user, 2)` and `0x813F5` is `8ED40(rec, 2)`. The user
+   * arm is dead in the current model because `s.user_row_byte` is staged 0
+   * (OL-82); it is wired for the eventual producer. */
+  if (out.events != 0) {
+    if (out.user_row_4a != 0u)
+      (void)fifa96_match_run_stats_add(mr, controlled, 2); /* 0x813CD (OL-82) */
+    else
+      (void)fifa96_match_run_stats_add(mr, id, 2);         /* 0x813F5 */
+  }
   if (out.ran != 0) r->ran = 1;
   r->timer89 = out.timer89;
   r->stage92 = out.stage92;
@@ -3595,8 +3605,8 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
   if (out.byte_15877d_set != 0)
     mr->process_15877d = out.byte_15877d;               /* 0x811CA/0x8141C/0x8147E */
   /* out.anim (0x6E598, OL-52), out.ball_stage (the 0x7A490 staging call,
-   * OL-62), out.events/event_code/event_sound (the 0x8ED40/0x8F188/0x92820/
-   * 0x974F0/0x651F0 sinks, OL-82), out.face_angle (+0x7D has no pool field,
+   * OL-62), out.event_code/event_sound (the 0x8F188/0x92820/0x974F0/0x651F0
+   * sinks, OL-82), out.face_angle (+0x7D has no pool field,
    * OL-82) and out.snap beyond the target copy (0x79B1C's lane/velocity
    * zeroes, OL-82) have no derived consumer. */
   return FIFA96_OK;
@@ -3893,8 +3903,9 @@ static struct fifa96_match_entity *match_entity_by_id(struct fifa96_match_run *m
  * gate is the `<= 0x60` band alone (FU-169 status erratum).
  *
  * Legs: the ring-post branch `[[rec+4]] == 0x18DE` (FU169-L3, descriptor
- * unmodeled); the `%10` event 0xA1, the `0x8ED40(rec,-3)` impact accumulator
- * and the `0x741B4`/`0x92040`/`0x651F0`/`0x974F0` sinks (FU169-L2); the
+ * unmodeled); the `%10` event 0xA1 and the
+ * `0x741B4`/`0x92040`/`0x651F0`/`0x974F0` sinks (FU169-L2) — the
+ * `0x8ED40(rec,-3)` impact accumulator is wired; the
  * `0x79B6C` tail's anim re-anchor `0x6E48C` and the transient row-0/0x26
  * install (FU169-L8). */
 static int fifa96_match_action_0B(struct fifa96_match_run *mr) {
@@ -4004,8 +4015,10 @@ static int fifa96_match_action_0B(struct fifa96_match_run *mr) {
       return FIFA96_OK;
     }
     mr->entities.team[team].duel_7d7++;              /* 0x81B80/0x81B83 */
+    (void)fifa96_match_run_stats_add(mr, r->entity_id, -3); /* 0x81BBE */
     /* 0x81B89..0x81BB7: the `%10` event 0xA1 request (FU169-L2).
-     * 0x81BB7/0x81BBE: FUN_0008ED40(rec, -3) impact accumulator (FU169-L2). */
+     * 0x81BB7/0x81BBE: FUN_0008ED40(rec, -3) impact accumulator, wired above
+     * (FU169-L2). */
     point[0] = found->pos_x;
     point[1] = found->pos_y;
     point[2] = found->pos_z;
@@ -6366,18 +6379,23 @@ static int match_row09_arm1(struct fifa96_match_run *mr,
   /* 0x80D18..0x80D3D: the 0x8DC68 speed of the (vel<<6) pair. The native's
    * word stores at [ESP+2]/[ESP+4] are read back as the dword aliases
    * [ESP+2]/[ESP], so the arguments are (int16)(vel73<<6),(int16)(vel75<<6);
-   * the value is only the 0x7A490 replay argument (sink). */
+   * the value is only the 0x7A490 replay argument (sink). The block's
+   * `0x8ED40` activity pair (`0x80D6C` controlled / `0x80D99` acting, delta 2)
+   * is wired in the branch below. */
   (void)fifa96_entity_distance((int16_t)(r->vel73 << 6),
                                (int16_t)(r->vel75 << 6));
   if (controlled >= 0) {
     struct fifa96_match_entity *ctl = match_entity_by_id(mr, controlled);
     if (ctl != NULL && ctl->anim_id == 0x4Au) {        /* 0x80D50..0x80D5D */
+      (void)fifa96_match_run_stats_add(mr, controlled, 2); /* 0x80D6C */
       mr->match09_event_id = 0x67;                     /* 0x80D71..0x80D7C */
     } else {
+      (void)fifa96_match_run_stats_add(mr, r->entity_id, 2); /* 0x80D99 */
       mr->match09_event_id = 0x5Du;                    /* 0x80D9E..0x80DA5 */
       mr->match09_seq_flag_15877c = 1u;                /* 0x80DCC */
     }
   } else {
+    (void)fifa96_match_run_stats_add(mr, r->entity_id, 2); /* 0x80D99 */
     mr->match09_event_id = 0x5Du;
     mr->match09_seq_flag_15877c = 1u;
   }
