@@ -15,6 +15,11 @@ legs) and C (the parked replay legs) get their own designs after A.
 
 ## Evidence (fresh Ghidra, `/FIFA96.EXE`)
 
+> **Note:** the review errata at the end of this document supersede several
+> bullets below (five static templates, 23 outputs, class-4 extra, 28 map
+> pointers, and the native class/table pairing). Read the errata with this
+> section.
+
 `decompile_function 0x47298` and the table reads:
 
 - The function first copies **23** `0x8E`-byte template blocks
@@ -198,3 +203,90 @@ the new module (or stay and are passed in already mapped).
 - The option-cell mapping for `FUN_0001CAEC(9/0xD)`; stage 0 if absent.
 - The module split (loader vs engine) if the engine's render struct is a
   better home for the pool.
+
+## Review errata (fresh Ghidra, 2026-11-11)
+
+The evidence bullets above are superseded by this fresh pass. The prior
+sections are left intact per the repo's errata rule. Addresses are from
+`/FIFA96.EXE`; the reads are `disassemble_function 0x47298`,
+`decompile_function 0x4C00C`/`0x4C098`, and `read_memory` on the cited
+tables.
+
+1. **Five static base templates, not 23.** `0x472B8..0x472D3` copies the
+   `0x106962` block (0x8E bytes) five times into the local pool (0x2C6
+   bytes). The `0x17`-iteration loop at `0x47578` builds the 23 output
+   blocks. The first draft's "copies 23 0x8E-byte template blocks" is wrong.
+2. **The 23 descriptors.** The class array at `[ESP+0x480]` is home 0 = 2
+   (GK), home 1..10 = 0, away 0 = 3 (GK), away 1..10 = 1, extra = 4
+   (`0x473F5..0x47435`). `0x107080 = {0,0,14,15,13}` maps class 0/1 -> row 0,
+   class 2 -> row 14, class 3 -> row 15, class 4 -> row 13. The extra is
+   **class 4**, not class 3.
+3. **Class/table pairing.** `FUN_0004C00C` reads
+   `*(int*)(entry+0x1A)>>24` = byte `entry+0x1D` = PCCD `+0x1C` (the port's
+   `roster_hair_code`). `FUN_0004C098` reads `*(int*)(entry+0x1B)>>24` =
+   byte `entry+0x1E` = PCCD `+0x1D` (the port's `roster_skin_code`). In
+   `FUN_00047298`, the `0x4C098` class indexes `0x1070D4` (the hair ramp)
+   and the `0x4C00C` class indexes `0x1070E4` (the skin base) and controls
+   the class-0 `0xE3` clear (`0x475DB`, `0x475E2`, `0x47622`). The port's
+   current builder pairs them the other way; the native builder must follow
+   the native pairing. "hair"/"skin" are the port's PCCD field labels, not
+   the native table roles.
+4. **Hair class 2.** `0x1070D4` is
+   `00 00 00 00 EB EC FC FD F0 F1 F2 43 D7 D8 D9 DA`; the last class-2 byte
+   is `0x43`, not the legacy helper's `0xF3`.
+5. **Extra descriptor.** Template class 4 (row 13), skin class 2, hair class
+   2 (`0x47412..0x47435`). Its pool slot 22 has no xref
+   (`get_xrefs_to 0x14BF9C` = 0); the consumer remains a numbered leg.
+6. **Source maps.** `0x106B00` is 28 pointers (4 groups x 7 patterns) into
+   the shared `0x106A1C..0x106B00` region (0xE4 bytes), not 16 pointers with
+   seven-entry maps. A band reads `len+1` overlapping bytes from its
+   pointer.
+7. **Second pass.** For each band whose row entry is 2, the first pass
+   zeroes `template[dest]`; the second pass (`0x476B8..0x4775C`) uses map
+   index 1 (`0x106B08` = group*7+1) and writes
+   `out[0x1068E4[dest+k]] = template[map1[k]+map1[k+1]]`.
+8. **Special branch.** The `0x107080[class] > 0x15` guard at `0x47762` is
+   unreachable for classes 0..4 (rows 0/0/14/15/13). It is not an exercised
+   path; keep it as a comment or a numbered leg.
+9. **Team kit overlay.** The native block's kit bands are default shade
+   bytes (`0xBD/0xBB` for class 0), not the live team destinations
+   `37/48/59/70/81/92`. The port's `remap_team` must still be applied over
+   the six kit source bands after the native block is copied; dropping it
+   replaces the live kit colors with shades. Apply it to all 22 visible
+   blocks, including the GK blocks, to preserve the current kit behaviour.
+   The native group-2 rows map `0x8A..0x92` as sock-family sources while the
+   overlay keeps the port's shirt assignment; that band-group difference and
+   the GK-specific `FUN_00048DC0` shade patch (pool blocks 0/0xB) remain
+   legs.
+10. **`FUN_0004BF04`.** It stores `[0x1074B8]`, which selects the roster
+    source (`0` = `0x14C360` desired, `1` = `0x157BD2` current). It is not a
+    defaults provider. The extra classes are hardcoded after the second
+    call.
+11. **Builder interface.** The builder takes the native classes, not the
+    PCCD digits:
+    `fifa96_match_remap_build(pool, class_a, class_b, home_blank, away_blank)`,
+    where `class_a` is the `0x4C00C` class (the engine's
+    `match_run_hair_class(roster_hair_code)`) and `class_b` is the
+    `0x4C098` class (the engine's
+    `match_run_skin_class(roster_skin_code, class_a)`). The extra uses
+    class_a 2 / class_b 2.
+12. **Corrected engine-test bytes** (class_a = `0x4C00C`, class_b =
+    `0x4C098`):
+    - roster 0 (`roster_hair_code` '4' -> class_a 0, `roster_skin_code`
+      '3' -> class_b 2): `[0xD7..0xDA] = F0 F1 F2 43`,
+      `[0xDB..0xE3] = F6..FD, 0`.
+    - roster 5 ('4' / '1'): `D7 D8 D9 DA`, `F6..FD, 0`.
+    - unassigned default ('0' / '4'): `00 00 00 00`, `DB..E3`.
+    - Brazil pitch 0 (hair '1' / skin '2'): `EB EC FC FD`, `E4..EC`.
+    - Brazil pitch 1 (hair '2' / skin default '4'): `00 00 00 00`,
+      `ED..F5`.
+    - Germany pitch 2 (hair '0' / skin '1'): `D7..DA`, `DB..E3`.
+    - Germany pitch 4 (hair '0' / skin '2'): `EB EC FC FD`, `DB..E3`.
+    The old `[0x75]` assertions (`0xE8`/`0xDF`/`0xF1`) are retired; the
+    native template gives `0x00` there for the five classes.
+13. **Template bytes for the five classes** (independent of the player
+    classes): home GK `[0x50] = 0xC0`; home outfield `[0x50] = 0xBD`,
+    `[0x52] = 0xBB`, `[0xC2..0xC4] = C0 BB 00`, `[0x4E] = 0x00`; away GK
+    `[0x50] = 0x00`; away outfield `[0x50] = 0xBD`; extra `[0x50] = 0x00`,
+    `[0x51] = 0xBB`, `[0xD7..0xDA] = F0 F1 F2 43`,
+    `[0xDB..0xE3] = E4..EC`.
