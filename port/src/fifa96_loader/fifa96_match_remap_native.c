@@ -129,7 +129,7 @@ void fifa96_match_remap_build(uint8_t pool[FIFA96_MATCH_REMAP_BLOCKS]
   /* Compose the five templates from the shared remap_base copy. */
   for (i = 0; i < 5; i++) {
     const uint8_t *row = remap_rows[remap_row_for_class[i]];
-    memcpy(templates[i], remap_base, sizeof remap_base);
+    memcpy(templates[i], remap_base, sizeof templates[i]);
     for (j = 0; j < 12; j++) {
       uint8_t dest = remap_bands[j].dest;
       uint8_t len = remap_bands[j].len;

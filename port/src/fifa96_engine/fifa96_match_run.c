@@ -11268,6 +11268,8 @@ static void match_run_build_entity_remaps(
     const uint8_t remap_team[2][256],
     uint8_t remap_entity[2][FIFA96_MATCH_ENTITY_RECORDS][256],
     uint8_t remap_extra[256]) {
+  _Static_assert(FIFA96_MATCH_ENTITY_RECORDS == 11,
+                 "remap builder expects 11 pitch records");
   uint8_t pool[FIFA96_MATCH_REMAP_BLOCKS][FIFA96_MATCH_REMAP_BYTES];
   uint8_t class_a[2][11];
   uint8_t class_b[2][11];

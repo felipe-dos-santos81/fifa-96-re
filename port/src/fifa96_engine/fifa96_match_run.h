@@ -589,11 +589,13 @@ struct fifa96_match_run_render {
    * keeps `remap`, so M1/M2 stay byte-identical. `team_remap_ready` is set by
    * fifa96_match_run_stage_pitch. */
   uint8_t remap_team[2][256];
-  /* Phase-86 [D]: the per-pitch-record appearance tables. Each is the team
-   * kit table with that player's native hair/skin classes composed over the
-   * 0xD7..0xE3 source bands. The roster slot comes from `sub_lineup` (the
-   * native 0x14C360 lineup matrix is unported); sprite draws select this
-   * table for the live 22 player slots. */
+  /* Phase-86 [D]: the per-pitch-record appearance tables. Each is one of the
+   * 23 native pool blocks built by `fifa96_match_remap_build` (the transcribed
+   * `FUN_00047298` builder), with the six `remap_team` kit source bands
+   * overlaid to carry the live kit colours; the 0xD7..0xE3 skin/hair bands
+   * stay native. The roster slot comes from `sub_lineup` (the native 0x14C360
+   * lineup matrix is unported); sprite draws select this table for the live
+   * 22 player slots. */
   uint8_t remap_entity[2][FIFA96_MATCH_ENTITY_RECORDS][256];
   uint8_t remap_extra[256];  /* FUN_00047298's 23rd block (consumer leg) */
   /* Live ball art translation. The retail GAMEART0 `ball.fsh` uses palette

@@ -86,6 +86,8 @@ target_compile_options(fifa96_pccd PRIVATE ${FIFA96_ENGINE_SAN_FLAGS})
 target_link_options(fifa96_pccd INTERFACE ${FIFA96_ENGINE_SAN_LINK})
 
 add_library(fifa96_match_remap_native src/fifa96_loader/fifa96_match_remap_native.c)
+target_compile_options(fifa96_match_remap_native PRIVATE ${FIFA96_ENGINE_SAN_FLAGS})
+target_link_options(fifa96_match_remap_native INTERFACE ${FIFA96_ENGINE_SAN_LINK})
 target_include_directories(fifa96_match_remap_native PUBLIC include PRIVATE src)
 
 add_library(fifa96_kvgt src/fifa96_loader/fifa96_kvgt.c)

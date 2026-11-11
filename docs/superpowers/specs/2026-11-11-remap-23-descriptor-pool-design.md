@@ -299,7 +299,8 @@ tables.
 
 ## Closure record (2026-11-11)
 
-The slice landed on `main` as Tasks 1–2 (`b562ae3`, `705417e`). The builder is
+The slice landed on `main` as Tasks 1–2 (Task 1 builder `14b7a11`, Task 1
+head/legs doc `b562ae3`, Task 2 `705417e`). The builder is
 `port/src/fifa96_loader/fifa96_match_remap_native.{h,c}`; the engine consumes it
 in `fifa96_match_run.c::match_run_build_entity_remaps`.
 

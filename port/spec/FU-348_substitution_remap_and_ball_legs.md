@@ -305,8 +305,8 @@ question, not part of this slice.
 
 **Erratum (quoted).** §6 lists "FU348-L2 — full `FUN_00047298` pass ... remain
 open (Phase-86 legs)". This is closed for the five-template/23-block builder by
-the 23-descriptor remap slice (`b562ae3`, `705417e`): the native
-`FUN_00047298` pass is ported as `fifa96_match_remap_build`
+the 23-descriptor remap slice (`b562ae3`, `705417e`): the
+five-template/23-block builder is ported as `fifa96_match_remap_build`
 (`port/src/fifa96_loader/fifa96_match_remap_native.{h,c}`), and the engine now
 builds its entity remaps from the 23-block pool instead of the per-pitch band
 approximation.
