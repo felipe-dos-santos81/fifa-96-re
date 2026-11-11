@@ -300,3 +300,35 @@ question, not part of this slice.
   glue with the native camera-relative ball lead.
 * **FU348-L5 — vertical ball physics.** Closed as **not-native** by §3 of this
   document; do not add a gravity/bounce model to the native ball record.
+
+## 7. FU348-L2 closure (2026-11-11)
+
+**Erratum (quoted).** §6 lists "FU348-L2 — full `FUN_00047298` pass ... remain
+open (Phase-86 legs)". This is closed for the five-template/23-block builder by
+the 23-descriptor remap slice (`b562ae3`, `705417e`): the native
+`FUN_00047298` pass is ported as `fifa96_match_remap_build`
+(`port/src/fifa96_loader/fifa96_match_remap_native.{h,c}`), and the engine now
+builds its entity remaps from the 23-block pool instead of the per-pitch band
+approximation.
+
+The closed builder records the native class pairing (`class_a` = `FUN_0004C00C`
+→ the `0x1070E4` skin base and the class-0 `0xE3` clear; `class_b` =
+`FUN_0004C098` → the `0x1070D4` hair ramp), the template class per slot (home 0
+= 2, home 1..10 = 0, away 0 = 3, away 1..10 = 1), the extra class 4 with
+skin/hair class 2/2, and the six-band `remap_team` overlay that preserves the
+live kit colours over the native blocks.
+
+The remaining sub-legs stay open:
+
+* **FU348-L2a — extra consumer.** The 23rd pool slot has no proved consumer
+  (`get_xrefs_to 0x14BF9C` = 0); it is stored native into `render.remap_extra`
+  with no draw path.
+* **FU348-L2b — GK shade patch.** `FUN_00048DC0` (the native per-sprite palette
+  install for pool blocks 0/0xB) is unported; the engine's `0xFF` source-0
+  adapter is the documented bridge.
+* **FU348-L2c — option gates.** The `FUN_0001CAEC(9/0xD)` skin/hair blanking
+  gates are staged 0 (the engine has no option cell); the builder's
+  `home_blank`/`away_blank` inputs are passed `0,0` at the live call site.
+* **FU348-L2d — special branch.** The `0x107080[class] > 0x15` special branch is
+  unreachable for the five template classes (selectors 0/0/14/15/13) and is
+  intentionally omitted.

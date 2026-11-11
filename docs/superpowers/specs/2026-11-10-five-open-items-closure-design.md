@@ -592,6 +592,24 @@ bytes. It:
 - Substitution rebuild: the remap still follows `sub_lineup`/`roster_order`.
 - M1/M2 exact; `make check`; smoke.
 
+### 10.5 Closure record (2026-11-11)
+
+The pool is landed as the `fifa96_match_remap_native` builder (five `0x106962`
+templates, 23 outputs; template class home 0 = 2 / home 1..10 = 0 / away 0 = 3
+/ away 1..10 = 1 / extra 22 = 4 with hardcoded class_a/b 2/2), consumed by
+`fifa96_match_run.c::match_run_build_entity_remaps` with the six-band
+`remap_team` overlay and the source-0 `0xFF` render adapter. `class_a` =
+`FUN_0004C00C` drives `0x1070E4`/the `0xE3` clear; `class_b` = `FUN_0004C098`
+drives `0x1070D4`. `test_remap_native_pool` plus the corrected live render
+tests pin the bytes; `make check` 124/124, M1/M2 `cmp` exact, smoke `124`. No
+golden re-pin and no completion-number movement (a live render internal, no
+new body/row).
+
+The four remaining legs stay open: the 23rd pool slot's consumer
+(`get_xrefs_to 0x14BF9C` = 0), the `FUN_00048DC0` GK shade patch, the
+`FUN_0001CAEC(9/0xD)` option gates (staged 0), and the unreachable
+`0x107080[class] > 0x15` branch. Full native kit fidelity is not claimed.
+
 ## 11. Campaign acceptance
 
 - Each slice is green on `make check`, M1/M2 `cmp` and the windowed smoke

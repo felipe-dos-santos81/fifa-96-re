@@ -5241,3 +5241,26 @@ close-out below).
   recorded-frame ring and pause drain, the world/clock freeze, the `0x5865C`
   pre-arm audio, and the `FUN_0003BB1C` match-screen UI loop. Record: FU-351
   §23.2, ENGINE Phase 116, design §9.5.
+
+- **Phase 117 native 23-descriptor remap pool (2026-11-11).** The engine's
+  per-player remap is now the native `FUN_00047298` 23-block builder
+  (`fifa96_match_remap_build`, `port/src/fifa96_loader/fifa96_match_remap_native.{h,c}`)
+  instead of the per-pitch band approximation. Five `0x8E` templates are
+  composed from `0x106962` via the `0x106C00` rows (selectors `0x107080 =
+  {0,0,14,15,13}`), the 12 `0x106B70` bands, the 28 `0x106B00` map pointers and
+  the shared `0x106A1C..0x106B00` map region (base+offset); the 23 256-byte
+  outputs use template class home 0 = 2 / home 1..10 = 0 / away 0 = 3 /
+  away 1..10 = 1 / extra 22 = 4 (hardcoded class_a/b 2/2), with `class_a`
+  (`FUN_0004C00C`) driving `0x1070E4`/the `0xE3` clear and `class_b`
+  (`FUN_0004C098`) driving `0x1070D4`. `match_run_build_entity_remaps` copies
+  the first 22 blocks into `remap_entity[side][pitch]`, overlays the six
+  `remap_team` kit bands over all 22 (including the GKs), forces visible byte 0
+  to `0xFF` (the port's source-0 key), and stores the extra block native
+  (byte 0 = `0x00`) into `render.remap_extra[256]`. **Gate:** `make check`
+  124/124; M1/M2 `cmp` exact; windowed smoke `124`. No golden re-pin and no
+  completion-number movement (a live render internal — no new body or dispatch
+  row). Legs: the 23rd pool slot's consumer (`get_xrefs_to 0x14BF9C` = 0), the
+  `FUN_00048DC0` GK shade patch, the `FUN_0001CAEC(9/0xD)` option gates
+  (staged 0) and the unreachable `0x107080[class] > 0x15` branch. Full native
+  kit fidelity is not claimed. Record: FU-348 §7 (L2 closure), FU-350 §6 (L3
+  closure), design §10.5.

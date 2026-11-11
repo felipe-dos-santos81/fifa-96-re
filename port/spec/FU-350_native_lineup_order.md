@@ -204,3 +204,12 @@ Open legs:
   per-pitch projection covers the 11 visible players per side);
 - **FU350-L4** in-match order swaps `FUN_00041494` / `FUN_0008CBB0` /
   `FUN_0008EAB8` / `FUN_0009343C` (substitution/placement order).
+
+**Closure (FU350-L3, 2026-11-11).** FU350-L3 is closed for the pool: the full
+`FUN_00047298` 23-descriptor builder is ported (`fifa96_match_remap_build`,
+`port/src/fifa96_loader/fifa96_match_remap_native.{h,c}`) and the engine builds
+its entity remaps from the 23-block pool, storing the extra block in
+`render.remap_extra`. The 23rd block's consumer remains unproved
+(`get_xrefs_to 0x14BF9C` = 0) and stays a numbered leg; the `FUN_00048DC0` GK
+shade patch, the `FUN_0001CAEC(9/0xD)` option gates and the unreachable
+`0x107080[class] > 0x15` branch also stay open (see the FU-348 §7 L2 closure).

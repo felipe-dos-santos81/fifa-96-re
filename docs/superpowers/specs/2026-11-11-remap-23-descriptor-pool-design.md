@@ -296,3 +296,35 @@ tables.
     `[0xD7..0xDA] = F0 F1 F2 43`, `[0xDB..0xE3] = E4..EC`.
     The class-0 shorts/torso/socks bands are native zeros; the team-kit
     overlay fills them.
+
+## Closure record (2026-11-11)
+
+The slice landed on `main` as Tasks 1–2 (`b562ae3`, `705417e`). The builder is
+`port/src/fifa96_loader/fifa96_match_remap_native.{h,c}`; the engine consumes it
+in `fifa96_match_run.c::match_run_build_entity_remaps`.
+
+- **Builder.** Five `0x8E` templates composed from the static `0x106962` base
+  via the `0x106C00` rows (selectors `0x107080 = {0,0,14,15,13}`), the 12-entry
+  `0x106B70` band table, the 28 `0x106B00` map pointers and the shared
+  `0x106A1C..0x106B00` map region (base+offset reads). 23 256-byte outputs;
+  template class per slot home 0 = 2 / home 1..10 = 0 / away 0 = 3 /
+  away 1..10 = 1 / extra 22 = 4 (hardcoded class_a 2 / class_b 2). `class_a`
+  (`FUN_0004C00C`) drives the `0x1070E4` skin base and the class-0 `0xE3`
+  clear; `class_b` (`FUN_0004C098`) drives the `0x1070D4` hair ramp. The
+  `0x7E` copy runs through `0x1068E4`; the second pass uses map index 2.
+- **Adapter.** The engine copies the first 22 pool blocks into
+  `remap_entity[side][pitch]`, overlays the six `remap_team` kit bands on all
+  22 (including the GKs), and forces visible byte 0 to `0xFF` (the port's
+  source-0 render key). The extra block is stored native (byte 0 = `0x00`)
+  into `render.remap_extra[256]`.
+- **Tests.** `test_remap_native_pool` pins the five template classes, the band
+  samples, the second-pass `0x75/0x76` bytes, the extra block and the home/away
+  gates; the live render tests pin the corrected per-roster bytes from errata
+  12. `make check` 124/124; M1/M2 `cmp` exact; windowed smoke `124`.
+
+**Remaining legs (honest).** The 23rd pool slot has no proved consumer
+(`get_xrefs_to 0x14BF9C` = 0); the `FUN_00048DC0` GK shade patch (pool blocks
+0/0xB) is unported; the `FUN_0001CAEC(9/0xD)` option gates are staged 0 (the
+engine has no option cell); and the `0x107080[class] > 0x15` special branch is
+unreachable for the five template classes and is intentionally omitted. The
+pool's consumer and full native kit fidelity are therefore not claimed closed.

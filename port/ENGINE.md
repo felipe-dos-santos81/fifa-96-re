@@ -12335,3 +12335,46 @@ windowed smoke `124`. No golden was re-pinned and no completion number moved
 (`FUN_00063D34`/`CBC`/`FUN_0006428C`) and pause drain, the live-match
 world/clock freeze, the `0x5865C` pre-arm audio, and the `FUN_0003BB1C`
 match-screen UI loop. Record: FU-351 §23.2, design §9.5.
+
+## Phase 117 — the native 23-descriptor remap pool (2026-11-11)
+
+`fifa96_match_remap_native` (loader layer) is the native `FUN_00047298`
+23-block builder, and the engine now builds its entity remaps from it instead
+of the per-pitch band approximation.
+
+**Builder.** Five `0x8E` templates are composed from the static `0x106962` base
+via the `0x106C00` rows (selectors `0x107080 = {0,0,14,15,13}`), the 12-entry
+`0x106B70` band table, the 28 `0x106B00` map pointers and the shared
+`0x106A1C..0x106B00` map region (base+offset reads). The 23 256-byte output
+blocks are built from the template class per slot — home 0 = class 2 (GK),
+home 1..10 = class 0, away 0 = class 3 (GK), away 1..10 = class 1, extra 22 =
+class 4 — with the `0x7E` copy through `0x1068E4`, the hair ramp (`class_b`,
+`FUN_0004C098`, `0x1070D4`) at `0xD7..0xDA`, the skin base+ramp (`class_a`,
+`FUN_0004C00C`, `0x1070E4`) at `0xDB..0xE3` plus the template `+6..+0xE`, the
+`class_a == 0` `0xE3` clear, the blanking gates, and the template-2 second
+pattern pass (map index 2). The extra block is hardcoded `class_a 2 /
+class_b 2`.
+
+**Adapter.** `match_run_build_entity_remaps` copies the first 22 pool blocks
+into `remap_entity[side][pitch]`, overlays the six `remap_team` kit bands over
+all 22 (including the GKs) via `match_run_overlay_team_kit`, and forces
+`dst[0] = 0xFF` (the renderer's source-0 colour key; the native block keeps
+`0x00`). The extra block is stored native (byte 0 = `0x00`) into
+`render.remap_extra[256]`. The substitution rebuild and the atomic live-kit
+stage both go through this one builder.
+
+**Verification.** `test_remap_native_pool` pins the five template classes, the
+band samples, the second-pass `0x75/0x76` bytes, the extra block and the
+home/away gates; the live render tests pin the corrected per-roster bytes.
+`make check` **124/124**; M1/M2 `cmp` exact; windowed smoke `124`. No golden
+re-pin and no completion-number movement (a live render internal — no new body
+or dispatch row).
+
+**Legs.** The 23rd pool slot's consumer is unproved (`get_xrefs_to 0x14BF9C` =
+0); the `FUN_00048DC0` GK shade patch (pool blocks 0/0xB) is unported; the
+`FUN_0001CAEC(9/0xD)` option gates are staged 0 (no engine option cell); and
+the `0x107080[class] > 0x15` special branch is unreachable for the five
+template classes and is intentionally omitted. Full native kit fidelity is not
+claimed.
+
+Record: FU-348 §7 (L2 closure), FU-350 §6 (L3 closure), design §10.5.
