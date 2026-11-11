@@ -5504,8 +5504,9 @@ static void test_action_1b_stage1_anim_table(void) {
  * falls to the `0x77636` stage-4 head, so the emit `0x77707` self-satisfies
  * (FU285-L1 narrows FU-273 T2b-L1). The deep pan seed + Blocks A-G through the
  * `0x77423` seat and the `0x77428..0x774D2` install tree (`0x77035..0x774D2`)
- * are ported by FU301/T6 + FU302/T7; the sink bodies stay OL-27/OL-82 legs and
- * the computed requests are the `match1b_*` observables. */
+ * are ported by FU301/T6 + FU302/T7; the `0x8F188`/`0x974DC` sink bodies stay
+ * OL-27/OL-82 legs and the computed requests are the `match1b_*` observables,
+ * while the `0x8ED40` stat calls are wired in `match_1b_deep_pan`. */
 
 /* The wide ROUTE: head not bound (phase != 0x0D), rec != actor and != tracked,
  * the `[0x157C5C]` latch clear, the rush (`+0x6B <= +0x77`) and band gates pass
