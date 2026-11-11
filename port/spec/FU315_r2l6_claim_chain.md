@@ -356,7 +356,9 @@ Commits `45090c0` (helper), `034045d` (row 18 / `0x7CD60` / `0x7D1D4`) and
 no engine body), `0x938F0` (`FUN_00093890`, the slot↔record walk, FU-70) and
 `0x83AA0` (the second `FUN_00083428` receiver branch; the port's
 `match_sp_receiver_cut` models the `0x838EF` arm only, so this site has no
-distinct engine branch). None of the four is counted as wired.
+distinct engine branch). None of these sites is counted as wired. A fresh
+`get_xrefs_to 0x786A0` (this session) returns **9** calls, the same nine sites
+as the design census; a fresh `get_xrefs_to 0x74CB8` returns **0**.
 
 The §4.2 bullet "`fifa96_match_action_18` swaps only the boolean" is superseded
 by this closure and kept verbatim above.
