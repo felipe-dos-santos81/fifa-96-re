@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "fifa96_engine/fifa96_match_replay_ring.h"
+#include "fifa96_engine/fifa96_match_run.h"
 
 /* The map's fixed lane offsets (header). */
 enum {
@@ -41,6 +42,12 @@ enum {
   FIFA96_REPLAY_REC_QUEUE6 = 0x10E,
   FIFA96_REPLAY_REC_WORD_1CC = 0x114,
   FIFA96_REPLAY_REC_STAMP = 0x116,
+};
+
+/* The recorder's native constants (spec §5.3). */
+enum {
+  FIFA96_REPLAY_BUDGET_LIMIT = 0x5A,  /* `[0x107310] < 0x5A` gates the pack */
+  FIFA96_REPLAY_EVICT_COUNT = 0x95,    /* evict while the count exceeds 149 */
 };
 
 static uint16_t replay_get_word(const uint8_t *block, size_t off) {
@@ -144,4 +151,90 @@ void fifa96_match_replay_unpack(const uint8_t *record, uint8_t *view) {
   /* The stamp lands in the view's `+0x1CE` (`word_55C72`), not `+0x1CC`. */
   replay_put_word(view, FIFA96_REPLAY_WORD_1CE,
                   replay_get_word(record, FIFA96_REPLAY_REC_STAMP));
+}
+
+/* The mode-window increment set (spec §5.3, FU-111 §1): the phases whose
+ * frames advance `[0x107310]`. Every other phase resets the counter to 0, so
+ * packing resumes immediately in a reset mode. */
+static int replay_phase_increments_budget(uint8_t phase) {
+  switch (phase) {
+    case 0x00:
+    case 0x01:
+    case 0x03:
+    case 0x04:
+    case 0x05:
+    case 0x06:
+    case 0x07:
+    case 0x08:
+    case 0x0A:
+    case 0x0B:
+    case 0x0C:
+    case 0x13:
+    case 0x14:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+void fifa96_match_replay_ring_reset(struct fifa96_match_run *mr) {
+  if (!mr) return;
+
+  mr->replay_ring.read = 0;
+  mr->replay_ring.write = 0;
+  mr->replay_ring.count = 0;
+  mr->replay_ring.stamp_acc = 0;
+  mr->replay_ring.budget = 0;
+  mr->replay_ring.enabled = 0;
+  /* The native `FUN_00064030` writes `[0x9A94] = 0`; the count mirror
+   * (`cursor_limit`) follows it. */
+  mr->render.replay.cursor = 0;
+  mr->render.replay.cursor_limit = 0;
+}
+
+void fifa96_match_replay_ring_record(struct fifa96_match_run *mr, int on) {
+  if (!mr) return;
+
+  mr->replay_ring.enabled = on ? 1 : 0;
+}
+
+void fifa96_match_replay_capture(struct fifa96_match_run *mr, uint32_t ticks) {
+  struct fifa96_match_replay_ring *ring;
+
+  if (!mr) return;
+  ring = &mr->replay_ring;
+
+  /* The budget updates first and blocks before the accumulator moves: the
+   * native does not call the packer at all on a blocked frame. */
+  if (replay_phase_increments_budget(mr->state.phase))
+    ring->budget++;
+  else
+    ring->budget = 0;
+  if (ring->budget >= FIFA96_REPLAY_BUDGET_LIMIT) return;
+
+  if (!ring->enabled) return;
+
+  if (ticks == 0) {
+    /* The native flush: stamp 1 and write the record immediately. */
+    ring->stamp_acc = 1;
+  } else {
+    ring->stamp_acc += ticks;
+    if (ring->stamp_acc < 2) return;
+  }
+
+  if (ring->count > FIFA96_REPLAY_EVICT_COUNT) {
+    ring->read = (ring->read + 1) % FIFA96_MATCH_REPLAY_RING_RECORDS;
+    ring->count--;
+  }
+
+  fifa96_match_replay_pack(mr->render.replay.replay_view,
+                           ring->record[ring->write],
+                           (uint16_t)ring->stamp_acc);
+  ring->write = (ring->write + 1) % FIFA96_MATCH_REPLAY_RING_RECORDS;
+  ring->count++;
+  ring->stamp_acc = 0;
+}
+
+uint32_t fifa96_match_replay_count(const struct fifa96_match_run *mr) {
+  return mr ? mr->replay_ring.count : 0;
 }

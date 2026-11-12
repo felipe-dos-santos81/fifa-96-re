@@ -69,3 +69,20 @@ void fifa96_match_replay_pack(const uint8_t *view, uint8_t *record,
  * stamp lands in the view's `+0x1CE` word and the heading high words are left
  * untouched (the composer sets them to 0). */
 void fifa96_match_replay_unpack(const uint8_t *record, uint8_t *view);
+
+/* `FUN_00064030`: zero the read/write cursors, the count, the packer
+ * accumulator, the mode-window budget, the recorder gate and the playback
+ * index/limit (`render.replay.cursor`/`cursor_limit`). */
+void fifa96_match_replay_ring_reset(struct fifa96_match_run *mr);
+
+/* `FUN_00064074`/`FUN_00064080`: clear/set the `[0x109A90]` recorder gate. */
+void fifa96_match_replay_ring_record(struct fifa96_match_run *mr, int on);
+
+/* One live frame of the recorder: the 90-frame mode-window budget gate
+ * (`[0x107310] < 0x5A`), the recorder gate and the `FUN_0006408C` packer
+ * cadence. `ticks` is 1 per live frame; 0 is the native flush (write now,
+ * stamp 1). */
+void fifa96_match_replay_capture(struct fifa96_match_run *mr, uint32_t ticks);
+
+/* The ring count (`*[0x109AC0]`), 0 on NULL. */
+uint32_t fifa96_match_replay_count(const struct fifa96_match_run *mr);

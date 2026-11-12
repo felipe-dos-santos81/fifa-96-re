@@ -1,11 +1,19 @@
-/* port/tests/test_engine_replay_ring.c — recorded-frame replay ring Task 1:
- * the native 0x155AA4 view block and the 0x118 record pack/apply pair.
+/* port/tests/test_engine_replay_ring.c — recorded-frame replay ring Task 1/2:
+ * the native 0x155AA4 view block, the 0x118 record pack/apply pair, and the
+ * ring cursors with the recorder gate, the packer cadence and the 90-frame
+ * mode-window budget.
  *
  * The record map asserted here is spec §5.1 (fresh disassembly of the packer
  * `0x6408C` and the applier `0x63B80`): the byte lanes pre-increment, so the
  * appearance lane starts at record +0xC4 and the frame lane at +0xDB, and the
  * +0x116 stamp is the one asymmetric lane (pack writes the accumulator,
- * unpack writes it into the view's +0x1CE word). */
+ * unpack writes it into the view's +0x1CE word).
+ *
+ * The capture cadence is spec §5.3: the budget gate runs first and returns
+ * before the accumulator moves, so an uninterrupted increment-mode window
+ * yields 44 records (packs at frames 2, 4, .., 88; the 90th frame is blocked),
+ * a reset phase clears the budget and packing resumes, and the 151st pack
+ * evicts the oldest record. */
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -13,6 +21,7 @@
 #include <string.h>
 
 #include "fifa96_engine/fifa96_match_replay_ring.h"
+#include "fifa96_engine/fifa96_match_run.h"
 
 /* The host is little-endian (the record/view are native byte blocks); the
  * helpers copy bytes, never a cast through an unaligned pointer. */
@@ -141,8 +150,141 @@ static void test_ring_pack_apply_roundtrip(void) {
   }
 }
 
+/* Task 2: the mode-window budget, the two-tick packer cadence and the reset
+ * phase's budget clear. A 90-frame increment window (phase 0) packs at the
+ * even frames 2..88 and blocks the 90th with the accumulator left at 1. */
+static void test_ring_capture_budget(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_replay_ring *ring;
+  uint32_t i;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  fifa96_match_replay_ring_reset(&mr);
+  fifa96_match_replay_ring_record(&mr, 1);
+  ring = &mr.replay_ring;
+
+  mr.state.phase = 0;   /* the increment set */
+  for (i = 1; i <= 90; i++) {
+    mr.render.replay.replay_view[0] = (uint8_t)i;
+    fifa96_match_replay_capture(&mr, 1);
+    if (i == 2) {
+      assert(fifa96_match_replay_count(&mr) == 1);
+      assert(get_u16(ring->record[0], 0x116) == 2);
+    }
+  }
+  assert(fifa96_match_replay_count(&mr) == 44);
+  assert(ring->stamp_acc == 1);
+  assert(ring->budget == 90);
+  for (i = 0; i < 44; i++) {
+    assert(get_u16(ring->record[i], 0x116) == 2);
+    /* The packer stores the view's focus dword, so the write order shows. */
+    assert(ring->record[i][0] == (uint8_t)(2u * (i + 1u)));
+  }
+
+  /* The reset phase clears the budget; the persisted accumulator packs. */
+  mr.state.phase = 2;
+  mr.render.replay.replay_view[0] = 0xEE;
+  fifa96_match_replay_capture(&mr, 1);
+  assert(fifa96_match_replay_count(&mr) == 45);
+  assert(ring->budget == 0);
+  assert(get_u16(ring->record[44], 0x116) == 2);
+
+  /* The next two ticks pack #46; the third leaves the accumulator at 1. */
+  mr.render.replay.replay_view[0] = 0xEF;
+  fifa96_match_replay_capture(&mr, 1);
+  fifa96_match_replay_capture(&mr, 1);
+  fifa96_match_replay_capture(&mr, 1);
+  assert(fifa96_match_replay_count(&mr) == 46);
+  assert(ring->stamp_acc == 1);
+}
+
+/* Task 2: the ring holds 150 records. The 151st pack evicts the oldest, so
+ * record[read] is the second pack and record[read + 149] is the newest. A
+ * reset phase every frame keeps the budget at 0, so the packer always runs. */
+static void test_ring_eviction(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_replay_ring *ring;
+  uint32_t pack, tick, oldest;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  fifa96_match_replay_ring_reset(&mr);
+  fifa96_match_replay_ring_record(&mr, 1);
+  ring = &mr.replay_ring;
+
+  mr.state.phase = 2;   /* the reset set: budget 0, the packer always runs */
+  for (pack = 1; pack <= 151; pack++) {
+    /* Slot 0's appearance lane packs to record +0xC4. */
+    mr.render.replay.replay_view[0x17C] = (uint8_t)pack;
+    /* The packer needs two ticks per record. */
+    for (tick = 0; tick < 2; tick++) fifa96_match_replay_capture(&mr, 1);
+  }
+
+  assert(fifa96_match_replay_count(&mr) == 150);
+  assert(ring->read == 1);
+  assert(ring->write == 1);
+  /* record[(read + 0) % 150] is the second pack; record[(read + 149) % 150]
+   * is the newest (the 151st). */
+  oldest = (ring->read + 149u) % FIFA96_MATCH_REPLAY_RING_RECORDS;
+  assert(ring->record[ring->read % FIFA96_MATCH_REPLAY_RING_RECORDS][0xC4] == 2);
+  assert(ring->record[oldest][0xC4] == 151);
+  assert(ring->record[1][0xC4] == 2);
+  assert(ring->record[0][0xC4] == 151);
+}
+
+/* Task 2: an empty or disabled ring records nothing, the accumulator still
+ * counts two ticks per pack, and `ticks == 0` is the native flush (stamp 1,
+ * written immediately). Resetting clears every cursor and the gate. */
+static void test_ring_empty_reset(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_replay_ring *ring;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  fifa96_match_replay_ring_reset(&mr);
+  ring = &mr.replay_ring;
+
+  assert(fifa96_match_replay_count(&mr) == 0);
+  assert(fifa96_match_replay_count(NULL) == 0);
+  assert(ring->read == 0 && ring->write == 0 && ring->count == 0);
+  assert(ring->stamp_acc == 0 && ring->budget == 0 && ring->enabled == 0);
+  assert(mr.render.replay.cursor == 0 && mr.render.replay.cursor_limit == 0);
+
+  /* The gate is off: two ticks record nothing. */
+  fifa96_match_replay_ring_record(&mr, 0);
+  fifa96_match_replay_capture(&mr, 1);
+  fifa96_match_replay_capture(&mr, 1);
+  assert(fifa96_match_replay_count(&mr) == 0);
+
+  /* The gate on: the first tick only accumulates, the second packs. */
+  fifa96_match_replay_ring_record(&mr, 1);
+  fifa96_match_replay_capture(&mr, 1);
+  assert(fifa96_match_replay_count(&mr) == 0);
+  assert(ring->stamp_acc == 1);
+  fifa96_match_replay_capture(&mr, 1);
+  assert(fifa96_match_replay_count(&mr) == 1);
+  assert(get_u16(ring->record[0], 0x116) == 2);
+
+  /* `ticks == 0` is the flush: stamp 1 and write immediately. */
+  fifa96_match_replay_ring_reset(&mr);
+  fifa96_match_replay_ring_record(&mr, 1);
+  fifa96_match_replay_capture(&mr, 0);
+  assert(fifa96_match_replay_count(&mr) == 1);
+  assert(ring->stamp_acc == 0);
+  assert(get_u16(ring->record[0], 0x116) == 1);
+
+  fifa96_match_replay_ring_reset(&mr);
+  assert(ring->read == 0 && ring->write == 0 && ring->count == 0);
+  assert(ring->stamp_acc == 0 && ring->budget == 0 && ring->enabled == 0);
+  assert(mr.render.replay.cursor == 0 && mr.render.replay.cursor_limit == 0);
+}
+
 int main(void) {
   test_ring_pack_apply_roundtrip();
+  test_ring_capture_budget();
+  test_ring_eviction();
+  test_ring_empty_reset();
   puts("test_engine_replay_ring OK");
   return 0;
 }
