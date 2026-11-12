@@ -353,11 +353,13 @@ next replay sees it) and restores the live camera.
   `+0x116 = stamp_acc` (low word), `write = (write+1) % 150`, `count++`,
   `stamp_acc = 0`.
 - `ring_reset` zeroes the read/write cursors, the count, the play cursor
-  (`render.replay.cursor`), its `cursor_limit`, the packer accumulator and the
-  budget, and sets `enabled` from the caller; `fifa96_match_run_begin` calls
-  reset(1); `fifa96_match_run_end` calls reset(0). `fifa96_match_run_replay_begin`
-  does **not** reset the ring. The act-9 reset does not reset the ring (the
-  native setup caller is the only `FUN_00064030` caller).
+  (`render.replay.cursor`), its `cursor_limit`, the packer accumulator, the
+  budget and the recorder gate. The **match** `fifa96_match_run_begin` calls
+  reset and then enables the recorder with `ring_record(mr, 1)`;
+  `fifa96_match_run_init` resets (gate stays off) and `fifa96_match_run_end`
+  resets. `fifa96_match_run_replay_begin` does **not** reset the ring. The
+  act-9 reset does not reset the ring (the native setup caller is the only
+  `FUN_00064030` caller).
 
 ### 7.4 Playback
 

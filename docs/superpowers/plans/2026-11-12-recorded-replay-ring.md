@@ -389,7 +389,7 @@ Add to `test_engine_match_frame.c` and register them in its `main()` (and regist
 - Fill a record with distinct slot values and a matrix; apply it; with `live_start = 1` and `camera_kind = POSE`, call `fifa96_match_replay_pose` and `fifa96_match_replay_stage`; assert `render_eye_*`/`yaw`/`pitch`/`view_ratio` come from the record; assert the render slot's heading is folded once; assert `render.entities[i].bank_index` is re-derived from the applied appearance; assert the applied roll byte sets `render.ball_roll`; assert the live pool is unchanged.
 
 Update the existing frozen-frame tests in the same step:
-- `test_replay_frozen_live_view_applies_target`: set `camera_kind = FIFA96_CAMERA_REPLAY_VIEW` (a non-POSE camera) before the frozen step so the live view driver still runs; keep the existing eye/target assertions. Add a second block with `camera_kind = POSE` asserting the recorded matrix/eye wins and the driver does not overwrite it.
+- `test_replay_frozen_live_view_applies_target`: the arm frame resets the camera to 0 (POSE), so select the non-POSE camera **after** the arm frame with `fifa96_match_run_replay_camera_set(&mr, 1)` (camera 1 = `FIFA96_CAMERA_REPLAY_VIEW`), then run another granted frozen frame and keep the existing eye/target assertions. Add a second block that selects camera 0 (POSE) and asserts the recorded matrix/eye wins and the driver does not overwrite it.
 - `test_replay_frozen_scene_stage_keeps_record_anim`: seed a **record** and arm the replay (the `0x81` arm applies record 0), or set the view block and arrange `count == 0` so the arm leaves it; the stage now reads the view, not the live pool. Keep the assertion that the sim-visible record fields (`+0x28`/`+0x3D`) do not advance.
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -400,7 +400,7 @@ Expected: FAIL — `fifa96_match_replay_stage`/`fifa96_match_run_anim_bank` do n
 - [ ] **Step 3: Implement the anim-bank helper, the stage and the frame hooks**
 
 - Add `fifa96_match_run_anim_bank` in `fifa96_match_run.c` (wrapping the static `match_run_anim_rows` table via `fifa96_animation_row_lookup`; return 1 and set `*bank_index = row.sprite_bank` on success, 0 otherwise); declare it in `fifa96_match_run.h`.
-- Add `fifa96_match_replay_stage`: for **all 23 slots** (0..21 from the team records, slot 22 from the ball record), read the view pos, unfold the heading `(0x400 - (packed >> 6)) & 0x3FF` into the high word, set `anim_id`/`frame`, `hidden = (y == FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y)`, re-derive `bank_index` with the helper; set `render.entity_count = 23`. Write render cells only.
+- Add `fifa96_match_replay_stage`: loop **all 23 view slots** (0..22; the composer already filled slot 22 from the staged ball), read the view pos, unfold the heading `(0x400 - (packed >> 6)) & 0x3FF` into the high word, set `anim_id`/`frame`, `hidden = (y == FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y)`, re-derive `bank_index` with the helper; set `render.entity_count = 23`. Write render cells only.
 - Live frame body: inside the granted loop, **inside** the
   `if (mr->render.enabled) { ... }` branch, after `match_run_scene_stage(mr)`,
   call `fifa96_match_replay_compose(mr); fifa96_match_replay_capture(mr, 1);`
@@ -415,7 +415,7 @@ Expected: FAIL — `fifa96_match_replay_stage`/`fifa96_match_run_anim_bank` do n
   replay.camera_kind != FIFA96_CAMERA_REPLAY_POSE`; call
   `fifa96_match_replay_pose(mr)` after the feed/driver and before the display
   update.
-- `fifa96_match_run_init` and the **match** `fifa96_match_run_begin` call `fifa96_match_replay_ring_reset` (enable at the match begin; init leaves it disabled); `fifa96_match_run_end` resets/clears the gate. `fifa96_match_run_replay_begin` does **not** reset the ring.
+- `fifa96_match_run_init` calls `fifa96_match_replay_ring_reset` (gate off); the **match** `fifa96_match_run_begin` calls reset and then `fifa96_match_replay_ring_record(mr, 1)`; `fifa96_match_run_end` resets/clears the gate. `fifa96_match_run_replay_begin` does **not** reset the ring.
 
 - [ ] **Step 4: Run the focused tests to verify they pass**
 
