@@ -309,6 +309,7 @@ static void test_kickoff_auto_pass_replay_gated(void) {
   assert(fifa96_engine_step(f.engine) == 0);   /* DECLINE -> panel */
   assert(fifa96_engine_step(f.engine) == 0);   /* release */
   assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM -> bridge */
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM release */
   assert(f.engine->match != NULL);
   f.engine->match->state.phase = 1;            /* the kickoff wait */
   f.engine->match->global_157ac2 = 0;
