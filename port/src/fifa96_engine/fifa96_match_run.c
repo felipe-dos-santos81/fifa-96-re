@@ -5217,6 +5217,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->sit_side_pending = 0;
   mr->corner_count[0] = 0;
   mr->corner_count[1] = 0;
+  /* [0x157ABE] via FUN_0007417C; global_157ac2 cleared above */
   mr->side_swap = fifa96_match_side_swap_value(mr->global_157ac2, 0u);
   mr->store_15882b = 0;
   mr->store_15882c = 0;
@@ -8177,7 +8178,11 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * `tick_total`, the kickoff timers, the live input/control-slot model and
    * the entity/ball pool are live-only and do not run, so the match is frozen
    * until the exit (the next non-family frame resumes
-   * `fifa96_match_state_tick`). */
+   * `fifa96_match_state_tick`). The HUD sub-notice still ages (the
+   * `sub_notice_ticks` decrement runs before this branch), while the
+   * `mark_over` tail is part of the skipped live path: the OVER screen is
+   * deferred until the first post-exit frame, so a replay cannot end the
+   * match. */
   if (fifa96_match_run_replay_family(&mr->render.replay)) {
     int frozen_granted = 0;
     rc = fifa96_match_pace_tick(&mr->pace, 0, &frozen_granted);
@@ -8189,20 +8194,24 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
                                          (int32_t)mr->state.frame_delta);
       mr->render.replay.input_buttons = 0;
       /* Review F1: the replay view. `replay_target` selects the source-4
-       * camera on the 0x81 arm and the 0x20 cycle rewrites it, but only
-       * `match_run_live_camera_follow` consumes `camera_target.source == 4`
-       * and writes the live `render_eye_*`; without it a frozen live replay
-       * stays on the frozen live view and the camera cycle changes only the
-       * caption. The pose feed keeps the staged orientation input in the
-       * live-frame order (pose before the view driver). Review F3: the live
-       * pan/event camera walk (`match_run_frame_camera`) is NOT run on the
-       * frozen path — it spends the shared match RNG on pan/event state the
-       * replay driver replaces, and its FU-71 armer is live camera motion.
-       * The frozen view is the replay driver plus the pose feed, so the match
-       * RNG stream is untouched by replay frames. */
+       * camera on the 0x81 arm; the 0x20 cycle only stores the camera-record
+       * selection (`camera_kind`/`camera_sub`/`record_index`), which the view
+       * does not consume (leg). `match_run_live_camera_follow` is the only
+       * source-4 camera/view consumer and live `render_eye_*` writer;
+       * `replay_exit` only resets the source. Without the driver a frozen
+       * live replay stays on the frozen live view and the camera cycle
+       * changes only the caption. The pose feed keeps the staged orientation
+       * input in the live-frame order (pose before the view driver). Review
+       * F3: the live pan/event camera walk (`match_run_frame_camera`) is NOT
+       * run on the frozen path — it spends the shared match RNG on pan/event
+       * state the replay driver replaces, and its FU-71 armer is live camera
+       * motion. The frozen view is the replay driver plus the pose feed, so
+       * the match RNG stream is untouched by replay frames. */
       (void)fifa96_camera_pose_feed(&mr->render.camera, &mr->render.yaw,
                                     &mr->render.pitch, &mr->render.view_ratio,
                                     &mr->render.camera_pose);
+      /* The view driver is live-run only; a non-live frozen run keeps the
+       * pose feed above and nothing else. */
       if (mr->live_start) match_run_live_camera_follow(mr);
       (void)fifa96_match_display_update(&mr->render.display,
                                         mr->state.frame_delta, 0);
@@ -8212,6 +8221,8 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
        * different row/aux word; the frozen frame keeps only the render-slot
        * positions (and the ball roll). */
       if (mr->render.enabled) match_run_scene_stage_positions(mr);
+      /* `follow=0` records that the FU-71 armer/follow did not run on the
+       * frozen path (the live `match_run_frame_camera` is skipped). */
       match_run_frame_camera_trace(mr, 0);
     }
     return 1;

@@ -1200,6 +1200,9 @@ pack/apply and the `0x55AA4` live block) stay one leg; the full
 
 ## 26. C1/C3/C4 closure — replay input, live freeze and pre-arm audio (2026-11-12)
 
+Native facts restate the 2026-11-11 design §6.5/§6.6/§6.10/§6.11 session and
+the Task 2–6 reports; this slice made no fresh Ghidra reads.
+
 **C1 — the three input minors (code).** (1) `struct fifa96_match_run_replay`
 gains `input_primed`: the first replay-family poll after `replay_begin` only
 primes `input_buttons_held` and consumes no edge, so a key held across the arm
@@ -1246,12 +1249,15 @@ control-slot model, the camera out-of-bounds goal arm, the entity/ball pool
 and its shapers, the referee, the phase machine/driver, the screen scheduler,
 the shot/keeper/goal blocks, the ball machine, the act timer and the
 end-word/`mark_over` tail. The kept tail is the pose feed, the live view driver
-(`match_run_live_camera_follow`, the only source-4 `camera_target` consumer and
-live `render_eye_*` writer) for live runs, the FU-90 display timer,
-positions-only staging (`match_run_scene_stage_positions`) and the camera
-trace. The live pan/event walk is deliberately not run so frozen frames spend
-no shared `mr->rng` (review F3); the animator split keeps the sim-visible
-`rec->frame`/`rec->anim_id` frozen (review F2).
+(`match_run_live_camera_follow`, the only source-4 camera/view consumer and
+live `render_eye_*` writer; `replay_exit` only resets the source) for live
+runs, the FU-90 display timer, positions-only staging
+(`match_run_scene_stage_positions`) and the camera trace. The live pan/event
+walk is deliberately not run so frozen frames spend no shared `mr->rng`
+(review F3); the animator split keeps the sim-visible
+`rec->frame`/`rec->anim_id` frozen (review F2). The `0x20` cycle only stores the
+camera-record selection (`camera_kind`/`camera_sub`/`record_index`), which the
+view does not consume (leg).
 
 **C3 tests** (`test_engine_match_frame`). `test_replay_freezes_live_frame`:
 three granted frozen frames leave the clock, `tick_total` and record `pos_x`
@@ -1286,8 +1292,8 @@ idempotent second arm, release re-arms, whistle/goal gains read
 through the R arm, the R release and the replay exit. Review `5945cdb` added
 the engine-edge and 1/3-gain coverage and observed both mutations as RED.
 
-**Remaining.** The `0x20` replay camera record cycle in the native replay
-driver and the recorded-frame ring; the request cells/timed exit and the full
-`FUN_0003BB1C` match-screen loop from §25. **C4-L1:** the native `0x2B`
+**Remaining.** The `0x20` camera-record cycle's view consumption in the native
+replay driver and the recorded-frame ring; the request cells/timed exit and the
+full `FUN_0003BB1C` match-screen loop from §25. **C4-L1:** the native `0x2B`
 channel identity (the stop may be commentary/music rather than crowd) and the
 native restore are unproved; the engine release is the adapter.

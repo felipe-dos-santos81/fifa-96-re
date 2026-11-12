@@ -575,8 +575,18 @@ Extends §10, which keeps the documentary A/B3/C2 record and its corrected
 A4/C2 scope. Tasks 2–6 of the plan landed the code legs below; each entry
 records the test evidence, the native facts it rests on, the adapter/leg
 split, and what stays open. Every entry uses the corrected A4/C2 scope from
-§10. Gate for the whole record: `make check` **124/124**, M1/M2 `cmp`
+§10. Native facts restate the 2026-11-11 design §6.5/§6.6/§6.10/§6.11
+session and the Task 2–6 reports; this slice made no fresh Ghidra reads.
+Gate for the whole record: `make check` **124/124**, M1/M2 `cmp`
 byte-exact, windowed smoke exit 124 with a clean log.
+
+**Errata (quoted, whole-branch review).**
+
+- §6.2's "the live-match path never sets `[0x1068E0]`" — the only setter
+  caller is the `FUN_0003BB1C` UI loop; no direct live frame-body setter is
+  evidenced.
+- §6.5's "return `count == 3`" — the function returns 1 on a hit and 0 on a
+  miss; the `stats_third_selection` cell carries the `count == 3` flag.
 
 ### 11.1 B1 — the `FUN_0008ECC4` counter (Tasks 2 + fix `51f3ef5`)
 
@@ -694,13 +704,15 @@ word, clearing the word after each. The clock, `tick_total`, the kickoff
 timers, the live input/control-slot model, the entity/ball pool, the phase
 machine, the screen scheduler, the shot/goal/act/end-word blocks and the
 `mark_over` tail are skipped. The kept tail is the pose feed, the live view
-driver (`match_run_live_camera_follow`, the only `camera_target.source == 4`
-consumer and live `render_eye_*` writer) for live runs, the FU-90 display
-timer, positions-only staging (`match_run_scene_stage_positions`, so the
-sim-visible `rec->frame`/`rec->anim_id` fields do not move) and the camera
-trace. The live pan/event camera walk is deliberately not run so replay
-frames spend no shared `mr->rng` (review F3); the replay record camera cycle
-is not ported.
+driver (`match_run_live_camera_follow`, the only source-4 camera/view
+consumer and live `render_eye_*` writer; `replay_exit` only resets the
+source) for live runs, the FU-90 display timer, positions-only staging
+(`match_run_scene_stage_positions`, so the sim-visible
+`rec->frame`/`rec->anim_id` fields do not move) and the camera trace. The
+live pan/event camera walk is deliberately not run so replay frames spend no
+shared `mr->rng` (review F3); the replay record camera cycle (`0x20`) only
+stores the camera-record selection (`camera_kind`/`camera_sub`/
+`record_index`), which the view does not consume (leg).
 
 **Tests** (`test_engine_match_frame`). `test_replay_freezes_live_frame`: three
 granted frozen frames leave the clock, `tick_total` and record `pos_x`
@@ -714,8 +726,8 @@ staging restages the render slot (`stage.pos.x`, `stage.anim_id`) but leaves
 `records[0].frame`/`anim_id` and `stage.frame` unchanged; it was the RED
 witness for the animator split.
 
-**Legs.** The `0x20` replay camera record cycle in the native replay driver
-and the recorded-frame ring stay open.
+**Legs.** The `0x20` camera-record cycle's view consumption in the native
+replay driver and the recorded-frame ring stay open.
 
 ### 11.5 C4 — the pre-arm audio duck (Tasks 6 + fix `5945cdb`)
 

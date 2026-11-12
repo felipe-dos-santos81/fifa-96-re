@@ -304,6 +304,9 @@ static void test_engine_replay_audio_duck_edge(void) {
     loops++;
   }
   assert(!fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(f.engine->match != NULL);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
+  assert(f.engine->audio.active);
   assert(f.engine->match_run.replay_audio_armed == 0);
   assert(f.engine->audio.replay_ducked == 0);  /* the engine edge released it */
   drop_fixture(f);
@@ -342,6 +345,7 @@ static void test_kickoff_auto_pass_replay_gated(void) {
   assert(f.engine->match_halftime_hold == 10u); /* the dwell paused */
   assert(fifa96_engine_step(f.engine) == 0);   /* R release: a later replay frame */
   assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(f.engine->match_run.render.replay.input_buttons == 0);
   assert(f.engine->match_halftime_hold == 10u); /* the later frame also froze */
   assert(fifa96_engine_step(f.engine) == 0);   /* QUIT down: stage the replay exit */
   assert(fifa96_engine_step(f.engine) == 0);   /* QUIT up */
@@ -354,13 +358,12 @@ static void test_kickoff_auto_pass_replay_gated(void) {
     loops++;
   }
   assert(!fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
-  /* The dwell resumes after the exit: the auto-PASS decrement is observable. */
-  int resumed = 0;
-  for (int i = 0; i < 8 && !resumed; i++) {
-    assert(fifa96_engine_step(f.engine) == 0);
-    resumed = f.engine->match_halftime_hold != 10u;
-  }
-  assert(resumed);
+  /* The step that cleared the replay family already ran the live dispatch, so
+   * the dwell resumed on that step: it is 9 here and one further live step
+   * decrements it to 8 (not merely "anything below 10"). */
+  assert(f.engine->match_halftime_hold == 9u);
+  assert(fifa96_engine_step(f.engine) == 0);
+  assert(f.engine->match_halftime_hold == 8u);
   drop_fixture(f);
 }
 

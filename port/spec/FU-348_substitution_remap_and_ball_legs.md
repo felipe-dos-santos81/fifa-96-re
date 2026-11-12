@@ -430,8 +430,15 @@ so its default path keeps the builder's below-`0x16` selectors (the port
 models them as `0/0/14/15/13`) and the branch is unreachable only for that
 path. The static image five is the default-cell value the port models, not
 the runtime array in every match. The port's omission and its comment stand
-for the staged-0
-path; the non-default-cell path is the reopened leg below.
+for the staged-0 path; the non-default-cell path is the reopened leg below.
+
+**Erratum (quoted).** §7's "FU348-L2d — special branch. The
+`0x107080[class] > 0x15` special branch is unreachable for the five template
+classes (selectors 0/0/14/15/13) and is intentionally omitted" is scoped to
+the staged-0/default cells: the live setup writer's option-gated arms stage
+`0x16`/`0x17` for non-default kit cells, so `FU348-L2d` is reopened for the
+non-default kit-cell path. The default/gates-0 port path (the builder's
+below-`0x16` selectors, the omitted branch and its comment) stays.
 
 **Remaining legs.**
 
