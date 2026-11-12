@@ -19,6 +19,10 @@
  *  - a score increase fires the A6-L2 goal stand-in once;
  *  - P6: SFX Volume scales the crowd/whistle/goal base gains (100/91/50/0)
  *    and the engine's Sound Effects gate yields percent 0 and silence.
+ *  - C4: arming the replay duck stops the crowd (no re-arm while ducked),
+ *    scales the whistle/goal caller percent by 1/3 (a second arm does not
+ *    divide again), and the release restores the full percent and re-arms the
+ *    crowd; the no-bank path only moves the flag.
  *
  * ISO-gated: without data/game/FIFAPCCD96.iso the retail half prints SKIP and
  * the no-bank half still runs, matching the M1/M2 no-ISO convention.
@@ -351,6 +355,44 @@ static void test_retail_banks(void) {
   assert(a.goal_cues == 1u);
   assert(fifa96_match_audio_step(&a, mr, &plat, 1) == 0);
   assert(a.goal_cues == 1u);
+
+  /* C4: the ducked gain is the native 1/3 percent, and a second arm does not
+   * divide it again. The caller/descriptor/master values mirror
+   * `test_volume_scale` (whistle caller 0x7F, descriptor 0x7F; goal caller
+   * 0x60, descriptor 0x32; master 0x7F). */
+  uint32_t duck_percent = a.sfx_percent / 3u;
+  uint8_t duck_whistle_gain = (uint8_t)(0x7Fu * (0x7Fu * duck_percent / 100u) *
+                                        0x7Fu / 0x3F01u);
+  uint8_t duck_goal_gain = (uint8_t)(0x32u * (0x60u * duck_percent / 100u) *
+                                     0x7Fu / 0x3F01u);
+  fifa96_match_audio_replay_arm(&a);
+  mr->whistle_seq++;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.last_whistle_gain == duck_whistle_gain);
+  mr->score[0] = 2;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.last_goal_gain == duck_goal_gain);
+  fifa96_match_audio_replay_arm(&a);           /* not /9 on a second arm */
+  mr->whistle_seq++;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.last_whistle_gain == duck_whistle_gain);
+  mr->score[0] = 3;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.last_goal_gain == duck_goal_gain);
+  fifa96_match_audio_replay_release(&a);
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.crowd_voice >= 0);
+  assert(fifa96_mixer_voice_active(&a.mixer, a.crowd_voice));
+  uint8_t full_whistle_gain = (uint8_t)(0x7Fu * (0x7Fu * a.sfx_percent / 100u) *
+                                        0x7Fu / 0x3F01u);
+  uint8_t full_goal_gain = (uint8_t)(0x32u * (0x60u * a.sfx_percent / 100u) *
+                                     0x7Fu / 0x3F01u);
+  mr->whistle_seq++;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.last_whistle_gain == full_whistle_gain);
+  mr->score[0] = 4;
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.last_goal_gain == full_goal_gain);
 
   fifa96_match_audio_stop(&a);
   test_volume_scale(sfx, sfx_len, crowd, crowd_len);

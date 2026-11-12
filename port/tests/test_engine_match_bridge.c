@@ -49,8 +49,9 @@ struct fixture {
   struct fifa96_engine *engine;
 };
 
-static struct fixture make_fixture(const fifa96_platform_key *tape,
-                                   size_t tape_len, const char *iso_path) {
+static struct fixture make_fixture_cfg(const fifa96_platform_key *tape,
+                                       size_t tape_len, const char *iso_path,
+                                       int headless) {
   struct fifa96_platform_null_config pcfg;
   memset(&pcfg, 0, sizeof pcfg);
   pcfg.tape = tape;
@@ -64,11 +65,16 @@ static struct fixture make_fixture(const fifa96_platform_key *tape,
   ecfg.iso_path = iso_path;
   ecfg.width = 320;
   ecfg.height = 240;
-  ecfg.headless = 1;
+  ecfg.headless = headless;
   f.engine = fifa96_engine_create(&ecfg, f.plat);
   assert(f.engine != NULL);
   assert(fifa96_engine_boot(f.engine) == 0);
   return f;
+}
+
+static struct fixture make_fixture(const fifa96_platform_key *tape,
+                                   size_t tape_len, const char *iso_path) {
+  return make_fixture_cfg(tape, tape_len, iso_path, 1);
 }
 
 static void drop_fixture(struct fixture f) {
@@ -249,6 +255,60 @@ static void test_engine_replay_key_arms(void) {
   drop_fixture(f);
 }
 
+/* C4: the engine's own replay arm/release audio edge. Every fixture above is
+ * headless, where the engine's audio branch is gated out, so the run-cell
+ * assertions alone cannot catch a wrong/missing edge in fifa96_engine.c. This
+ * fixture is non-headless: the bridge begins a live run and the engine starts
+ * the audio module with NULL banks (an empty boot asset table; no ISO), so
+ * `active` is 1 and only the duck flag changes. The assertions are the engine
+ * cells, not the run cell. */
+static void test_engine_replay_audio_duck_edge(void) {
+  const fifa96_platform_key tape[] = {
+      {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
+      {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
+      {FIFA96_ENGINE_KEY_REPLAY, 1},  {FIFA96_ENGINE_KEY_REPLAY, 0},
+      {FIFA96_ENGINE_KEY_QUIT, 1},    {FIFA96_ENGINE_KEY_QUIT, 0},
+  };
+  struct fixture f =
+      make_fixture_cfg(tape, sizeof tape / sizeof tape[0], NULL, 0);
+  assert(f.engine->cfg.headless == 0);
+  assert(fifa96_engine_step(f.engine) == 0);   /* DECLINE -> panel */
+  assert(fifa96_engine_step(f.engine) == 0);   /* release */
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM -> bridge */
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
+  assert(f.engine->match_run.render.replay.state == FIFA96_MATCH_REPLAY_LIVE);
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM release */
+  /* The engine started the audio module on the first MATCH step: no banks, so
+   * active but asset-disabled, and not ducked. */
+  assert(f.engine->audio.active == 1);
+  assert(f.engine->audio.have_sfx == 0 && f.engine->audio.have_crowd == 0);
+  assert(f.engine->audio.replay_ducked == 0);
+
+  assert(fifa96_engine_step(f.engine) == 0);   /* R -> the 0x81 arm */
+  assert(f.engine->match_run.render.replay.state == FIFA96_MATCH_REPLAY_ARMED);
+  assert(f.engine->match_run.replay_audio_armed == 1);
+  assert(f.engine->audio.replay_ducked == 1);  /* the engine edge armed it */
+  assert(f.engine->audio.crowd_voice == -1);
+
+  assert(fifa96_engine_step(f.engine) == 0);   /* release: stays in the family */
+  assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(f.engine->audio.replay_ducked == 1);  /* persistent across steps */
+  assert(fifa96_engine_step(f.engine) == 0);   /* QUIT down: ESC is replay exit */
+  assert(fifa96_engine_step(f.engine) == 0);   /* QUIT up */
+  /* The frame body consumes the staged 0x80 on the pace grant, not every step,
+   * so poll a bounded number of steps until the replay family clears. */
+  int loops = 0;
+  while (fifa96_match_run_replay_family(&f.engine->match_run.render.replay) &&
+         loops < 8) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    loops++;
+  }
+  assert(!fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(f.engine->match_run.replay_audio_armed == 0);
+  assert(f.engine->audio.replay_ducked == 0);  /* the engine edge released it */
+  drop_fixture(f);
+}
+
 /* The host kickoff auto-PASS and its dwell must freeze while the replay is
  * active: the R edge is the arm step, the auto PASS must not be injected into
  * the replay input (where it maps to 0x20/camera), the dwell must not tick on
@@ -396,6 +456,7 @@ int main(void) {
   test_bridge_starts_and_rebegins();
   test_engine_step_wires_bridge();
   test_engine_replay_key_arms();
+  test_engine_replay_audio_duck_edge();
   test_kickoff_auto_pass_replay_gated();
   test_bridge_stages_render_with_iso();
   test_bridge_hands_off_appearance();
