@@ -105,7 +105,9 @@ phase-2 gate (`[0x157A4A] >> 24 == 2`) stay the consumer's (OL-27). The
 "target" clamp (z snapped to ±0xAD4, sign from the entering current z) and the
 boundary-point projection (a 32-bit IMUL/IDIV per axis onto z = ±0xB0F/±0xB11)
 are ported. The boundary classify gates (`& 0x4` reclassify, `& 0x13` direct)
-re-enter the existing step-back.
+re-enter the existing step-back. The high arm also folds
+`vel_z = ±max(4, |vel_z|/2)` (loader-owned, `0x70F6B..0x70FA1`); only the low
+arm's `FUN_00092AC8` RNG velocity stays a leg.
 
 **New open leg (Task 4):**
 
@@ -118,10 +120,11 @@ re-enter the existing step-back.
   change) cannot reseed them; the cell stays a leg. The Task 3 zero-guard
   test remains the recorded behavior.
 
-**Still legs (OL-T11-79, unchanged):** the corner velocity updates (the high
-arm's `vel_z = ±max(4, |vel_z|/2)` fold and the low arm's `FUN_00092AC8`
-global-RNG velocity — neither owned by the loader), the
-`0x974DC/0x651F0/0x974F0` sound sinks, and the elevation loop.
+**Still legs (OL-T11-79, unchanged):** the low arm's `FUN_00092AC8`
+global-RNG velocity (not owned by the loader), the `0x974DC/0x651F0/0x974F0`
+sound sinks, and the elevation loop. (The high arm's `vel_z = ±max(4,
+|vel_z|/2)` fold is loader-owned and **is** ported — `fifa96_camera.c`, the
+`0x70F6B..0x70FA1` arm.)
 
 ## Provenance
 

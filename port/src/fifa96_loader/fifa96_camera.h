@@ -709,15 +709,16 @@ typedef struct {
  * TRACKED}` when boundary_x < -0xC0 or > 0xC1. Both arms record the corner
  * `0x8F188` request in `*events` (0x49/0x48) and `*event_code` (0x40) and
  * land the camera on the boundary point with z snapped to +-0xAD4 (the
- * "target" clamp, sign from the entering current z). A boundary that fails
- * the gate re-enters the step-back (the 0x710df reclassify of the boundary as
- * the new previous triple). Returns 1 when the walk/reposition ran, 0 for the
- * overlap no-op, -FIFA96_ERR_INVALID on NULL. `type_off_x`/`type_off_z` are
- * the caller-staged 0x10F334/3C tables (unused). `stats` may be NULL.
+ * "target" clamp, sign from the entering current z). The high arm also folds
+ * `vel_z = (cur_z >= 0 ? -1 : 1) * max(4, |vel_z| / 2)` (0x70f6b..0x70fa1).
+ * A boundary that fails the gate re-enters the step-back (the 0x710df
+ * reclassify of the boundary as the new previous triple). Returns 1 when the
+ * walk/reposition ran, 0 for the overlap no-op, -FIFA96_ERR_INVALID on NULL.
+ * `type_off_x`/`type_off_z` are the caller-staged 0x10F334/3C tables (unused).
+ * `stats` may be NULL.
  *
- * Legs (OL-T11-79): the corner velocity updates (the high arm's vel_z fold and
- * the low arm's FUN_00092AC8 global-RNG velocity — neither owned by the
- * loader), the FUN_000974DC/FUN_000651F0/FUN_000974F0 sound sinks, the
+ * Legs (OL-T11-79): the low arm's FUN_00092AC8 global-RNG velocity (not owned
+ * by the loader), the FUN_000974DC/FUN_000651F0/FUN_000974F0 sound sinks, the
  * elevation loop, and the 0x71231 `[0x15781C] = frame_delta` reseed (its
  * inputs — the goal counter and the frame delta — are engine-owned; Slice-B
  * Task 4 records it as a leg, T4-L1). The `0x8F188` ring post and its

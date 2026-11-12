@@ -1520,15 +1520,20 @@ static void test_reposition_steps_back(void) {
    * triple was in it (flags 0): the flags are disjoint and bit 8 is clear,
    * so the step path walks from the previous point toward the current one
    * while the candidate keeps the previous (mouth) class — landing just
-   * under 0xB90. */
+   * under 0xB90. The bit-clear path emits no stat event and no corner
+   * request (both live only in the bit-0x8-set boundary arm). */
   fifa96_camera cam = fresh_camera();
   fifa96_camera_init(&cam, 0, 0, 0xBA0);
-  uint8_t events = 0;
-  uint8_t code = 0;
+  uint8_t events = 0xFF;
+  uint8_t code = 0xFF;
+  fifa96_camera_stat_events stats;
+  memset(&stats, 0, sizeof stats);
   assert(fifa96_camera_reposition(&cam, 0, 0, 0xB20, NULL, NULL, &events, &code,
-                                  NULL) == 1);
+                                  &stats) == 1);
   assert(cam.pos_z == 0xB8F);          /* 0xB20 + 0x40 + 0x20 + 0x8 + 0x4 + 0x2 + 0x1 */
   assert(cam.pos_z < 0xB90 && cam.pos_z > 0xB20);
+  assert(events == 0 && code == 0);    /* no corner request on the bit-clear path */
+  assert(stats.count == 0 && stats.overflow == 0);   /* no stat event either */
 }
 
 static void test_reposition_invalid(void) {
@@ -1575,6 +1580,8 @@ static void test_reposition_boundary_stat_high(void) {
   assert(stats.event[0].entity == FIFA96_CAMERA_STAT_TRACKED);
   assert(events == 0x49 && code == 0x40);   /* the 0x8f188(0x49, tracked, 0x40) */
   assert(cam.pos_x == 0 && cam.pos_y == 0x94 && cam.pos_z == 0xAD4);
+  /* 0x70f6b..0x70fa1: |vel_z|=0 -> max(4, 0) = 4, cur_z >= 0 negates -> -4. */
+  assert(cam.vel_z == -4);
 }
 
 /* 0x70fac arm: boundary_y <= 0x90 && boundary_x < -0xC0 -> 0x70fce. prev

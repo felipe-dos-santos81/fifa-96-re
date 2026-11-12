@@ -8439,12 +8439,19 @@ static void test_screen_advance_ring(void) {
 
 /* FU-148 S4: the FUN_000505D0 pose feed wired into the granted frame. Mode
  * 6/0x10 selects record 7 of the default behavior block (the +0x4C array
- * 0x107F1C, class 3): {x,y,z} = {-83, 320, 3631}. The view triple
- * (yaw/pitch/ratio) is the pose feed's; the place itself is then corrected by
- * the armer's FUN_00070DE0 boundary arm (Slice-B Task 4), which steps the
- * prev(0,0,0) -> pose jump back to the mouth band so the goal-mouth gate no
- * longer arms. The corner/goal-kick situation arm therefore stays queued-off
- * (sit 0); the pre-Task-4 arming expectation is superseded. */
+ * 0x107F1C, class 3): {x,y,z} = {-83, 320, 3631}; |z|_w > 0xB20 and the
+ * camera lands out of bounds, so the frame's armer fires on the fed pose (the
+ * arming gate is the native word-truncated |camZ| > 0xB20). The classifier
+ * reports zone 0 (|z| >= 0xB90), so the scan takes the corner/goal-kick arm
+ * (FU-149 P1): snap z positive and ball side 0 (the fresh run's [0x1577CA]
+ * stand-in is unset) -> cond true -> sit 4, queued id 0 for the side-1 kick in
+ * the byte-1 (Practise) session (staged; FU-166).
+ *
+ * Slice-B Task 4: the armer's FUN_00070DE0 reposition runs first, so the
+ * fixture stages the camera far-out (z = 0xC00) — the pose's own classify word
+ * (0x14) — making the reposition an overlap no-op and letting the fed pose
+ * survive to the arming gate. The prev(0,0,0) jump is the boundary-reposition
+ * case, pinned separately in `test_view_pose_feed_boundary_reposition`. */
 static void test_view_pose_feed_arms_camera(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -8460,16 +8467,54 @@ static void test_view_pose_feed_arms_camera(void) {
   assert(mr.situation_pending == 0);
   assert(mr.render.camera_pose.view_mode == 0); /* the fresh-match default */
 
+  /* Stage the camera far-out so the pose feed's target classifies to the same
+   * word (0x14) as the prev triple and the reposition is an overlap no-op. */
+  mr.render.camera.pos_z = 0xC00;
   mr.render.camera_pose.view_mode = 0x10;
   one_granted_frame(&mr);
-  /* Slice-B Task 4: the pose feed lands the camera at (-83, 320, 3631), but
-   * the armer's FUN_00070DE0 reposition runs first (0x7134F) and its bit-0x8
-   * boundary arm re-classifies the prev(0,0,0) -> cur(pose) jump as a
-   * 0xB10-zone crossing and steps the camera back to the mouth band
-   * (-41, 164, 1826). The arming gate then reads the repositioned camera
-   * (|z| = 0x722 <= 0xB20), so it no longer arms — the pose-fed place is
-   * corrected before the goal-mouth gate. The view triple (yaw/pitch/ratio)
-   * is the pose feed's, untouched by the reposition. */
+  assert(mr.render.camera.pos_x == -83);
+  assert(mr.render.camera.pos_y == 320);
+  assert(mr.render.camera.pos_z == 3631);
+  assert(mr.render.yaw == 33732 && mr.render.pitch == 2203);
+  assert(mr.render.view_ratio == 3712);
+  assert(mr.goal_armed == 1);
+  assert(mr.goal_snap_x == -83 && mr.goal_snap_y == 0 && mr.goal_snap_z == 3631);
+  assert(mr.goal_zone == 0);
+  /* FU-149 P1: the corner/goal-kick arm fires (sit = 3 + cond, side =
+   * ball ^ 1) and the byte-1 (Practise) session queues the restart id. The
+   * ball side is the derived stand-in (the pool controlled actor, then the
+   * carrier; the native `[0x1577CA]` team byte is unported). FU-171 §7 rec 1
+   * (T2): the row-04 half-line admission now reads the live camera Y, so the
+   * settle frame's camY-0 claims survive (team 1) and the posed camera Y
+   * (320 > 0x50) closes the frame's own half-line; cond = ((+snap z) ==
+   * (ball == 1)) = 0 -> sit 3 (the corner arm), side = 1 ^ 1 = 0 -> id 9. */
+  assert(mr.situation_pending == 1);
+  assert(mr.situation_id == 9u);
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* Slice-B Task 4: with prev (0,0,0), the pose feed's (-83, 320, 3631) jump is
+ * a 0xB10-zone crossing, so the armer's FUN_00070DE0 boundary arm steps the
+ * camera back to the mouth band (-41, 164, 1826) before the arming gate
+ * (|z| = 0x722 <= 0xB20), which therefore no longer arms. The view triple
+ * (yaw/pitch/ratio) is the pose feed's, untouched by the reposition. */
+static void test_view_pose_feed_boundary_reposition(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  mr.session_gate_14c32a = 1;
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);                       /* settle the kickoff machine */
+  assert(mr.situation_pending == 0);
+  assert(mr.render.camera_pose.view_mode == 0);
+
+  mr.render.camera_pose.view_mode = 0x10;
+  one_granted_frame(&mr);
   assert(mr.render.camera.pos_x == -41);
   assert(mr.render.camera.pos_y == 164);
   assert(mr.render.camera.pos_z == 1826);
@@ -11457,6 +11502,7 @@ int main(void) {
   test_keeper_interlock_cross_team_install();
   test_actor_lift_controlled_side();
   test_view_pose_feed_arms_camera();
+  test_view_pose_feed_boundary_reposition();
   test_camera_pan_event_chain();
   test_camera_rate_chain_sustained_pan();
   test_camera_band_cells_seam();

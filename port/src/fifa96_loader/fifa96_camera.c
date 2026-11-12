@@ -2505,6 +2505,18 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
       camera_stat_emit(stats, 0x70F44, 3, FIFA96_CAMERA_STAT_TRACKED);
       *events = 0x49;      /* 0x70f66 CALL 0x8f188 (0x49, tracked, 0x40) */
       *event_code = 0x40;
+      /* 0x70f6b..0x70fa1: vel_z = (cur_z >= 0 ? -1 : 1) * max(4, |vel_z|/2).
+       * The magnitude is the sign-extended word[0x1577c2] folded through the
+       * dword[0x1577c0]>>16 extract, |.| then >> 1 (0x70f89), floored at 4
+       * (0x70f8e JGE / 0x70f93), negated only when cur_z >= 0 (0x70f98/0x70f9f),
+       * and stored back to vel_z (0x70fa1). */
+      {
+        int32_t mag = (int32_t)cam->vel_z;
+        if (mag < 0) mag = -mag;
+        mag >>= 1;
+        if (mag < 4) mag = 4;
+        cam->vel_z = (int16_t)((cur[2] >= 0) ? -mag : mag);
+      }
       goto reposition;
     }
     if (bnd[0] < -0xC0 || bnd[0] > 0xC1) {

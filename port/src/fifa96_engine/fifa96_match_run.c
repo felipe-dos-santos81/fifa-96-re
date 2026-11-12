@@ -6793,8 +6793,8 @@ int fifa96_match_goal_arm(struct fifa96_match_run *mr) {
    * to 0 only when the zero-extended sum is strictly > 0x1E (0x71342 CMP /
    * 0x71345 JLE; 0x71347..0x71349). Then the FUN_00070DE0 reposition call at
    * 0x7134F runs unconditionally (its own overlap/boundary gates are inside),
-   * and the stat events it fills (none yet — the stat arms are Task 4) are
-   * drained in native order. */
+   * and the stat events it fills (the two boundary-arm +3 events, Slice-B
+   * Task 4) are drained in native order. */
   if (mr->goal_counter_15781c != 0u) {
     uint8_t counter =
         (uint8_t)(mr->goal_counter_15781c + (uint8_t)mr->state.frame_delta);

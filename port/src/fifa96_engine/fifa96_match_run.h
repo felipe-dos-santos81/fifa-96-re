@@ -1342,8 +1342,9 @@ struct fifa96_match_run {
   /* FU-145 S2 / Slice-B Task 3: the armer head's [0x15781C] counter
    * (FUN_0007131C 0x71325..0x71349). Aged by the frame-delta low byte only
    * when nonzero; reset to 0 only when the sum is strictly > 0x1E. No producer
-   * reseeds it yet (the 0x71231 boundary reseed is Task 4), so it stays 0 and
-   * the aging is skipped until then. */
+   * reseeds it yet: the 0x71231 boundary reseed is leg T4-L1 (its inputs — the
+   * counter and the frame delta — are engine-owned, so the loader cannot
+   * reseed it), so the counter stays 0 and the aging is skipped. */
   uint8_t goal_counter_15781c;
   uint8_t goal_zone;
   int32_t goal_snap_x;
