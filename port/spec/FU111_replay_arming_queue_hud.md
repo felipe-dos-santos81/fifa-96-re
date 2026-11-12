@@ -278,3 +278,16 @@ enum erratum; see FU-107 §4 (which already lists `0x84`→`63CBC`×2 and
 `0x85`→`63E54`×2) and design `2026-11-12-recorded-replay-ring` §5.4/§7.4 for
 the corrected mapping. The §4 table above is left verbatim (append-only). No
 code changed and no completion-number movement.
+
+## 11. Closure (2026-11-12) — the RR-L8 re-label
+
+**Erratum (quoted).** §1 names the increment/reset mode sets through
+`FUN_0004b380()` = `[0x157A4A] >> 24` (the mode byte). The ring design §7.8
+leg read: "RR-L8 — the exact mode-window phase mapping. The port's
+`state.phase` is the `[0x157A4A]>>24` model; the increment/reset sets are
+modeled as FU-111 records them. If a live phase is ever re-mapped, the budget
+gate follows the mode byte, not the phase table." This slice re-labels RR-L8
+as a documented mapping: the port's `state.phase` **is** the
+`[0x157A4A] >> 24` model and the increment/reset sets are FU-111's (§1), so the
+budget gate follows the mode byte, not the phase table. Re-labeled, not a new
+port. No code, golden or completion-number movement.

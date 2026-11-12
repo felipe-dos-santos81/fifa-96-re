@@ -626,3 +626,67 @@ recorder overlay gating; RR-L3 camera band/queue producers; RR-L4 appearance
 byte mapping; RR-L5 the `0x20` camera cycle / matrix precedence; RR-L6 the
 tick source; RR-L7 mode-7 request/timed exit; RR-L8 the exact mode-window
 phase mapping; RR-L9 the ball frame byte; RR-L10 the re-sync hooks.
+
+## 11. Slice A closure (2026-11-12) — ring-leg re-labels
+
+Append-only; the §7.8 leg lines quoted below are never rewritten. The re-read
+is fresh from this session (2026-11-12) on `/FIFA96.EXE`:
+`decompile_function 0x53DC4`/`0x53A48`, `get_function_xrefs 0x53DC4`/`0x53A48`,
+`get_xrefs_to 0x14E574` (35). Binding facts: spec
+`2026-11-12-open-items-closure-slice-a` §4.5 (RR-L10) / §4.7 (RR-L1/L2/L8).
+
+- **RR-L1 — allocator/lifecycle (re-labeled).** §7.8 read: "RR-L1 —
+  allocator/lifecycle. `FUN_0004A448`/`&0xA41C`/`FUN_000993EC` and the ring's
+  free/allocate lifecycle. The port embeds 150 records." The embedded
+  150 × `0x118` ring is the chosen design; the native allocator lifecycle
+  (`FUN_0004A448`/`&0xA41C`/`FUN_000993EC`) is out of contract, not a fidelity
+  claim. Re-labeled, not a missing behavior.
+
+- **RR-L2 — recorder overlay gating (B handoff, not closed).** §7.8 read:
+  "RR-L2 — recorder overlay gating. `FUN_00053DC4`'s `[0x14E574]` latch and
+  `FUN_00053A48`'s state-5 re-enable. The port records every live ACTIVE frame
+  while the mode-window budget allows." The re-read: `FUN_00053DC4` is
+  `if ([0x14E574] == 0) { FUN_00064074(); [0x14E574] = 1; }` — it clears the
+  `[0x109A90]` recorder gate and sets the latch. `FUN_00053A48`'s state-5→6
+  transition, when the latch is set, calls `FUN_00064080()` (the recorder-gate
+  enable) and clears the latch. The latch therefore **gates the live match
+  recorder**, not a presentation-only flag: `FUN_00053A48` is reached from the
+  live match frame — `FUN_000493A0` at `0x49523` and `FUN_00049B28` at
+  `0x4A045` (the same per-frame loop that holds the packer call at `0x4A040`).
+  `FUN_00053DC4`'s callers are `FUN_0004B100` (`0x4B1D7`/`0x4B257`),
+  `FUN_00037F54` (`0x37F83`) and `FUN_0004C324` (`0x4C324`). `[0x14E574]`
+  read/write addresses: `0x53DC5` READ / `0x53DD8` WRITE in `FUN_00053DC4`;
+  `0x53A95` READ / `0x53AA2` WRITE in `FUN_00053A48`. RR-L2 is a **B** handoff
+  (the overlay recorder-gate toggle), not closed here.
+
+- **RR-L8 — the mode-window phase mapping (re-labeled).** §7.8 read: "RR-L8 —
+  the exact mode-window phase mapping. The port's `state.phase` is the
+  `[0x157A4A]>>24` model; the increment/reset sets are modeled as FU-111
+  records them. If a live phase is ever re-mapped, the budget gate follows the
+  mode byte, not the phase table." The port's `state.phase` is the
+  `[0x157A4A] >> 24` model and the increment/reset sets are FU-111's (§1); if a
+  live phase is re-mapped, the budget gate follows the mode byte, not the
+  phase table. Re-labeled as a documented mapping, not a new port.
+
+- **RR-L9 — the ball frame byte (closed).** §7.8 read: "RR-L9 — the ball frame
+  byte. The native composer copies `0x15887B` (`obj+0x8F`, FU-158 L14.8.b)
+  into the 23rd slot; the port does not model the producer and stages 0."
+  FU158 §11 (this slice) records `get_xrefs_to 0x15887B` = 1 READ at `0x36E38`
+  in `FUN_00036C70` (the composer) and no static writer; the port's staged 0 is
+  exact for the analyzed image. RR-L9 is closed by that proof.
+
+- **RR-L10 — the re-sync hooks (split).** §7.8 read: "RR-L10 — the re-sync
+  hooks. `FUN_000974D8`/`FUN_000974DC` are called on every replay transition
+  (the `0x81` arm, play/pause, the step modes and the countdown) and
+  `FUN_0006428C` is the per-countdown-step re-sync; the port's transitions and
+  the `FUN_0006428C` call site are state-only (the latter a no-op
+  `replay_resync`) and the hook bodies remain unported (FU-108 §6 leg 2 /
+  FU-107 leg 4)." `FUN_000974D0` (`0x974D0`) is the
+  `MOV EAX,1; LEA EAX,[EAX]; RET` return-1 body; `FUN_000974D8` is the bare
+  `RET` at `0x974D8`. The port's `replay_transition` no-op is exact for
+  `FUN_000974D8`. `FUN_000974DC` calls `FUN_00064EC0`, which gates on
+  `([0x109A98] & 0x80) == 0` **and** `FUN_00037AE4() == 0` (the latter true
+  when `[0x105FFC]` is not 5/7) and calls `FUN_00064EF0(1, ...)` (the 20-entry
+  `0x155C8C` queue push); it then calls `FUN_00065CC0`, which updates
+  `[0x10A254]` through `FUN_000A7705`. The `0x974D8` half is closed by the RET
+  proof; the `0x974DC` queue/scalar half is a **B** handoff, not closed.

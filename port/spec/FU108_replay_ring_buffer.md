@@ -129,3 +129,23 @@ apply — as `fifa96_match_replay_ring.{c,h}` in the engine layer. §6 leg 2
 (allocator/free and the `FUN_000974D8`/`FUN_000974DC` re-sync) stays open as
 RR-L1/RR-L10; the mode-7 request/timed exit stays RR-L7. No completion-number
 movement and no golden re-pin.
+
+## 8. Closure (2026-11-12) — the RR-L10 split
+
+**Erratum (quoted).** §6 leg 2 and §7 record "`FUN_000974D8`/`FUN_000974DC`
+(re-sync)" as one open leg (RR-L10). The Slice A re-read (spec
+`2026-11-12-open-items-closure-slice-a` §4.5, fresh `disassemble_bytes 0x974D0`)
+splits the pair:
+
+- `FUN_000974D0` (`0x974D0`) is the `MOV EAX,1; LEA EAX,[EAX]; RET` return-1
+  body; `FUN_000974D8` is the bare `RET` at `0x974D8`. The port's
+  `replay_transition` no-op is exact for `FUN_000974D8`; this half is **closed**
+  by the RET proof.
+- `FUN_000974DC` calls `FUN_00064EC0`, which gates on
+  `([0x109A98] & 0x80) == 0` **and** `FUN_00037AE4() == 0` (the latter true
+  when `[0x105FFC]` is not 5/7) and calls `FUN_00064EF0(1, ...)` (the 20-entry
+  `0x155C8C` queue push); it then calls `FUN_00065CC0`, which updates
+  `[0x10A254]` through `FUN_000A7705`. This half is a **B** handoff, not
+  closed.
+
+No code, golden or completion-number movement.
