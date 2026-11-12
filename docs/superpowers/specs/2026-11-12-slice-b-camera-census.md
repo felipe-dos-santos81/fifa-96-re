@@ -23,25 +23,26 @@ All reads this slice, program `/FIFA96.EXE`:
 | `disassemble_bytes 0x8AD2E` (len 0x80) | `MOV EBP,[0x157A9B]` and the case-6 arm through `0x8AD54`. |
 | `disassemble_bytes 0x70EF0` (len 0x140) | the `FUN_00070DE0` boundary arms (`0x70F44`/`0x70FCE`), byte-exact gates. |
 | `disassemble_bytes 0x714B0`/`0x714A0` | the six `FUN_0007131C` sites' `MOV EDX,imm` deltas, byte-exact. |
+| `disassemble_bytes 0x71460`/`0x715B0`/`0x71690`/`0x71700`/`0x71760` | the `FUN_0007131C` goal-arm gates (review fix): `0x714BE` cam-X admission `abs([0x15774C]) > 0x1E0`, the `0x71732` prev/current-phase pair, the `0x717E3` `[0x15758D] != 0` guard. |
 
 ## Census — 19 sites
 
 | site | body | native arm/gate | argument | delta | engine owner | port status | test |
 |---|---|---|---|---|---|---|---|
 | `0x70F44` | `FUN_00070DE0` | `local_30 > 0x90` boundary arm (`0x70F2C CMP [ESP+0x28],0x90` / `0x70F34 JLE 0x70FAC` fall-through) | `[0x1577CA]` (TRACKED) | `+3` | `fifa96_camera_reposition` | block missing (tail) | B1 |
-| `0x70FCE` | `FUN_00070DE0` | `local_30 <= 0x90` && (`local_34 < -0xC0` || `local_34 > 0xC1`) (`0x70FB0 CMP EDX,0xFFFFFF40`/`JL`; `0x70FB8 CMP EDX,0xC1`/`0x70FBE JLE 0x710DF`) | `[0x1577CA]` (TRACKED) | `+3` | `fifa96_camera_reposition` | block missing (tail) | B1 |
-| `0x714BE` | `FUN_0007131C` | `[0x157A4A]>>24 == 2` && `[0x157A83]==NULL` && `[0x1577CA]!=NULL` && `FUN_0008F078(tracked,tracked) > 0x1260` | `[0x1577CA]` (TRACKED) | `+5` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
-| `0x7157C` | `FUN_0007131C` | phase `0x10`; `|camZ|_w > 0x960`; `|camX|_w < 0x3C0`; `|camX|_w < 0xD0` | `[0x1577CA]` (TRACKED) | `-100` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
-| `0x715DD` | `FUN_0007131C` | phase != `0x10`; `|local| < 0x1E0` && `[0x1575A7] > 0x840` | `[0x1577CA]` (TRACKED) | `-5` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
-| `0x716C7` | `FUN_0007131C` | `[0x157A4E]==0x10` || phase `0x10`; `|camX|_w >= 0xD0`; `[0x15758D] < 0x1E0` | `[0x1577CA]` (TRACKED) | `-100` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
-| `0x71732` | `FUN_0007131C` | phase != `0x10`; `|local| < 0x1E0` && `[0x1575A7] > 0x840` | `[0x1577CA]` (TRACKED) | `-5` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
-| `0x717E3` | `FUN_0007131C` | `[0x15758D] < 0x30` tail (the `0x52`/`0x44` event arm) | `[0x1577CA]` (TRACKED) | `+5` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
+| `0x70FCE` | `FUN_00070DE0` | `local_30 <= 0x90` && (`local_34 < -0xC0` or `local_34 > 0xC1`) (`0x70FB0 CMP EDX,0xFFFFFF40`/`JL`; `0x70FB8 CMP EDX,0xC1`/`0x70FBE JLE 0x710DF`) | `[0x1577CA]` (TRACKED) | `+3` | `fifa96_camera_reposition` | block missing (tail) | B1 |
+| `0x714BE` | `FUN_0007131C` | `[0x157A4A]>>24 == 2` && `abs([0x15774C]) > 0x1E0` && `[0x157A83]==0` && `[0x1577CA]!=0` && `FUN_0008F078(tracked,tracked) > 0x1260` | `[0x1577CA]` (TRACKED) | `+5` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
+| `0x7157C` | `FUN_0007131C` | `[0x157A4A]>>24 == 0x10`; `abs([0x157754]) > 0x960`; `abs([0x15774C]) < 0x3C0`; `abs([0x15774C]) < 0xD0` | `[0x1577CA]` (TRACKED) | `-100` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
+| `0x715DD` | `FUN_0007131C` | `[0x157A4A]>>24 != 0x10`; `abs([0x15759F]) < 0x1E0` && `[0x1575A7] > 0x840` | `[0x1577CA]` (TRACKED) | `-5` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
+| `0x716C7` | `FUN_0007131C` | `[0x157A4E]==0x10` or `[0x157A4A]>>24 == 0x10`; `abs([0x15774C]) >= 0xD0`; `[0x15758D] < 0x1E0` | `[0x1577CA]` (TRACKED) | `-100` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
+| `0x71732` | `FUN_0007131C` | previous phase `[0x157A4E] != 0x10` && current phase `[0x157A4A]>>24 != 0x10`; `abs([0x15759F]) < 0x1E0` && `[0x1575A7] > 0x840` | `[0x1577CA]` (TRACKED) | `-5` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
+| `0x717E3` | `FUN_0007131C` | `[0x15758D] != 0` && `[0x15758D] < 0x30` tail (the `0x52`/`0x44` event arm) | `[0x1577CA]` (TRACKED) | `+5` | `fifa96_match_goal_arm` | block missing (arms) | B2 |
 | `0x72649` | `FUN_00072478` | fall-through pair, first (`0x7263F MOV EDX,0x32`) | `[0x1577CA]` (TRACKED) | `+0x32` | engine-owned tracker (unported) | body missing | B3 |
 | `0x72660` | `FUN_00072478` | fall-through pair, second (`0x72655 MOV EDX,0xFFFFFFB5`; `0x7265A MOV EAX,[EAX+0x7A6]`) | `[team+0x7A6]` (BALL_SUB7A6) | `-0x4B` | engine-owned tracker (unported) | body missing | B3 |
 | `0x7270F` | `FUN_00072478` | `[0x15B43C]` staging arm: `record[0]==0xB` (`0x726F6 MOVSX/CMP 0xB`) then `0x72702 MOV EDX,0x19` / `0x72707 MOV EAX,[EAX+0x5]` | `[0x15B43C]+5` (REC_15B43C) | `+0x19` | engine-owned tracker (unported) | body missing | B3 |
 | `0x72A52` | `FUN_00072478` | previous phase `0x10` (`0x724D9 CMP EAX,0x10`/`0x724DC JZ 0x72A48`; `0x72A48 MOV EDX,0xF`) | `[0x1577CA]` (TRACKED) | `+0xF` | engine-owned tracker (unported) | body missing | B3 |
 | `0x72DE3` | `FUN_00072AC4` | save/follow block, same-side (`0x72DC1 CMP DL,byte[EBX+0x826]`/`JNZ`); `0x72DD9 MOV EDX,0x1` | `[0x1575DA]` (REC_1575DA) | `+1` | `fifa96_camera_save_tail` (loader) | body missing | B4 |
-| `0x72ED1` | `FUN_00072AC4` | `[0x1575B3] > 0x750` && `|[0x1575AB]| < 0x2D0` (`0x72EA2 CMP`/`0x72EC0 CMP`); `0x72EC7 MOV EDX,0x2` | `[0x1575DA]` (REC_1575DA) | `+2` | `fifa96_camera_save_tail` (loader) | body missing | B4 |
+| `0x72ED1` | `FUN_00072AC4` | `[0x1575B3] > 0x750` && `abs([0x1575AB]) < 0x2D0` (`0x72EA2 CMP`/`0x72EC0 CMP`); `0x72EC7 MOV EDX,0x2` | `[0x1575DA]` (REC_1575DA) | `+2` | `fifa96_camera_save_tail` (loader) | body missing | B4 |
 | `0x77DFD` | row-1C tail | phase-0x10 negative product (`0x77DD3 CMP EAX,0x10`/`JNZ 0x77E0B`; `0x77DE6 IMUL`; `0x77DE9 TEST`/`0x77DEB JGE 0x77E6F`; `0x77DF1 MOV EDX,0x64`) | `EBP` (LOCAL_EBP) | `+0x64` | `fifa96_match_action_1C` | block missing (tail) | B5 |
 | `0x77E38` | row-1C tail | phase-non-0x10 nonnegative product (`0x77E0B`; `0x77E19 IMUL`; `0x77E1E JL 0x77E55` fall-through; `0x77E31 MOV EDX,0x19`) | `EBP` (LOCAL_EBP) | `+0x19` | `fifa96_match_action_1C` | block missing (tail) | B5 |
 | `0x77E4E` | row-1C tail | phase-non-0x10 nonnegative product, optional tracked `+5` (`0x77E3D MOV ECX,[0x1577CA]`/`0x77E43 TEST`/`JZ`; `0x77E47 MOV EDX,0x5`) | `[0x1577CA]` (TRACKED) | `+5` | `fifa96_match_action_1C` | block missing (tail) | B5 |
