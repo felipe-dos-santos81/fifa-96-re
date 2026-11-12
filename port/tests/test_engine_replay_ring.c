@@ -405,12 +405,154 @@ static void test_ring_compose(void) {
   assert((int32_t)get_u32(view, 0x1C2) == 6);
 }
 
+/* Task 4: fill the ring with 150 records, each stamped 2 with a slot-0
+ * appearance marker equal to its index. The markers ride the `+0xC4`
+ * appearance lane and the stamp the `+0x116` word, so the playback apply can
+ * be observed through the view's `+0x17C` byte. */
+static void fill_ring_150(struct fifa96_match_run *mr) {
+  struct fifa96_match_replay_ring *ring = &mr->replay_ring;
+  for (uint32_t i = 0; i < FIFA96_MATCH_REPLAY_RING_RECORDS; i++) {
+    ring->record[i][0xC4] = (uint8_t)i;
+    put_u16(ring->record[i], 0x116, 2);
+  }
+  ring->read = 0;
+  ring->write = 0;
+  ring->count = FIFA96_MATCH_REPLAY_RING_RECORDS;
+}
+
+/* Task 4: the PLAYING countdown. With every record stamped 2, the ring tick
+ * (1) accumulates in `advance` and one record plays every two calls. After 300
+ * calls the cursor reaches the end and the state settles at IDLE. Re-seeding
+ * IDLE at cursor 0 shows button 1 enters PLAYING without applying (the native
+ * only rewinds/applies at the end). */
+static void test_ring_playback_cadence(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_run_replay *r;
+  uint32_t i;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  r = &mr.render.replay;
+  fill_ring_150(&mr);
+
+  r->state = FIFA96_MATCH_REPLAY_PLAYING;
+  r->cursor = 0;
+  r->cursor_limit = 150;
+  r->advance = 0;
+
+  fifa96_match_run_replay_step(&mr, 0);
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(r->cursor == 1);   /* 2 ticks of the stamp-2 cadence = 1 record */
+
+  for (i = 2; i < 300; i++) fifa96_match_run_replay_step(&mr, 0);
+  assert(r->cursor == 150);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
+  assert(mr.render.replay.replay_view[0x17C] == 149);   /* the last record */
+
+  /* IDLE at cursor 0: button 1 enters PLAYING with no apply. */
+  r->state = FIFA96_MATCH_REPLAY_IDLE;
+  r->cursor = 0;
+  r->cursor_limit = 150;
+  r->advance = 0;
+  mr.render.replay.replay_view[0x17C] = 0xEE;   /* the untouched sentinel */
+  fifa96_match_run_replay_step(&mr, 1);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAYING);
+  assert(r->cursor == 0);
+  assert(mr.render.replay.replay_view[0x17C] == 0xEE);
+}
+
+/* Task 4: the step/slow states on a full ring. Buttons 8/4/2 map to
+ * back/forward/slow; the same call performs two back/forward steps or the
+ * slow step+reload; the next call resets the step state to IDLE; button 1 at
+ * the end rewinds and applies record 0. */
+static void test_ring_step_modes(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_run_replay *r;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  r = &mr.render.replay;
+  fill_ring_150(&mr);
+
+  r->state = FIFA96_MATCH_REPLAY_IDLE;
+  r->cursor = 10;
+
+  fifa96_match_run_replay_step(&mr, 8);
+  assert(r->state == FIFA96_MATCH_REPLAY_STEP_BACK);
+  assert(r->cursor == 8);                              /* two back steps */
+  assert(mr.render.replay.replay_view[0x17C] == 8);    /* applied record 8 */
+
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
+
+  fifa96_match_run_replay_step(&mr, 4);
+  assert(r->state == FIFA96_MATCH_REPLAY_STEP_FWD);
+  assert(r->cursor == 10);                             /* two forward steps */
+
+  r->wait_timer = 0;
+  r->wait_reload = 3;
+  fifa96_match_run_replay_step(&mr, 2);
+  assert(r->state == FIFA96_MATCH_REPLAY_SLOW);
+  assert(r->wait_timer == 3);
+  assert(r->cursor == 11);                             /* steps then reloads */
+
+  fifa96_match_run_replay_step(&mr, 2);
+  assert(r->state == FIFA96_MATCH_REPLAY_SLOW);
+  assert(r->wait_timer == 2);                          /* the countdown, no step */
+  assert(r->cursor == 11);
+
+  r->state = FIFA96_MATCH_REPLAY_IDLE;
+  r->cursor = 150;                                     /* == count */
+  fifa96_match_run_replay_step(&mr, 1);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAYING);
+  assert(r->cursor == 1);                              /* end rewind applied 0 */
+}
+
+/* Task 4: an empty ring arms cleanly. `replay_begin` returns 0; the first
+ * step runs the 0x81 arm to IDLE with cursor 0; button 1 enters PLAYING,
+ * button 0 stays, button 0x80 exits to LIVE; the view is never touched. */
+static void test_ring_empty(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_run_replay *r;
+  uint8_t before;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  r = &mr.render.replay;
+
+  assert(fifa96_match_replay_count(&mr) == 0);
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_ARMED);
+
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
+  assert(r->cursor == 0);
+
+  before = mr.render.replay.replay_view[0x17C];
+  fifa96_match_run_replay_step(&mr, 1);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAYING);
+  assert(mr.render.replay.replay_view[0x17C] == before);
+
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAYING);
+  assert(mr.render.replay.replay_view[0x17C] == before);
+
+  fifa96_match_run_replay_step(&mr, 0x80);
+  assert(r->state == FIFA96_MATCH_REPLAY_LIVE);
+  assert(r->state == 0);
+}
+
 int main(void) {
   test_ring_pack_apply_roundtrip();
   test_ring_capture_budget();
   test_ring_eviction();
   test_ring_empty_reset();
   test_ring_compose();
+  test_ring_playback_cadence();
+  test_ring_step_modes();
+  test_ring_empty();
   puts("test_engine_replay_ring OK");
   return 0;
 }

@@ -325,3 +325,77 @@ void fifa96_match_replay_capture(struct fifa96_match_run *mr, uint32_t ticks) {
 uint32_t fifa96_match_replay_count(const struct fifa96_match_run *mr) {
   return mr ? mr->replay_ring.count : 0;
 }
+
+int fifa96_match_replay_apply(struct fifa96_match_run *mr, uint32_t index) {
+  struct fifa96_match_replay_ring *ring;
+  uint32_t idx;
+
+  if (!mr) return 0;
+  ring = &mr->replay_ring;
+  if (index >= ring->count) return 0;
+  idx = (ring->read + index) % FIFA96_MATCH_REPLAY_RING_RECORDS;
+  fifa96_match_replay_unpack(ring->record[idx],
+                             mr->render.replay.replay_view);
+  /* The applier also latches the roll byte from the camera cluster. */
+  mr->render.ball_roll =
+      mr->render.replay.replay_view[FIFA96_REPLAY_CAMERA_BYTES];
+  return 1;
+}
+
+int fifa96_match_replay_step_forward(struct fifa96_match_run *mr) {
+  struct fifa96_match_replay_ring *ring;
+  struct fifa96_match_run_replay *r;
+
+  if (!mr) return 0;
+  ring = &mr->replay_ring;
+  r = &mr->render.replay;
+  r->cursor_limit = ring->count;
+  if (r->cursor >= ring->count) return 0;   /* the boundary is a no-op */
+  fifa96_match_replay_apply(mr, r->cursor);
+  r->cursor++;
+  if (r->cursor >= ring->count) r->state = FIFA96_MATCH_REPLAY_IDLE;
+  return 1;
+}
+
+int fifa96_match_replay_step_back(struct fifa96_match_run *mr) {
+  struct fifa96_match_replay_ring *ring;
+  struct fifa96_match_run_replay *r;
+
+  if (!mr) return 0;
+  ring = &mr->replay_ring;
+  r = &mr->render.replay;
+  r->cursor_limit = ring->count;
+  if (r->cursor == 0) return 0;             /* the boundary is a no-op */
+  r->cursor--;
+  fifa96_match_replay_apply(mr, r->cursor);
+  if (r->cursor < 1) r->state = FIFA96_MATCH_REPLAY_IDLE;
+  return 1;
+}
+
+uint16_t fifa96_match_replay_stamp(const struct fifa96_match_run *mr) {
+  uint32_t idx;
+
+  if (!mr) return 0;
+  if (mr->render.replay.cursor >= mr->replay_ring.count) return 0;
+  idx = (mr->replay_ring.read + mr->render.replay.cursor) %
+        FIFA96_MATCH_REPLAY_RING_RECORDS;
+  return replay_get_word(mr->replay_ring.record[idx],
+                         FIFA96_REPLAY_REC_STAMP);
+}
+
+void fifa96_match_replay_pose(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_render *render;
+  const uint8_t *view;
+
+  if (!mr) return;
+  render = &mr->render;
+  if (render->replay.camera_kind != FIFA96_CAMERA_REPLAY_POSE) return;
+  view = render->replay.replay_view;
+  render->render_eye_x = (int32_t)replay_get_dword(view, FIFA96_REPLAY_MATRIX + 0x00);
+  render->render_eye_y = (int32_t)replay_get_dword(view, FIFA96_REPLAY_MATRIX + 0x04);
+  render->render_eye_z = (int32_t)replay_get_dword(view, FIFA96_REPLAY_MATRIX + 0x08);
+  render->render_eye_valid = 1;
+  render->yaw = (int32_t)replay_get_dword(view, FIFA96_REPLAY_MATRIX + 0x0C);
+  render->pitch = (int32_t)replay_get_dword(view, FIFA96_REPLAY_MATRIX + 0x10);
+  render->view_ratio = (int32_t)replay_get_dword(view, FIFA96_REPLAY_MATRIX + 0x14);
+}

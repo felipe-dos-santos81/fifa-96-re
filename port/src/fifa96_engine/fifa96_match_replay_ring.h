@@ -100,3 +100,25 @@ void fifa96_match_replay_capture(struct fifa96_match_run *mr, uint32_t ticks);
 
 /* The ring count (`*[0x109AC0]`), 0 on NULL. */
 uint32_t fifa96_match_replay_count(const struct fifa96_match_run *mr);
+
+/* `FUN_00063B80`'s playback apply: unpack ring record `index` into the view
+ * block and latch the roll byte from the applied `+0x1AA`. Returns 1 on an
+ * applied record, 0 when `index` is past the ring (or `mr` is NULL). */
+int fifa96_match_replay_apply(struct fifa96_match_run *mr, uint32_t index);
+
+/* `FUN_00063D34` / `FUN_00063CBC`: one forward / back playback step. Each
+ * applies the record under the cursor and moves the cursor one record; the
+ * boundary (cursor >= count for forward, cursor == 0 for back) is a complete
+ * no-op and the IDLE state write sits inside the applied guard. Both set
+ * `cursor_limit` to the ring count and return 1 when a record was applied. */
+int fifa96_match_replay_step_forward(struct fifa96_match_run *mr);
+int fifa96_match_replay_step_back(struct fifa96_match_run *mr);
+
+/* The `+0x116` stamp word of the record under the cursor (0 past the ring or
+ * on NULL). */
+uint16_t fifa96_match_replay_stamp(const struct fifa96_match_run *mr);
+
+/* `FUN_0004D134`'s POSE feed: when the selected replay camera is the POSE
+ * kind, set the render eye/valid/yaw/pitch/ratio from the applied view
+ * matrix `+0x1AE..+0x1C5`. */
+void fifa96_match_replay_pose(struct fifa96_match_run *mr);

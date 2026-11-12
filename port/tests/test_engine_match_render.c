@@ -2604,38 +2604,38 @@ static void test_replay_step_machine(void) {
   r->state = 0x80;
   r->cursor = 9;
   r->camera_index = 4;
-  fifa96_match_run_replay_step(&mr, 0, 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
   assert(r->cursor == 0 && r->camera_index == 0);
   assert(r->camera_kind == FIFA96_CAMERA_REPLAY_POSE && r->camera_sub == 0);
 
-  /* Button 1 toggles play <-> pause. */
-  fifa96_match_run_replay_step(&mr, 1, 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PAUSE);
-  fifa96_match_run_replay_step(&mr, 1, 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  /* Button 1 toggles IDLE <-> PLAYING. */
+  fifa96_match_run_replay_step(&mr, 1);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAYING);
+  fifa96_match_run_replay_step(&mr, 1);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
 
   /* Button 0x20 cycles the replay camera (mod 6) + selects it. */
-  fifa96_match_run_replay_step(&mr, 0x20, 0);
+  fifa96_match_run_replay_step(&mr, 0x20);
   assert(r->camera_index == 1 && r->camera_kind == FIFA96_CAMERA_REPLAY_VIEW &&
          r->camera_sub == 5);
-  for (int i = 0; i < 5; i++) fifa96_match_run_replay_step(&mr, 0x20, 0);
+  for (int i = 0; i < 5; i++) fifa96_match_run_replay_step(&mr, 0x20);
   assert(r->camera_index == 0);
 
-  /* Buttons 8/4/2 set the step modes; the next frame resets them to play. */
-  fifa96_match_run_replay_step(&mr, 8, 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_STEP_FWD);
-  fifa96_match_run_replay_step(&mr, 0, 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
-  fifa96_match_run_replay_step(&mr, 4, 0);
+  /* Buttons 8/4/2 set the step modes; the next frame resets them to IDLE. */
+  fifa96_match_run_replay_step(&mr, 8);
   assert(r->state == FIFA96_MATCH_REPLAY_STEP_BACK);
-  fifa96_match_run_replay_step(&mr, 0, 0);
-  fifa96_match_run_replay_step(&mr, 2, 0);
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
+  fifa96_match_run_replay_step(&mr, 4);
+  assert(r->state == FIFA96_MATCH_REPLAY_STEP_FWD);
+  fifa96_match_run_replay_step(&mr, 0);
+  fifa96_match_run_replay_step(&mr, 2);
   assert(r->state == FIFA96_MATCH_REPLAY_SLOW);
 
   /* The exit arm (bit 0x80): state 0 and the HUD arm cleared. */
   r->hud_armed = 1;
-  fifa96_match_run_replay_step(&mr, 0x80, 0);
+  fifa96_match_run_replay_step(&mr, 0x80);
   assert(r->state == 0 && r->hud_armed == 0);
 }
 
@@ -2685,10 +2685,10 @@ static void test_replay_target(void) {
   r->phase_counter = 0;
   mr.render.camera_target.source = 0;
   mr.render.camera_target.index = -1;
-  fifa96_match_run_replay_step(&mr, 0, 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
   assert(mr.render.camera_target.source == 4);
-  fifa96_match_run_replay_step(&mr, 0x80, 0);
+  fifa96_match_run_replay_step(&mr, 0x80);
   assert(mr.render.camera_target.source == 0);
   assert(mr.render.camera_target.index == -1);
 
@@ -2731,32 +2731,32 @@ static void test_replay_begin_and_step(void) {
   assert(r->hud_armed == 1);
   assert(r->cursor == 0 && r->camera_index == 0);
   assert(fifa96_match_run_replay_row(&mr) == FIFA96_MATCH_REPLAY_ROW_NONE);
-  assert(fifa96_match_run_replay_step(&mr, 0, 0) == 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);    /* first step -> 0x82 */
+  assert(fifa96_match_run_replay_step(&mr, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);    /* first step -> 0x82 */
   assert(mr.render.camera_target.source == 4);
   assert(mr.render.camera_target.index == 7);      /* the 0,1,0 ring */
-  /* The armed HUD row appears at PLAY; the armed state itself has no row. */
+  /* The armed HUD row appears at IDLE; the armed state itself has no row. */
   assert(fifa96_match_run_replay_row(&mr) == FIFA96_MATCH_REPLAY_ROW_HUD);
 
-  assert(fifa96_match_run_replay_step(&mr, 1, 0) == 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PAUSE);
-  assert(fifa96_match_run_replay_step(&mr, 1, 0) == 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(fifa96_match_run_replay_step(&mr, 1) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAYING);
+  assert(fifa96_match_run_replay_step(&mr, 1) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
 
-  assert(fifa96_match_run_replay_step(&mr, 0x20, 0) == 0);
+  assert(fifa96_match_run_replay_step(&mr, 0x20) == 0);
   assert(r->camera_index == 1);
-  assert(fifa96_match_run_replay_step(&mr, 8, 0) == 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_STEP_FWD);
-  assert(fifa96_match_run_replay_step(&mr, 0, 0) == 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
-  assert(fifa96_match_run_replay_step(&mr, 4, 0) == 0);
+  assert(fifa96_match_run_replay_step(&mr, 8) == 0);
   assert(r->state == FIFA96_MATCH_REPLAY_STEP_BACK);
-  assert(fifa96_match_run_replay_step(&mr, 0, 0) == 0);
-  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
-  assert(fifa96_match_run_replay_step(&mr, 2, 0) == 0);
+  assert(fifa96_match_run_replay_step(&mr, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
+  assert(fifa96_match_run_replay_step(&mr, 4) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_STEP_FWD);
+  assert(fifa96_match_run_replay_step(&mr, 0) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
+  assert(fifa96_match_run_replay_step(&mr, 2) == 0);
   assert(r->state == FIFA96_MATCH_REPLAY_SLOW);
 
-  assert(fifa96_match_run_replay_step(&mr, 0x80, 0) == 0);
+  assert(fifa96_match_run_replay_step(&mr, 0x80) == 0);
   assert(r->state == FIFA96_MATCH_REPLAY_LIVE);    /* the exit arm */
   assert(r->hud_armed == 0);
   assert(mr.render.camera_target.source == 0);
@@ -3129,7 +3129,7 @@ static void test_replay_row_and_draw(void) {
   struct hud_fixture f;
   hud_fixture_init(&f);
   struct fifa96_match_run_replay *r = &f.mr.render.replay;
-  r->state = FIFA96_MATCH_REPLAY_PLAY;
+  r->state = FIFA96_MATCH_REPLAY_IDLE;
   r->hud_armed = 1;
   r->phase_counter = 0;
   r->caption_x = 100;
@@ -3160,7 +3160,7 @@ static void test_replay_row_and_draw(void) {
   /* The armed state suppresses the row; the HUD without the arm too. */
   r->state = FIFA96_MATCH_REPLAY_ARMED;
   assert(fifa96_match_run_replay_row(&f.mr) == FIFA96_MATCH_REPLAY_ROW_NONE);
-  r->state = FIFA96_MATCH_REPLAY_PLAY;
+  r->state = FIFA96_MATCH_REPLAY_IDLE;
   r->hud_armed = 0;
   r->phase_counter = 0;
   assert(fifa96_match_run_replay_row(&f.mr) == FIFA96_MATCH_REPLAY_ROW_NONE);

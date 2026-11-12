@@ -8190,8 +8190,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     if (frozen_granted == 0) return 0;
     mr->state.frame_delta = (uint16_t)(FIFA96_MATCH_STATE_STEP >> 8);
     for (uint32_t i = 0; i < (uint32_t)frozen_granted; i++) {
-      (void)fifa96_match_run_replay_step(mr, mr->render.replay.input_buttons,
-                                         (int32_t)mr->state.frame_delta);
+      (void)fifa96_match_run_replay_step(mr, mr->render.replay.input_buttons);
       mr->render.replay.input_buttons = 0;
       /* Review F1: the replay view. `replay_target` selects the source-4
        * camera on the 0x81 arm; the 0x20 cycle only stores the camera-record
@@ -9657,7 +9656,7 @@ int fifa96_match_run_replay_armed(const struct fifa96_match_run_replay *replay) 
 }
 
 int fifa96_match_run_replay_playing(const struct fifa96_match_run_replay *replay) {
-  return replay && replay->state == FIFA96_MATCH_REPLAY_PLAY;   /* FUN_0006401C */
+  return replay && replay->state == FIFA96_MATCH_REPLAY_IDLE;   /* FUN_0006401C */
 }
 
 int fifa96_match_run_replay_ramp_window(const struct fifa96_match_run_replay *replay) {
@@ -9708,6 +9707,7 @@ int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
   r->hud_armed = 1;
   r->phase_counter = 0;
   r->cursor = 0;
+  r->advance = 0;
   r->camera_index = 0;
   /* C1: the arm drops any switch/tackle edge latched before it and primes a
    * fresh replay input poll; an exit pending from an earlier replay is
@@ -9796,37 +9796,61 @@ void fifa96_match_run_replay_exit(struct fifa96_match_run *mr) {
   }
 }
 
-int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons,
-                                 int32_t delta) {
+/* RR-L10: the native `FUN_000974D8` transition, run before a step/slow arm.
+ * The body is unproved (leg); the port keeps the call site as a no-op. */
+static void replay_transition(struct fifa96_match_run *mr) {
+  (void)mr;
+}
+
+/* RR-L10: the native `FUN_0006428C` resync, run after each countdown step.
+ * The body is unproved (leg); the port keeps the call site as a no-op. */
+static void replay_resync(struct fifa96_match_run *mr) {
+  (void)mr;
+}
+
+int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons) {
   struct fifa96_match_run_replay *r;
   if (!mr) return -FIFA96_ERR_INVALID;
   r = &mr->render.replay;
   if (r->state == FIFA96_MATCH_REPLAY_LIVE) return 0;
   if (r->state == 0x80) r->state = FIFA96_MATCH_REPLAY_ARMED;
   if (r->state == FIFA96_MATCH_REPLAY_ARMED) {
-    /* The 0x81 arm runs while the replay phase counter is 0: reset the
-     * cursor and camera selection (FUN_00063CBC + FUN_0004D134(0)), then
-     * hand over to the caller's next state (the engine's PLAY). */
-    if (r->phase_counter == 0) {
-      r->cursor = 0;
-      r->camera_index = 0;
-      (void)fifa96_match_run_replay_camera_set(mr, 0);
-      r->advance = 0;
-      r->state = FIFA96_MATCH_REPLAY_PLAY;
-      (void)fifa96_match_run_replay_target(mr);
+    /* The 0x81 arm: reset the cursor and apply record 0 when the ring holds
+     * one (advancing the cursor to 1); an empty ring leaves the cursor at 0.
+     * The cursor limit mirrors the ring count, the advance/wait timers reset,
+     * camera 0 reselects and the target chooser runs, then the state settles
+     * at IDLE. */
+    r->cursor = 0;
+    if (mr->replay_ring.count > 0) {
+      fifa96_match_replay_apply(mr, 0);
+      r->cursor = 1;
     }
+    r->cursor_limit = mr->replay_ring.count;
+    r->advance = 0;
+    r->wait_timer = 0;
+    r->camera_index = 0;
+    (void)fifa96_match_run_replay_camera_set(mr, 0);
+    (void)fifa96_match_run_replay_target(mr);
+    r->state = FIFA96_MATCH_REPLAY_IDLE;
     return 0;
   }
-  /* The step/slow states fall back to play at the next frame body. */
-  if (r->state == FIFA96_MATCH_REPLAY_STEP_BACK ||
-      r->state == FIFA96_MATCH_REPLAY_STEP_FWD ||
+  /* The next-call reset: a step/slow state (or the engine-only 0x87) falls
+   * back to IDLE at the top of the following call (R6). */
+  if (r->state == FIFA96_MATCH_REPLAY_STEP_FWD ||
+      r->state == FIFA96_MATCH_REPLAY_STEP_BACK ||
       r->state == FIFA96_MATCH_REPLAY_SLOW || r->state == 0x87)
-    r->state = FIFA96_MATCH_REPLAY_PLAY;
+    r->state = FIFA96_MATCH_REPLAY_IDLE;
   if (buttons == 1u) {
-    /* FUN_000974D8 + the play/pause toggle with the cursor wrap. */
-    r->state = r->state == FIFA96_MATCH_REPLAY_PLAY ? FIFA96_MATCH_REPLAY_PAUSE
-                                                    : FIFA96_MATCH_REPLAY_PLAY;
-    if (r->cursor_limit != 0 && r->cursor >= r->cursor_limit) r->cursor = 0;
+    /* The play/pause toggle with the end rewind: at the end the cursor wraps
+     * to the start and record 0 is applied (the cursor advances to 1). */
+    if (r->cursor_limit != 0 && r->cursor >= r->cursor_limit) {
+      r->cursor = 0;
+      fifa96_match_replay_apply(mr, 0);
+      r->cursor = 1;
+    }
+    r->state = r->state == FIFA96_MATCH_REPLAY_IDLE
+                   ? FIFA96_MATCH_REPLAY_PLAYING
+                   : FIFA96_MATCH_REPLAY_IDLE;
     return 0;
   }
   if ((buttons & 0x80u) != 0) {   /* the exit arm */
@@ -9837,24 +9861,45 @@ int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons,
     r->camera_index = (uint8_t)((r->camera_index + 1u) % 6u);
     (void)fifa96_match_run_replay_camera_set(mr, r->camera_index);
   } else if (buttons == 8u) {
-    r->state = FIFA96_MATCH_REPLAY_STEP_FWD;
-  } else if (buttons == 4u) {
+    replay_transition(mr);
     r->state = FIFA96_MATCH_REPLAY_STEP_BACK;
+  } else if (buttons == 4u) {
+    replay_transition(mr);
+    r->state = FIFA96_MATCH_REPLAY_STEP_FWD;
   } else if (buttons == 2u) {
+    replay_transition(mr);
     r->state = FIFA96_MATCH_REPLAY_SLOW;
   }
   switch (r->state) {
-    case FIFA96_MATCH_REPLAY_PLAY:
+    case FIFA96_MATCH_REPLAY_IDLE:
       r->wait_timer = 0;                  /* case 0x82 */
       break;
-    case FIFA96_MATCH_REPLAY_PAUSE:
-      r->advance += delta;                /* case 0x83 (the ring is a leg) */
+    case FIFA96_MATCH_REPLAY_PLAYING: {
+      uint16_t stamp;
+      r->advance += 1;                    /* case 0x83: the ring tick */
+      stamp = fifa96_match_replay_stamp(mr);
+      while (stamp > 0 && stamp <= (uint32_t)r->advance) {
+        r->advance -= (int32_t)stamp;
+        fifa96_match_replay_step_forward(mr);
+        replay_resync(mr);
+        stamp = fifa96_match_replay_stamp(mr);
+      }
+      break;
+    }
+    case FIFA96_MATCH_REPLAY_STEP_FWD:
+      fifa96_match_replay_step_forward(mr);
+      fifa96_match_replay_step_forward(mr);
+      break;
+    case FIFA96_MATCH_REPLAY_STEP_BACK:
+      fifa96_match_replay_step_back(mr);
+      fifa96_match_replay_step_back(mr);
       break;
     case FIFA96_MATCH_REPLAY_SLOW:
       if (r->wait_timer > 0) {
-        r->wait_timer--;
+        r->wait_timer--;                  /* case 0x86: the reload countdown */
       } else {
-        r->wait_timer = r->wait_reload;   /* case 0x86 */
+        fifa96_match_replay_step_forward(mr);
+        r->wait_timer = r->wait_reload;
       }
       break;
     default:

@@ -266,10 +266,10 @@ struct fifa96_match_run_entity {
 enum {
   FIFA96_MATCH_REPLAY_LIVE = 0x00,      /* [0x109A98] == 0 */
   FIFA96_MATCH_REPLAY_ARMED = 0x81,     /* the armed/intro state */
-  FIFA96_MATCH_REPLAY_PLAY = 0x82,
-  FIFA96_MATCH_REPLAY_PAUSE = 0x83,
-  FIFA96_MATCH_REPLAY_STEP_BACK = 0x84,
-  FIFA96_MATCH_REPLAY_STEP_FWD = 0x85,
+  FIFA96_MATCH_REPLAY_IDLE = 0x82,      /* the idle/ready state */
+  FIFA96_MATCH_REPLAY_PLAYING = 0x83,   /* the playing state */
+  FIFA96_MATCH_REPLAY_STEP_FWD = 0x84,
+  FIFA96_MATCH_REPLAY_STEP_BACK = 0x85,
   FIFA96_MATCH_REPLAY_SLOW = 0x86,
 };
 
@@ -308,7 +308,7 @@ struct fifa96_match_run_replay {
   uint8_t goal_count;
   int32_t activity_count[2][FIFA96_CAMERA_REPLAY_SLOTS];
   /* The replay input seam: the native button word (1 play/pause, 2 slow,
-   * 4 step back, 8 step forward, 0x20 camera, 0x80 exit). Rising edges
+   * 4 step forward, 8 step back, 0x20 camera, 0x80 exit). Rising edges
    * accumulate into `input_buttons` across polls and persist until the
    * granted-frame body consumes them (it clears the word after
    * `fifa96_match_run_replay_step`); `input_buttons_held` is the previous
@@ -354,13 +354,16 @@ int fifa96_match_run_replay_blink_step(struct fifa96_match_run_replay *replay,
 int fifa96_match_run_replay_begin(struct fifa96_match_run *mr);
 
 /* The reachable FUN_000642FC subset: the 0x80 -> 0x81 promotion, the 0x81 arm
- * (reset cursor/camera + selector 0), the button mapping (1 toggles
- * play/pause, 0x20 cycles the camera mod 6, 8/4/2 -> step modes), the
- * single-frame step-mode reset and the exit arm (bit 0x80 -> state 0, HUD
- * arm cleared). The replay-ring advance (FUN_00063D34/CBC/6428C), the held
- * pad probe FUN_000451F1 and the pan keys FUN_0004CA08 stay legs. */
-int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons,
-                                 int32_t delta);
+ * (reset cursor, apply record 0 when the ring is non-empty, mirror the ring
+ * count, reselect camera 0, run the target chooser, settle at IDLE), the
+ * button mapping (1 toggles IDLE/PLAYING with the end rewind, 0x20 cycles the
+ * camera mod 6, 8/4/2 -> back/forward/slow step modes), the next-call
+ * step/slow reset to IDLE and the exit arm (bit 0x80 -> state 0, HUD arm
+ * cleared). The ring tick is 1 inside the PLAYING countdown; the Q8 frame
+ * delta stays in the scene staging, not the replay step. The replay-ring
+ * advance (FUN_00063D34/CBC/6428C), the held pad probe FUN_000451F1 and the
+ * pan keys FUN_0004CA08 stay legs. */
+int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons);
 
 /* The exit chain FUN_00064E8C's reachable state: [0x109A98] = 0 and the HUD
  * arm freed. The hero/selection release and audio sinks stay legs. */

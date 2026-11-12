@@ -1340,7 +1340,7 @@ static void test_replay_freezes_live_frame(void) {
   assert(mr.state.total_seconds == total);
   assert(mr.state.tick_total == ticks);
   assert(mr.entities.team[0].records[0].pos_x == x);
-  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_IDLE);
   assert(mr.state.frame_delta != 0);
   fifa96_match_run_replay_exit(&mr);
   one_granted_frame(&mr);
@@ -1370,8 +1370,8 @@ static void test_replay_frozen_live_view_applies_target(void) {
   mr.entities.team[0].records[0].pos_z = 0x1E0;
   assert(mr.render.render_eye_valid == 0u);
   assert(fifa96_match_run_replay_begin(&mr) == 0);
-  one_granted_frame(&mr);                 /* the 0x81 arm -> PLAY + target */
-  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_PLAY);
+  one_granted_frame(&mr);                 /* the 0x81 arm -> IDLE + target */
+  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_IDLE);
   assert(mr.render.camera_target.source == 4);
   assert(mr.render.camera_target.index == 0);   /* team 0 record 0 */
   assert(mr.render.native_view_class == 1);
@@ -1413,7 +1413,7 @@ static void test_replay_frozen_scene_stage_keeps_record_anim(void) {
   mr.entities.team[0].records[0].pos_x = 0x40;
   assert(fifa96_match_run_replay_begin(&mr) == 0);
   one_granted_frame(&mr);
-  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_IDLE);
   /* The position staging ran (the render tail is kept) ... */
   assert(mr.render.entities[0].stage.pos.x == 0x40);
   assert(mr.render.entities[0].stage.anim_id == 4);
