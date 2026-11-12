@@ -356,6 +356,9 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->follow_speed = 0;
   cam->event_peak = 0;                         /* 0x1577F2 */
   cam->band_1577f6 = 0;                        /* 0x1577F6 */
+  cam->shadow_speed_157825 = 0;                /* [0x157825] */
+  cam->shadow_vel_157827 = 0;                  /* [0x157827] */
+  cam->shadow_vel_157829 = 0;                  /* [0x157829] */
   return FIFA96_OK;
 }
 
@@ -463,6 +466,26 @@ int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
   }
   cam->speed = (uint16_t)fifa96_entity_distance(cam->vel_x, cam->vel_z);
   cam->follow_speed = gate_speed;              /* the 0x739CE pre-tail value */
+  return FIFA96_OK;
+}
+
+int fifa96_camera_commit(fifa96_camera *cam) {
+  if (!cam) return -FIFA96_ERR_INVALID;
+  /* Slice-B Task 5: the camera-visible part of the native `0x73723 CALL
+   * 0x92864` + `0x73728..0x73750` stores. The native order is: the commit
+   * CALL (FUN_00092864) reads the live `speed`/`vel_x`/`vel_z` and compares
+   * them against the previous frame's shadows, appending the 0x15B650 sink
+   * record to the 0x15B440 event ring on a change (and clearing the sink
+   * byte); then the three word stores re-copy the live triple into the
+   * shadows. The ring append is a non-camera effect (the replay event ring,
+   * FU-142 OL-27) the loader does not own -> numbered leg T5-L1. The three
+   * shadow stores are ported here, byte-for-byte as the native 16-bit MOVs:
+   *   [0x157825] = word[0x1577BE] (`speed`),
+   *   [0x157827] = word[0x1577C0] (`vel_x`),
+   *   [0x157829] = word[0x1577C2] (`vel_z`). */
+  cam->shadow_speed_157825 = cam->speed;
+  cam->shadow_vel_157827 = cam->vel_x;
+  cam->shadow_vel_157829 = cam->vel_z;
   return FIFA96_OK;
 }
 

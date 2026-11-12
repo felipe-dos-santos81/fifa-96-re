@@ -1252,6 +1252,39 @@ static void test_update_walk_captures_prev_triple(void) {
   assert(cam.prev_x == 0x11 && cam.prev_y == 0x22 && cam.prev_z == 0x33);
 }
 
+/* Slice-B Task 5: the native `0x73728..0x73750` word shadows, copied after the
+ * `0x73723 CALL 0x92864` commit:
+ *   [0x157825] = word[0x1577BE] (`speed`), [0x157827] = word[0x1577C0]
+ *   (`vel_x`), [0x157829] = word[0x1577C2] (`vel_z`).
+ * All three are plain 16-bit MOVs (no sign/width widening). `FUN_00092864`'s
+ * ring append (the non-camera half) is a numbered leg, T5-L1. */
+static void test_camera_commit_shadows(void) {
+  fifa96_camera cam;
+  memset(&cam, 0xAA, sizeof cam);
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  /* init zeroes the three shadow cells ([0x157825]/[0x157827]/[0x157829]). */
+  assert(cam.shadow_speed_157825 == 0);
+  assert(cam.shadow_vel_157827 == 0);
+  assert(cam.shadow_vel_157829 == 0);
+  cam.speed = 0xAB12;
+  cam.vel_x = -12345;
+  cam.vel_z = 0x2345;
+  assert(fifa96_camera_commit(&cam) == FIFA96_OK);
+  assert(cam.shadow_speed_157825 == cam.speed);
+  assert(cam.shadow_vel_157827 == cam.vel_x);
+  assert(cam.shadow_vel_157829 == cam.vel_z);
+  /* Pin the word width/sign: a top-bit speed copies as the raw unsigned word,
+   * and a negative velocity copies as the raw signed 16-bit value. */
+  cam.speed = 0x8000;
+  cam.vel_x = 0x7FFF;
+  cam.vel_z = -32768;
+  assert(fifa96_camera_commit(&cam) == FIFA96_OK);
+  assert(cam.shadow_speed_157825 == 0x8000);
+  assert(cam.shadow_vel_157827 == 0x7FFF);
+  assert(cam.shadow_vel_157829 == -32768);
+  assert(fifa96_camera_commit(NULL) == -FIFA96_ERR_INVALID);
+}
+
 /* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08 — the
  * per-record camera event FUN_0007BF20's tail (0x7C8FC) runs for every
  * record. First-hand body 0x70C08..0x70DDD (disassemble_bytes this task). */
@@ -3466,6 +3499,7 @@ int main(void) {
   test_update_walk_gate();
   test_update_walk_landing_pan();
   test_update_walk_captures_prev_triple();
+  test_camera_commit_shadows();
   test_wall_arm_gate_and_head();
   test_wall_arm_z_chain_edges();
   test_wall_arm_x_chain_edges();

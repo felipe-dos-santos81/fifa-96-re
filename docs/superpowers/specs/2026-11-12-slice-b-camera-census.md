@@ -126,6 +126,41 @@ sound sinks, and the elevation loop. (The high arm's `vel_z = ±max(4,
 |vel_z|/2)` fold is loader-owned and **is** ported — `fifa96_camera.c`, the
 `0x70F6B..0x70FA1` arm.)
 
+## Task 5 outcome — the `FUN_00092864` commit and the shadow stores (2026-11-12)
+
+Task 5 ports the native `0x73723 CALL 0x92864` commit point and the
+`0x73728..0x73750` word shadow stores (`fifa96_camera_commit` in
+`fifa96_camera.c`, wired in `match_run_frame_camera` before the walk; the
+jitter is Task 6, the save tail Task 9).
+
+The camera-visible half is the three previous-frame shadows, all plain 16-bit
+MOVs (fresh `disassemble_bytes 0x73710`, byte-exact):
+
+| store | source | field | width/sign |
+|---|---|---|---|
+| `0x7372E` `[0x157825] = AX` | `word[0x1577BE]` (`speed`) | `shadow_speed_157825` | `uint16_t` |
+| `0x7373F` `[0x157827] = AX` | `word[0x1577C0]` (`vel_x`) | `shadow_vel_157827` | `int16_t` |
+| `0x73750` `[0x157829] = AX` | `word[0x1577C2]` (`vel_z`) | `shadow_vel_157829` | `int16_t` |
+
+(`0x7373A MOV EDI,0x157758` and `0x7374B MOV ESI,0x15774C` in the same range
+are the `0x73756 CALL 0x72AC4` save-tail's `MOVSD` setup, not shadow stores.)
+
+**New open leg (Task 5):**
+
+- **T5-L1 — the `FUN_00092864` event-ring append.** Fresh
+  `disassemble_bytes 0x92864`: the commit reads the live `speed`/`vel_x`/
+  `vel_z`, compares them against the shadows, and — when the triple changed and
+  the sink code `byte[0x15B650] != 0x26` — advances the ring index
+  `byte[0x15B665] = (index + 1) % 25` and copies the 21-byte sink record
+  `0x15B650..0x15B664` to `0x15B440 + index*0x15`, then clears the sink byte
+  (`XOR AH,AH ; MOV [0x15B650],AH`). This is the camera-motion feed into the
+  replay event ring (FU-142 OL-27): the append mechanics are already ported as
+  `fifa96_event_ring_append` (`FUN_000928F0`), but the camera commit's
+  motion-change gate is **not** wired — the loader `fifa96_camera` owns no
+  event ring, and the engine's `fifa96_event_queue` has no driver for the
+  camera-motion commit. The three shadow stores are ported and tested
+  (`test_camera_commit_shadows`).
+
 ## Provenance
 
 Ghidra MCP on `/FIFA96.EXE` (read-only): the reads listed in §Method. No

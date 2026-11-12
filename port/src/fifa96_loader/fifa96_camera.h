@@ -96,6 +96,20 @@ typedef struct fifa96_camera {
    * F6 is the 0x70544 argument, 0 on the engine path). `camera_event_ramp`
    * folds it here so the Seam A can bind the (FU303-L10) cell. */
   int16_t band_1577f6;
+  /* Slice-B Task 5: the native `0x73728..0x73750` word shadows — the previous
+   * frame's `speed`/`vel_x`/`vel_z`, copied after the `0x73723 CALL 0x92864`
+   * commit. `FUN_00092864` reads the live triple, compares it against these
+   * shadows, and on a change appends the `0x15B650` sink record to the
+   * 0x15B440 event ring (the non-camera effect is a numbered leg, T5-L1); the
+   * three stores then re-copy the live triple. The stores are plain 16-bit
+   * MOVs with no sign/width widening:
+   *   [0x157825] = word[0x1577BE] (`speed`), [0x157827] = word[0x1577C0]
+   *   (`vel_x`), [0x157829] = word[0x1577C2] (`vel_z`).
+   * `fifa96_camera_init` zeroes them; the native init 0x700F4 is silent on
+   * 0x157825/27/29, so the image-default zero is the fresh value. */
+  uint16_t shadow_speed_157825;
+  int16_t shadow_vel_157827;
+  int16_t shadow_vel_157829;
 } fifa96_camera;
 
 #define FIFA96_CAMERA_TRACKED_NONE (-1)
@@ -113,6 +127,17 @@ int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int cursor_high,
 int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
                               int16_t delta, int cursor_high, int input_bit2,
                               int walk_gate);
+
+/* Slice-B Task 5: the native `0x73723 CALL 0x92864` commit point plus the
+ * `0x73728..0x73750` shadow stores. `FUN_00092864` is the camera-motion
+ * history-ring tick: it compares the live `speed`/`vel_x`/`vel_z` against the
+ * previous frame's shadows (`shadow_speed_157825`/`shadow_vel_157827`/
+ * `shadow_vel_157829`) and, on a change, appends the `0x15B650` sink record to
+ * the 0x15B440 event ring. The ring append is a non-camera effect (the replay
+ * event ring, FU-142 OL-27) the loader does not own -> numbered leg T5-L1; the
+ * three word shadow stores are ported here and tested. Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID on NULL. */
+int fifa96_camera_commit(fifa96_camera *cam);
 
 /* FU-152 §2.9 (T3): FUN_00071C94 0x71D27's `[0x1577CA] = rec` write. The id
  * is the engine pool id (team*11 + index) or FIFA96_CAMERA_TRACKED_NONE.

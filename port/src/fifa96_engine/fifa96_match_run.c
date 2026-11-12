@@ -8199,6 +8199,11 @@ int fifa96_match_run_should_mark_over(const struct fifa96_match_run *mr) {
  * Returns the camera-follow verdict for this frame's trace line. */
 static int match_run_frame_camera(struct fifa96_match_run *mr) {
   uint16_t range = (uint16_t)(mr->input_range[0] | mr->input_range[1]);
+  /* Slice-B Task 5: the native `0x73723 CALL 0x92864` commit + shadow stores
+   * run immediately before the walk (the `0x736B2..0x73722` jitter is Task 6,
+   * to be inserted before this; the `0x73756` save tail is Task 9, between
+   * this and the walk). */
+  (void)fifa96_camera_commit(&mr->render.camera);
   (void)fifa96_camera_update_walk(&mr->render.camera, &mr->rng,
                                   (int16_t)mr->state.frame_delta,
                                   mr->difficulty_14c2f6 != 0,
