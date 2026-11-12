@@ -604,3 +604,27 @@ The 1.25x branch (no `+0x8D` writer), the `FUN_0008ECC4` `+4` counter path,
 the `[0x157ABE]` producer (OL-72; the seed keys by team index and the wrapper
 blocks by `team.side ^ side_swap`), the 23 remaining call sites above, and
 the recorded-frame replay ring remain open.
+
+## Closure (2026-11-11) — B3 `+0x8D`/`+0x8A` writer census
+
+**Fresh census.** `search_instructions` with `mnemonic=MOV` and
+`operand_pattern="+ 0x8d]"` returns **19** matches, every one a load (`CL`,
+`AL`, `BL`, `DL` or `AH` byte loads, and `EAX`/`EBX` dword loads); the same
+scan for `"+ 0x8a]"` returns **49** matches, every one a dword load. No store
+form appears in either family. A supplementary all-mnemonic pass finds 81
+references to `+0x8D` (19 `MOV`, 2 `LEA`, 7 `MOVSX`, 53 `CMP`) and 54 to
+`+0x8A` (49 `MOV`, 5 `LEA`); the `LEA` sites pass the computed address to a
+call rather than storing (`0x24415`, `0x250DE` for `+0x8D`; `0x1BA27`,
+`0x1BCE0`, `0x1BD01`, `0x1BDBF`, `0x250F3` for `+0x8A`).
+
+**Verdict.** `+0x8D` stays 0 in the modeled match, so the 2× branch
+(`0x8EDC2 ADD [EDX+0x15A99E],EBP`) is the only reachable weight and the 1.25×
+arm is a documented dead branch. The record/team init (`FUN_0006D9C4`,
+`FUN_00073D10`, `FUN_0007417C`, `FUN_000481EC`) still does not write either
+cell; the all-mnemonic census finds no store-form reference to either cell
+anywhere in the image. No code; the weight tests are unchanged.
+
+**Remaining.** The 1.25× branch stays unimplemented; the `FUN_0008ECC4` `+4`
+counter path, the `[0x157ABE]` `side_swap` producer (the `0x742B4` writer's
+caller is still missing; the flip is B2-L1), the 23 unported `0x8ED40` sites
+and the recorded-frame ring stay open.

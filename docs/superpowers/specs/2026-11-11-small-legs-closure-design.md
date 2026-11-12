@@ -457,3 +457,85 @@ golden re-pin. No completion-number movement.
 - The `0x2B` channel mapping for C4.
 - The per-leg plan order and test fixtures; the design fixes the verdicts
   and the boundaries, the plan fixes the order and the tests.
+
+## 10. Closure record (documentary legs)
+
+Date: 2026-11-11. Fresh Ghidra session on `/FIFA96.EXE` (standard MCP tools,
+no scripts). Every value below is this session's own output; no prior read is
+reused.
+
+**Commands and results.**
+
+| Command | Fresh result |
+|---|---|
+| `get_xrefs_to 0x14BF9C` | 0 |
+| `get_xrefs_to 0x48DC0` | 2 — `0x56478` `FUN_000563d0`, `0x5721A` `FUN_00057158` |
+| `get_xrefs_to 0x1068E0` | 5 — reads `0x48DCE` (`FUN_00048dc0`), `0x48EE5`/`0x48FF8` (`FUN_00048ff4`); writes `0x48FE1` (`FUN_00048ed8`), `0x4902F` (`FUN_00048ff4`) |
+| `decompile_function 0x48DC0` | flag gate `[0x1068E0] == 1 && (param_1 == 0 \|\| 0xB)`; `(&DAT_0014bf60)[param_1]`; ranges `0x94..0x9A`/`0x9B..0xA5` and `0x82..0x88`/`0x89..0x93` via `0x107287`/`0x10727C`; `FUN_000CE980` commit |
+| `decompile_function 0x48ED8` | preview branch `DAT_001068e0 != 1`; `0x14B200` build; `0x48FCB MOV ECX,0x1`; `0x48FE1 MOV [0x1068E0],ECX` |
+| `decompile_function 0x48FF4` | `0x14B500` restore; `[0x1068E0] = 0` at `0x4902F` |
+| `decompile_function 0x1CAEC` | case 9 `[0x105284] == 4`; case 0xD `[0x105298] == 4` |
+| `search_instructions 105284` | 4 matches, all `CMP` reads in `FUN_0001CAEC` |
+| `search_instructions 105298` | 4 matches, all `CMP` reads in `FUN_0001CAEC` |
+| `get_xrefs_to 0x107080` | 4 — DATA `0x47450`/`0x47586`/`0x47769` (`FUN_00047298`); WRITE `0x487D9` (`FUN_000481EC`) |
+| `get_xrefs_to 0x481EC` | 1 — `0x48D57` `FUN_00048d38` |
+| `disassemble_bytes 0x487A0` | `MOV EBP,0x15`; write-loop head `0x487C8`; store `0x487D9 MOV [ESI+0x107080],EAX`; tail `0x48895..0x488A6` (four dwords) |
+| `disassemble_bytes 0x47740` | `0x47769 CMP dword[EAX*4+0x107080],0x16`; `0x47771 JL 0x477bb` |
+| `search_instructions MOV "+ 0x8d]"` | 19, all loads |
+| `search_instructions MOV "+ 0x8a]"` | 49, all loads |
+| `get_xrefs_to 0x64270` | 3 — `0x383B3` `FUN_00038004`, `0x38E81` `FUN_00038630`, `0x5112D` `FUN_000510DC` |
+| `decompile_function 0x510DC` | begin arm `[0x14E58C] = 1`, `FUN_00064270()`, `FUN_00037114(4)`, `[0x108E0C] = 1`, `[0x108E10] = 0` |
+
+**Verdicts.**
+
+- **A1 — dormant.** `0x14BF9C` has no static reader. The two team tables are
+  the runtime pointer pair `0x14BF60`/`0x14BF8C`; the image cells read 0 and
+  the fresh `FUN_00048DC0` body indexes them with `param_1` 0 or `0xB`. The
+  engine keeps `remap_extra` and the consumer note.
+- **A2 — kit-editor preview, label corrected.** `FUN_00048DC0` is the
+  preview palette transform, gated on the preview flag. The flag's only
+  writers are `FUN_00048ED8` (set) and `FUN_00048FF4` (clear); the live match
+  never sets it. The prior "GK shade patch" name is retired.
+- **A3 — option cells, staged 0.** The `FUN_0001CAEC` cases are the
+  `[0x105284]`/`[0x105298]` team-kit colour cells; the fresh instruction
+  search finds only the `CMP` reads and no static store. The builder's
+  `home_blank`/`away_blank` and the engine's staged 0 stay; the option UI is
+  a leg.
+- **A4 — unreachable for the live lineup.** The static `0x107080` array is
+  `{0,0,14,15,13}`, all `< 0x16`; the `FUN_00047298` reads index it by the
+  template and the sole writer is the preview builder `FUN_000481EC`
+  (`0x487D9`, via `FUN_00048D38`/`0x48D57`; callers `0x372B4`/`0x4AE76`).
+  The port's omission stands.
+- **B3 — no writer.** 19 `+0x8D` loads and 49 `+0x8A` loads, no store; `+0x8D`
+  stays 0 and the 2× branch is the only reachable weight. The 1.25× arm is a
+  documented dead branch.
+- **C2 — documented adapter, no request seam.** `0x64270` has three menu/
+  pause callers; the `FUN_000510DC` begin arm is the request. The host
+  `R`/BACK key is the adapter at the arm. The request cells and the timed exit
+  stay a leg with the recorded-frame ring.
+
+**Errata (fresh-read corrections to §6).**
+
+- §6.4 calls `0x107080` the "lineup-order array" and `0x487A0 MOV EBP,0x15`
+  a "bound". The fresh read shows the array is the five-dword
+  template-selector table (static `{0,0,14,15,13}`, indexed by the template
+  index in `FUN_00047298`), and `0x487A0` is the blank-kit selector value
+  staged into the write-loop sources `[ESP+0xc]`/`[ESP+0x34]`, not a loop
+  bound. The verdict is unchanged for the live lineup: the live array is the
+  static five, all `< 0x16`.
+- §6.4 expects the writer's value range to be "0..0x15". The fresh write loop
+  stages four selectors, and the option-gated arms stage `0x15` (blank) plus
+  `0x16`/`0x17` (kit colour cells 1/2) into those slots. The branch is
+  therefore reachable only inside the (out-of-scope) preview build with a
+  non-default kit cell; it remains unreachable for the live lineup. The port
+  comment stays correct for the live array, and porting the preview reopens
+  the branch for the preview's own block build.
+- §6.1's pointer pair is runtime-populated: the image cells `0x14BF60` and
+  `0x14BF8C` read 0 in the fresh memory read, and the `FUN_00048DC0` body
+  indexes the table through `param_1` 0/`0xB`.
+
+**Remaining legs (named honestly).** The 23rd-slot consumer, the
+`FUN_0001CAEC` option UI, the `[0x157AC2]` flip (B2-L1), the recorded-frame
+ring, the 19-site `0x8ED40` body campaign, and the `FUN_0003BB1C` loop. The
+team-editor preview (`FUN_00048DC0`/`FUN_00048ED8`/`FUN_00048FF4` and the
+preview branch) also stays out of scope by §3.

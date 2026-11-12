@@ -213,3 +213,32 @@ its entity remaps from the 23-block pool, storing the extra block in
 (`get_xrefs_to 0x14BF9C` = 0) and stays a numbered leg; the `FUN_00048DC0` GK
 shade patch, the `FUN_0001CAEC(9/0xD)` option gates and the unreachable
 `0x107080[class] > 0x15` branch also stay open (see the FU-348 §7 L2 closure).
+
+## 7. The `0x107080` writer evidence (2026-11-11)
+
+**Erratum (quoted).** §6's "the `FUN_00048DC0` GK shade patch ... stay open"
+is corrected by FU-348 §8: the body is the kit-editor preview palette
+transform, and the `0x107080` branch closure below carries the writer detail.
+
+**Fresh xrefs.** `get_xrefs_to 0x107080` returns four references: the DATA
+reads `0x47450` (`MOV EBX,[EBX+0x107080]`), `0x47586` (`MOV
+EBX,[EAX*4+0x107080]`, `EAX` from the slot map at `[ESP+EAX+0x480]`, i.e. the
+template index) and `0x47769` (`CMP dword[EAX*4+0x107080],0x16`, `EAX` from
+`0x47762 MOV EAX,[ESP+0x4ec]`), all in `FUN_00047298`; the only WRITE is
+`0x487D9 MOV [ESI+0x107080],EAX` in `FUN_000481EC`. `get_xrefs_to 0x481EC`
+returns one caller, `0x48D57` in `FUN_00048D38`; the fresh `FUN_00048D38`
+decompile runs `FUN_000481EC` → `FUN_00048AB0` → `FUN_00047298(1)` →
+`FUN_000471EC` → `FUN_00048C8C`/`FUN_00048B60`.
+
+**The writer.** `0x487A0 MOV EBP,0x15` stages the blank-kit selector into
+`[ESP+0x34]`/`[ESP+0xc]`; `0x487BB MOV EDX,0x15` stages the away side. The
+write-loop head is `0x487C8 XOR ECX,ECX / XOR EDI,EDI / XOR ESI,ESI`, the
+store is `0x487D9` from `0x487D5 MOV EAX,[ESP+EDI+0xc]`, and `0x48895 ADD
+EDI,0x14` / `0x48899 ADD ESI,0x4` / `0x488A3 CMP ECX,0x4` / `0x488A6 JL
+0x487D5` close four dwords. The fresh image read at `0x107080` is the static
+five `{0,0,14,15,13}` (all `< 0x16`); `0x106AFD`/`0x106AFE` read 6/5. The
+writer's four sources are `[ESP+0xc]`/`[ESP+0x34]` (the `0x105284` gates
+6/7/8) and `[ESP+0x20]`/`[ESP+0x48]` (the `0x105298` gates 10/0xB/0xC),
+staging `0x16`/`0x17`/`0x15`; that is the preview path, not the live lineup.
+The lineup-order producer remains `FUN_00012010`; `0x107080` is the
+template-selector table, not the order matrix. See FU-348 §8 (A4).

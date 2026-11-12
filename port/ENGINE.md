@@ -12378,3 +12378,33 @@ template classes and is intentionally omitted. Full native kit fidelity is not
 claimed.
 
 Record: FU-348 §7 (L2 closure), FU-350 §6 (L3 closure), design §10.5.
+
+## Phase 118 — small-legs evidence closures (2026-11-11)
+
+Six documentary legs were re-read fresh on `/FIFA96.EXE` and closed or
+re-labelled without code. **A1 is dormant:** `get_xrefs_to 0x14BF9C` = 0; the
+23rd remap-pool block has no static reader, and the team tables are reached
+through the runtime pointer pair `0x14BF60`/`0x14BF8C` (`(&DAT_0014bf60)[0 or
+0xB]` in `FUN_00048DC0`). **A2 is the kit-editor preview palette transform,**
+not a live GK patch: `FUN_00048DC0` is gated on `[0x1068E0] == 1`; the flag's
+only writers are the preview set/clear pair `FUN_00048ED8` (`0x48FE1`, with
+`0x48FCB MOV ECX,1`) and `FUN_00048FF4` (`0x4902F`, 0), the image cell reads
+0, and the callers are `0x56478`/`0x5721A`. **A3 is the team-kit colour
+option cells:** `case 9` tests `[0x105284] == 4` and `case 0xD` tests
+`[0x105298] == 4`; `search_instructions` returns only the four `CMP` reads per
+cell and no store, so the engine's staged 0 stays and the option UI is a leg.
+**A4 is unreachable for the live lineup:** the static `0x107080` array is
+`{0,0,14,15,13}` (all `< 0x16`), the three `FUN_00047298` reads index it by
+the template and the sole writer is the preview builder `FUN_000481EC`
+(`0x487D9`, reached via `FUN_00048D38`/`0x48D57`), not the live path. **B3 has
+no writer:** the fresh `MOV` census finds 19 `+0x8D` loads and 49 `+0x8A`
+loads with no store, so the 2× branch is the only reachable weight and the
+1.25× arm is dead. **C2 is a documented adapter:** `get_xrefs_to 0x64270` = 3,
+`FUN_000510DC`'s begin arm is the menu/pause producer, and the host `R`/BACK
+key is the adapter; the request cells and timed exit stay a leg because they
+entangle the recorded-frame ring. **Gate:** `make check` **124/124**; M1/M2
+`cmp` exact. No golden re-pin and no completion-number movement (no new body
+or dispatch row). Remaining legs: the 23rd-slot consumer, the
+`FUN_0001CAEC` option UI, the `[0x157AC2]` flip (B2-L1), the recorded-frame
+ring, the 19-site `0x8ED40` body campaign, and the `FUN_0003BB1C` loop.
+Record: FU-348 §8, FU-350 §7, FU72 B3 closure, FU-351 §25, design §10.

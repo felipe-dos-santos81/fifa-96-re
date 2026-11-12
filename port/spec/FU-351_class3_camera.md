@@ -1168,3 +1168,28 @@ list link and the seven control-word clears) stays **FU275-L6**. The engine
 does not set the receiver `has_slot`; that partial write left two slot holders
 and was removed. Row 29's source-2 store remains on the unwired row-29 entry;
 the source-4 non-goal activity updates and replay UI trigger are unchanged.
+
+## 25. C2 closure — the native mode-7 request is a menu producer (2026-11-11)
+
+**Fresh census.** `get_xrefs_to 0x64270` returns three callers: `0x383B3`
+in `FUN_00038004` (the menu dispatch's `param_1 == 0xB` case), `0x38E81` in
+`FUN_00038630` (menu case 3) and `0x5112D` in `FUN_000510DC` (the
+pause/replay state machine). The fresh `FUN_000510DC` decompile shows the
+begin arm (`param_1 != 0`): `[0x14E58C] = 1`, `FUN_00064270()`,
+`FUN_00037114(4)`, `[0x108E0C] = 1`, `[0x108E10] = 0`.
+
+**Verdict — documented adapter, no request seam.** The mode-7 request is the
+§23 menu/pause-screen producer (`FUN_0004B100` mode 7 → `FUN_000513EC`/
+`FUN_00053BB8` → `FUN_00051270`/`0x51370`/`0x512B0` → `FUN_000510DC` →
+`FUN_00064270`), not a live-match event; the port has no replay menu item.
+The host `R`/BACK key remains the documented adapter at the arm
+(`FUN_00064270`), and `replay_begin` already stores the native arm (`0x81`).
+The native request cells (`[0x8E0C]`/`[0x8E10]`/`[0x4E58C]`) and the timed
+exit (`FUN_00064E74`/`FUN_00064DFC`) stay a numbered leg: the request path is
+entangled with the recorded-frame ring, so a partial seam would claim more
+than it proves. No code in this slice.
+
+**Remaining.** The request cells, the timed exit and the recorded-frame ring
+(`FUN_00063D34`/`FUN_00063CBC`/`FUN_0006428C`, the `0x118`-byte record
+pack/apply and the `0x55AA4` live block) stay one leg; the full
+`FUN_0003BB1C` match-screen loop stays a separate UI slice.
