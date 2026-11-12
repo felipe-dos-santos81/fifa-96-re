@@ -1398,8 +1398,11 @@ struct fifa96_match_run {
    *    counters, indexed by `side ^ side_swap` (0x8ABFF/0x8AC0F); reset by
    *    the match reset FUN_00073EE0 (0x73F6A/0x73F9C) and begin; no reader
    *    (FU-149 L10: accumulated count is write-only statically);
-   *  - `side_swap` = byte [0x157ABE], the display/score slot swap (the
-   *    producer is unported, FU-143 OL-75 / FU-149 L1-adjacent; seeded 0);
+   *  - `side_swap` = byte [0x157ABE], the display/score slot swap; init/begin
+   *    call `fifa96_match_side_swap_value(global_157ac2, 0u)`, the modeled
+   *    `FUN_0007417C` formula `([0x157AC2] ^ byte[0x157AC3]) & 1`, which stays 0
+   *    at reset because `global_157ac2` is cleared first; the non-zero flip
+   *    producer is unported (B2-L1);
    *  - `store_15882b`/`store_15882c` = the act-8 replay bytes [0x15882B]
    *    (situation) / [0x15882C] (side) written by the BX!=0 fallback
    *    (0x8AA93/0x8AA9D) and re-read by act 8's tail (0x8A8BD..0x8ACD); the
@@ -1859,6 +1862,18 @@ int fifa96_match_run_stats_bump(struct fifa96_match_run *mr, int32_t entity_id);
  * slot the replay selector reads). The table is cleared by the re-key, so it
  * must run before any frame accumulates. NULL is a no-op. */
 void fifa96_match_run_stats_seed(struct fifa96_match_run *mr);
+
+/* FU72 B2 / `FUN_0007417C` (and the `0x742B4` writer, whose caller is not
+ * created in the project): the native side-swap cell is
+ * `[0x157ABE] = ([0x157AC2] ^ byte[0x157AC3]) & 1`, with `[0x157ABF]` its
+ * complement. This is the pure low-bit formula: `(native_157ac2 ^
+ * native_157ac3) & 1u`. The run's init/begin reset calls it with
+ * `(mr->global_157ac2, 0u)`; `global_157ac2` is 0 there, so the reset value
+ * stays 0. The non-zero flip is NOT wired (B2-L1: the native `[0x157AC2]`
+ * phase/mode byte has many writers and the stats-key/block mapping across a
+ * flip is unproved), so no test asserts a non-zero run value. */
+uint8_t fifa96_match_side_swap_value(uint8_t native_157ac2,
+                                     uint8_t native_157ac3);
 
 /* One match input poll: fold the engine key presses in `keys` (codes 1..11;
  * state == 1 only) into the FU-61 keyboard-handler code byte (directions

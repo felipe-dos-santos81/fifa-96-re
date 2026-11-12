@@ -628,3 +628,42 @@ anywhere in the image. No code; the weight tests are unchanged.
 counter path, the `[0x157ABE]` `side_swap` producer (the `0x742B4` writer's
 caller is still missing; the flip is B2-L1), the 23 unported `0x8ED40` sites
 and the recorded-frame ring stay open.
+
+## Closure (2026-11-12) — B2 `[0x157ABE]` `side_swap` formula at the reset seam
+
+**Evidence (design §6.6, fresh 2026-11-11 Ghidra session; recorded here, not
+re-read in this slice).** `FUN_0007417C` computes
+`[0x157ABE] = ([0x157AC2] ^ byte[0x157AC3]) & 1` and
+`[0x157ABF] = that ^ 1`. The unnamed writer at `0x742B4` (the block starting
+`0x74293`) repeats the same formula, but `get_function_by_address 0x74293`
+returns none: its enclosing function is not created in the project, so its
+caller/producer stays unproved.
+
+**`0x157AC3`.** `search_instructions` finds exactly one store:
+`FUN_00073EE0 0x73F5E MOV byte[0x157AC3], BL` — the match reset writes the
+low byte 0. The other references are the two XOR reads.
+
+**`0x157AC2`.** The fresh `search_instructions` census returns **56**
+references. The writers are `0x4B0DE` (immediate 4), `0x4BA20` (8),
+`0x4BA31` (`DL`), `0x38990` (`DH`), `0x73F82` (`DH`), `0x88D6A` (`BL`),
+`0x8B58A` (`BH`) and `0x8B61B` (`INC`). It is a phase/mode byte; the engine's
+`global_157ac2` is the current period model, not yet proved identical.
+
+**Landed engine model.** `fifa96_match_side_swap_value(native_157ac2,
+native_157ac3)` returns `(native_157ac2 ^ native_157ac3) & 1u` (pure, no
+state). `fifa96_match_run_init` and `fifa96_match_run_begin` replace their
+unconditional `mr->side_swap = 0` with
+`fifa96_match_side_swap_value(mr->global_157ac2, 0u)`. In both functions the
+reset clears `global_157ac2` earlier, so the value stays 0 and the non-live
+tapes/M1/M2 are unchanged. The test is `test_engine_match_handlers.c`
+`test_side_swap_value`: `(0,0)=0`, `(1,0)=1`, `(2,0)=0`, `(3,0)=1`,
+`(0,1)=1`, `(0xFF,0)=1` (the formula reads only bit 0).
+
+**B2-L1 (open).** No non-zero flip is wired. Three facts are still unproved:
+(1) the `[0x157AC2]` mapping — the engine's `global_157ac2` is the period
+roll, while the native byte is a phase/mode byte with the eight writers above;
+(2) the `0x742B4` writer's caller, whose enclosing function is not created;
+(3) the stats-key/block consistency across a flip — `stats_seed` keys by team
+index while `stats_add`/`stats_bump` resolve `team.side ^ side_swap`, so a
+non-zero swap would move the lookup block unless the seed re-keys. A flip
+ships only after those are proved; until then the run keeps `side_swap = 0`.

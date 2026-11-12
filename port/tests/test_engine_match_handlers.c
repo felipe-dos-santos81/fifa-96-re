@@ -7111,6 +7111,15 @@ static void test_stats_counter_score_event(void) {
   drop_fixture(&f);
 }
 
+static void test_side_swap_value(void) {
+  assert(fifa96_match_side_swap_value(0, 0) == 0);
+  assert(fifa96_match_side_swap_value(1, 0) == 1);
+  assert(fifa96_match_side_swap_value(2, 0) == 0);
+  assert(fifa96_match_side_swap_value(3, 0) == 1);
+  assert(fifa96_match_side_swap_value(0, 1) == 1);
+  assert(fifa96_match_side_swap_value(0xFF, 0) == 1);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -7256,6 +7265,7 @@ int main(void) {
   test_stats_counter_bump();
   test_stats_counter_score_event();
   test_stats_third_selection_cleared();
+  test_side_swap_value();
   puts("test_engine_match_handlers OK");
   return 0;
 }

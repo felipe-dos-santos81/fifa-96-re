@@ -146,6 +146,19 @@ int fifa96_match_run_stats_bump(struct fifa96_match_run *mr, int32_t entity_id) 
   }
   return 0;
 }
+
+uint8_t fifa96_match_side_swap_value(uint8_t native_157ac2,
+                                     uint8_t native_157ac3) {
+  /* `FUN_0007417C`: `[0x157ABE] = ([0x157AC2] ^ byte[0x157AC3]) & 1`, with
+   * `[0x157ABF]` the complement; the unnamed `0x742B4` writer repeats the
+   * same formula. The reset sites below pass `(global_157ac2, 0)`, and the
+   * match reset `FUN_00073EE0` stores `byte[0x157AC3] = BL` (0) at `0x73F5E`.
+   * The non-zero flip is deliberately not wired: the native `[0x157AC2]`
+   * phase/mode byte has many writers and the stats-key/block mapping across
+   * a flip is unproved (B2-L1, FU72). */
+  return (uint8_t)((native_157ac2 ^ native_157ac3) & 1u);
+}
+
 /* FU-70 §1.2 slot tables (flat 0x11064E direction map and the animation chain
  * T1 0x10E1DC -> T2 0x10E1EC / T3 0x10E1F5). */
 static const uint8_t match_run_slot_map[16] = {
@@ -5166,7 +5179,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->sit_side_pending = 0;
   mr->corner_count[0] = 0;
   mr->corner_count[1] = 0;
-  mr->side_swap = 0;
+  mr->side_swap = fifa96_match_side_swap_value(mr->global_157ac2, 0u);
   mr->store_15882b = 0;
   mr->store_15882c = 0;
   mr->incident_x = 0;
@@ -5473,12 +5486,13 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   match_run_ball_settle_clear(mr);     /* Phase 70: no staged settle */
   /* FU-149 P1: a fresh match drops the set-piece dispatcher state (the native
    * match reset FUN_00073EE0 zeroes the corner counters 0x157AD4/0x157AD6;
-   * the [0x157ABE] swap and the incident triple carry their unported-producer
-   * defaults). */
+   * the [0x157ABE] swap follows the modeled FUN_0007417C formula from the
+   * reset global_157ac2 = 0, and the incident triple keeps its
+   * unported-producer default). */
   mr->sit_side_pending = 0;
   mr->corner_count[0] = 0;
   mr->corner_count[1] = 0;
-  mr->side_swap = 0;
+  mr->side_swap = fifa96_match_side_swap_value(mr->global_157ac2, 0u);
   mr->store_15882b = 0;
   mr->store_15882c = 0;
   mr->incident_x = 0;

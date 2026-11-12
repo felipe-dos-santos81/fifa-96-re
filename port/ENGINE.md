@@ -12422,3 +12422,25 @@ or dispatch row). Remaining legs: the 23rd-slot consumer, the
 (B2-L1), the recorded-frame ring, the 19-site `0x8ED40` body campaign, and the
 `FUN_0003BB1C` loop.
 Record: FU-348 §8, FU-350 §7, FU72 B3 closure, FU-351 §25, design §10.
+
+## Phase 119 — B2 `side_swap` reset formula (2026-11-12)
+
+The native `[0x157ABE]` swap is the low bit of `([0x157AC2] ^
+byte[0x157AC3])` (`FUN_0007417C`, with `[0x157ABF]` its complement); the
+`0x742B4` writer repeats the same formula, but its enclosing function is not
+created in the project (`get_function_by_address 0x74293` = none), so its
+caller stays unproved. The `[0x157AC3]` census has exactly one store, the
+match reset `FUN_00073EE0 0x73F5E MOV byte[0x157AC3], BL` (low byte 0); the
+other references are the two XOR reads. The `[0x157AC2]` phase/mode byte has
+**56** fresh references with writers at `0x4B0DE` (4), `0x4BA20` (8),
+`0x4BA31` (`DL`), `0x38990` (`DH`), `0x73F82` (`DH`), `0x88D6A` (`BL`),
+`0x8B58A` (`BH`) and `0x8B61B` (`INC`). The engine now exposes the pure
+`fifa96_match_side_swap_value(a, b) = (a ^ b) & 1` and both resets
+(`fifa96_match_run_init`/`_begin`) call it with `(global_157ac2, 0)` after the
+`global_157ac2` clear, so `side_swap` stays 0 and M1/M2 are byte-exact. **No
+non-zero flip is wired (B2-L1):** the `0x157AC2`↔`global_157ac2` mapping, the
+`0x742B4` caller and the stats-key/block consistency across a flip are
+unproved. Test: `test_engine_match_handlers` `test_side_swap_value`. Gate:
+`make check` 124/124; M1/M2 `cmp` exact; no golden re-pin and no
+completion-number movement (a run-cell formula, no new body or dispatch row).
+Record: FU72 B2 closure (2026-11-12), design §6.6/§10.
