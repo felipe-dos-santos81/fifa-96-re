@@ -6184,6 +6184,28 @@ static void test_goal_arm_wall_arm(void) {
   assert(mr.camera_arm_announce == 0);
 }
 
+/* Slice-B Task 3: the frame-level out-of-bounds gate (0x73B70..0x73B9B) means
+ * the armer — and therefore its [0x15781C] counter head — is reached only
+ * through the out-of-bounds admission. A camera in bounds leaves the counter
+ * untouched across granted frames. */
+static void test_frame_goal_counter_in_bounds(void) {
+  struct fifa96_match_run mr;
+  int granted = 0;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;                 /* class 1: the clock runs */
+  mr.state.period_length = 90;        /* no period end inside the window */
+  mr.render.camera.pos_x = 0;
+  mr.render.camera.pos_z = 0;
+  mr.goal_counter_15781c = 5;
+  for (int i = 0; i < 10 && granted == 0; i++) {
+    int rc = fifa96_match_run_frame(&mr);
+    assert(rc >= 0);
+    granted += rc;
+  }
+  assert(granted >= 1);               /* at least one granted frame ran */
+  assert(mr.goal_counter_15781c == 5);  /* in bounds: the armer never fired */
+}
+
 /* FU-145 S2: the clock-tail gate and scanner (`FUN_0008AF38 0x8B623..0x8B643`
  * -> `FUN_00088940`). Armed + phase 2/0x10 + `|goal_snap_z| > 0xB20` + zone
  * != 0 queues situation 6 through `fifa96_match_run_goal_queue`; the queued id
@@ -11291,6 +11313,7 @@ int main(void) {
   test_goal_arm_gates_and_snapshot();
   test_goal_arm_reflect_clear();
   test_goal_arm_wall_arm();
+  test_frame_goal_counter_in_bounds();
   test_goal_scan_queue_and_fallback();
   test_goal_phase2_write_clears_arm();
   test_set_piece_queue_ids();

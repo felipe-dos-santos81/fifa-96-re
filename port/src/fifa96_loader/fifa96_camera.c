@@ -2439,8 +2439,13 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
   (void)fifa96_camera_classify(cur, &flags_cur);
   overlap = (uint16_t)(flags_prev & flags_cur);
   if (overlap != 0) return 0;                    /* 0x70e2x: the AND return */
-  if (((flags_prev ^ flags_cur) & 0x8u) == 0) {
-    /* 0x70e56..0x710fd LAB: step the current triple back toward the previous
+  /* 0x710fd/0x71101/0x71106: the step-back (and its mask tail) runs only when
+   * the XOR's bit 0x8 is clear AND the two classify words differ
+   * (`CMP AX,word[ESP+0x34]` / `JZ 0x71302`). Same-zone triples jump straight
+   * to the store, leaving the camera at the current point (the m 42 goal link
+   * is the live case: prev/cur both inside the mouth band, so no step). */
+  if (((flags_prev ^ flags_cur) & 0x8u) == 0 && flags_prev != flags_cur) {
+    /* 0x710fd..0x711d7 LAB: step the current triple back toward the previous
      * one (FUN_0008DC50(delta, 1) per axis) while the candidate keeps the
      * previous flags; adopt each adopted candidate. */
     int32_t adopted[3] = {prev_x, prev_y, prev_z};
@@ -2467,21 +2472,21 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
     cam->pos_x = adopted[0];
     cam->pos_y = adopted[1];
     cam->pos_z = adopted[2];
-  }
-  /* The mask effects, over the changed flags (`uVar5 = prev ^ cur`, the
-   * native 0x710fd tail). `local_1c` is the PREVIOUS classify's return byte
-   * (flags_prev == 0 when it returned 1): bit 4 zeroes vel_z only when
-   * flags_prev == 0; bit 0x10 takes the y jitter when flags_prev != 0 and the
-   * FUN_00070B94 elevation loop otherwise (leg, OL-T11-79). */
-  {
-    uint16_t changed = (uint16_t)(flags_prev ^ flags_cur);
-    if ((changed & 3u) != 0) cam->vel_x = (int16_t)fifa96_camera_shift_step(-cam->vel_x, 2);
-    if ((changed & 0x4u) != 0 && flags_prev == 0) cam->vel_z = 0;
-    if ((changed & 0x10u) != 0 && flags_prev != 0) {
-      cam->pos_y += (cam->pos_y < 0 ? -4 : 4);   /* +-2*delta (delta 2 staged) */
+    /* The mask effects, over the changed flags (`uVar5 = prev ^ cur`, the
+     * native 0x710fd tail). `local_1c` is the PREVIOUS classify's return byte
+     * (flags_prev == 0 when it returned 1): bit 4 zeroes vel_z only when
+     * flags_prev == 0; bit 0x10 takes the y jitter when flags_prev != 0 and the
+     * FUN_00070B94 elevation loop otherwise (leg, OL-T11-79). */
+    {
+      uint16_t changed = (uint16_t)(flags_prev ^ flags_cur);
+      if ((changed & 3u) != 0) cam->vel_x = (int16_t)fifa96_camera_shift_step(-cam->vel_x, 2);
+      if ((changed & 0x4u) != 0 && flags_prev == 0) cam->vel_z = 0;
+      if ((changed & 0x10u) != 0 && flags_prev != 0) {
+        cam->pos_y += (cam->pos_y < 0 ? -4 : 4);   /* +-2*delta (delta 2 staged) */
+      }
     }
+    cam->speed = (uint16_t)(int16_t)fifa96_entity_distance(cam->vel_x, cam->vel_z);
   }
-  cam->speed = (uint16_t)(int16_t)fifa96_entity_distance(cam->vel_x, cam->vel_z);
   return 1;
 }
 

@@ -7198,6 +7198,56 @@ static void test_stats_drain_events(void) {
   drop_fixture(&f);
 }
 
+/* Slice-B Task 3: the armer head's [0x15781C] counter (FUN_0007131C
+ * 0x71325..0x71349). The head runs on every fifa96_match_goal_arm call (the
+ * unit calls the armer directly; the counter head still runs before the
+ * armed/phase/boundary branches). A zero counter skips aging; a nonzero
+ * counter adds the frame-delta low byte and resets only when the sum is
+ * strictly > 0x1E. */
+static void test_goal_arm_counter_zero_guard(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.goal_counter_15781c = 0;
+  mr.state.frame_delta = 5;
+  for (int i = 0; i < 7; i++) {
+    (void)fifa96_match_goal_arm(&mr);
+    assert(mr.goal_counter_15781c == 0);
+  }
+}
+
+static void test_goal_arm_counter_sequence(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.goal_counter_15781c = 5;
+  mr.state.frame_delta = 5;
+  const uint8_t expect[7] = {10, 15, 20, 25, 30, 0, 0};
+  for (int i = 0; i < 7; i++) {
+    (void)fifa96_match_goal_arm(&mr);
+    assert(mr.goal_counter_15781c == expect[i]);
+  }
+}
+
+static void test_goal_arm_counter_exact_thirty(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.goal_counter_15781c = 0x1E;
+  mr.state.frame_delta = 0;
+  (void)fifa96_match_goal_arm(&mr);
+  assert(mr.goal_counter_15781c == 0x1E);   /* 0x1E + 0 is not > 0x1E */
+  mr.state.frame_delta = 1;
+  (void)fifa96_match_goal_arm(&mr);
+  assert(mr.goal_counter_15781c == 0);      /* 0x1F > 0x1E -> reset */
+}
+
+static void test_goal_arm_counter_byte_wrap(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.goal_counter_15781c = 0xFF;
+  mr.state.frame_delta = 2;
+  (void)fifa96_match_goal_arm(&mr);
+  assert(mr.goal_counter_15781c == 1);      /* 0xFF + 2 wraps to 0x01 */
+}
+
 static void test_side_swap_value(void) {
   assert(fifa96_match_side_swap_value(0, 0) == 0);
   assert(fifa96_match_side_swap_value(1, 0) == 1);
@@ -7353,6 +7403,10 @@ int main(void) {
   test_stats_counter_score_event();
   test_stats_drain_events();
   test_stats_third_selection_cleared();
+  test_goal_arm_counter_zero_guard();
+  test_goal_arm_counter_sequence();
+  test_goal_arm_counter_exact_thirty();
+  test_goal_arm_counter_byte_wrap();
   test_side_swap_value();
   puts("test_engine_match_handlers OK");
   return 0;

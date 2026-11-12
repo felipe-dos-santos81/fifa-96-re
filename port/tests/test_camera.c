@@ -1538,6 +1538,21 @@ static void test_reposition_invalid(void) {
                                   NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* Slice-B Task 3 (M2 m 42 ruling): the native same-zone guard. Both triples
+ * classify to the same zone (inside the mouth band [0xB10,0xB90): flags 0 ==
+ * 0), so the native `0x71101 CMP AX,word[ESP+0x34]; 0x71106 JZ 0x71302`
+ * skips the step-back entirely and the camera stays at the current point. */
+static void test_reposition_same_zone_no_step(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, 0, 0xB28);
+  uint8_t events = 0;
+  uint8_t code = 0;
+  assert(fifa96_camera_reposition(&cam, 0, 0, 0xB20, NULL, NULL, &events, &code,
+                                  NULL) == 1);
+  assert(cam.pos_x == 0 && cam.pos_y == 0 && cam.pos_z == 0xB28);  /* no step */
+  assert(events == 0 && code == 0);
+}
+
 /* ---- FU-152 §2.9 (T2) + FU303/FU294-L2 (phase-28 T8): FUN_00071DF4's
  * table/keeper arm — the 0x10E169 compass + 0x11042B/0x11042C rate pair ---- */
 
@@ -3396,6 +3411,7 @@ int main(void) {
   test_tracked_record();
   test_reposition_flag_overlap_noop();
   test_reposition_steps_back();
+  test_reposition_same_zone_no_step();
   test_reposition_invalid();
   test_rate_table_arm();
   test_event_dir_byte();

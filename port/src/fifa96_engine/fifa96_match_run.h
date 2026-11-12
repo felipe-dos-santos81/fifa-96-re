@@ -1339,6 +1339,12 @@ struct fifa96_match_run {
    *    and the queue route falls back to the native table-2 situation-6 arm
    *    (the native byte-0 direct goal path). */
   uint8_t goal_armed;
+  /* FU-145 S2 / Slice-B Task 3: the armer head's [0x15781C] counter
+   * (FUN_0007131C 0x71325..0x71349). Aged by the frame-delta low byte only
+   * when nonzero; reset to 0 only when the sum is strictly > 0x1E. No producer
+   * reseeds it yet (the 0x71231 boundary reseed is Task 4), so it stays 0 and
+   * the aging is skipped until then. */
+  uint8_t goal_counter_15781c;
   uint8_t goal_zone;
   int32_t goal_snap_x;
   int32_t goal_snap_y;

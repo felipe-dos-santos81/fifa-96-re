@@ -2896,6 +2896,7 @@ static int fifa96_match_run_teardown(void *ctx) {
   /* FU-145 S2: the restart-body clear (`0x84F90`) drops the goal-arm state
    * with the match; the session gate returns to 0 with the session. */
   mr->goal_armed = 0;
+  mr->goal_counter_15781c = 0;
   mr->goal_zone = 0;
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
@@ -5233,6 +5234,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   /* FU-145 S2: fresh goal-arm/queue state (the session gate seeds 0 here and
    * 1 in begin: a live match). */
   mr->goal_armed = 0;
+  mr->goal_counter_15781c = 0;
   mr->goal_zone = 0;
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
@@ -5551,6 +5553,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * byte-0 direct arm (`0x8A957 JZ 0x8AA7B`), the value the FU-146/FU-155
    * polarity pair carries for the engine's live match type. */
   mr->goal_armed = 0;
+  mr->goal_counter_15781c = 0;
   mr->goal_zone = 0;
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
@@ -6783,6 +6786,32 @@ static int match_run_goal_boundary(struct fifa96_match_run *mr) {
 
 int fifa96_match_goal_arm(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
+  /* FU-145 S2 / Slice-B Task 3 (FUN_0007131C 0x71325..0x7134F): the counter
+   * head. Read [0x15781C]; a zero counter skips aging (0x7132B TEST/JZ
+   * 0x7134F); a nonzero counter adds the frame-delta low byte (0x7132F
+   * MOV AL,[0x157A64]; 0x71334..0x7133C stores the byte sum back) and resets
+   * to 0 only when the zero-extended sum is strictly > 0x1E (0x71342 CMP /
+   * 0x71345 JLE; 0x71347..0x71349). Then the FUN_00070DE0 reposition call at
+   * 0x7134F runs unconditionally (its own overlap/boundary gates are inside),
+   * and the stat events it fills (none yet — the stat arms are Task 4) are
+   * drained in native order. */
+  if (mr->goal_counter_15781c != 0u) {
+    uint8_t counter =
+        (uint8_t)(mr->goal_counter_15781c + (uint8_t)mr->state.frame_delta);
+    mr->goal_counter_15781c = counter;
+    if (counter > 0x1Eu) mr->goal_counter_15781c = 0u;
+  }
+  {
+    uint8_t events = 0;
+    uint8_t event_code = 0;
+    fifa96_camera_stat_events stats;
+    memset(&stats, 0, sizeof stats);
+    (void)fifa96_camera_reposition(&mr->render.camera, mr->render.camera.prev_x,
+                                   mr->render.camera.prev_y,
+                                   mr->render.camera.prev_z, NULL, NULL,
+                                   &events, &event_code, &stats);
+    (void)fifa96_match_run_stats_drain(mr, &stats, mr->record.entity_id);
+  }
   if (mr->goal_armed) return match_run_goal_boundary(mr);
   /* 0x71390..0x713A0: phase 2/0x10; any other phase still reaches the
    * 0x718A9 boundary gate (the native `JNZ 0x718A9`). */
