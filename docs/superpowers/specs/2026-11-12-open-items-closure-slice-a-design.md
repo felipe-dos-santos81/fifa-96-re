@@ -251,7 +251,9 @@ the analyzed image; an indirect writer remains unproved.
 ### 6.7 B/C handoff
 
 - **B:** 19 `0x8ED40` sites; B2-L1; RR-L3/L4/L5/L7; RR-L10's `0x974DC`
-  half; the arm's `0x5865C` view reset (C4R-L1).
+  half; the arm's `0x5865C` view reset (C4R-L1); **RR-L2 only if** the
+  re-read proves the `0x14E574` latch gates the live match recorder (if it
+  is presentation-only, it closes in A).
 - **C:** `FUN_0003BB1C`, its screen table (`0x110C70`) and the `0x8FF30`
   third-selection consumer.
 
