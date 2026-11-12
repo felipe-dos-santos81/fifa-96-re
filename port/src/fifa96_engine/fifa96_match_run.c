@@ -1440,6 +1440,19 @@ static uint8_t match_run_row_terminal_flag(uint8_t anim_id) {
   return (uint8_t)(row.flags & 0x01u);
 }
 
+/* The FU-85 resolver's `row +8` sprite bank for an animation row id (the
+ * replay stage re-derives `bank_index` from the applied appearance — the
+ * record carries no bank field). */
+int fifa96_match_run_anim_bank(int32_t anim_id, uint8_t *bank_index) {
+  fifa96_anim_row row;
+  if (!bank_index) return 0;
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  anim_id, &row) != FIFA96_OK)
+    return 0;
+  *bank_index = row.sprite_bank;
+  return 1;
+}
+
 /* FU319 §5 writer 3 (phase-33): the kickoff placement's narrow +0x43 install —
  * the native tail `FUN_0006E598(rec, active ? 0 : 0x26, 0)` (`0x79BF1..0x79C13`)
  * writes `byte[rec+0x43] = row_flags & 2` (0x6E6BF..0x6E6C4). The pool-side
@@ -5324,6 +5337,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
+  /* RR-L1: the recorded-frame ring is reset at init with the recorder gate
+   * off (the match begin is the only path that enables it). */
+  fifa96_match_replay_ring_reset(mr);
 }
 
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
@@ -5832,6 +5848,11 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
     match_run_live_control_seed(mr);
   }
   match_run_camera_trace_open(mr);   /* FU313 §4.1: immediately before return 0 */
+  /* RR-L1: the match begin resets the recorded-frame ring and turns the
+   * recorder on (the live frame body then composes + captures once per granted
+   * frame inside the render-enabled branch). */
+  fifa96_match_replay_ring_reset(mr);
+  fifa96_match_replay_ring_record(mr, 1);
   return 0;
 }
 
@@ -8209,17 +8230,25 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
       (void)fifa96_camera_pose_feed(&mr->render.camera, &mr->render.yaw,
                                     &mr->render.pitch, &mr->render.view_ratio,
                                     &mr->render.camera_pose);
-      /* The view driver is live-run only; a non-live frozen run keeps the
-       * pose feed above and nothing else. */
-      if (mr->live_start) match_run_live_camera_follow(mr);
+      /* The live view driver (source-4 replay camera) runs only for a live
+       * run on a non-POSE replay camera; the POSE camera draws the recorded
+       * matrix instead. A non-live frozen run keeps the pose feed above and
+       * nothing else. */
+      if (mr->live_start &&
+          mr->render.replay.camera_kind != FIFA96_CAMERA_REPLAY_POSE)
+        match_run_live_camera_follow(mr);
+      /* The POSE feed lands after the pose feed/driver so the recorded matrix
+       * wins over the live pose feed (spec §7.5). */
+      fifa96_match_replay_pose(mr);
       (void)fifa96_match_display_update(&mr->render.display,
                                         mr->state.frame_delta, 0);
-      /* Review F2: positions-only staging. The animator half of the live
-       * staging writes the sim-visible +0x28/+0x3D record fields the entity
-       * machine reads, which would let the first post-replay frame resolve a
-       * different row/aux word; the frozen frame keeps only the render-slot
-       * positions (and the ball roll). */
-      if (mr->render.enabled) match_run_scene_stage_positions(mr);
+      /* Review F2: stage the recorded view (the frozen past), not the live
+       * pool. The animator half of the live staging writes the sim-visible
+       * +0x28/+0x3D record fields the entity machine reads, which would let
+       * the first post-replay frame resolve a different row/aux word; the
+       * replay stage writes render cells only (and the ball roll via the
+       * applied roll byte). */
+      if (mr->render.enabled) fifa96_match_replay_stage(mr);
       /* `follow=0` records that the FU-71 armer/follow did not run on the
        * frozen path (the live `match_run_frame_camera` is skipped). */
       match_run_frame_camera_trace(mr, 0);
@@ -8462,7 +8491,16 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * update chain (0x49523, after the 0x49514 CALL 0x4B100), so the staged
      * positions/animations reflect this frame. Rendering stays opt-in: the
      * Task 12-14 fixtures keep an unstaged scene. */
-    if (mr->render.enabled) match_run_scene_stage(mr);
+    if (mr->render.enabled) {
+      match_run_scene_stage(mr);
+      /* RR capture: compose the staged render slots into the view block and
+       * record one live frame, so the ring holds exactly the frame the
+       * renderer draws. The composer must run after the scene staging; a
+       * headless run (`render.enabled == 0`) stages no slots and captures
+       * nothing. */
+      fifa96_match_replay_compose(mr);
+      fifa96_match_replay_capture(mr, 1);
+    }
     match_run_frame_camera_trace(mr, follow_ran);
   }
   /* FU-232 §4.1/§4.3 (M2 phase-22 T3): the native frame-loop `mark_over` tail.
@@ -8918,6 +8956,9 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   mr->render.team_remap_ready = 0;
   mr->render.hud_colors_ready = 0;
   mr->render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  /* RR-L1: the match end resets the recorded-frame ring (clears the recorder
+   * gate, the cursors and the count). */
+  fifa96_match_replay_ring_reset(mr);
   if (eng) {
     if (eng->match == mr) eng->match = NULL;
     if (eng->mode == FIFA96_ENGINE_MODE_MATCH) eng->mode = FIFA96_ENGINE_MODE_FRONTEND;

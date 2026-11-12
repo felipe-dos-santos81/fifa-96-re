@@ -399,3 +399,37 @@ void fifa96_match_replay_pose(struct fifa96_match_run *mr) {
   render->pitch = (int32_t)replay_get_dword(view, FIFA96_REPLAY_MATRIX + 0x10);
   render->view_ratio = (int32_t)replay_get_dword(view, FIFA96_REPLAY_MATRIX + 0x14);
 }
+
+void fifa96_match_replay_stage(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_render *r;
+  const uint8_t *view;
+  size_t i;
+
+  if (!mr) return;
+  r = &mr->render;
+  view = r->replay.replay_view;
+
+  /* All 23 slots: 22 team records plus the composed ball at slot 22. The
+   * composer already filled slot 22 from the staged ball, so this loop covers
+   * the whole view block uniformly. */
+  for (i = 0; i < FIFA96_MATCH_REPLAY_VIEW_SLOTS; i++) {
+    struct fifa96_match_run_entity *e = &r->entities[i];
+    size_t base = FIFA96_REPLAY_SLOTS + FIFA96_REPLAY_SLOT_STRIDE * i;
+    uint16_t packed = replay_get_word(view, FIFA96_REPLAY_HEADINGS + 4 * i);
+
+    e->stage.pos.x = (int32_t)replay_get_dword(view, base + 0x0);
+    e->stage.pos.y = (int32_t)replay_get_dword(view, base + 0x4);
+    e->stage.pos.z = (int32_t)replay_get_dword(view, base + 0x8);
+    /* The composer folded the raw heading once (`((0x400 - face7d) & 0x3FF)
+     * << 6`); unfold it back into the high word so `fifa96_render_slot_stage`
+     * folds it exactly once at draw time. */
+    e->stage.heading =
+        (int32_t)(((0x400u - ((uint32_t)packed >> 6)) & 0x3FFu) << 16);
+    e->stage.anim_id = view[FIFA96_REPLAY_APPEARANCE + i];
+    e->stage.frame = view[FIFA96_REPLAY_FRAMES + i];
+    e->stage.hidden =
+        (e->stage.pos.y == FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y) ? 1 : 0;
+    (void)fifa96_match_run_anim_bank((int32_t)e->stage.anim_id, &e->bank_index);
+  }
+  r->entity_count = FIFA96_MATCH_REPLAY_VIEW_SLOTS;
+}

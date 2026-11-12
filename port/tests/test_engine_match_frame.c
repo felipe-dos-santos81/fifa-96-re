@@ -1374,6 +1374,10 @@ static void test_replay_frozen_live_view_applies_target(void) {
   assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_IDLE);
   assert(mr.render.camera_target.source == 4);
   assert(mr.render.camera_target.index == 0);   /* team 0 record 0 */
+  /* The arm frame re-selected camera 0 (POSE); pick the class-1 view camera
+   * so the source-4 live view driver runs on the next frozen frame. */
+  assert(fifa96_match_run_replay_camera_set(&mr, 1) == 1);
+  one_granted_frame(&mr);                 /* the VIEW camera drives the eye */
   assert(mr.render.native_view_class == 1);
   assert(mr.render.render_eye_valid == 1u);
   assert(mr.render.native_view_cam[1].track_x == 0x140);
@@ -1385,6 +1389,25 @@ static void test_replay_frozen_live_view_applies_target(void) {
   /* The view driver consumed the replay camera, but the match stayed frozen. */
   assert(mr.state.tick_total == 0);
   assert(mr.entities.team[0].records[0].pos_x == 0x140);
+  /* The POSE camera (0): the recorded matrix wins and the live driver stays
+   * out (the eye is the seeded view matrix, not the class-1 eye above). */
+  {
+    uint8_t *view = mr.render.replay.replay_view;
+    for (int k = 0; k < 6; k++) {
+      uint32_t v = (uint32_t)(0x100 * (k + 1));
+      memcpy(view + 0x1AE + 4 * k, &v, sizeof v);
+    }
+    assert(fifa96_match_run_replay_camera_set(&mr, 0) == 1);
+    one_granted_frame(&mr);
+    assert(mr.render.replay.camera_kind == FIFA96_CAMERA_REPLAY_POSE);
+    assert(mr.render.render_eye_valid == 1u);
+    assert(mr.render.render_eye_x == 0x100);
+    assert(mr.render.render_eye_y == 0x200);
+    assert(mr.render.render_eye_z == 0x300);
+    assert(mr.render.yaw == 0x400);
+    assert(mr.render.pitch == 0x500);
+    assert(mr.render.view_ratio == 0x600);
+  }
   fifa96_match_run_replay_exit(&mr);
   fifa96_match_run_init(&mr);
 }
@@ -1411,17 +1434,136 @@ static void test_replay_frozen_scene_stage_keeps_record_anim(void) {
   mr.entities.team[0].records[0].anim_id = 4;   /* row 4: last 5, flags 0 */
   mr.entities.team[0].records[0].frame = 0;
   mr.entities.team[0].records[0].pos_x = 0x40;
+  /* Stage the replay view directly (count == 0, so the 0x81 arm leaves it):
+   * the frozen frame now stages the recorded past, not the live pool. */
+  {
+    uint8_t *view = mr.render.replay.replay_view;
+    uint32_t x = 0x70, y = 0x80, z = 0x90;
+    memcpy(view + 0x0C + 0, &x, sizeof x);
+    memcpy(view + 0x0C + 4, &y, sizeof y);
+    memcpy(view + 0x0C + 8, &z, sizeof z);
+    view[0x17C] = 7;                     /* slot 0 appearance */
+    view[0x193] = 2;                     /* slot 0 frame */
+  }
   assert(fifa96_match_run_replay_begin(&mr) == 0);
   one_granted_frame(&mr);
   assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_IDLE);
-  /* The position staging ran (the render tail is kept) ... */
-  assert(mr.render.entities[0].stage.pos.x == 0x40);
-  assert(mr.render.entities[0].stage.anim_id == 4);
+  /* The replay stage reads the view (the recorded past), not the live pool. */
+  assert(mr.render.entities[0].stage.pos.x == 0x70);
+  assert(mr.render.entities[0].stage.pos.z == 0x90);
+  assert(mr.render.entities[0].stage.anim_id == 7);
+  assert(mr.render.entities[0].stage.frame == 2);
   /* ... but the frozen frame did not advance the record animator. */
   assert(mr.entities.team[0].records[0].frame == 0);
   assert(mr.entities.team[0].records[0].anim_id == 4);
-  assert(mr.render.entities[0].stage.frame == 0);
   fifa96_match_run_replay_exit(&mr);
+  fifa96_match_run_init(&mr);
+}
+
+/* Byte-block accessors for the replay ring (the record/view are little-endian
+ * native images; never cast through an unaligned pointer). */
+static uint16_t frame_get_word(const uint8_t *block, size_t off) {
+  uint16_t value;
+  memcpy(&value, block + off, sizeof value);
+  return value;
+}
+
+static uint32_t frame_get_dword(const uint8_t *block, size_t off) {
+  uint32_t value;
+  memcpy(&value, block + off, sizeof value);
+  return value;
+}
+
+/* Task 5: the live granted-frame body composes and captures once per granted
+ * frame inside the render-enabled branch. Four granted frames (phase 0, the
+ * recorder gate on) pack at the even frames 2 and 4, so the ring holds two
+ * records each stamped 2, and the composed view's slot-0 position is the live
+ * entity's position at the moment of capture. */
+static void test_replay_capture_in_frame(void) {
+  struct fifa96_match_run mr;
+  int32_t pos2, pos4;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.state.phase = 0;
+  mr.state.period_length = 90;
+  mr.render.enabled = 1;
+  fifa96_match_replay_ring_record(&mr, 1);   /* init leaves the gate off */
+  assert(mr.replay_ring.enabled == 1);
+
+  one_granted_frame(&mr);   /* frame 1: accumulator 1, no pack */
+  one_granted_frame(&mr);   /* frame 2: pack record 0 */
+  pos2 = mr.entities.team[0].records[0].pos_x;
+  one_granted_frame(&mr);   /* frame 3: accumulator 1, no pack */
+  one_granted_frame(&mr);   /* frame 4: pack record 1 */
+  pos4 = mr.entities.team[0].records[0].pos_x;
+
+  assert(fifa96_match_replay_count(&mr) == 2);
+  assert(frame_get_word(mr.replay_ring.record[0], 0x116) == 2);
+  assert(frame_get_word(mr.replay_ring.record[1], 0x116) == 2);
+  /* The record stores the low word of the staged (live) slot x; the composed
+   * view (the frame-4 capture) holds the frame-4 live slot position. */
+  assert(frame_get_word(mr.replay_ring.record[0], 0x0C) ==
+         (uint16_t)(uint32_t)pos2);
+  assert(frame_get_word(mr.replay_ring.record[1], 0x0C) ==
+         (uint16_t)(uint32_t)pos4);
+  assert((int32_t)frame_get_dword(mr.render.replay.replay_view, 0x0C) == pos4);
+  fifa96_match_run_init(&mr);
+}
+
+/* Task 5: the replay draws the recorded past. Two captured frames at position
+ * A, then two at position B, arm the replay and run one frozen frame: the
+ * stage must draw record 0 (A), not the live pool (still B), and the next live
+ * frame must resume the clock. */
+static void test_replay_draws_recorded_past(void) {
+  struct fifa96_match_run mr;
+  int32_t a_x, a_z, b_x, b_z;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.state.phase = 0;
+  mr.state.period_length = 90;
+  mr.render.enabled = 1;
+  fifa96_match_replay_ring_record(&mr, 1);
+
+  /* Position A: the second granted frame packs it. */
+  mr.entities.team[0].records[0].pos_x = 0x100;
+  mr.entities.team[0].records[0].pos_z = 0x200;
+  one_granted_frame(&mr);
+  one_granted_frame(&mr);
+  a_x = mr.entities.team[0].records[0].pos_x;
+  a_z = mr.entities.team[0].records[0].pos_z;
+  /* Position B: the second granted frame packs it. */
+  mr.entities.team[0].records[0].pos_x = 0x300;
+  mr.entities.team[0].records[0].pos_z = 0x400;
+  one_granted_frame(&mr);
+  one_granted_frame(&mr);
+  b_x = mr.entities.team[0].records[0].pos_x;
+  b_z = mr.entities.team[0].records[0].pos_z;
+
+  assert(fifa96_match_replay_count(&mr) == 2);
+
+  /* Arm (the 0x81 arm applies record 0) and run one frozen frame. */
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  one_granted_frame(&mr);
+  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_IDLE);
+  /* The two captures are distinct positions (A != B). */
+  assert(a_x != b_x);
+  /* The staged slot draws record 0 (A), not the live position (B). */
+  assert(mr.render.entities[0].stage.pos.x == a_x);
+  assert(mr.render.entities[0].stage.pos.z == a_z);
+  assert(mr.render.entities[0].stage.pos.x != b_x);
+  /* The live pool was not overwritten. */
+  assert(mr.entities.team[0].records[0].pos_x == b_x);
+  assert(mr.entities.team[0].records[0].pos_z == b_z);
+
+  /* Exit; the next live frame resumes the clock. */
+  uint16_t ticks = mr.state.tick_total;
+  fifa96_match_run_replay_exit(&mr);
+  one_granted_frame(&mr);
+  assert(mr.state.tick_total != ticks);
   fifa96_match_run_init(&mr);
 }
 
@@ -11135,6 +11277,8 @@ int main(void) {
   test_replay_freezes_live_frame();
   test_replay_frozen_live_view_applies_target();
   test_replay_frozen_scene_stage_keeps_record_anim();
+  test_replay_capture_in_frame();
+  test_replay_draws_recorded_past();
   test_goal_zone_classifier();
   test_goal_arm_gates_and_snapshot();
   test_goal_arm_reflect_clear();

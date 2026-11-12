@@ -2262,6 +2262,13 @@ int fifa96_match_run_record_anim_successor_turn(struct fifa96_match_entity *e,
                                                 int8_t turn);
 int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e);
 
+/* The FU-85 resolver's sprite-bank derive (`row +8`) for a given animation
+ * row id, over the ported `match_run_anim_rows` table via
+ * `fifa96_animation_row_lookup` — the same lookup `match_run_animate_entity`
+ * uses to set `bank_index`. Returns 1 and stores `row.sprite_bank` on a hit,
+ * 0 (leaving `*bank_index` untouched) on a miss or a NULL `bank_index`. */
+int fifa96_match_run_anim_bank(int32_t anim_id, uint8_t *bank_index);
+
 /* M2 phase-9 T3 (FU-152 §2.9 / FU-145 §1.2): the every-frame FUN_00071DF4
  * call site (FUN_000736AC 0x739C6..0x73B6B). Runs the ported first arm when
  * the call-site gates hold — `pan_counter == 0`, the bearing word

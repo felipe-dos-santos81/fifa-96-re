@@ -2937,6 +2937,84 @@ static void test_replay_camera_set(void) {
   assert(fifa96_match_run_replay_camera_set(NULL, 0) == -FIFA96_ERR_INVALID);
 }
 
+/* Task 5: the frozen replay stage draws the applied view (the recorded past)
+ * into the render slots, re-derives each slot's sprite bank from the applied
+ * appearance, unfolds the packed heading exactly once, and — on the POSE
+ * camera — feeds the render eye/yaw/pitch/ratio from the recorded matrix. The
+ * live pool is untouched. */
+static void test_replay_view_render(void) {
+  struct fifa96_match_run mr;
+  uint8_t *rec;
+  size_t i;
+  fifa96_match_run_init(&mr);
+  mr.live_start = 1;
+  mr.render.replay.camera_kind = FIFA96_CAMERA_REPLAY_POSE;
+
+  /* Seed ring record 0 with distinct slot values, packed headings,
+   * appearance/frame bytes, the roll byte and a distinct camera matrix. */
+  mr.replay_ring.read = 0;
+  mr.replay_ring.write = 1;
+  mr.replay_ring.count = 1;
+  rec = mr.replay_ring.record[0];
+  for (i = 0; i < FIFA96_MATCH_REPLAY_VIEW_SLOTS; i++) {
+    int16_t x = (int16_t)(0x100 + (int)i);
+    int16_t z = (int16_t)(0x200 + (int)i);
+    int16_t y = (int16_t)(0x300 + (int)i);
+    uint16_t heading = (uint16_t)(0x40u * (i + 1u));
+    memcpy(rec + 0x0C + 2 * i, &x, sizeof x);
+    memcpy(rec + 0x3A + 2 * i, &z, sizeof z);
+    memcpy(rec + 0x68 + 2 * i, &y, sizeof y);
+    memcpy(rec + 0x96 + 2 * i, &heading, sizeof heading);
+    rec[0xC4 + i] = (uint8_t)(1 + i);   /* appearance rows 1..23 */
+    rec[0xDB + i] = (uint8_t)(i % 5);   /* frame */
+  }
+  rec[0xF2] = 0x25;                     /* the roll byte */
+  for (i = 0; i < 6; i++) {
+    uint32_t m = (uint32_t)(0x1000u + i * 0x111u);
+    memcpy(rec + 0xF6 + 4 * i, &m, sizeof m);
+  }
+
+  /* Apply record 0 and the POSE feed, then stage the view. */
+  assert(fifa96_match_replay_apply(&mr, 0) == 1);
+  assert(mr.render.ball_roll == 0x25);   /* the applied roll byte */
+  fifa96_match_replay_pose(&mr);
+  fifa96_match_replay_stage(&mr);
+
+  /* The pose feed set the render eye/yaw/pitch/ratio from the matrix. */
+  assert(mr.render.render_eye_valid == 1u);
+  assert(mr.render.render_eye_x == 0x1000);
+  assert(mr.render.render_eye_y == 0x1111);
+  assert(mr.render.render_eye_z == 0x1222);
+  assert(mr.render.yaw == 0x1333);
+  assert(mr.render.pitch == 0x1444);
+  assert(mr.render.view_ratio == 0x1555);
+  assert(mr.render.entity_count == FIFA96_MATCH_REPLAY_VIEW_SLOTS);
+
+  /* Slot 0 stages the applied values: pos, appearance -> anim_id, frame and
+   * the re-derived bank (row 1 -> sprite bank 1). */
+  assert(mr.render.entities[0].stage.pos.x == 0x100);
+  assert(mr.render.entities[0].stage.pos.y == 0x300);
+  assert(mr.render.entities[0].stage.pos.z == 0x200);
+  assert(mr.render.entities[0].stage.anim_id == 1);
+  assert(mr.render.entities[0].stage.frame == 0);
+  assert(mr.render.entities[0].bank_index == 1);
+  /* The heading is unfolded then re-folded exactly once: the render fold of
+   * slot 0's staged heading reproduces the record's packed word 0x40. */
+  {
+    fifa96_render_slot folded;
+    assert(fifa96_render_slot_stage(&mr.render.entities[0].stage, &folded) ==
+           FIFA96_OK);
+    assert(folded.angle == 0x40);
+  }
+  /* The ball slot (22) stages the applied appearance row 23. */
+  assert(mr.render.entities[22].stage.anim_id == 23);
+  assert(mr.render.entities[22].stage.frame == (uint8_t)(22 % 5));
+
+  /* The live pool was untouched. */
+  assert(mr.entities.team[0].records[0].pos_x == 0);
+  fifa96_match_run_init(&mr);
+}
+
 static void test_sub_marks_and_numbers(void) {
   struct fifa96_match_run_sub sub;
   memset(&sub, 0, sizeof sub);
@@ -3358,6 +3436,7 @@ int main(void) {
   test_replay_arm_held_key();
   test_replay_switch_tackle_resync();
   test_replay_camera_set();
+  test_replay_view_render();
   test_sub_marks_and_numbers();
   test_overlay_rows_and_timeout();
   test_sub_strip_draw();

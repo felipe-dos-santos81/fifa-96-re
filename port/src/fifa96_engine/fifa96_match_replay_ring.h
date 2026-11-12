@@ -122,3 +122,12 @@ uint16_t fifa96_match_replay_stamp(const struct fifa96_match_run *mr);
  * kind, set the render eye/valid/yaw/pitch/ratio from the applied view
  * matrix `+0x1AE..+0x1C5`. */
 void fifa96_match_replay_pose(struct fifa96_match_run *mr);
+
+/* The frozen-frame render stage (spec §7.5): write `render.entities[0..22]
+ * .stage` from the applied view block — pos, the unfolded heading
+ * `(0x400 - (packed >> 6)) & 0x3FF` shifted into the high word, appearance →
+ * `anim_id`, frame, `hidden = (y == FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y)` — and
+ * re-derive each slot's `bank_index` from the applied appearance via
+ * `fifa96_match_run_anim_bank`. Sets `render.entity_count = 23`. Writes render
+ * cells only (the live pool is untouched). */
+void fifa96_match_replay_stage(struct fifa96_match_run *mr);
