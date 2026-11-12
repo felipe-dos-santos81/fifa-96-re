@@ -1434,25 +1434,33 @@ static void test_replay_frozen_scene_stage_keeps_record_anim(void) {
   mr.entities.team[0].records[0].anim_id = 4;   /* row 4: last 5, flags 0 */
   mr.entities.team[0].records[0].frame = 0;
   mr.entities.team[0].records[0].pos_x = 0x40;
-  /* Stage the replay view directly (count == 0, so the 0x81 arm leaves it):
-   * the frozen frame now stages the recorded past, not the live pool. */
+  /* Seed one physical ring record: pack a view whose slot 0 carries the
+   * recorded position/appearance/frame, then let the frozen frame's 0x81 arm
+   * apply record 0 (the recorded past), not the live pool. */
   {
     uint8_t *view = mr.render.replay.replay_view;
-    uint32_t x = 0x70, y = 0x80, z = 0x90;
+    uint32_t x = 0x40, y = 0x80, z = 0x90;
+    memset(view, 0, sizeof mr.render.replay.replay_view);
     memcpy(view + 0x0C + 0, &x, sizeof x);
     memcpy(view + 0x0C + 4, &y, sizeof y);
     memcpy(view + 0x0C + 8, &z, sizeof z);
-    view[0x17C] = 7;                     /* slot 0 appearance */
-    view[0x193] = 2;                     /* slot 0 frame */
+    view[0x17C] = 4;                     /* slot 0 appearance -> anim_id 4 */
+    view[0x193] = 0;                     /* slot 0 frame 0 */
+    fifa96_match_replay_pack(view, mr.replay_ring.record[0], 0);
+    mr.replay_ring.read = 0;
+    mr.replay_ring.write = 1;
+    mr.replay_ring.count = 1;
   }
   assert(fifa96_match_run_replay_begin(&mr) == 0);
   one_granted_frame(&mr);
   assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_IDLE);
-  /* The replay stage reads the view (the recorded past), not the live pool. */
-  assert(mr.render.entities[0].stage.pos.x == 0x70);
+  /* The replay stage reads the applied record (the recorded past), not the
+   * live pool: the applied y/z distinguish it from the live record's 0/0. */
+  assert(mr.render.entities[0].stage.pos.x == 0x40);
+  assert(mr.render.entities[0].stage.pos.y == 0x80);
   assert(mr.render.entities[0].stage.pos.z == 0x90);
-  assert(mr.render.entities[0].stage.anim_id == 7);
-  assert(mr.render.entities[0].stage.frame == 2);
+  assert(mr.render.entities[0].stage.anim_id == 4);
+  assert(mr.render.entities[0].stage.frame == 0);
   /* ... but the frozen frame did not advance the record animator. */
   assert(mr.entities.team[0].records[0].frame == 0);
   assert(mr.entities.team[0].records[0].anim_id == 4);

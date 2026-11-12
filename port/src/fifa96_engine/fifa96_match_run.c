@@ -9741,8 +9741,9 @@ int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
       mr->lc.screen != FIFA96_MATCH_SCREEN_ACTIVE)
     return -FIFA96_ERR_STATE;
   /* FUN_00064270 stores 0x81 when the replay buffer [0x109AB0] is allocated
-   * (FUN_00063EBC). The engine's recorded-frame buffer is a later leg, so the
-   * live ACTIVE run is the modeled gate; no 0x80 store exists in the native. */
+   * (FUN_00063EBC). The engine's embedded recorded-frame ring is reset at init
+   * and armed at match begin, so the live ACTIVE run is the modeled gate; no
+   * 0x80 store exists in the native. */
   r = &mr->render.replay;
   r->state = FIFA96_MATCH_REPLAY_ARMED;
   r->hud_armed = 1;

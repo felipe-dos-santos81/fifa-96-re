@@ -139,7 +139,10 @@ The port enum now reads `ARMED = 0x81`, `IDLE = 0x82`, `PLAYING = 0x83`,
 `STEP_FWD = 0x84`, `STEP_BACK = 0x85` (the former `PLAY = 0x82`/`PAUSE = 0x83`
 and `STEP_BACK = 0x84`/`STEP_FWD = 0x85` were inverted); the §4 dispatch table
 above is unaffected (it already lists `0x84`→`63CBC`×2 and `0x85`→`63E54`×2).
-§7 leg 2 (`FUN_00063CBC`/`FUN_00063D34`/`FUN_00063E54`/`FUN_0006428C`) is now
-closed by the ring slice; the `FUN_000974D8`/`FUN_000974DC` re-sync hooks stay
-RR-L10 and the request cells/timed exit stay RR-L7. No completion-number
-movement and no golden re-pin.
+§7 leg 2's step calls (`FUN_00063CBC`/`FUN_00063D34`/`FUN_00063E54`) are now
+closed by the ring slice — the forward/back step bodies and the countdown loop
+landed — and the `FUN_0006428C` call site is wired as the per-step re-sync no-op
+(`replay_resync`); the `FUN_0006428C` body itself remains under RR-L10. The
+`FUN_000974D8`/`FUN_000974DC` re-sync hooks stay RR-L10 and the request
+cells/timed exit stay RR-L7. No completion-number movement and no golden
+re-pin.

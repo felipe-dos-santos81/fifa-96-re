@@ -502,8 +502,10 @@ Add to `port/tests/test_engine_match_frame.c` and
   the producer and stages 0.
 - **RR-L10 — the re-sync hooks.** `FUN_000974D8`/`FUN_000974DC` are called
   on every replay transition (the `0x81` arm, play/pause, the step modes and
-  the countdown); the port's transitions are state-only and the hooks remain
-  unported (FU-108 §6 leg 2 / FU-107 leg 4).
+  the countdown) and `FUN_0006428C` is the per-countdown-step re-sync; the
+  port's transitions and the `FUN_0006428C` call site are state-only (the
+  latter a no-op `replay_resync`) and the hook bodies remain unported
+  (FU-108 §6 leg 2 / FU-107 leg 4).
 
 ### 7.9 Documentary errata the slice appends
 

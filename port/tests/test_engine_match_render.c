@@ -2968,6 +2968,13 @@ static void test_replay_view_render(void) {
     rec[0xC4 + i] = (uint8_t)(1 + i);   /* appearance rows 1..23 */
     rec[0xDB + i] = (uint8_t)(i % 5);   /* frame */
   }
+  /* Hidden slot (design §7.6): slot 1's y word is the native sentinel; slot 0
+   * stays a visible control slot so the stage's sentinel branch is exercised
+   * against a visible neighbour. */
+  {
+    int16_t hidden_y = (int16_t)FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y;
+    memcpy(rec + 0x68 + 2 * 1, &hidden_y, sizeof hidden_y);
+  }
   rec[0xF2] = 0x25;                     /* the roll byte */
   for (i = 0; i < 6; i++) {
     uint32_t m = (uint32_t)(0x1000u + i * 0x111u);
@@ -3009,6 +3016,11 @@ static void test_replay_view_render(void) {
   /* The ball slot (22) stages the applied appearance row 23. */
   assert(mr.render.entities[22].stage.anim_id == 23);
   assert(mr.render.entities[22].stage.frame == (uint8_t)(22 % 5));
+
+  /* Slot 1's y sentinel drives stage.hidden; the visible slot 0 stays 0. */
+  assert(mr.render.entities[1].stage.hidden == 1);
+  assert(mr.render.entities[1].stage.pos.y == FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y);
+  assert(mr.render.entities[0].stage.hidden == 0);
 
   /* The live pool was untouched. */
   assert(mr.entities.team[0].records[0].pos_x == 0);

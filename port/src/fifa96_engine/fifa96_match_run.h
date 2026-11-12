@@ -348,8 +348,9 @@ int fifa96_match_run_replay_blink_step(struct fifa96_match_run_replay *replay,
                                        int32_t tick);
 
 /* FUN_00064270: arm the replay (state 0x81) for a live, unpaused, ACTIVE
- * run. The native buffer gate [0x109AB0] is modeled by the live-run gate
- * (the recorded-frame ring is a later leg). Returns 0, -FIFA96_ERR_INVALID
+ * run. The native buffer gate [0x109AB0] is modeled by the live-run gate; the
+ * embedded recorded-frame ring is reset at init, armed at match begin and
+ * applied by the 0x81 arm on the first step. Returns 0, -FIFA96_ERR_INVALID
  * on NULL, -FIFA96_ERR_STATE when the run is not running/ACTIVE or paused. */
 int fifa96_match_run_replay_begin(struct fifa96_match_run *mr);
 
@@ -359,10 +360,12 @@ int fifa96_match_run_replay_begin(struct fifa96_match_run *mr);
  * button mapping (1 toggles IDLE/PLAYING with the end rewind, 0x20 cycles the
  * camera mod 6, 8/4/2 -> back/forward/slow step modes), the next-call
  * step/slow reset to IDLE and the exit arm (bit 0x80 -> state 0, HUD arm
- * cleared). The ring tick is 1 inside the PLAYING countdown; the Q8 frame
- * delta stays in the scene staging, not the replay step. The replay-ring
- * advance (FUN_00063D34/CBC/6428C), the held pad probe FUN_000451F1 and the
- * pan keys FUN_0004CA08 stay legs. */
+ * cleared). The embedded ring advances here: the ring tick is 1 inside the
+ * PLAYING countdown, which consumes each record's stamp through the forward
+ * step (FUN_00063D34/CBC) and calls the FUN_0006428C re-sync no-op; the Q8
+ * frame delta stays in the scene staging, not the replay step. The held pad
+ * probe FUN_000451F1, the pan keys FUN_0004CA08 and the FUN_0006428C body
+ * stay legs. */
 int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons);
 
 /* The exit chain FUN_00064E8C's reachable state: [0x109A98] = 0 and the HUD
