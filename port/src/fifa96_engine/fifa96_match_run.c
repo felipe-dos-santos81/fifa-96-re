@@ -122,6 +122,32 @@ int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
   return 1;
 }
 
+int fifa96_match_run_stats_drain(struct fifa96_match_run *mr,
+                                 const fifa96_camera_stat_events *events,
+                                 int32_t local_ebp_id) {
+  uint32_t i;
+  int drained = 0;
+  if (!mr || !events) return 0;
+  for (i = 0; i < events->count && i < FIFA96_CAMERA_STAT_MAX; i++) {
+    int32_t entity_id;
+    switch (events->event[i].entity) {
+      case FIFA96_CAMERA_STAT_TRACKED:
+        entity_id = mr->render.camera.tracked;   /* [0x1577CA] */
+        break;
+      case FIFA96_CAMERA_STAT_LOCAL_EBP:
+        entity_id = local_ebp_id;                /* the handler's own record */
+        break;
+      default:
+        /* OPEN kinds (BALL_SUB7A6, REC_15B43C, REC_157A9B, REC_1575DA) and
+         * any out-of-range entity byte are skipped — never entity 0. */
+        continue;
+    }
+    if (fifa96_match_run_stats_add(mr, entity_id, events->event[i].delta))
+      drained++;
+  }
+  return drained;
+}
+
 int fifa96_match_run_stats_bump(struct fifa96_match_run *mr, int32_t entity_id) {
   uint32_t side, block, pitch;
   if (!mr || entity_id < 0 ||

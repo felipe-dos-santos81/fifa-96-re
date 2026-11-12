@@ -2420,13 +2420,15 @@ int32_t fifa96_camera_shift_step(int32_t v, int n) {
 int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
                              int32_t prev_z, const int8_t *type_off_x,
                              const int8_t *type_off_z, uint8_t *events,
-                             uint8_t *event_code) {
+                             uint8_t *event_code,
+                             fifa96_camera_stat_events *stats) {
   uint16_t flags_prev = 0, flags_cur = 0;
   uint16_t overlap;
   int32_t cur[3];
   int32_t prev[3] = {prev_x, prev_y, prev_z};
   (void)type_off_x;
   (void)type_off_z;
+  (void)stats;                  /* the stat arms land in Task 4 (B1) */
   if (!cam || !events || !event_code) return -FIFA96_ERR_INVALID;
   cur[0] = cam->pos_x;
   cur[1] = cam->pos_y;

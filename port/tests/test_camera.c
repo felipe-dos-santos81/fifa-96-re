@@ -1509,7 +1509,8 @@ static void test_reposition_flag_overlap_noop(void) {
   fifa96_camera_init(&cam, 10, 0, 20);
   uint8_t events = 0;
   uint8_t code = 0;
-  assert(fifa96_camera_reposition(&cam, 0, 0, 0, NULL, NULL, &events, &code) == 0);
+  assert(fifa96_camera_reposition(&cam, 0, 0, 0, NULL, NULL, &events, &code,
+                                  NULL) == 0);
   assert(cam.pos_x == 10 && cam.pos_z == 20);
   assert(events == 0 && code == 0);
 }
@@ -1524,7 +1525,8 @@ static void test_reposition_steps_back(void) {
   fifa96_camera_init(&cam, 0, 0, 0xBA0);
   uint8_t events = 0;
   uint8_t code = 0;
-  assert(fifa96_camera_reposition(&cam, 0, 0, 0xB20, NULL, NULL, &events, &code) == 1);
+  assert(fifa96_camera_reposition(&cam, 0, 0, 0xB20, NULL, NULL, &events, &code,
+                                  NULL) == 1);
   assert(cam.pos_z == 0xB8F);          /* 0xB20 + 0x40 + 0x20 + 0x8 + 0x4 + 0x2 + 0x1 */
   assert(cam.pos_z < 0xB90 && cam.pos_z > 0xB20);
 }
@@ -1532,8 +1534,8 @@ static void test_reposition_steps_back(void) {
 static void test_reposition_invalid(void) {
   uint8_t events = 0;
   uint8_t code = 0;
-  assert(fifa96_camera_reposition(NULL, 0, 0, 0, NULL, NULL, &events, &code) ==
-         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_reposition(NULL, 0, 0, 0, NULL, NULL, &events, &code,
+                                  NULL) == -FIFA96_ERR_INVALID);
 }
 
 /* ---- FU-152 §2.9 (T2) + FU303/FU294-L2 (phase-28 T8): FUN_00071DF4's

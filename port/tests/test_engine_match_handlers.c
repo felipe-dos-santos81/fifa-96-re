@@ -7111,6 +7111,42 @@ static void test_stats_counter_score_event(void) {
   drop_fixture(&f);
 }
 
+/* Slice-B Task 2: the typed stat-event contract. The drain resolves TRACKED
+ * (cam->tracked) and LOCAL_EBP (the passed id) in array order and skips every
+ * OPEN kind; the 2x weight turns +3 into 6 and +1 into 2. */
+static void test_stats_drain_events(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t side = 0; side < 2u; side++) {
+    for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++)
+      f.mr.roster_order[side][slot] = (uint8_t)slot;
+    f.mr.roster_order_ok[side] = 1;
+  }
+  fifa96_match_run_stats_seed(&f.mr);
+  f.mr.render.camera.tracked = 0;
+  fifa96_camera_stat_events events;
+  memset(&events, 0, sizeof events);
+  events.event[0].site = 0x70F44;
+  events.event[0].delta = 3;
+  events.event[0].entity = FIFA96_CAMERA_STAT_TRACKED;
+  events.event[1].site = 0x72DE3;
+  events.event[1].delta = 1;
+  events.event[1].entity = FIFA96_CAMERA_STAT_LOCAL_EBP;
+  /* An OPEN kind is skipped: it does not count and does not touch the table. */
+  events.event[2].site = 0x8AD54;
+  events.event[2].delta = -0x96;
+  events.event[2].entity = FIFA96_CAMERA_STAT_REC_157A9B;
+  events.count = 3;
+  assert(fifa96_match_run_stats_drain(&f.mr, &events, 1) == 2);
+  assert(f.mr.stats.value[0][0] == 6);   /* +3 * 2 */
+  assert(f.mr.stats.value[0][1] == 2);   /* +1 * 2 */
+  assert(f.mr.stats.value[0][0] == 6 && f.mr.stats.value[0][1] == 2);
+  /* NULL arguments are a no-op returning 0. */
+  assert(fifa96_match_run_stats_drain(NULL, &events, 1) == 0);
+  assert(fifa96_match_run_stats_drain(&f.mr, NULL, 1) == 0);
+  drop_fixture(&f);
+}
+
 static void test_side_swap_value(void) {
   assert(fifa96_match_side_swap_value(0, 0) == 0);
   assert(fifa96_match_side_swap_value(1, 0) == 1);
@@ -7264,6 +7300,7 @@ int main(void) {
   test_stats_permuted_roster_order();
   test_stats_counter_bump();
   test_stats_counter_score_event();
+  test_stats_drain_events();
   test_stats_third_selection_cleared();
   test_side_swap_value();
   puts("test_engine_match_handlers OK");

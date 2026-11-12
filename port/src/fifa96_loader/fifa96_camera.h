@@ -658,6 +658,36 @@ int16_t fifa96_camera_mul16(int32_t a, int32_t b);
 int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
                            int walk_gate, int32_t *class_of, int32_t *param);
 
+/* Slice-B statistics contract: a stat-bearing camera arm fills a
+ * caller-supplied event array that the engine drains into
+ * `fifa96_match_run_stats_add`. `site` is the native CALL address (uint32_t:
+ * `0x70F44` etc. exceed 0xFFFF); `delta` is the native EDX value; `entity` is
+ * one of `fifa96_camera_stat_entity`. The drain resolves `TRACKED`
+ * (`cam->tracked`) and `LOCAL_EBP` (the handler's own record id); the four
+ * OPEN kinds (`BALL_SUB7A6`, `REC_15B43C`, `REC_157A9B`, `REC_1575DA`) are
+ * skipped — never folded into entity 0 (B0-L1..L4). */
+typedef enum {
+  FIFA96_CAMERA_STAT_TRACKED = 0,
+  FIFA96_CAMERA_STAT_BALL_SUB7A6,
+  FIFA96_CAMERA_STAT_REC_15B43C,
+  FIFA96_CAMERA_STAT_REC_157A9B,
+  FIFA96_CAMERA_STAT_LOCAL_EBP,
+  FIFA96_CAMERA_STAT_REC_1575DA
+} fifa96_camera_stat_entity;
+
+typedef struct {
+  uint32_t site;        /* the native CALL address; must hold 0x70F44 etc. */
+  int16_t delta;
+  uint8_t entity;
+} fifa96_camera_stat_event;
+
+#define FIFA96_CAMERA_STAT_MAX 8
+typedef struct {
+  fifa96_camera_stat_event event[FIFA96_CAMERA_STAT_MAX];
+  uint8_t count;
+  uint8_t overflow;
+} fifa96_camera_stat_events;
+
 /* FU-152 §2.9 (T2): FUN_00070DE0's derived core — the boundary/reposition
  * handler the armer FUN_0007131C calls at 0x7134F. Classifies the previous
  * (0x157758/5C/60) and current triples; on a nonzero flag overlap it is a
@@ -678,7 +708,8 @@ int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
 int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
                              int32_t prev_z, const int8_t *type_off_x,
                              const int8_t *type_off_z, uint8_t *events,
-                             uint8_t *event_code);
+                             uint8_t *event_code,
+                             fifa96_camera_stat_events *stats);
 
 /* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08
  * (`0x70C08..0x70DDD`) — the per-record camera event FUN_0007BF20's tail

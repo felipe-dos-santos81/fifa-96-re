@@ -1880,6 +1880,17 @@ int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
 int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
                                int32_t delta);
 
+/* Slice-B stats drain: fold a camera stat-event array into the activity table
+ * in native order (`fifa96_match_run_stats_add` per event). Resolves
+ * `TRACKED` to `mr->render.camera.tracked` and `LOCAL_EBP` to `local_ebp_id`;
+ * every OPEN kind (`BALL_SUB7A6`, `REC_15B43C`, `REC_157A9B`, `REC_1575DA`) is
+ * skipped and does not count. Returns the number of events drained into the
+ * table (a skipped OPEN kind or a `stats_add` miss is not counted); NULL
+ * `mr`/`events` is a no-op returning 0. */
+int fifa96_match_run_stats_drain(struct fifa96_match_run *mr,
+                                 const fifa96_camera_stat_events *events,
+                                 int32_t local_ebp_id);
+
 /* FU-72 §2.3 / `FUN_0008ECC4`: bump the `+4` counter of the slot keyed by
  * `entity_id`'s replay roster id. Resolves the block with
  * `(team[side].side ^ side_swap) & 1` (the same resolution as
