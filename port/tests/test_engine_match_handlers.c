@@ -7047,6 +7047,43 @@ static void test_stats_permuted_roster_order(void) {
   drop_fixture(&f);
 }
 
+static void test_stats_counter_bump(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t side = 0; side < 2u; side++) {
+    for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++)
+      f.mr.roster_order[side][slot] = (uint8_t)slot;
+    f.mr.roster_order_ok[side] = 1;
+  }
+  fifa96_match_run_stats_seed(&f.mr);
+  assert(fifa96_match_run_stats_bump(NULL, 0) == 0);
+  assert(fifa96_match_run_stats_bump(&f.mr, 0x99) == 0);
+  assert(fifa96_match_run_stats_bump(&f.mr, 0 * 11 + 3) == 1);
+  assert(f.mr.stats.count[0][3] == 1 && f.mr.stats_third_selection == 0);
+  assert(fifa96_match_run_stats_bump(&f.mr, 0 * 11 + 3) == 1);
+  assert(f.mr.stats.count[0][3] == 2 && f.mr.stats_third_selection == 0);
+  assert(fifa96_match_run_stats_bump(&f.mr, 0 * 11 + 3) == 1);
+  assert(f.mr.stats.count[0][3] == 3 && f.mr.stats_third_selection == 1);
+  assert(fifa96_match_run_stats_bump(&f.mr, 0 * 11 + 3) == 1);
+  assert(f.mr.stats.count[0][3] == 4 && f.mr.stats_third_selection == 0);
+  fifa96_match_run_stats_seed(&f.mr);
+  assert(f.mr.stats.count[0][3] == 0 && f.mr.stats_third_selection == 0);
+  drop_fixture(&f);
+}
+
+static void test_stats_counter_score_event(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++)
+    f.mr.roster_order[0][slot] = (uint8_t)slot;
+  f.mr.roster_order_ok[0] = 1;
+  fifa96_match_run_stats_seed(&f.mr);
+  f.mr.goal_record = 0 * 11 + 3;
+  assert(fifa96_match_run_score_event(&f.mr, 0, 0) == 0);
+  assert(f.mr.stats.count[0][3] == 1);
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -7189,6 +7226,8 @@ int main(void) {
   test_situation_producer_live_at_begin();
   test_stats_table_add();
   test_stats_permuted_roster_order();
+  test_stats_counter_bump();
+  test_stats_counter_score_event();
   puts("test_engine_match_handlers OK");
   return 0;
 }

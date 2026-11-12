@@ -80,6 +80,9 @@ int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
 void fifa96_match_run_stats_seed(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_stats_reset(&mr->stats);
+  /* The native re-key has no counter preservation: the `+4` words reset with
+   * the table, so the `[0x5B358]` third-selection flag clears too. */
+  mr->stats_third_selection = 0;
   /* The seed blocks are the team indices. `fifa96_match_run_stats_add` keys
    * the same blocks as `(team+0x826 ^ [0x57ABE]) & 1`; `entities_init` sets
    * `team+0x826 = team index` and `side_swap` is staged 0 (OL-72), so the two
@@ -117,6 +120,31 @@ int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
   if (slot < FIFA96_CAMERA_REPLAY_SLOTS)
     mr->render.replay.activity_count[block][slot] = mr->stats.value[block][slot];
   return 1;
+}
+
+int fifa96_match_run_stats_bump(struct fifa96_match_run *mr, int32_t entity_id) {
+  uint32_t side, block, pitch;
+  if (!mr || entity_id < 0 ||
+      entity_id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  side = (uint32_t)entity_id / FIFA96_MATCH_ENTITY_RECORDS;
+  pitch = (uint32_t)entity_id % FIFA96_MATCH_ENTITY_RECORDS;
+  /* Native block = `(team+0x826 ^ [0x57ABE]) & 1`, the same resolution as
+   * `fifa96_match_run_stats_add`; `FUN_0008ECC4` scans that block only
+   * (`off = n*0xA + block*0xA0`), so a key that exists solely in the other
+   * block is a miss. */
+  block = ((uint32_t)mr->entities.team[side].side ^ mr->side_swap) & 1u;
+  {
+    int32_t key = match_run_replay_roster_id(mr, side, pitch);
+    for (uint32_t slot = 0; slot < FIFA96_MATCH_STATS_SLOTS; slot++) {
+      if (mr->stats.key[block][slot] != key) continue;
+      mr->stats.count[block][slot]++;   /* native word wraps at 65536 */
+      mr->stats_third_selection =
+          (uint8_t)(mr->stats.count[block][slot] == 3u);
+      return 1;
+    }
+  }
+  return 0;
 }
 /* FU-70 §1.2 slot tables (flat 0x11064E direction map and the animation chain
  * T1 0x10E1DC -> T2 0x10E1EC / T3 0x10E1F5). */
@@ -5877,6 +5905,10 @@ static void match_run_replay_note_goal(struct fifa96_match_run *mr,
     uint32_t picked = (uint32_t)mr->goal_record % FIFA96_MATCH_ENTITY_RECORDS;
     if (team < FIFA96_MATCH_ENTITY_TEAMS)
       roster = mr->entities.team[team].records[picked].desc_d;
+    /* The native `[0x157A9B] == NULL` branch calls `FUN_0008ECC4` with the
+     * scorer descriptor; the engine has no `[0x157A9B]` producer, so this is
+     * the live scorer path. */
+    (void)fifa96_match_run_stats_bump(mr, mr->goal_record);
   }
   if (r->goal_count >= FIFA96_CAMERA_REPLAY_EVENTS) {
     memmove(r->goal_side, r->goal_side + 1,

@@ -862,8 +862,8 @@ enum fifa96_match_run_sub_action {
  * `render.replay.activity_count` and the source-4 selector share the same key.
  * `max_value`/`max_key`/`max_block` mirror the native max triple (the compare
  * is on the sign-extended low word). `count` is the native `+4` word; the
- * `FUN_0008ED40` path never bumps it — only `FUN_0008ECC4` does — so it stays
- * storage for that unported accessor path (FU-72 §2.3 leg). */
+ * `FUN_0008ED40` path never bumps it — only `FUN_0008ECC4` does, which is the
+ * separate `fifa96_match_run_stats_bump` path below. */
 #define FIFA96_MATCH_STATS_SLOTS 16u
 struct fifa96_match_stats {
   int32_t key[2][FIFA96_MATCH_STATS_SLOTS];
@@ -1797,6 +1797,11 @@ struct fifa96_match_run {
    * replay roster id; see the struct contract above). Seeded by begin and the
    * act-9 reset, cleared by init/end so a reused run starts clean. */
   struct fifa96_match_stats stats;
+  /* FU-72 §2.3 / `FUN_0008ECC4`: the native `[0x5B358]` "third selection"
+   * flag. The bump sets it to `(slot count == 3)` on every hit (so a fourth
+   * hit clears it); it is not a latch. The `0x8FF30` consumer stays an open
+   * leg. Cleared by the stats seed with the rest of the table. */
+  uint8_t stats_third_selection;
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
    * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/
@@ -1835,6 +1840,16 @@ int fifa96_match_stats_add(struct fifa96_match_stats *s, uint32_t block,
  * unchanged. Returns 1 on a hit, 0 for NULL/out-of-range/no matching key. */
 int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
                                int32_t delta);
+
+/* FU-72 §2.3 / `FUN_0008ECC4`: bump the `+4` counter of the slot keyed by
+ * `entity_id`'s replay roster id. Resolves the block with
+ * `(team[side].side ^ side_swap) & 1` (the same resolution as
+ * `fifa96_match_run_stats_add`) and scans that block's 16 slots only; a key
+ * that exists solely in the other block is a miss. On a hit increments the
+ * `uint16_t` count and sets `stats_third_selection = (count == 3)` (0 for any
+ * other count). Returns 1 on a hit, 0 on NULL/out-of-range/no matching key.
+ * Does not touch `activity_count` (that mirror belongs to `0x8ED40`). */
+int fifa96_match_run_stats_bump(struct fifa96_match_run *mr, int32_t entity_id);
 
 /* Re-key the activity table from the current roster binding: every block/slot
  * key becomes `match_run_replay_roster_id(side, slot)`, which is the engine's
