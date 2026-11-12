@@ -7114,6 +7114,25 @@ static void test_stats_counter_score_event(void) {
 /* Slice-B Task 2: the typed stat-event contract. The drain resolves TRACKED
  * (cam->tracked) and LOCAL_EBP (the passed id) in array order and skips every
  * OPEN kind; the 2x weight turns +3 into 6 and +1 into 2. */
+struct stats_snapshot {
+  struct fifa96_match_stats stats;
+  int32_t activity[2][FIFA96_CAMERA_REPLAY_SLOTS];
+};
+
+static void stats_snapshot_take(const struct fifa96_match_run *mr,
+                                struct stats_snapshot *snap) {
+  memcpy(&snap->stats, &mr->stats, sizeof snap->stats);
+  memcpy(snap->activity, mr->render.replay.activity_count,
+         sizeof snap->activity);
+}
+
+static int stats_snapshot_equal(const struct fifa96_match_run *mr,
+                                const struct stats_snapshot *snap) {
+  return memcmp(&snap->stats, &mr->stats, sizeof snap->stats) == 0 &&
+         memcmp(snap->activity, mr->render.replay.activity_count,
+                sizeof snap->activity) == 0;
+}
+
 static void test_stats_drain_events(void) {
   struct fixture f;
   make_fixture(&f);
@@ -7132,15 +7151,47 @@ static void test_stats_drain_events(void) {
   events.event[1].site = 0x72DE3;
   events.event[1].delta = 1;
   events.event[1].entity = FIFA96_CAMERA_STAT_LOCAL_EBP;
-  /* An OPEN kind is skipped: it does not count and does not touch the table. */
-  events.event[2].site = 0x8AD54;
-  events.event[2].delta = -0x96;
-  events.event[2].entity = FIFA96_CAMERA_STAT_REC_157A9B;
-  events.count = 3;
+  events.count = 2;
   assert(fifa96_match_run_stats_drain(&f.mr, &events, 1) == 2);
   assert(f.mr.stats.value[0][0] == 6);   /* +3 * 2 */
   assert(f.mr.stats.value[0][1] == 2);   /* +1 * 2 */
-  assert(f.mr.stats.value[0][0] == 6 && f.mr.stats.value[0][1] == 2);
+
+  /* An OPEN kind alone drains to 0 and leaves the whole stats table and its
+   * activity mirror byte-identical (it never touches a slot). */
+  {
+    struct stats_snapshot snap;
+    events.event[0].site = 0x8AD54;
+    events.event[0].delta = -0x96;
+    events.event[0].entity = FIFA96_CAMERA_STAT_REC_157A9B;
+    events.count = 1;
+    stats_snapshot_take(&f.mr, &snap);
+    assert(fifa96_match_run_stats_drain(&f.mr, &events, 1) == 0);
+    assert(stats_snapshot_equal(&f.mr, &snap));
+  }
+  /* A TRACKED event whose tracked id is unresolved (NONE) is a stats_add miss:
+   * it drains to 0 and leaves the table/mirror untouched. */
+  {
+    struct stats_snapshot snap;
+    f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+    events.event[0].site = 0x70F44;
+    events.event[0].delta = 3;
+    events.event[0].entity = FIFA96_CAMERA_STAT_TRACKED;
+    events.count = 1;
+    stats_snapshot_take(&f.mr, &snap);
+    assert(fifa96_match_run_stats_drain(&f.mr, &events, 1) == 0);
+    assert(stats_snapshot_equal(&f.mr, &snap));
+  }
+  /* An entity byte above the enum range is also skipped (never entity 0). */
+  {
+    struct stats_snapshot snap;
+    events.event[0].site = 0x70F44;
+    events.event[0].delta = 3;
+    events.event[0].entity = (uint8_t)0xFE;
+    events.count = 1;
+    stats_snapshot_take(&f.mr, &snap);
+    assert(fifa96_match_run_stats_drain(&f.mr, &events, 1) == 0);
+    assert(stats_snapshot_equal(&f.mr, &snap));
+  }
   /* NULL arguments are a no-op returning 0. */
   assert(fifa96_match_run_stats_drain(NULL, &events, 1) == 0);
   assert(fifa96_match_run_stats_drain(&f.mr, NULL, 1) == 0);
