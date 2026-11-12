@@ -112,3 +112,20 @@ Analysis-only: no port, capture-rig, ISO, or Ghidra-project change.
    `[0x9ABC]`/`[0x9AAC]` writers.
 5. **The other `0x63xxx` functions** (`FUN_00063fd0`/`0x63fdc`/`0x63ff0`
    `[0x9A98]` readers, `FUN_00063734`, the `0x631xx..0x63xxx` band).
+
+## 7. Closure (2026-11-12) — the recorded-frame ring landed
+
+**Erratum (quoted).** §2 "append — `FUN_00063cbc`" and the Result line's
+"`FUN_00063cbc` appends a record" are wrong. `FUN_00063CBC` is the playback
+**forward step**: it applies the record at `(read + cursor) mod 150` via
+`FUN_00063B80`, advances the play index, and sets mode `0x82` when the index
+reaches the count. The recorder/packer is `FUN_0006408C` (FU-109 §1, design
+`2026-11-12-recorded-replay-ring` §5.3). The ring slice ports the whole
+structure — the `0x155AA4` view block, the 150 × `0x118` record ring, the
+pack/apply pair (`fifa96_match_replay_pack`/`_unpack`), the read/write/count
+cursors, the two-tick packer under the 90-frame budget, the composer, the
+playback states (`0x81`/`0x82`/`0x83`/`0x84`/`0x85`/`0x86`) and the pose/stage
+apply — as `fifa96_match_replay_ring.{c,h}` in the engine layer. §6 leg 2
+(allocator/free and the `FUN_000974D8`/`FUN_000974DC` re-sync) stays open as
+RR-L1/RR-L10; the mode-7 request/timed exit stays RR-L7. No completion-number
+movement and no golden re-pin.

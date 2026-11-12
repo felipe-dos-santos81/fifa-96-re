@@ -1297,3 +1297,18 @@ replay driver and the recorded-frame ring; the request cells/timed exit and the
 full `FUN_0003BB1C` match-screen loop from §25. **C4-L1:** the native `0x2B`
 channel identity (the stop may be commentary/music rather than crowd) and the
 native restore are unproved; the engine release is the adapter.
+
+## 27. Closure (2026-11-12) — the recorded-frame ring leg landed
+
+**Erratum (quoted).** §26's "Remaining" line names "the recorded-frame ring"
+as open; that leg is now landed by the recorded-frame-ring slice (design
+`2026-11-12-recorded-replay-ring`, Tasks 1–5). The engine now records every
+recordable live frame into the 150 × `0x118` ring, applies records back into
+the `0x155AA4` view, and renders the applied view (22 player slots + the ball
++ camera pose) instead of the frozen live pool. The remaining ring-scope legs
+are **RR-L5** (the `0x20` replay camera record cycle / matrix precedence — the
+non-pose cameras still use the existing source-4 path) and **RR-L7** (the
+mode-7 request/timed exit). The §25 request cells/timed exit, the §26 `0x20`
+view-consumption note and the `FUN_0003BB1C` UI loop are all folded into
+RR-L5/RR-L7 and the standing UI leg; C4-L1 is unchanged. No completion-number
+movement and no golden re-pin.

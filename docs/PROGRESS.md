@@ -5337,3 +5337,29 @@ close-out below).
   replay camera record cycle, the `0x8FF30` consumer, the 19-site `0x8ED40`
   body campaign, the `FUN_0003BB1C` UI loop and its request path. Record:
   ENGINE Phase 119/120, FU72 B1/B2 closures, FU-351 §26, design §11.
+
+- **Phase 121 recorded-frame replay ring (2026-11-12).** The first of the
+  three remaining engine-level blocked items is closed: the replay now plays
+  the recorded past instead of the frozen present. The engine records every
+  recordable live frame into the 150 × `0x118` ring (two-tick packer under the
+  90-frame budget, 44 records per uninterrupted increment window), applies
+  records back into the `0x155AA4` view, and renders the applied view (22
+  player slots + the ball + camera pose). The pack/applier are byte-exact
+  inverses over the design §5.1 map (`+0x116` is the one asymmetric lane). The
+  port replay enum labels are corrected to the native wire values (`IDLE =
+  0x82`, `PLAYING = 0x83`, `STEP_FWD = 0x84` = two forward `63CBC`,
+  `STEP_BACK = 0x85` = two back `63E54`, input `8`→back / `4`→forward). Tests:
+  the new `test_engine_replay_ring` (pack/apply round trip, budget, eviction,
+  flush, composer, 300-grant cadence, step modes, empty ring) plus
+  `test_replay_capture_in_frame`, `test_replay_draws_recorded_past`
+  (`test_engine_match_frame`) and `test_replay_view_render`
+  (`test_engine_match_render`). **Gate:** `make check` **125/125** strict-clean;
+  M1/M2 `cmp` byte-exact; windowed smoke `124`. No golden re-pin and no
+  completion-number movement (port coverage 78/78, wired 61/80 / 64/80
+  install-live, README title unchanged — no new dispatch body or row).
+  Remaining legs: RR-L1..RR-L10 (allocator/lifecycle, recorder overlay gating,
+  camera band/queue producers, appearance byte mapping, the `0x20` camera
+  cycle, the tick source, mode-7 request/timed exit, the mode-window phase
+  mapping, the ball frame byte, the re-sync hooks). Record: ENGINE Phase 121,
+  design §10 closure, FU-108 §7, FU-109 §8, FU-112 §7, FU-107 §8, FU-111 §9,
+  FU-351 §27, FU72 closure.

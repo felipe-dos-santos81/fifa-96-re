@@ -12517,3 +12517,64 @@ request cells/timed exit). The team-editor preview stays out of scope.
 
 Record: design §11, FU72 B1 closure (2026-11-12), FU-351 §26, PROGRESS
 Phase 119–120.
+
+## Phase 121 — the recorded-frame replay ring (2026-11-12)
+
+The recorded-frame ring landed (design `2026-11-12-recorded-replay-ring`,
+Tasks 1–5). The replay now plays the recorded past, not the frozen present:
+every recordable live frame is composed into the `0x155AA4` view block and
+packed into the 150 × `0x118` ring; playback applies a record back into the
+view and the renderer draws that view.
+
+**Landed.** `port/src/fifa96_engine/fifa96_match_replay_ring.{c,h}` adds the
+view block (`replay_view[0x1D0]`), the ring (`struct fifa96_match_replay_ring`:
+150 records, read/write/count cursors, the packer accumulator, the budget, the
+enable gate) and the seam `_ring_reset`/`_ring_record`/`_compose`/`_capture`/
+`_count`/`_apply`/`_step_forward`/`_step_back`/`_stamp`/`_pose`/`_stage`. The
+pack/applier are byte-exact inverses over the design §5.1 map (the `+0x116`
+stamp is the one asymmetric lane: pack writes the accumulator, apply writes it
+into the view `+0x1CE`). The capture cadence is the two-tick packer under the
+90-frame mode-window budget (44 records per uninterrupted increment window;
+the 90th frame is blocked with the accumulator left at 1; a reset phase clears
+the budget and packing resumes; the 151st pack evicts). The composer fills the
+view from the staged render slots + focus + camera cluster. Playback applies
+through the native states: `0x81` arm → `0x82` idle/display → `0x83` playing
+countdown, `0x84` forward double-step, `0x85` back double-step, `0x86` slow.
+`_pose`/`_stage` render the applied view instead of the frozen live pool; the
+live pool is never written by playback.
+
+**Errata (quoted) — the replay enum wire values.** The port's replay enum
+names were semantically inverted and are corrected with the native wire values
+unchanged (FU-107 §8, design §5.4/§7.4). Native `0x84` is the **forward**
+double-step (two `FUN_00063CBC`) and `0x85` the **back** double-step (two
+`FUN_00063E54`); the input maps `8 → 0x85` (back) and `4 → 0x84` (forward).
+Native `0x82` is the **idle/display** state and `0x83` the **active playback
+countdown**. The port enum now reads `ARMED = 0x81`, `IDLE = 0x82`,
+`PLAYING = 0x83`, `STEP_FWD = 0x84`, `STEP_BACK = 0x85`. The Phase 116 button
+map text ("Left `4` step back, Right `8` step forward") is superseded by this:
+button `8` is step **back** and button `4` is step **forward**.
+
+**Tests and gate.** New `test_engine_replay_ring` pins the pack map lane-by-
+lane and the round trip, the budget/eviction/flush edges, the composer
+(focus/override/clamp, hidden sentinel, folded heading, ball slot, camera
+cluster), the 300-grant cadence, the step modes and the empty-ring arm;
+`test_engine_match_frame` adds `test_replay_capture_in_frame` and
+`test_replay_draws_recorded_past`; `test_engine_match_render` adds
+`test_replay_view_render`. Gate: `make check` **125/125** strict-clean; M1/M2
+`cmp` byte-exact; windowed smoke exit 124, clean log.
+
+**Unchanged.** Port coverage 78/78, wired 61/80 (64/80 install-live), the
+README title and the M1/M2 goldens are unmoved — no new dispatch body/row and
+no golden re-pin.
+
+**Remaining legs (RR-L1..RR-L10).** RR-L1 allocator/lifecycle; RR-L2 recorder
+overlay gating; RR-L3 camera band/queue producers; RR-L4 appearance byte
+mapping; RR-L5 the `0x20` camera cycle / matrix precedence; RR-L6 the tick
+source; RR-L7 mode-7 request/timed exit; RR-L8 the exact mode-window phase
+mapping; RR-L9 the ball frame byte; RR-L10 the re-sync hooks. These fold the
+Phase 115/116/118/119/120 "recorded-frame ring" entries; the 19-site
+`0x8ED40` campaign, the `FUN_0003BB1C` UI loop, B2-L1, C4-L1, the 23rd-slot
+consumer and the `FUN_0001CAEC` option UI are unchanged.
+
+Record: design §10 (closure), FU-108 §7, FU-109 §8, FU-112 §7, FU-107 §8,
+FU-111 §9, FU-351 §27, FU72 closure, PROGRESS Phase 121.

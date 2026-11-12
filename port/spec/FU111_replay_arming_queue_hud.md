@@ -248,3 +248,20 @@ Ghidra MCP on `/fifa96_le.bin`: `decompile_function` 0x49AD0, 0x49B28,
    caller).
 6. The device layer identities (`FUN_00064f70`, `FUN_0006504c`,
    `FUN_00068cfc`, `FUN_000a6265`, `FUN_000a6a03`, `FUN_000cbbe8`).
+
+## 9. Closure (2026-11-12) — the budget is a cap, not a pause
+
+**Erratum (quoted).** §1's 90-frame gate (`0x4A032 CMP [0x7310],0x5A`) is a
+**budget cap**, not a pause (design `2026-11-12-recorded-replay-ring` §5.3,
+fresh re-read). The reset modes `{2,9,0xD..0x12,>=0x15}` set `[0x107310]` to 0
+and **do not stop the packer** — the counter is reset and the packer then runs
+because `0 < 0x5A`. The counter is incremented **before** the gate, so an
+uninterrupted increment-mode run yields at most **44** records (packs at
+frames 2, 4, …, 88; the 90th frame's pack is blocked with the accumulator left
+at 1). A reset mode clears the budget and packing resumes immediately; the ring
+fills across windows, not as one continuous 300-frame window. The ring slice
+ports this exactly (`fifa96_match_replay_capture`: the budget gate runs first
+and returns before touching the accumulator); `test_engine_replay_ring`
+`test_ring_capture_budget` pins the 44-record window, the blocked 90th frame,
+the reset-phase clear and the flush. No completion-number movement and no
+golden re-pin.

@@ -712,3 +712,15 @@ campaign.
 above (B2-L1 open), B3 closed by the `+0x8D`/`+0x8A` census above (the 1.25×
 arm stays dead). Remaining legs in this record: B2-L1, the `0x8FF30` consumer,
 the 19-site `0x8ED40` body campaign and the recorded-frame ring.
+
+## Closure (2026-11-12) — the recorded-frame ring leg landed
+
+**Erratum (quoted).** The B1 "Remaining legs" line names "the recorded-frame
+ring" as open; that leg is now landed by the recorded-frame-ring slice (design
+`2026-11-12-recorded-replay-ring`, Tasks 1–5). The engine now records every
+recordable live frame into the 150 × `0x118` ring, applies records back into
+the `0x155AA4` view, and renders the applied view. The remaining ring-scope
+legs are **RR-L5** (the `0x20` replay camera record cycle / matrix precedence)
+and **RR-L7** (the mode-7 request/timed exit). The other FU-72 legs (B2-L1,
+the `0x8FF30` consumer, the 19-site `0x8ED40` campaign) are unchanged. No
+completion-number movement and no golden re-pin.

@@ -113,3 +113,20 @@ Analysis-only: no port, capture-rig, ISO, or Ghidra-project change.
 5. **The `+0x0C..+0x2E` word loop's exact per-lane mapping** (the packer and
    applier iterate it; the stride expression `puVar1 += 2`/`puVar1 += 1`
    mixes word and byte lanes).
+
+## 8. Closure (2026-11-12) — the record map corrections
+
+**Errata (quoted).** §2's byte-lane rows and the word-loop rows are corrected
+by the fresh packer/applier disassembly (design `2026-11-12-recorded-replay-ring`
+§5.1, `disassemble_function 0x6408C`/`0x63B80`): the packer pre-increments the
+byte pointers, so the appearance lane is record `+0xC4+i` from view `+0x17C`
+and the frame lane is record `+0xDB+i` from view `+0x193` (the decompiler's
+`puVar6 + 0x31` display is pointer arithmetic, not a literal `+0x31` lane).
+The per-entity word loop's axis order is x at record `+0x0C`, z at `+0x3A`,
+y at `+0x68` (from view `+0x0C`/`+0x14`/`+0x10` per 0xC-stride slot). The
+`+0x116` stamp is asymmetric: the packer writes the accumulator, the apply
+writes it into the view's `+0x1CE` (`0x155C72`) word — the one lane that is
+not a view→record→view round trip. The record ring slice ports this map
+byte-exactly (`fifa96_match_replay_pack`/`_unpack`); the test
+`test_engine_replay_ring` pins every lane and the `+0x1CE` asymmetry. No
+completion-number movement and no golden re-pin.

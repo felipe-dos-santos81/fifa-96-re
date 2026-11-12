@@ -1,7 +1,7 @@
 # Recorded-frame replay ring — design
 
 Date: 2026-11-12
-Status: draft for approval
+Status: implemented
 Campaign: close the recorded-frame replay ring, the first of the three
 remaining engine-level blocked items (ring, 19-site `0x8ED40` campaign,
 `FUN_0003BB1C` UI loop).
@@ -559,3 +559,63 @@ Fresh Ghidra MCP on `/FIFA96.EXE` (2026-11-12):
 this slice). FU-111 §1 is the prior record of the 90-frame budget; FU-158
 §2/§4 is the prior record of the ball `0x15887B` frame. Address mapping as
 FU-88.
+
+## 10. Closure (2026-11-12, Tasks 1–6)
+
+Status: **implemented**. Tasks 1–5 landed the ring; Task 6 appends the
+documentary errata (§7.9) and closes the slice. The design's status line is
+the only prior text changed to `implemented`; every correction below is a
+quoted erratum in the named source doc, never a rewrite of a prior section.
+
+**Landed (Task 1 — pack/apply, Task 2 — cursors/capture/budget, Task 3 —
+composer, Task 4 — playback states, Task 5 — pose/stage and the frozen-frame
+integration).** The `0x155AA4` view block (`uint8_t replay_view[0x1D0]`), the
+150 × `0x118` record ring (`struct fifa96_match_replay_ring`), and the §7.2
+seam (`_ring_reset`/`_ring_record`/`_compose`/`_capture`/`_count`/`_apply`/
+`_step_forward`/`_step_back`/`_stamp`/`_pose`/`_stage`) are all landed in
+`port/src/fifa96_engine/fifa96_match_replay_ring.{c,h}` and
+`fifa96_match_run.{c,h}`. The pack/applier are byte-exact inverses over the
+§5.1 map (the `+0x116` stamp is the one asymmetric lane — pack writes the
+accumulator, apply writes it into the view `+0x1CE`). The capture cadence is
+the two-tick packer under the 90-frame mode-window budget (44 records per
+uninterrupted increment window; a reset phase clears the budget and packing
+resumes; the 151st pack evicts). The composer fills the view from the staged
+render slots + focus + camera cluster. Playback applies through the native
+states (`0x81` arm → `0x82` idle/display → `0x83` playing countdown, `0x84`
+forward double-step, `0x85` back double-step, `0x86` slow). `_pose`/`_stage`
+render the applied view instead of the frozen live pool; the live pool is
+never written by playback.
+
+**Tests and gate.** New `port/tests/test_engine_replay_ring.c` pins the pack
+map lane-by-lane and the round trip, the budget (44 records, the blocked 90th
+frame, the reset-phase clear), the 150-record eviction, the empty/disabled/
+flush (`ticks == 0` → stamp 1) edges, the composer (focus/override/clamp,
+hidden sentinel, folded heading, ball slot, camera cluster), the 300-grant
+playback cadence (one record per two grants, `cursor`/`cursor_limit`), the
+step modes (`8`→`0x85` two back steps, `4`→`0x84` two forward steps, `2`
+slow, `1` at the end rewinds to record 0), and the empty-ring arm.
+`test_engine_match_frame` adds `test_replay_capture_in_frame` and
+`test_replay_draws_recorded_past`; `test_engine_match_render` adds
+`test_replay_view_render` and keeps the state-machine/input/freeze tests.
+Gate: `make check` **125/125** strict-clean; M1/M2 `cmp` byte-exact; windowed
+smoke `timeout 20s env DISPLAY=:1 make game` exit 124, clean log.
+
+**Unchanged (per §4 anti-goals).** The port coverage stays 78/78, the wired
+counts 61/80 (64/80 install-live), the README title and the M1/M2 goldens are
+unmoved — no new dispatch body/row and no golden re-pin.
+
+**Errata appended (Task 6).** The §7.9 list is now recorded in the source
+docs: FU-108 §2 (`FUN_00063CBC` is the playback forward step, the packer is
+`FUN_0006408C`); FU-109 §2 (byte lanes `+0xC4+i`/`+0xDB+i`, axis order x/z/y,
+stamp applies into view `+0x1CE`); FU-112 §1 (first triple is the camera
+focus, the 23rd frame byte is `[0x15887B]`); FU-107/ENGINE (wire values
+`0x84`=forward two, `0x85`=back two, input `8`→`0x85` and `4`→`0x84`;
+`0x82`=idle/display, `0x83`=playing countdown); FU-111 §1 (budget cap, 44
+records per uninterrupted run); FU-351 §26/FU72 (the ring leg is landed;
+RR-L5 and RR-L7 remain).
+
+**Remaining legs (unchanged from §7.8).** RR-L1 allocator/lifecycle; RR-L2
+recorder overlay gating; RR-L3 camera band/queue producers; RR-L4 appearance
+byte mapping; RR-L5 the `0x20` camera cycle / matrix precedence; RR-L6 the
+tick source; RR-L7 mode-7 request/timed exit; RR-L8 the exact mode-window
+phase mapping; RR-L9 the ball frame byte; RR-L10 the re-sync hooks.

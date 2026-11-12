@@ -124,3 +124,22 @@ Analysis-only: no port, capture-rig, ISO, or Ghidra-project change.
    arm).
 5. **`[0x9A9C]`/`[0x9AA0]` semantics** (replay-photo count) and the
    `[0x9AA4]` bit map beyond the pan bits.
+
+## 8. Closure (2026-11-12) — the port enum labels corrected
+
+**Errata (quoted).** The port's replay enum names were semantically inverted
+and are corrected by the recorded-frame-ring slice (design
+`2026-11-12-recorded-replay-ring` §5.4/§7.4), with the native wire values
+unchanged. Native `0x84` is the **forward** double-step (two `FUN_00063CBC`)
+and `0x85` is the **back** double-step (two `FUN_00063E54`); the input maps
+`8 → 0x85` (back) and `4 → 0x84` (forward). Native `0x82` is the
+**idle/display** state (the current record is shown, `[0x9A9C] = 0`) and
+`0x83` is the **active playback countdown** (the ring advances by the stamp).
+The port enum now reads `ARMED = 0x81`, `IDLE = 0x82`, `PLAYING = 0x83`,
+`STEP_FWD = 0x84`, `STEP_BACK = 0x85` (the former `PLAY = 0x82`/`PAUSE = 0x83`
+and `STEP_BACK = 0x84`/`STEP_FWD = 0x85` were inverted); the §4 dispatch table
+above is unaffected (it already lists `0x84`→`63CBC`×2 and `0x85`→`63E54`×2).
+§7 leg 2 (`FUN_00063CBC`/`FUN_00063D34`/`FUN_00063E54`/`FUN_0006428C`) is now
+closed by the ring slice; the `FUN_000974D8`/`FUN_000974DC` re-sync hooks stay
+RR-L10 and the request cells/timed exit stay RR-L7. No completion-number
+movement and no golden re-pin.

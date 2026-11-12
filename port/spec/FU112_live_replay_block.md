@@ -125,3 +125,17 @@ Ghidra MCP on `/fifa96_le.bin`: `decompile_function` 0x36C70, 0x3705C,
 4. `FUN_0004ba44`/`FUN_0004ba00`/`FUN_0004be44` semantics (`[0x590CC]`
    per-team flags, `[0x57A83]`, `[0x57AC2]`).
 5. `FUN_0004c904`'s `[0x7DC8]` view object identity.
+
+## 7. Closure (2026-11-12) — the composer corrections
+
+**Errata (quoted).** §1's "ball x/y/z" label for the first triple is wrong:
+the `0x155AA4/8/C` triple is the **camera focus**, sourced from `[0x57A6F]`
+(the camera-triple override) or `0x15774C` (the FU-71 place), not the ball
+record (design `2026-11-12-recorded-replay-ring` §5.2; FU-351 §8). §1's
+"its `0x55C37+0x16` byte is written 0" is also wrong: the composer copies
+`[0x15887B]` (the ball object's `obj+0x8F` frame, FU-158 §2, fresh `0x36E38`)
+into the 23rd slot. The port models the focus as `render_focus_*` and composes
+the same 23 staged render slots + focus + camera cluster into the view
+(`fifa96_match_replay_compose`); the ball frame byte is staged 0 until the
+`0x15887B` producer lands (RR-L9). The `+0x55C4C` byte-1 overlap note in §1 is
+unaffected. No completion-number movement and no golden re-pin.
