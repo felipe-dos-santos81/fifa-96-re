@@ -2691,7 +2691,12 @@ static void match_run_animate_entity(struct fifa96_match_run *mr, uint32_t i,
   }
 }
 
-static void match_run_scene_stage(struct fifa96_match_run *mr) {
+/* FU-85 §4/FUN_00036C70's position half: stage the 23 render slots from the
+ * pool (positions, heading, staged anim id/frame, hidden) and advance the ball
+ * roll. Writes render cells only. The C3 frozen frame calls this without the
+ * animator: `match_run_animate_entity` writes the sim-visible record fields
+ * (`+0x28` anim id / `+0x3D` frame) the entity machine reads. */
+static void match_run_scene_stage_positions(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r = &mr->render;
   uint32_t slot = 0;
   for (uint32_t team = 0; team < FIFA96_MATCH_ENTITY_TEAMS; team++) {
@@ -2740,10 +2745,22 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
       r->ball_bank < r->bank_count &&
       (uint32_t)(r->ball_roll & 0x0Fu) >= r->banks[r->ball_bank].count)
     r->ball_roll &= 0xF0u;
+}
 
+/* FU-84 `FUN_0008E008`'s animator half: advance every staged slot by the
+ * granted frame's whole-frame delta. This is the pass that writes the
+ * sim-visible record fields (the successor install), so it stays on the live
+ * path only. */
+static void match_run_scene_animate(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_render *r = &mr->render;
   if (!r->frames) return;
   for (uint32_t i = 0; i < r->entity_count; i++)
     match_run_animate_entity(mr, i, (uint16_t)mr->state.frame_delta);
+}
+
+static void match_run_scene_stage(struct fifa96_match_run *mr) {
+  match_run_scene_stage_positions(mr);
+  match_run_scene_animate(mr);
 }
 
 /* Stable slot identity: the lifecycle cancels by function pointer, so every
@@ -8072,10 +8089,12 @@ int fifa96_match_run_should_mark_over(const struct fifa96_match_run *mr) {
          !(mr->global_157ac2 == 4u && mr->global_157ac0 != 0u);
 }
 
-/* C3 (design §6.10): the frame body's common presentation/camera path. The
- * camera pan/follow/pose feed are presentation state, not match simulation:
- * the live frame and the frozen replay frame both run them, so the replay
- * view keeps a live camera and the overlay keeps its render staging.
+/* C3 (design §6.10): the live frame's presentation/camera path. The camera
+ * pan/follow/pose feed are presentation state, not match simulation, but they
+ * are also live-camera motion: the C3 review moved the frozen replay frame off
+ * this helper (it spends the shared match RNG in `fifa96_camera_update_walk`
+ * and its FU-71 armer is live camera motion). The frozen frame runs the pose
+ * feed plus the replay view driver (`match_run_live_camera_follow`) instead.
  *
  * - FU-148 §12.2 / FU-145 §1.8 (M2 phase-9 T3): the native FUN_000736AC reads
  *   `([0x14C1D4]|[0x14C1D6]) & 4` at 0x70ab1..0x70ac2 for the pan-step walk
@@ -8156,8 +8175,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * `tick_total`, the kickoff timers, the live input/control-slot model and
    * the entity/ball pool are live-only and do not run, so the match is frozen
    * until the exit (the next non-family frame resumes
-   * `fifa96_match_state_tick`). The presentation/camera/render path stays
-   * common to both frames. */
+   * `fifa96_match_state_tick`). */
   if (fifa96_match_run_replay_family(&mr->render.replay)) {
     int frozen_granted = 0;
     rc = fifa96_match_pace_tick(&mr->pace, 0, &frozen_granted);
@@ -8168,11 +8186,31 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
       (void)fifa96_match_run_replay_step(mr, mr->render.replay.input_buttons,
                                          (int32_t)mr->state.frame_delta);
       mr->render.replay.input_buttons = 0;
-      int follow_ran = match_run_frame_camera(mr);
+      /* Review F1: the replay view. `replay_target` selects the source-4
+       * camera on the 0x81 arm and the 0x20 cycle rewrites it, but only
+       * `match_run_live_camera_follow` consumes `camera_target.source == 4`
+       * and writes the live `render_eye_*`; without it a frozen live replay
+       * stays on the frozen live view and the camera cycle changes only the
+       * caption. The pose feed keeps the staged orientation input in the
+       * live-frame order (pose before the view driver). Review F3: the live
+       * pan/event camera walk (`match_run_frame_camera`) is NOT run on the
+       * frozen path — it spends the shared match RNG on pan/event state the
+       * replay driver replaces, and its FU-71 armer is live camera motion.
+       * The frozen view is the replay driver plus the pose feed, so the match
+       * RNG stream is untouched by replay frames. */
+      (void)fifa96_camera_pose_feed(&mr->render.camera, &mr->render.yaw,
+                                    &mr->render.pitch, &mr->render.view_ratio,
+                                    &mr->render.camera_pose);
+      if (mr->live_start) match_run_live_camera_follow(mr);
       (void)fifa96_match_display_update(&mr->render.display,
                                         mr->state.frame_delta, 0);
-      if (mr->render.enabled) match_run_scene_stage(mr);
-      match_run_frame_camera_trace(mr, follow_ran);
+      /* Review F2: positions-only staging. The animator half of the live
+       * staging writes the sim-visible +0x28/+0x3D record fields the entity
+       * machine reads, which would let the first post-replay frame resolve a
+       * different row/aux word; the frozen frame keeps only the render-slot
+       * positions (and the ball roll). */
+      if (mr->render.enabled) match_run_scene_stage_positions(mr);
+      match_run_frame_camera_trace(mr, 0);
     }
     return 1;
   }

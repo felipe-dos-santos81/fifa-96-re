@@ -1348,6 +1348,83 @@ static void test_replay_freezes_live_frame(void) {
   fifa96_match_run_init(&mr);
 }
 
+/* C3 review F1: a live frozen frame must drive the presentation view so the
+ * source-4 replay camera reaches the render eye. `replay_target` selects the
+ * source-4 target on the 0x81 arm and `replay_exit` clears it, so unless the
+ * frozen frame runs `match_run_live_camera_follow` (the only consumer of
+ * `camera_target.source == 4` and the only live writer of `render_eye_*`) the
+ * view stays on the frozen live camera and the 0x20 camera cycle only changes
+ * the caption. The engine's index-0 target is team 0 record 0, so the class-1
+ * handler track must be that record's clamped triple and the eye must be the
+ * handler's. RED on the keep-pan-only split: `render_eye_valid` stays 0 and
+ * the track stays 0. */
+static void test_replay_frozen_live_view_applies_target(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.state.phase = 2;                     /* class-1 view slot 1 */
+  mr.state.period_length = 90;
+  mr.entities.team[0].records[0].pos_x = 0x140;
+  mr.entities.team[0].records[0].pos_z = 0x1E0;
+  assert(mr.render.render_eye_valid == 0u);
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  one_granted_frame(&mr);                 /* the 0x81 arm -> PLAY + target */
+  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(mr.render.camera_target.source == 4);
+  assert(mr.render.camera_target.index == 0);   /* team 0 record 0 */
+  assert(mr.render.native_view_class == 1);
+  assert(mr.render.render_eye_valid == 1u);
+  assert(mr.render.native_view_cam[1].track_x == 0x140);
+  assert(mr.render.native_view_cam[1].track_y == 0);
+  assert(mr.render.native_view_cam[1].track_z == 0x1E0);
+  assert(mr.render.render_eye_x == mr.render.native_view_cam[1].pos_x);
+  assert(mr.render.render_eye_y == mr.render.native_view_cam[1].pos_y);
+  assert(mr.render.render_eye_z == mr.render.native_view_cam[1].pos_z);
+  /* The view driver consumed the replay camera, but the match stayed frozen. */
+  assert(mr.state.tick_total == 0);
+  assert(mr.entities.team[0].records[0].pos_x == 0x140);
+  fifa96_match_run_replay_exit(&mr);
+  fifa96_match_run_init(&mr);
+}
+
+/* C3 review F2: the frozen render staging is positions-only. The animator half
+ * of `match_run_scene_stage` writes the sim-visible record fields (+0x3D
+ * `frame` and, on a row successor, +0x28 `anim_id`) that the entity machine
+ * reads, so a frozen frame must not advance them. Row 4 is non-terminal
+ * (last frame 5, flags 0); a zero frame duration with turn 1 would advance
+ * frame 0 -> 1 on the animator pass. RED on the pre-review split: the frozen
+ * frame advanced `records[0].frame` to 1. */
+static void test_replay_frozen_scene_stage_keeps_record_anim(void) {
+  uint8_t frames[30];                    /* six 5-byte FU-84 frame records */
+  struct fifa96_match_run mr;
+  memset(frames, 0, sizeof frames);      /* every duration 0 */
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.render.enabled = 1;
+  mr.render.frames = frames;
+  mr.render.entities[0].anim_turn = 1;
+  mr.entities.team[0].records[0].anim_id = 4;   /* row 4: last 5, flags 0 */
+  mr.entities.team[0].records[0].frame = 0;
+  mr.entities.team[0].records[0].pos_x = 0x40;
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  one_granted_frame(&mr);
+  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_PLAY);
+  /* The position staging ran (the render tail is kept) ... */
+  assert(mr.render.entities[0].stage.pos.x == 0x40);
+  assert(mr.render.entities[0].stage.anim_id == 4);
+  /* ... but the frozen frame did not advance the record animator. */
+  assert(mr.entities.team[0].records[0].frame == 0);
+  assert(mr.entities.team[0].records[0].anim_id == 4);
+  assert(mr.render.entities[0].stage.frame == 0);
+  fifa96_match_run_replay_exit(&mr);
+  fifa96_match_run_init(&mr);
+}
+
 /* Phase-35 P1 (the +0x79 producer's measured pacing): the formation now
  * runs from the first frame, so at the phase-2 entry the slot record sits
  * off the row-04 half-line gate instead of the pre-producer lane-2 spot on
@@ -11056,6 +11133,8 @@ int main(void) {
   test_goal_situation_dispatch_is_not_the_writer();
   test_natural_phase2_never_scores();
   test_replay_freezes_live_frame();
+  test_replay_frozen_live_view_applies_target();
+  test_replay_frozen_scene_stage_keeps_record_anim();
   test_goal_zone_classifier();
   test_goal_arm_gates_and_snapshot();
   test_goal_arm_reflect_clear();
