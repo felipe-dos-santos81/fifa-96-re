@@ -280,6 +280,7 @@ static void test_replay_switch_tackle_resync(void) {
   mr.running = 1;
   mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
   mr.live_start = 1;
+  mr.state.phase = 2;                 /* the switch_accept phase gate */
   mr.live_switch_press = 1;
   mr.live_tackle_press = 1;
   assert(fifa96_match_run_replay_begin(&mr) == 0);
@@ -330,7 +331,14 @@ Expected: `test_replay_arm_held_key` fails (held PASS produces `input_buttons ==
 
 1. Replay input priming: in the replay branch of `fifa96_match_run_input`, if `!r->input_primed`, set `r->input_buttons_held = held`, `r->input_buttons = 0`, `r->input_primed = 1`, and return. Otherwise keep the existing edge accumulation.
 2. Switch/tackle: `replay_begin` clears `live_switch_press`/`live_tackle_press`; `replay_exit` sets `input_resync = 1`. In the non-replay input path, if `mr->input_resync`, set the two down latches to the current `switch_down`/`tackle_down`, clear the two press flags, clear `input_resync`, and skip the edge branches for this poll (still fold the FU-61 word).
-3. Auto-PASS: in `fifa96_engine.c`, compute `replay_guard = e->match && (fifa96_match_run_replay_family(&e->match->render.replay) || replay_edge);` and gate the kickoff auto-PASS block and the `match_halftime_*` dwell updates on `!replay_guard`. The arm edge is handled after the block, so the arming step is covered by `replay_edge`.
+3. Auto-PASS: in `fifa96_engine.c`, **move the replay-down/edge computation
+   above the kickoff block** (the current `replay_down`/`replay_edge`/
+   `match_replay_held` lines are below it), then compute
+   `replay_guard = e->match && (fifa96_match_run_replay_family(&e->match->render.replay) || replay_edge);`
+   and wrap the whole kickoff wait block — the auto-PASS injection and the
+   `match_halftime_*` dwell updates — in `if (!replay_guard) { ... }`. The
+   later arm uses the same variables. The dwell therefore freezes for the
+   arming step and every replay frame, and resumes on exit.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -363,27 +371,35 @@ git commit -m "fix(engine): freeze the replay input edges and the kickoff auto-p
 
 - [ ] **Step 1: Write the failing test**
 
-Add `test_replay_freezes_live_frame` to `port/tests/test_engine_match_frame.c` and register it in `main()`. Use the file's existing run/fixture pattern:
+Add `test_replay_freezes_live_frame` to `port/tests/test_engine_match_frame.c` and register it in `main()`. Use the file's existing run helper pattern; the grant loop is deterministic (the pace grants 3 frames per 10 ticks):
 
 ```c
+static int step_until_granted(struct fifa96_match_run *mr) {
+  for (int i = 0; i < 16; i++) {
+    int rc = fifa96_match_run_frame(mr);
+    assert(rc >= 0);
+    if (rc == 1) return 1;
+  }
+  return 0;
+}
+
 static void test_replay_freezes_live_frame(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   mr.running = 1;
   mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
-  mr.state.period = 0;
+  mr.state.phase = 2;                  /* clock class 1 */
+  mr.state.period_length = 90;
   mr.state.period_seconds = 30;
   mr.state.total_seconds = 30;
   mr.state.tick_total = 0x1234;
   mr.entities.team[0].records[0].pos_x = 77;
-  fifa96_match_pace_init(&mr.pace);            /* the file's existing pace setup */
   assert(fifa96_match_run_replay_begin(&mr) == 0);
   uint16_t seconds = mr.state.period_seconds;
   uint16_t total = mr.state.total_seconds;
   uint16_t ticks = mr.state.tick_total;
   int16_t x = mr.entities.team[0].records[0].pos_x;
-  for (int i = 0; i < 4; i++)
-    assert(fifa96_match_run_frame(&mr) == 0);
+  for (int i = 0; i < 3; i++) assert(step_until_granted(&mr));
   assert(mr.state.period_seconds == seconds);
   assert(mr.state.total_seconds == total);
   assert(mr.state.tick_total == ticks);
@@ -391,18 +407,13 @@ static void test_replay_freezes_live_frame(void) {
   assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_PLAY);
   assert(mr.state.frame_delta != 0);
   fifa96_match_run_replay_exit(&mr);
-  /* The next granted frame advances the clock again. */
-  int advanced = 0;
-  for (int i = 0; i < 8 && !advanced; i++) {
-    assert(fifa96_match_run_frame(&mr) == 0);
-    advanced = mr.state.tick_total != ticks;
-  }
-  assert(advanced);
+  assert(step_until_granted(&mr));
+  assert(mr.state.tick_total != ticks);   /* the clock resumed */
   fifa96_match_run_init(&mr);
 }
 ```
 
-Adjust the pace fixture to the file's existing helper if it differs; the assertion set is the requirement.
+If the file's existing `one_granted_frame` helper already does this, use it instead; the assertion set is the requirement.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -458,33 +469,37 @@ git commit -m "feat(engine): freeze the live match while replay is active"
 
 - [ ] **Step 1: Write the failing test**
 
-Add `test_audio_replay_duck` to `port/tests/test_engine_audio.c` and register it in `main()`. Use the file's existing parsed-bank fixture; if the bank is absent, the test skips exactly like the file's other asset-gated cases:
+Add the no-bank arm/release assertions to `test_no_assets_is_silent` (after the current `a.active == 1` checks), and add the retail-bank duck block inside `test_retail_banks` after the crowd-loop assertion (`fifa96_mixer_voice_active(&a.mixer, a.crowd_voice) == 1`):
 
 ```c
-static void test_audio_replay_duck(void) {
-  /* build the audio object and bank fixture the file already uses */
-  struct fifa96_match_run mr;
-  fifa96_match_run_init(&mr);
-  struct fifa96_match_audio a;
-  /* start with the parsed crowd bank; skip when the fixture has no bank */
-  if (!audio_fixture_start(&a, &mr)) { fifa96_match_run_init(&mr); return; }
+  /* C4: the pre-arm duck is persistent and idempotent. */
   int voice = a.crowd_voice;
-  assert(voice >= 0);
   fifa96_match_audio_replay_arm(&a);
   assert(a.replay_ducked == 1);
   assert(!fifa96_mixer_voice_active(&a.mixer, voice));
-  fifa96_match_audio_step(&a, &mr, NULL, 0);   /* NULL plat is the no-submit path */
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
   assert(a.crowd_voice == -1);                 /* no re-arm while ducked */
   fifa96_match_audio_replay_arm(&a);           /* idempotent */
   assert(a.replay_ducked == 1 && a.crowd_voice == -1);
   fifa96_match_audio_replay_release(&a);
   assert(a.replay_ducked == 0);
-  fifa96_match_audio_stop(&a);
-  fifa96_match_run_init(&mr);
-}
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.crowd_voice >= 0);
+  assert(fifa96_mixer_voice_active(&a.mixer, a.crowd_voice));
 ```
 
-If `fifa96_match_audio_step` requires a non-NULL platform before the early no-asset return, pass the file's existing fake platform; the assertions are the requirement. The no-bank path is covered by the file's existing `audio_start` no-bank cases; if not, add a second assertion block that calls arm/release on a zeroed audio object and expects no crash.
+The no-bank block:
+
+```c
+  fifa96_match_audio_replay_arm(&a);
+  assert(a.replay_ducked == 1 && a.crowd_voice == -1);
+  fifa96_match_audio_replay_release(&a);
+  assert(a.replay_ducked == 0);
+```
+
+Also extend `test_engine_replay_key_arms` in `port/tests/test_engine_match_bridge.c`: after the R arm assert `f.engine->match_run.replay_audio_armed == 1`; after the exit loop assert `== 0`. The audio hook edge itself is covered by the direct retail test.
+
+The retail half stays ISO-gated exactly like the existing test.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
