@@ -198,6 +198,93 @@ void fifa96_match_replay_ring_record(struct fifa96_match_run *mr, int on) {
   mr->replay_ring.enabled = on ? 1 : 0;
 }
 
+/* The native folded heading (spec §5.2): `((0x400 - face7d) & 0x3FF) << 6`.
+ * The staged slot carries the raw high word (`face7d << 16`), so the composer
+ * folds it once; the replay staging unfolds it back. */
+static uint32_t replay_packed_heading(int32_t heading) {
+  return ((0x400u - ((uint32_t)heading >> 16)) & 0x3FFu) << 6;
+}
+
+/* One slot's view lane (`x/y/z` dwords at `+0x0C+0x0C*i`, the packed heading
+ * dword at `+0x120+4*i`, appearance and frame bytes). A hidden slot replaces
+ * only y with the native sentinel. */
+static void replay_view_put_slot(uint8_t *view, size_t slot,
+                                 const fifa96_render_entity *stage) {
+  size_t base = FIFA96_REPLAY_SLOTS + FIFA96_REPLAY_SLOT_STRIDE * slot;
+
+  replay_put_dword(view, base + 0x0, (uint32_t)stage->pos.x);
+  replay_put_dword(view, base + 0x4,
+                   stage->hidden
+                       ? (uint32_t)(int32_t)FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y
+                       : (uint32_t)stage->pos.y);
+  replay_put_dword(view, base + 0x8, (uint32_t)stage->pos.z);
+  replay_put_dword(view, FIFA96_REPLAY_HEADINGS + 4 * slot,
+                   replay_packed_heading(stage->heading));
+  view[FIFA96_REPLAY_APPEARANCE + slot] = stage->anim_id;
+  view[FIFA96_REPLAY_FRAMES + slot] = stage->frame;
+}
+
+void fifa96_match_replay_compose(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_render *r;
+  const fifa96_camera_handler_state *cam;
+  fifa96_camera_focus focus;
+  uint8_t *view;
+  int32_t fx, fy, fz;
+  size_t i;
+
+  if (!mr) return;
+  r = &mr->render;
+  view = r->replay.replay_view;
+
+  /* The focus triple: the native FU-71 place (or its override), clamped. */
+  if (r->render_focus_valid) {
+    fx = r->render_focus_x;
+    fy = r->render_focus_y;
+    fz = r->render_focus_z;
+  } else if (mr->camera_override_157a6f) {
+    fx = mr->camera_override_triple[0];
+    fy = mr->camera_override_triple[1];
+    fz = mr->camera_override_triple[2];
+  } else {
+    fx = r->camera.pos_x;
+    fy = r->camera.pos_y;
+    fz = r->camera.pos_z;
+  }
+  (void)fifa96_camera_focus_clamp(fx, fy, fz, &focus);
+  replay_put_dword(view, FIFA96_REPLAY_FOCUS + 0x0, (uint32_t)focus.x);
+  replay_put_dword(view, FIFA96_REPLAY_FOCUS + 0x4, (uint32_t)focus.y);
+  replay_put_dword(view, FIFA96_REPLAY_FOCUS + 0x8, (uint32_t)focus.z);
+
+  /* All 23 slots: 22 team slots plus the staged ball at slot 22. */
+  for (i = 0; i < FIFA96_MATCH_REPLAY_VIEW_SLOTS; i++)
+    replay_view_put_slot(view, i, &r->entities[i].stage);
+
+  /* The camera cluster: the roll byte, the three staged-zero bytes
+   * (queue pop / band / flag, RR-L3), the six queue bytes, the `FUN_000974D0`
+   * stub 1 and the `FUN_000492CC` frame-delta stand-in (RR-L6). */
+  view[FIFA96_REPLAY_CAMERA_BYTES + 0] = r->ball_roll;
+  view[FIFA96_REPLAY_CAMERA_BYTES + 1] = 0;
+  view[FIFA96_REPLAY_CAMERA_BYTES + 2] = 0;
+  view[FIFA96_REPLAY_CAMERA_BYTES + 3] = 0;
+  memset(view + FIFA96_REPLAY_QUEUE6, 0, 6);
+  replay_put_word(view, FIFA96_REPLAY_WORD_1CC, 1);
+  replay_put_word(view, FIFA96_REPLAY_WORD_1CE, mr->state.frame_delta);
+
+  /* The matrix is the selected live view class when it is a valid 0..2 view,
+   * else the class-3 action camera. */
+  if (r->native_view_class >= 0 && r->native_view_class < 3 &&
+      r->native_view_valid[r->native_view_class])
+    cam = &r->native_view_cam[r->native_view_class];
+  else
+    cam = &r->action_cam;
+  replay_put_dword(view, FIFA96_REPLAY_MATRIX + 0x00, (uint32_t)cam->pos_x);
+  replay_put_dword(view, FIFA96_REPLAY_MATRIX + 0x04, (uint32_t)cam->pos_y);
+  replay_put_dword(view, FIFA96_REPLAY_MATRIX + 0x08, (uint32_t)cam->pos_z);
+  replay_put_dword(view, FIFA96_REPLAY_MATRIX + 0x0C, (uint32_t)cam->yaw);
+  replay_put_dword(view, FIFA96_REPLAY_MATRIX + 0x10, (uint32_t)cam->pitch);
+  replay_put_dword(view, FIFA96_REPLAY_MATRIX + 0x14, (uint32_t)cam->ratio);
+}
+
 void fifa96_match_replay_capture(struct fifa96_match_run *mr, uint32_t ticks) {
   struct fifa96_match_replay_ring *ring;
 

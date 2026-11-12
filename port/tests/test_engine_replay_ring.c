@@ -280,11 +280,137 @@ static void test_ring_empty_reset(void) {
   assert(mr.render.replay.cursor == 0 && mr.render.replay.cursor_limit == 0);
 }
 
+/* Task 3: the composer fills the native `0x155AA4` view block from the staged
+ * render slots (spec §5.2/§7.3). The view is pre-filled with 0xCC so every
+ * asserted lane proves a write, not a zero-initialised coincidence. The first
+ * block drives the `render_focus_*` arm and native view class 0; the second
+ * drives the `0x157A6F` override triple through the native clamp fallback and
+ * the class-3 `action_cam` matrix fallback. */
+static void test_ring_compose(void) {
+  struct fifa96_match_run mr;
+  uint8_t *view;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  mr.state.frame_delta = 2;
+  view = mr.render.replay.replay_view;
+  memset(view, 0xCC, FIFA96_MATCH_REPLAY_VIEW_SIZE);
+
+  /* Slot 0: a visible team slot. */
+  mr.render.entities[0].stage.pos.x = 11;
+  mr.render.entities[0].stage.pos.y = 22;
+  mr.render.entities[0].stage.pos.z = 33;
+  mr.render.entities[0].stage.heading = 0x3FF << 16;
+  mr.render.entities[0].stage.anim_id = 7;
+  mr.render.entities[0].stage.frame = 4;
+  mr.render.entities[0].stage.hidden = 0;
+  /* Slot 1: hidden, so only its y lane carries the sentinel. */
+  mr.render.entities[1].stage.pos.x = 1;
+  mr.render.entities[1].stage.pos.y = 2;
+  mr.render.entities[1].stage.pos.z = 3;
+  mr.render.entities[1].stage.hidden = 1;
+  /* Slot 22: the staged ball. */
+  mr.render.entities[22].stage.pos.x = 44;
+  mr.render.entities[22].stage.pos.y = 55;
+  mr.render.entities[22].stage.pos.z = 66;
+  mr.render.entities[22].stage.heading = 0x123 << 16;
+  mr.render.entities[22].stage.anim_id = 9;
+  mr.render.entities[22].stage.frame = 0;
+
+  mr.render.entity_count = 23;
+  mr.render.ball_roll = 0xA5;
+  mr.render.native_view_class = 0;
+  mr.render.native_view_valid[0] = 1;
+  mr.render.native_view_cam[0].pos_x = -10;
+  mr.render.native_view_cam[0].pos_y = 20;
+  mr.render.native_view_cam[0].pos_z = 30;
+  mr.render.native_view_cam[0].yaw = 0x111;
+  mr.render.native_view_cam[0].pitch = 0x222;
+  mr.render.native_view_cam[0].ratio = 0x333;
+  mr.render.render_focus_valid = 1;
+  mr.render.render_focus_x = 100;
+  mr.render.render_focus_y = 200;
+  mr.render.render_focus_z = 300;
+
+  fifa96_match_replay_compose(&mr);
+
+  /* Focus triple: `render_focus_*` wins and is inside the clamp box. */
+  assert((int32_t)get_u32(view, 0x00) == 100);
+  assert((int32_t)get_u32(view, 0x04) == 200);
+  assert((int32_t)get_u32(view, 0x08) == 300);
+
+  /* Slot 0: the staged x/y/z, the folded heading, appearance and frame. */
+  assert((int32_t)get_u32(view, 0x0C) == 11);
+  assert((int32_t)get_u32(view, 0x10) == 22);
+  assert((int32_t)get_u32(view, 0x14) == 33);
+  assert(get_u32(view, 0x120) == (uint32_t)(((0x400 - 0x3FF) & 0x3FF) << 6));
+  assert(view[0x17C] == 7);
+  assert(view[0x193] == 4);
+
+  /* Slot 1: hidden writes the native -10000 y sentinel. */
+  assert((int32_t)get_u32(view, 0x10 + 0xC) == FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y);
+  assert((int32_t)get_u32(view, 0x10 + 0xC) == -10000);
+
+  /* Slot 22: the staged ball, same heading derivation. */
+  assert((int32_t)get_u32(view, 0x0C + 0xC * 22) == 44);
+  assert((int32_t)get_u32(view, 0x10 + 0xC * 22) == 55);
+  assert((int32_t)get_u32(view, 0x14 + 0xC * 22) == 66);
+  assert(get_u32(view, 0x120 + 4 * 22) ==
+         (uint32_t)(((0x400 - 0x123) & 0x3FF) << 6));
+  assert(view[0x17C + 22] == 9);
+  assert(view[0x193 + 22] == 0);
+
+  /* The camera cluster: roll, staged-zero queue bytes, the `=1` word, the
+   * frame-delta stamp, and the six-dword matrix in the *view* offsets. */
+  assert(view[0x1AA] == 0xA5);
+  assert(view[0x1AB] == 0 && view[0x1AC] == 0 && view[0x1AD] == 0);
+  assert(view[0x1C6] == 0 && view[0x1C7] == 0 && view[0x1C8] == 0);
+  assert(view[0x1C9] == 0 && view[0x1CA] == 0 && view[0x1CB] == 0);
+  assert(get_u16(view, 0x1CC) == 1);
+  assert(get_u16(view, 0x1CE) == 2);
+  assert((int32_t)get_u32(view, 0x1AE) == -10);
+  assert((int32_t)get_u32(view, 0x1B2) == 20);
+  assert((int32_t)get_u32(view, 0x1B6) == 30);
+  assert((int32_t)get_u32(view, 0x1BA) == 0x111);
+  assert((int32_t)get_u32(view, 0x1BE) == 0x222);
+  assert((int32_t)get_u32(view, 0x1C2) == 0x333);
+
+  /* Second block: the override triple is out of the clamp box, so all three
+   * fall back to (-4000, 0, -4000); class 3 selects the action camera. */
+  mr.render.render_focus_valid = 0;
+  mr.camera_override_157a6f = 1;
+  mr.camera_override_triple[0] = 9000;
+  mr.camera_override_triple[1] = 20000;
+  mr.camera_override_triple[2] = -9000;
+  mr.render.native_view_class = 3;
+  mr.render.action_cam.pos_x = 1;
+  mr.render.action_cam.pos_y = 2;
+  mr.render.action_cam.pos_z = 3;
+  mr.render.action_cam.yaw = 4;
+  mr.render.action_cam.pitch = 5;
+  mr.render.action_cam.ratio = 6;
+
+  fifa96_match_replay_compose(&mr);
+
+  assert((int32_t)get_u32(view, 0x00) == -4000);
+  assert((int32_t)get_u32(view, 0x04) == 0);
+  assert((int32_t)get_u32(view, 0x08) == -4000);
+  assert((int32_t)get_u32(view, 0x1AE) == 1);
+  assert((int32_t)get_u32(view, 0x1B2) == 2);
+  assert((int32_t)get_u32(view, 0x1B6) == 3);
+  assert((int32_t)get_u32(view, 0x1BA) == 4);
+  assert((int32_t)get_u32(view, 0x1BE) == 5);
+  assert((int32_t)get_u32(view, 0x1C2) == 6);
+}
+
 int main(void) {
   test_ring_pack_apply_roundtrip();
   test_ring_capture_budget();
   test_ring_eviction();
   test_ring_empty_reset();
+  test_ring_compose();
   puts("test_engine_replay_ring OK");
   return 0;
 }

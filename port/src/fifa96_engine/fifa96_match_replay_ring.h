@@ -78,6 +78,20 @@ void fifa96_match_replay_ring_reset(struct fifa96_match_run *mr);
 /* `FUN_00064074`/`FUN_00064080`: clear/set the `[0x109A90]` recorder gate. */
 void fifa96_match_replay_ring_record(struct fifa96_match_run *mr, int on);
 
+/* The composer (`FUN_00036C70`'s view half, spec §5.2/§7.3): fill the view
+ * block from the staged render slots — the values the renderer draws — plus
+ * the focus triple, the ball roll and the camera matrix. The focus is
+ * `render.render_focus_*` when valid, else `camera_override_triple` when
+ * `camera_override_157a6f`, else `render.camera.pos_*`, clamped with
+ * `fifa96_camera_focus_clamp`. The packed heading is the native folded
+ * `((0x400 - (stage.heading >> 16)) & 0x3FF) << 6`, a hidden slot writes
+ * `FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y` in y, the six queue bytes are staged 0,
+ * `+0x1CC` is the `FUN_000974D0` stub 1 and `+0x1CE` the `FUN_000492CC`
+ * stand-in (`state.frame_delta`). The matrix comes from
+ * `native_view_cam[native_view_class]` when that class is a valid 0..2 view,
+ * else `action_cam`. */
+void fifa96_match_replay_compose(struct fifa96_match_run *mr);
+
 /* One live frame of the recorder: the 90-frame mode-window budget gate
  * (`[0x107310] < 0x5A`), the recorder gate and the `FUN_0006408C` packer
  * cadence. `ticks` is 1 per live frame; 0 is the native flush (write now,
