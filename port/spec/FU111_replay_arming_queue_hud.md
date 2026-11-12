@@ -265,3 +265,16 @@ and returns before touching the accumulator); `test_engine_replay_ring`
 `test_ring_capture_budget` pins the 44-record window, the blocked 90th frame,
 the reset-phase clear and the flush. No completion-number movement and no
 golden re-pin.
+
+## 10. Erratum (2026-11-12) — the §4 step-direction labels are swapped
+
+**Erratum (quoted).** §4's state-table rows read "`0x84` — `FUN_00063e54`
+(step back)" and "`0x85` — `FUN_00063cbc` (append/step forward)". The
+direction labels are swapped: native `0x84` is the **forward** double-step
+(two `FUN_00063CBC`) and `0x85` is the **back** double-step (two
+`FUN_00063E54`), and the input maps `8 → 0x85` (back) / `4 → 0x84` (forward).
+This is the same label swap corrected for FU-107 §8 and the ENGINE Phase 121
+enum erratum; see FU-107 §4 (which already lists `0x84`→`63CBC`×2 and
+`0x85`→`63E54`×2) and design `2026-11-12-recorded-replay-ring` §5.4/§7.4 for
+the corrected mapping. The §4 table above is left verbatim (append-only). No
+code changed and no completion-number movement.

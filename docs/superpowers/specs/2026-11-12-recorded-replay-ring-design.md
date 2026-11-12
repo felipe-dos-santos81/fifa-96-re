@@ -526,6 +526,10 @@ Append-only, in the source docs:
 - **FU-111 §1.** The gate is a budget cap, not a pause: the reset modes set
   the counter to 0 and the packer runs; an uninterrupted increment-mode run
   yields 44 records (the 90th frame's pack is blocked).
+- **FU-111 §4.** The §4 state table's `0x84`/`0x85` direction labels are
+  swapped (the same swap corrected for FU-107/ENGINE): native `0x84` is the
+  forward double-step and `0x85` the back double-step. The §4 table is left
+  verbatim; the correction lands as FU-111 §10.
 - **FU-351 §26 / FU72 remaining-leg paragraphs.** The recorded-frame ring is
   no longer a leg; the replay camera record cycle (RR-L5) and the mode-7
   request/timed exit (RR-L7) remain.
@@ -611,8 +615,9 @@ stamp applies into view `+0x1CE`); FU-112 §1 (first triple is the camera
 focus, the 23rd frame byte is `[0x15887B]`); FU-107/ENGINE (wire values
 `0x84`=forward two, `0x85`=back two, input `8`→`0x85` and `4`→`0x84`;
 `0x82`=idle/display, `0x83`=playing countdown); FU-111 §1 (budget cap, 44
-records per uninterrupted run); FU-351 §26/FU72 (the ring leg is landed;
-RR-L5 and RR-L7 remain).
+records per uninterrupted run) and FU-111 §4 (the §4 state-table direction
+labels are swapped, corrected as FU-111 §10); FU-351 §26/FU72 (the ring leg is
+landed; RR-L5 and RR-L7 remain).
 
 **Remaining legs (unchanged from §7.8).** RR-L1 allocator/lifecycle; RR-L2
 recorder overlay gating; RR-L3 camera band/queue producers; RR-L4 appearance
