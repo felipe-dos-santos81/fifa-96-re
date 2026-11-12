@@ -126,8 +126,11 @@ correct that:
 - `[0x1068E0]` is written to 1 by `FUN_00048ED8` (`0x48FE1`) and to 0 by
   `FUN_00048FF4` (`0x4902F`). Both are in the kit-preview cluster;
   `FUN_00048ED8` builds the `0x14B200`/`0x14B500` preview buffers.
-- The callers are the kit-preview sprite/palette builders
-  `FUN_000563D0` (`0x56478`) and `FUN_00057158` (`0x5721A`).
+- The callers are the preview/kit cluster's sprite path: `FUN_000563D0`
+  (`0x56478`, which calls `FUN_00048DC0(DAT_00108FAC)`) and
+  `FUN_00057158` (`0x5721A`). The load-bearing evidence is the flag:
+  `[0x1068E0]` is set by `FUN_00048ED8` (`0x48FE1`) and cleared by
+  `FUN_00048FF4` (`0x4902F`), both in the kit-preview cluster.
 - The live-match path never sets `[0x1068E0]`: the image cell reads 0,
   and the only writers are the preview set/clear above.
 
@@ -164,14 +167,17 @@ Fresh evidence:
 - `0x487D9` is `MOV [ESI + 0x107080], EAX`, inside `FUN_000481EC`'s
   lineup loop; `FUN_00048D38` calls `FUN_000481EC` and then
   `FUN_00047298(1)`.
+- `0x107080` is the lineup-order array; `0x487A0 MOV EBP,0x15` (21) is
+  the bound the loop stages before the write loop, and `FUN_00048D38`
+  calls `FUN_000481EC` before `FUN_00047298(1)`.
 - `0x106AFD`/`0x106AFE` read 6/5 (the special-branch source bytes).
 
 Required closure: a fresh read of `FUN_000481EC`'s loop bound and value
-range (the lineup order, 22 entries, values 0..21) showing the class
-entries are < 0x16. If the bound/range confirms, close the branch as
-unreachable and keep the builder's comment. If a class entry can reach
-0x16, reopen and port the branch. The plan's evidence task owns the
-verdict. No code expected.
+range (the lineup order, values 0..0x15) showing the class entries are
+< 0x16. If the bound/range confirms, close the branch as unreachable and
+keep the builder's comment. If a class entry can reach 0x16, reopen and
+port the branch. The plan's evidence task owns the verdict. No code
+expected.
 
 ### 6.5 B1 — `FUN_0008ECC4` counter path (code)
 
@@ -219,54 +225,48 @@ Fresh decompiles:
 
 - `FUN_0007417C` computes `[0x157ABE] = ([0x157AC2] ^ byte[0x157AC3]) & 1`
   and `[0x157ABF] = that ^ 1`.
-- The unnamed writer at `0x742B4` (in the function at `0x74293`..) uses
-  the same formula.
+- The unnamed writer at `0x742B4` (in the block at `0x74293`..) uses the
+  same formula; its enclosing function is not created in the project
+  (`get_function_by_address 0x74293` = none), so its caller/producer stays
+  a leg.
 - `search_instructions` for `0x157AC3` finds only one store:
-  `FUN_00073EE0 0x73F5E MOV byte[0x157AC3], BL`, and that function zeroes
-  the low byte as part of the match reset (the decompile shows
-  `DAT_00157ac3._0_1_ = 0`). The other references are the two XOR reads.
-- `[0x157AC2]` is the engine's existing `global_157ac2`.
+  `FUN_00073EE0 0x73F5E MOV byte[0x157AC3], BL` (the match reset writes
+  the low byte 0). The other references are the two XOR reads.
+- `[0x157AC2]` is the native phase/mode byte: a fresh
+  `search_instructions` finds 56 references, with writers at `0x4B0DE`
+  (4), `0x4BA20` (8), `0x4BA31` (DL), `0x38990` (DH), `0x73F82` (DH),
+  `0x88D6A` (BL), `0x8B58A` (BH) and `0x8B61B` (`INC`). The engine's
+  `global_157ac2` is the current period model, not yet proved identical.
 
 Required behavior:
 
-- Add `match_run_update_side_swap(mr)`: `mr->side_swap =
-  (mr->global_157ac2 ^ 0u) & 1u` (the `0x157AC3` cell is staged 0; the
-  only static writer zeroes it).
-- Call it where the native `FUN_0007417C` runs at match reset, and at the
-  engine's `global_157ac2` period-roll points where the second writer's
-  producer maps. If the second writer's caller is not ported, record that
-  half as a leg and wire the reset half.
-- Replace the two unconditional `mr->side_swap = 0` assignments with the
-  helper. Keep the non-live tapes byte-identical: the tapes' `157ac2` is
-  0, so the value stays 0.
-- **Table-consistency rule (settled).** The native key is `[[entity+4]]`,
-  unique per player; the engine's key is the per-side roster id, unique
-  only within a block. Before B2 ships a non-zero `side_swap`, the plan
-  must (a) census `0x157AC2`'s writers/values and confirm the engine's
-  `global_157ac2` is the same cell, and (b) prove the table stays
-  consistent across a flip: either the native re-initialises/re-keys the
-  table at the flip point (mirror it), or the engine's key must be made
-  globally unique and the replay `order_id`/`activity.count` side
-  indexing must use the same mapping. If neither is proved, B2 ships
-  only the reset write (where `side_swap` stays 0) and the flip stays a
-  leg. No half-time flip ships on an unproved key mapping.
+- Add a pure helper
+  `uint8_t fifa96_match_side_swap_value(uint8_t native_157ac2, uint8_t native_157ac3);`
+  = `(native_157ac2 ^ native_157ac3) & 1u`.
+- Add `match_run_update_side_swap(mr)` calling it with
+  `mr->global_157ac2, 0u`; replace the two unconditional
+  `mr->side_swap = 0` assignments. At reset `global_157ac2` is 0, so the
+  value stays 0 and the non-live tapes are unchanged.
+- **The non-zero flip is not wired in this slice.** B2-L1 records the
+  `0x157AC2` mapping, the second writer's missing caller and the
+  table-consistency proof as the remaining leg. No half-time flip ships
+  on an unproved key mapping.
 
-Tests: reset with `global_157ac2` 0/2/3 sets `side_swap` 0/0/1 (the
-formula is `& 1`) **only after the table-consistency rule is proved**;
-the stats block selection follows; a flipped run cannot match the other
-team's same-numbered player; M1/M2 exact.
+Tests: the pure helper at `(0,0)=0`, `(1,0)=1`, `(2,0)=0`, `(3,0)=1`,
+`(0,1)=1`, `(0xFF,0)=1`; the run's reset keeps `side_swap == 0`; M1/M2
+exact. The flip test waits for B2-L1.
 
 ### 6.7 B3 — the 1.25× weight writer census (documentary expected)
 
-Fresh `search_instructions` passes over the image for stores to
-`[rec+0x8D]` and the covering dword `[rec+0x8A]`, plus the record/team
-init (`FUN_0006D9C4`, `FUN_00073D10`, `FUN_0007417C`, the lineup builder
-`FUN_000481EC`), and `memset`/`memcpy` on the record blocks. The prior
-census found no writer; this slice re-runs it fresh and records the
-exact command/result. Expected verdict: `+0x8D` stays 0 in the modeled
-match, so the 2× branch is the only reachable weight and the 1.25× arm
-is a documented dead branch. No code. If a writer appears, port the
-branch and update the weight tests.
+Fresh `search_instructions` passes over the image (2026-11-11): a `MOV`
+scan for the literal `+ 0x8d]` returns 19 matches, all loads
+(`AL/BL/CL/DL/AH` or a dword from `[.. + 0x8d]`); the `MOV` scan for
+`+ 0x8a]` returns 49 matches, all loads. No static store to either cell
+appears, and the record/team init (`FUN_0006D9C4`, `FUN_00073D10`,
+`FUN_0007417C`, `FUN_000481EC`) does not write them. Expected verdict:
+`+0x8D` stays 0 in the modeled match, so the 2× branch is the only
+reachable weight and the 1.25× arm is a documented dead branch. No code.
+If a writer appears, port the branch and update the weight tests.
 
 ### 6.8 C1 — three replay input minors (code)
 
@@ -316,16 +316,17 @@ Fresh evidence:
 
 Required behavior:
 
-- Record the native chain as a leg: the request is a menu/pause-screen
-  producer, not a live-match event, and the port has no replay menu item.
-  The host `R`/BACK key remains the documented adapter at the arm
-  (`FUN_00064270`).
-- Optional narrow seam: add the `FUN_000510DC` request cells
-  (`request_state`/`request_timer`/`exit_timer`) and a
-  `fifa96_match_run_replay_request(mr)` that mirrors only the begin arm;
-  the host key calls it. The timed exit (`FUN_00064E74`/`FUN_00064DFC`)
-  depends on the recorded-frame ring and stays a leg. If the seam cannot
-  be split without the ring, the whole item is the documented leg.
+- **Verdict: documented adapter, no request seam.** The request is a
+  menu/pause-screen producer, not a live-match event, and the port has no
+  replay menu item. The host `R`/BACK key remains the documented adapter
+  at the arm (`FUN_00064270`).
+- The native `FUN_000510DC` request cells (`[0x8E0C]`/`[0x8E10]`/
+  `[0x4E58C]`) and the timed exit (`FUN_00064E74`/`FUN_00064DFC`,
+  ring-dependent) stay a numbered leg: the request path is entangled with
+  the recorded-frame ring, so a partial seam would claim more than it
+  proves. No code in this slice.
+- The closure records the exact chain and the adapter, so the leg is
+  narrowed to the menu producer and the ring, not the arm.
 
 ### 6.10 C3 — the live-match freeze (code)
 
@@ -376,17 +377,20 @@ Required behavior:
   1/3; if not, the hook is a documented no-op seam and the exact `0x2B`
   channel remains a leg.
 - **Persistence rule (settled).** The duck is persistent, not one-shot:
-  `fifa96_match_audio` gains a `replay_ducked` flag and saved base gains.
-  `replay_arm` saves the current crowd/SFX gains, stops the crowd voice,
-  scales the gains to 1/3 and sets the flag; while the flag is set,
-  `audio_step` does not re-arm the crowd loop and leaves the ducked gains
-  in place; `replay_release` restores the saved gains and clears the
-  flag. A second arm while set is a no-op (idempotent, not
-  multiplicative). The native de-arm/restore is not evidenced; the
-  engine-side release is an adapter and is recorded as C4-L1. The run
-  carries a `replay_audio_armed` cell so the engine can observe the edge;
-  the arm call site is the run's replay begin, the release is
-  `replay_exit`.
+  `fifa96_match_audio` gains a `replay_ducked` flag; `replay_arm` stops
+  the crowd voice with `fifa96_mixer_stop(&a->mixer, a->crowd_voice)` and
+  sets the flag; the gain scale is derived
+  (`a->sfx_percent / 3` while ducked, the unchanged `a->sfx_percent`
+  otherwise), and while the flag is set `audio_step` does not re-arm the
+  crowd loop. `replay_release` clears the flag; the next `audio_step`
+  re-arms the crowd through the existing
+  `fifa96_mixer_voice_active` check. A second arm while set is a no-op
+  (idempotent, not multiplicative). The native de-arm/restore is not
+  evidenced; the engine-side release is an adapter and is recorded as
+  C4-L1. The run carries a `replay_audio_armed` cell so the engine can
+  observe the edge; the arm/release calls are the engine's audio-step
+  edge (`fifa96_engine.c`, the `fifa96_match_audio_step` call site), and
+  the run sets/clears the cell in `replay_begin`/`replay_exit`.
 - The audio module is a no-op with no banks; the hook must stay silent
   in headless/no-ISO runs.
 - Tests: a parsed-bank fixture asserts the crowd stop/duck on arm, no
@@ -401,8 +405,8 @@ Per leg:
   fresh commands/results.
 - B1: `test_engine_match_render`/`test_engine_match_bridge` counter and
   flag assertions; the scorer bump through the score-event writer.
-- B2: `test_engine_match_render`/`test_engine_match_bridge` `side_swap`
-  assertions at `global_157ac2` 0/1 and the stats block flip.
+- B2: the pure helper cases and the reset `side_swap == 0`; the flip is
+  B2-L1.
 - B3: the census record; no test change unless a writer is found.
 - C1: the three input cases above, in `test_engine_match_input` /
   `test_engine_replay_key_arms`.
