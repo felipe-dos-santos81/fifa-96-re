@@ -5363,3 +5363,32 @@ close-out below).
   mapping, the ball frame byte, the re-sync hooks). Record: ENGINE Phase 121,
   design §10 closure, FU-108 §7, FU-109 §8, FU-112 §7, FU-107 §8, FU-111 §9,
   FU-351 §27, FU72 closure.
+
+- **Phase 122 open-items closure, Slice A (2026-11-12).** The proof/erratum
+  slice; append-only, no engine code, no golden re-pin, no completion-number
+  movement. **C4-L1** is closed as a misattribution: `FUN_0005865C` (from the
+  replay arm `FUN_00064270` at `0x6427F`) is a screen/projection reset —
+  `FUN_00056B88(0x2B)` writes the `0x1543A4`/`0x14E838` 12-dword table and the
+  `0x14E868..0x14E9B8` block, `FUN_00056894` the `0x1543A0` matrix, and the
+  `0x14E9B8` 0x5C-byte array is transform data divided by 3 — not a mixer
+  channel stop; the engine audio duck is an adapter and the arm's real
+  `0x5865C` view reset is the new **C4R-L1** leg (B). **RR-L9** is closed by
+  proof (`0x15887B` one READ at `0x36E38`, no static writer). The 23rd
+  remap-pool slot has no static consumer (`get_xrefs_to 0x14BF9C` = 0); the
+  runtime-indexed consumer stays **A1-R** (B). The option cells have no store
+  (`0x105284`/`0x105298` four `FUN_0001CAEC` READs each); **FU348-L2c/L2d** go
+  to B. **Ring re-labels:** RR-L1 (embedded ring, out of contract) and RR-L8
+  (mode-byte phase mapping) re-labeled; RR-L2 is a live **B** handoff (the
+  `[0x14E574]` latch gates the live match recorder); RR-L10 is split — the
+  `0x974D8` `RET` half closed, the `0x974DC` queue/scalar half B. **RR-L6
+  proved:** `[0x10732C]` is the integer whole-frame frame counter (five live
+  writes, none `0x200`), so the composer's `+0x1CE = state.frame_delta` is
+  correct and `test_ring_compose` pins it; no code. The exact frame-rate
+  reconciliation stays open. **B/C handoff:** B takes the 19 `0x8ED40` sites,
+  B2-L1, RR-L2/L3/L4/L5/L7, RR-L10's `0x974DC`, C4R-L1, A1-R and
+  FU348-L2c/L2d; C takes `FUN_0003BB1C`, its `0x110C70` screen table and the
+  `0x8FF30` consumer. **Gate:** `make check` **125/125**; M1/M2 `cmp`
+  byte-exact; windowed smoke `124`. No golden re-pin and no completion-number
+  movement (78/78, wired 61/80 / 64/80 install-live, README title unchanged).
+  Record: ENGINE Phase 122, design §6/§7, FU-351 §28, FU158 §11, FU-348 §9,
+  FU-350 §8, FU108 §8, FU111 §11, ring design §11/§12.

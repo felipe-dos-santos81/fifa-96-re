@@ -12578,3 +12578,67 @@ consumer and the `FUN_0001CAEC` option UI are unchanged.
 
 Record: design §10 (closure), FU-108 §7, FU-109 §8, FU-112 §7, FU-107 §8,
 FU-111 §9, FU-351 §27, FU72 closure, PROGRESS Phase 121.
+
+## Phase 122 — open-items closure, Slice A (2026-11-12)
+
+Slice A (design `2026-11-12-open-items-closure-slice-a`, Tasks 1–5) is the
+proof/erratum slice: it closes the inert or misattributed items and names the
+live code paths for Slices B/C. Append-only; no engine code, no golden re-pin
+and no completion-number movement.
+
+**C4-L1 is closed as a misattribution (Task 1).** Fresh decompiles show
+`FUN_0005865C` (called from the replay arm `FUN_00064270` at `0x6427F`) is a
+screen/projection reset, not a mixer channel stop: `FUN_00056B88(0x2B)` writes
+the 12-dword `0x1543A4` table from `param_1`/`-param_1`, copies it to
+`0x14E838`, adjusts `0x14E838/0x14E840/0x14E844/0x14E84C/0x14E850/0x14E85C`
+and calls `FUN_0004C478` over `0x14E868..0x14E9B8`; `FUN_00056894` builds the
+12-value `0x1543A0` matrix from `param_2`/`param_3 << 8`; the `0x14E9B8`
+0x5C-byte array is transform data divided by 3, not a channel-volume array.
+The engine audio duck is an **adapter** with no native audio gate at the arm;
+the arm's real `0x5865C` screen/projection reset is the new **C4R-L1** leg
+handed to Slice B (FU-351 §28, small-legs design §12).
+
+**The conservative proofs (Task 2).** RR-L9 is closed: `get_xrefs_to 0x15887B`
+= 1 READ at `0x36E38` in the composer `FUN_00036C70` and no static writer, so
+the port's staged 0 is exact for the analyzed image (FU158 §11). The 23rd
+remap-pool slot's static proof is recorded (`get_xrefs_to 0x14BF9C` = 0, no
+static consumer); the runtime-indexed consumer stays a leg (**A1-R**, handed to
+B). The option cells' no-store proof is recorded (`0x105284`/`0x105298` four
+`FUN_0001CAEC` READs each, no store); **FU348-L2c** (the option UI) and
+**FU348-L2d** (the non-default A4 branch, live at match setup) are handed to B
+(FU-348 §9, FU-350 §8).
+
+**The ring re-labels (Task 3).** RR-L1 is re-labeled (the embedded
+150 × `0x118` ring is the chosen design; the native allocator lifecycle is out
+of contract). RR-L8 is re-labeled (the port's `state.phase` is the
+`[0x157A4A] >> 24` model; the budget gate follows the mode byte). RR-L2 is a
+**B handoff (live)**: the `[0x14E574]` latch gates the live match recorder
+through `FUN_00064074`/`FUN_00064080` (`[0x109A90]`), and the re-enable half
+`FUN_00053A48` is reached from the live match frame (`FUN_000493A0` `0x49523`,
+`FUN_00049B28` `0x4A045`). RR-L10 is split: the `0x974D8` half is closed (a
+bare `RET`; the port's `replay_transition` no-op is exact), and the `0x974DC`
+queue/scalar half is handed to B (FU108 §8, FU111 §11, ring design §11).
+
+**RR-L6 proved (Task 4).** `FUN_000492CC` is exactly `MOV EAX,[0x10732C]; RET`
+and the composer writes that word into the view `+0x1CE` (`0x155C72`). The five
+live writes to `[0x10732C]` (`0x49B86`/`0x49BC2` in `FUN_00049B28`,
+`0x4A08A`/`0x4A0C9` in `FUN_0004A068`, `0x492FD` in `FUN_000492E8`) copy or
+reduce the whole-frame integer counter `[0x10731C]`, which the frame timer
+`FUN_00049320` increments by one per whole frame; none writes `0x200`. The
+composer's `+0x1CE = state.frame_delta` is therefore the correct scale and
+`test_ring_compose` pins it (`+0x1CE == 2`). No code change. The exact
+frame-rate reconciliation (the `0x102`/`0x35C` timer ratio) stays open.
+
+**B/C handoff.** Slice B: the 19 `0x8ED40` sites, B2-L1, RR-L2 (live), RR-L3/
+L4/L5/L7, RR-L10's `0x974DC` half, C4R-L1 (the `0x5865C` view reset), A1-R (the
+23rd-slot runtime consumer), FU348-L2c/L2d. Slice C: `FUN_0003BB1C`, its
+screen table `0x110C70` and the `0x8FF30` third-selection consumer.
+
+**Gate and unchanged.** `make check` **125/125** strict-clean; M1/M2 `cmp`
+byte-exact; windowed smoke exit 124. Port coverage 78/78, wired 61/80 (64/80
+install-live), the README title and the M1/M2 goldens are unmoved — no new
+dispatch body/row and no golden re-pin.
+
+Record: design `2026-11-12-open-items-closure-slice-a` §6/§7, FU-351 §28,
+FU158 §11, FU-348 §9, FU-350 §8, FU108 §8, FU111 §11, ring design §11/§12,
+PROGRESS Phase 122.
