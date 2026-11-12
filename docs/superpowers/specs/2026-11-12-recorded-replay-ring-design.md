@@ -186,7 +186,7 @@ fold twice.
   state therefore survives the frame (the HUD highlights the step button) and
   resets on the next call. The port's current next-call reset is right; the
   missing piece is the actual double-step in the same call.
-- **Pause at the end rewinds.** The `0x82` play/pause arm, when
+- **Idle at the end rewinds.** The `0x82` play/pause arm, when
   `[0x9A94] >= count`, sets `[0x9A94] = 0` and calls `FUN_00063CBC` (applies
   record 0, cursor = 1) before entering `0x83`. The port currently wraps
   `cursor` without applying.
@@ -471,7 +471,10 @@ Add to `port/tests/test_engine_match_frame.c` and
   composed render value.
 - **RR-L5 — the `0x20` camera cycle / matrix precedence.** The replay camera
   record cycle and the non-pose camera views. The default pose camera uses
-  the recorded matrix; the others keep the existing selector.
+  the recorded matrix; the others keep the existing selector. The native
+  matrix source is the `[0x7DC8]` active view object (FU-121); the port
+  captures its six fields from `native_view_cam`/`action_cam`, whose identity
+  with that object is part of this leg.
 - **RR-L6 — the tick source.** `FUN_000492CC` is `[0x10732C]`; the port uses
   1 per granted frame and `frame_delta` for `+0x1CE`. The exact live
   frame-rate/tick reconciliation stays open.
