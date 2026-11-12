@@ -1533,6 +1533,13 @@ struct fifa96_match_run {
    * poll) so a press made during the replay arms correctly and no pre-arm
    * latch fires after the exit. Set by `fifa96_match_run_replay_exit`. */
   uint8_t input_resync;
+  /* C4 (design §6.11): the replay-arm observation cell the engine's audio
+   * step edges on. `fifa96_match_run_replay_begin` sets it,
+   * `fifa96_match_run_replay_exit` clears it; the engine calls
+   * `fifa96_match_audio_replay_arm`/`_release` on the `armed && !ducked` /
+   * `!armed && ducked` edge (`fifa96_engine.c`, the audio-step site). The
+   * run only carries the cell; the audio module owns the duck. */
+  uint8_t replay_audio_armed;
   /* Phase 77 derived human contact [D]. The stored human side survives the
    * native restart-side flip after a human foul; the tackle edge runs the
    * same contact/referee seam as the AI. */

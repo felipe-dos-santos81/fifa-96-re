@@ -81,6 +81,7 @@ struct fifa96_match_audio {
   int have_sfx;              /* SFX_GAME parsed */
   int have_crowd;            /* CHN_GEN1 parsed */
   int active;                /* start ran; step may still be asset-disabled */
+  uint8_t replay_ducked;     /* C4: the persistent pre-arm duck is active */
   uint32_t sfx_percent;      /* P6 SFX volume x Sound Effects, 0..100 */
   int last_whistle_voice;    /* voice of the most recent whistle, -1 if none */
   uint8_t last_whistle_gain; /* mixer gain byte of that whistle (0..0x7F) */
@@ -114,6 +115,23 @@ int fifa96_match_audio_start(struct fifa96_match_audio *a,
 int fifa96_match_audio_step(struct fifa96_match_audio *a,
                             struct fifa96_match_run *mr,
                             fifa96_platform *plat, uint32_t ticks);
+
+/* C4 (design §6.11) — the native pre-arm audio `FUN_0005865C`: it sets
+ * `[0x109014] = 0`, stops channel `0x2B` (`FUN_00056B88(0x2B)`) and, when
+ * `[0x14E9B8] > 0x7F`, divides the 0x5C-byte channel-volume array by 3.
+ *
+ * The engine applies the settled persistent shape to the one channel it owns:
+ * `replay_arm` stops the crowd loop and sets `replay_ducked`; while the flag is
+ * set every component gain uses `sfx_percent / 3` and `audio_step` does not
+ * re-arm the crowd. Both hooks are idempotent and silent with no bank.
+ * `replay_release` only clears the flag; the next `audio_step` re-arms the
+ * crowd through the existing voice-active check.
+ *
+ * The native `0x2B` channel map is not proved and the native restore is not
+ * evidenced: the engine-side release is an adapter and the exact channel
+ * remains a leg (C4-L1). */
+void fifa96_match_audio_replay_arm(struct fifa96_match_audio *a);
+void fifa96_match_audio_replay_release(struct fifa96_match_audio *a);
 
 /* Release the voices/state. Bank bytes are borrowed and stay with the cache. */
 void fifa96_match_audio_stop(struct fifa96_match_audio *a);

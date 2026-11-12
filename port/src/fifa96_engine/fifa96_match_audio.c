@@ -42,6 +42,13 @@ static uint8_t match_audio_scale_volume(uint8_t base, uint32_t percent) {
   return (uint8_t)((uint32_t)base * percent / FIFA96_MATCH_AUDIO_PERCENT_UNITY);
 }
 
+/* C4: the pre-arm duck divides the native channel-volume array by 3, so every
+ * component gain takes this percent while `replay_ducked` is set; the release
+ * restores the caller's percent. A second arm does not divide again. */
+static uint32_t match_audio_percent(const struct fifa96_match_audio *a) {
+  return a->replay_ducked ? a->sfx_percent / 3u : a->sfx_percent;
+}
+
 /* Arm the CHN loop. A6-L3 records both choices: CHN_GEN1 is the generic bank
  * because the engine has no team identity (the native FUN_000652f0 selector
  * is unresolved, FU-43 §6 leg 1), and 0x60 is the plan's fixed crowd gain
@@ -54,12 +61,34 @@ static void match_audio_arm_crowd(struct fifa96_match_audio *a) {
   memset(&opts, 0, sizeof opts);
   opts.pan = -1;
   opts.volume = match_audio_scale_volume(FIFA96_MATCH_AUDIO_CROWD_VOLUME,
-                                         a->sfx_percent);
+                                         match_audio_percent(a));
   opts.master = FIFA96_MATCH_AUDIO_MASTER;
   memset(out, 0, sizeof out);
   int rc = fifa96_sfx_arm_alloc(&a->mixer, &a->crowd,
                                 FIFA96_MATCH_AUDIO_CROWD_ID, &opts, out);
   if (rc >= 0) a->crowd_voice = out[0].voice;
+}
+
+/* C4: the native `FUN_0005865C` stop/duck, kept persistent on the one channel
+ * the engine owns. The crowd loop is stopped and the flag makes every gain use
+ * the 1/3 percent until the release; a second arm while the flag is set is a
+ * no-op (not multiplicative). No banks -> crowd_voice is already -1 and the
+ * hook only sets the flag, so the headless/no-ISO path stays silent. */
+void fifa96_match_audio_replay_arm(struct fifa96_match_audio *a) {
+  if (!a) return;
+  if (a->crowd_voice >= 0) {   /* FUN_00056B88(0x2B) mapped to the CHN loop */
+    fifa96_mixer_stop(&a->mixer, a->crowd_voice);
+    a->crowd_voice = -1;
+  }
+  a->replay_ducked = 1;
+}
+
+/* The native restore is not evidenced (C4-L1): the engine adapter only clears
+ * the flag, and the next step re-arms the crowd through the voice-active
+ * check. */
+void fifa96_match_audio_replay_release(struct fifa96_match_audio *a) {
+  if (!a) return;
+  a->replay_ducked = 0;
 }
 
 int fifa96_match_audio_start(struct fifa96_match_audio *a,
@@ -92,7 +121,7 @@ static void match_audio_play_whistle(struct fifa96_match_audio *a) {
   memset(&opts, 0, sizeof opts);
   opts.pan = -1;
   opts.volume = match_audio_scale_volume(FIFA96_MATCH_AUDIO_CUE_VOLUME,
-                                         a->sfx_percent);
+                                         match_audio_percent(a));
   opts.master = FIFA96_MATCH_AUDIO_MASTER;
   memset(out, 0, sizeof out);
   if (fifa96_sfx_play_id(&a->mixer, &a->ids, FIFA96_MATCH_AUDIO_WHISTLE_ID,
@@ -112,7 +141,7 @@ static void match_audio_play_goal(struct fifa96_match_audio *a) {
   memset(&opts, 0, sizeof opts);
   opts.pan = -1;
   opts.volume = match_audio_scale_volume(FIFA96_MATCH_AUDIO_CROWD_VOLUME,
-                                         a->sfx_percent);
+                                         match_audio_percent(a));
   opts.master = FIFA96_MATCH_AUDIO_MASTER;
   memset(out, 0, sizeof out);
   if (fifa96_sfx_play_id(&a->mixer, &a->ids, FIFA96_MATCH_AUDIO_GOAL_ID,
@@ -153,9 +182,11 @@ int fifa96_match_audio_step(struct fifa96_match_audio *a,
   if (total > a->last_score) match_audio_play_goal(a);
   a->last_score = total;
 
-  /* The crowd loop can be stolen by the whistle/goal allocator; re-arm it. */
-  if (a->have_crowd && (a->crowd_voice < 0 ||
-                        !fifa96_mixer_voice_active(&a->mixer, a->crowd_voice)))
+  /* The crowd loop can be stolen by the whistle/goal allocator; re-arm it. A
+   * ducked loop stays stopped until `replay_release` (C4). */
+  if (!a->replay_ducked && a->have_crowd &&
+      (a->crowd_voice < 0 ||
+       !fifa96_mixer_voice_active(&a->mixer, a->crowd_voice)))
     match_audio_arm_crowd(a);
 
   /* 22050 frames/s over 100 PIT ticks/s: 220/221 frames per 10 ms tick. The

@@ -82,6 +82,10 @@ static void test_no_assets_is_silent(void) {
   assert(a.active == 1);
   assert(a.have_sfx == 0 && a.have_crowd == 0);
   assert(a.crowd_voice == -1);
+  fifa96_match_audio_replay_arm(&a);
+  assert(a.replay_ducked == 1 && a.crowd_voice == -1);
+  fifa96_match_audio_replay_release(&a);
+  assert(a.replay_ducked == 0);
   for (int i = 0; i < 10; i++)
     assert(fifa96_match_audio_step(&a, mr, &plat, 1) == 0);
   assert(cap.frames == 0);       /* no banks -> no submit */
@@ -282,6 +286,21 @@ static void test_retail_banks(void) {
   assert(cap.peak > 0x100u);
   assert(cap.energy / (cap.frames * 2u) > 100u);  /* mean |sample| */
   assert(fifa96_mixer_voice_active(&a.mixer, a.crowd_voice) == 1);
+
+  /* C4: the pre-arm duck is persistent and idempotent. */
+  int voice = a.crowd_voice;
+  fifa96_match_audio_replay_arm(&a);
+  assert(a.replay_ducked == 1);
+  assert(!fifa96_mixer_voice_active(&a.mixer, voice));
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.crowd_voice == -1);                 /* no re-arm while ducked */
+  fifa96_match_audio_replay_arm(&a);           /* idempotent */
+  assert(a.replay_ducked == 1 && a.crowd_voice == -1);
+  fifa96_match_audio_replay_release(&a);
+  assert(a.replay_ducked == 0);
+  assert(fifa96_match_audio_step(&a, mr, &plat, 0) == 0);
+  assert(a.crowd_voice >= 0);
+  assert(fifa96_mixer_voice_active(&a.mixer, a.crowd_voice));
 
   /* Whistle: one cue per ref_whistle change, none while the slot is held. */
   uint32_t cues = a.whistle_cues;

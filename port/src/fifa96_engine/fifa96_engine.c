@@ -485,10 +485,16 @@ int fifa96_engine_step(struct fifa96_engine *e) {
         } else {
           /* P3: the run step above has applied this frame's whistle writer, so
            * the audio cue edge is sampled after it (the clock already advanced
-           * the 100 Hz pump before this dispatch). */
-          if (!e->cfg.headless && e->audio.active)
+           * the 100 Hz pump before this dispatch). C4: the replay arm/release
+           * edge follows the run cell; the hooks are silent with no banks. */
+          if (!e->cfg.headless && e->audio.active) {
+            if (e->match->replay_audio_armed && !e->audio.replay_ducked)
+              fifa96_match_audio_replay_arm(&e->audio);
+            else if (!e->match->replay_audio_armed && e->audio.replay_ducked)
+              fifa96_match_audio_replay_release(&e->audio);
             (void)fifa96_match_audio_step(&e->audio, e->match, e->plat,
                                           e->step_ticks);
+          }
           /* One presentation pass per presented frame: recompose the indexed
            * match canvas before the surface->planes conversion below. The run
            * no-ops while rendering is disabled (the Task 12-14 fixtures). */

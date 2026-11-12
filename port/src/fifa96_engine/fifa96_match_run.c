@@ -5261,6 +5261,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->live_switch_down = 0;
   mr->live_tackle_down = 0;
   mr->input_resync = 0;                /* C1: no replay-exit re-sync pending */
+  mr->replay_audio_armed = 0;          /* C4: no replay-arm audio edge pending */
   mr->live_human_side = 0;
   mr->live_kick_hold = 0;              /* P7: no live possession hold */
   mr->live_kick_active = 0;            /* P7: no live ball flight */
@@ -5348,6 +5349,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->live_switch_down = 0;
   mr->live_tackle_down = 0;
   mr->input_resync = 0;                /* C1: no replay-exit re-sync pending */
+  mr->replay_audio_armed = 0;          /* C4: a fresh match starts unducked */
   mr->live_kick_hold = 0;              /* P7: fresh live possession hold */
   mr->live_kick_active = 0;            /* P7: fresh live ball flight */
   mr->live_kick_frames = 0;
@@ -9705,6 +9707,7 @@ int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
   mr->live_switch_press = 0;
   mr->live_tackle_press = 0;
   mr->input_resync = 0;
+  mr->replay_audio_armed = 1;   /* C4: the engine audio step arms the duck */
   (void)fifa96_match_run_replay_camera_set(mr, 0);
   return FIFA96_OK;
 }
@@ -9770,6 +9773,8 @@ void fifa96_match_run_replay_exit(struct fifa96_match_run *mr) {
    * freed (the hero/selection release and the audio sinks stay legs). */
   mr->render.replay.state = FIFA96_MATCH_REPLAY_LIVE;
   mr->render.replay.hud_armed = 0;
+  /* C4: the engine audio step sees the cleared cell and releases the duck. */
+  mr->replay_audio_armed = 0;
   /* C1: the next non-replay input poll re-syncs the switch/tackle physical
    * levels and drops any edge made during the replay. */
   mr->input_resync = 1;
