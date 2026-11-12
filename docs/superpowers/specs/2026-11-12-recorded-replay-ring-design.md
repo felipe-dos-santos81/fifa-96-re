@@ -12,9 +12,9 @@ The live replay trigger, state machine, camera selector, overlay and the
 live-match freeze are ported. What the replay plays is still the **frozen
 present**: `fifa96_match_run_frame` stops the live body and draws the current
 entities while the state machine advances. The native replay plays the
-**recorded past**: every live frame is composed into the `0x155AA4` block and
-packed into a 150-slot `0x118`-byte ring; playback applies a record back into
-the block and the renderer draws that block.
+**recorded past**: every recordable live frame is composed into the `0x155AA4`
+block and packed into a 150-slot `0x118`-byte ring; playback applies a record
+back into the block and the renderer draws that block.
 
 This slice makes the port's replay a true recorded replay. It closes the
 FU-108/FU-109/FU-112 core (buffer, cursors, record format, composer) and
@@ -30,8 +30,8 @@ stamps.
   cadence and under the native mode-window budget, while the recorder gate is
   enabled.
 - Play the ring back through the native state transitions: `0x81` arm
-  (apply record 0), `0x82` play, `0x83` active countdown, `0x84` forward
-  double-step, `0x85` back double-step, `0x86` slow, exit.
+  (apply record 0), `0x82` idle/display, `0x83` active countdown, `0x84`
+  forward double-step, `0x85` back double-step, `0x86` slow, exit.
 - Render the applied view (22 player slots + the ball + camera pose) instead
   of the frozen live pool; the live pool is never written by playback.
 - Keep the existing HUD/overlay, the live freeze and the audio duck.
@@ -117,10 +117,13 @@ contiguous (23 appearance bytes at `+0xC4..+0xDA`, 23 frame bytes at
 FU-112 §1 maps `FUN_00036C70`: the **focus triple** at `0x155AA4/8/C` from
 `[0x57A6F]` (override) or `0x15774C` (the FU-71 place), clamped
 `|x|,|z| <= 6000` else `(-4000,0,-4000)` and `0 <= y <= 16000`; 22 team
-records + the ball record at slot 22 (`0x15880C/10/14` position, `0x15885A`
-heading, `0x158866` appearance), and the camera/input cluster at
-`0x155C4C..0x155C72`. FU-112's "ball x/y/z" label for the first triple is an
-erratum: the source is the camera focus, not the ball record. The port
+records (each with the `+0x59/+0x5D/+0x61` position, `+0x7D` heading,
+`+0x28` appearance and `+0x3D` frame) + the ball record at slot 22
+(`0x15880C/10/14` position, `0x15885A` heading, `0x158866` appearance,
+`0x15887B` frame), and the camera/input cluster at `0x155C4C..0x155C72`. FU-112's "ball x/y/z" label for the first
+triple is an erratum: the source is the camera focus, not the ball record.
+FU-112's "its `0x55C37+0x16` byte is written 0" is also an erratum: the
+composer copies `[0x15887B]` (FU-158 §2, fresh `0x36E38`). The port
 already models the focus as `render_focus_*` (FU-351-L1) and derives the same
 23 slot fields in `match_run_scene_stage_positions`; the ring composer reads
 the live pool and ball record directly with that derivation, independent of
@@ -144,17 +147,23 @@ fold twice.
   `+0x116 = [0x109AAC]`.
 - **The 90-frame mode-window budget (FU-111 §1, fresh re-read).** The packer
   call sits inside `if ([0x107310] < 0x5A)`. Each frame, `FUN_0004B380()`
-  returns the mode/phase (`[0x157A4A] >> 24`): modes `{0,1,3..8,0xA..0xC,
-  0x13,0x14}` increment `[0x107310]`; modes `{2,9,0xD..0x12,>=0x15}` reset it
-  to 0. Recording therefore happens in bursts of at most 90 frames per mode
-  window (≤45 records), and pauses in the reset modes. The ring fills across
-  windows; it is not a continuous 300-frame window.
+  returns the mode/phase (`[0x157A4A] >> 24` = byte `[0x157A4D]`; the port's
+  `state.phase`): modes `{0,1,3..8,0xA..0xC,0x13,0x14}` increment
+  `[0x107310]`; modes `{2,9,0xD..0x12,>=0x15}` set it to 0. The reset modes
+  **do not pause recording** — they reset the counter to 0, and the packer then
+  runs because `0 < 0x5A`. The counter is incremented **before** the gate, so
+  an uninterrupted increment-mode run yields at most **44** records (packs at
+  frames 2,4,..,88; the 90th frame's pack is blocked). A reset mode clears the
+  budget and packing resumes immediately; the ring fills across windows, not
+  as a continuous 300-frame window.
 - `FUN_00063CBC` is the **playback forward step** (apply at
-  `(read + play) mod 150`, `play++`, mode `0x82` when `play >= count`), not
-  the append. FU-108 §2's "append — `FUN_00063CBC`" label is an erratum.
+  `(read + cursor) mod 150`, `cursor++`, mode `0x82` when
+  `cursor >= count`), not the append. FU-108 §2's "append — `FUN_00063CBC`"
+  label is an erratum.
 - `FUN_00063E54` steps back; `FUN_00063D34` reads the current record's
-  `+0x116` stamp (0 when `play >= count`); `FUN_00064030` resets the cursors;
-  `FUN_00064074`/`FUN_00064080` clear/set the `[0x109A90]` recorder gate.
+  `+0x116` stamp (0 when `cursor >= count`); `FUN_00064030` resets the
+  cursors; `FUN_00064074`/`FUN_00064080` clear/set the `[0x109A90]` recorder
+  gate.
 - `FUN_0004A228` (match setup) composes, resets the ring and enables the
   recorder. The ring is not reset per period; it spans the match.
 
@@ -167,10 +176,10 @@ fold twice.
   (back); `0x86` = slow (decrement `[0x9A9C]`, else step forward and reload
   from `[0x9AA0]`); `0x83` = `[0x9AA8] += ticks`, then the countdown loop
   (`stamp = FUN_00063D34`; while `0 < stamp <= [0x9AA8]`: subtract, step
-  forward, re-sync, re-read); `0x82` = play (`[0x9A9C] = 0`).
-- The `0x81` arm zeroes the play index, calls `FUN_00063CBC` once (applies
-  record 0 and advances play to 1), selects camera 0 via `FUN_0004D134`,
-  sets `0x82`, and zeroes the accumulators.
+  forward, re-sync, re-read); `0x82` = idle/display (`[0x9A9C] = 0`).
+- The `0x81` arm zeroes the play index `[0x9A94]`, calls `FUN_00063CBC` once
+  (applies record 0 and advances the index to 1), selects camera 0 via
+  `FUN_0004D134`, sets `0x82`, and zeroes the accumulators.
 - **State timing.** The input branch sets `0x84`/`0x85`/`0x86`; the same
   call's switch performs the step; the mode byte is not rewritten to `0x82`
   until the *next* call (the top-of-call reset at `0x643C9..0x643E9`). The
@@ -178,9 +187,15 @@ fold twice.
   resets on the next call. The port's current next-call reset is right; the
   missing piece is the actual double-step in the same call.
 - **Pause at the end rewinds.** The `0x82` play/pause arm, when
-  `play >= count`, sets `play = 0` and calls `FUN_00063CBC` (applies record 0,
-  play = 1) before entering `0x83`. The port currently wraps `cursor` without
-  applying.
+  `[0x9A94] >= count`, sets `[0x9A94] = 0` and calls `FUN_00063CBC` (applies
+  record 0, cursor = 1) before entering `0x83`. The port currently wraps
+  `cursor` without applying.
+- **Erratum (0x82/0x83 labels).** The native `0x82` is the **idle/display**
+  state (the current record is shown; `[0x9A9C] = 0`) and `0x83` is the
+  **active playback countdown** (the ring advances by the stamp). The port's
+  enum names `PLAY = 0x82` / `PAUSE = 0x83` are semantically inverted; the
+  slice renames them `IDLE`/`PLAYING` (values unchanged) and updates the
+  tests/HUD naming. The wire values `0x82`/`0x83` stay.
 - **Erratum (port labels).** The port's enum has `STEP_BACK = 0x84` and
   `STEP_FWD = 0x85`; the native is the opposite (`0x84` = forward two
   `63CBC`, `0x85` = back two `63E54`). The slice corrects the values and keeps
@@ -194,8 +209,9 @@ fold twice.
   `0x155C50` (camera band from `FUN_000627F4`) and `0x155C51` (the `=1` flag).
   They are not the dword at `0x155C4C`; byte 3 of that dword *is* `0x155C4F`.
   The producers are unported (RR-L3); the view stores staged values. On
-  apply, the low nibble of the roll byte syncs `render.ball_roll`, because the
-  draw reads that cell.
+  apply, the **whole** roll byte is copied to `render.ball_roll` (the draw
+  reads the low nibble; the high nibble carries the native flag), not just
+  the low nibble.
 - `FUN_0006408C` copies six dwords from `0x155C52..0x155C69` (the composer's
   `FUN_0004C904()` snapshot of `[0x7DC8]+0x10/0x14/0x18/0x58/0x5C/0x4C`;
   FU-121) and `FUN_00063B80` restores them. Fresh `get_xrefs_to 0x155C52`
@@ -205,8 +221,9 @@ fold twice.
   `ratio`.
 - `0x155C70` is `FUN_000974D0` (returns 1), `0x155C72` is `FUN_000492CC`
   (`[0x10732C]`). The port's active view state is
-  `render.native_view_cam[render.native_view_class]` when valid (the array is
-  indexed by class, not slot), else `action_cam`.
+  `render.native_view_cam[render.native_view_class]` when
+  `native_view_class < 3 && native_view_valid[native_view_class]` (the array
+  is indexed by class, not slot), else `render.action_cam`.
 
 ## 6. Approaches
 
@@ -239,7 +256,7 @@ padding can silently move a lane. Accessors are the only accessors.
 ```c
 #define FIFA96_MATCH_REPLAY_RING_RECORDS 150   /* 0x96 */
 #define FIFA96_MATCH_REPLAY_RECORD_SIZE  0x118
-#define FIFA96_MATCH_REPLAY_VIEW_SIZE    0x1CE
+#define FIFA96_MATCH_REPLAY_VIEW_SIZE    0x1D0   /* through 0x155C73 */
 #define FIFA96_MATCH_REPLAY_VIEW_SLOTS   23    /* 22 team records + ball */
 #define FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y 0xFFFFD8F0
 
@@ -249,15 +266,19 @@ struct fifa96_match_replay_ring {
   uint32_t read;         /* *[0x109AB8] */
   uint32_t write;        /* *[0x109ABC] */
   uint32_t count;        /* *[0x109AC0] */
-  uint32_t play;         /* [0x109A94] */
   uint32_t stamp_acc;    /* [0x109AAC] */
   uint32_t budget;       /* [0x107310] */
   uint8_t enabled;       /* [0x109A90] */
 };
 ```
 
+The play index is the **existing** `render.replay.cursor` (`[0x109A94]`);
+the ring adds only the read/write cursors, the count, the packer accumulator,
+the budget and the enable gate. `render.replay.cursor_limit` mirrors the
+count for the HUD progress (`FUN_000642B0`).
+
 The ring is a top-level `struct fifa96_match_replay_ring replay_ring;` in
-`struct fifa96_match_run`. The view is `uint8_t replay_view[0x1CE];` in
+`struct fifa96_match_run`. The view is `uint8_t replay_view[0x1D0];` in
 `struct fifa96_match_run_replay`, with accessors for the fields in §5.1
 (`replay_view_dword`, `replay_view_word`, `replay_view_byte`, and the
 slot-array addresses). The record and view offsets in §5.1 are the binding
@@ -275,13 +296,16 @@ int fifa96_match_replay_apply(struct fifa96_match_run *mr, uint32_t index);
 int fifa96_match_replay_step_forward(struct fifa96_match_run *mr);
 int fifa96_match_replay_step_back(struct fifa96_match_run *mr);
 uint16_t fifa96_match_replay_stamp(const struct fifa96_match_run *mr);
+void fifa96_match_replay_pose(struct fifa96_match_run *mr);
 void fifa96_match_replay_stage(struct fifa96_match_run *mr);
 ```
 
-`replay_begin` keeps its gate; it additionally clears `play` and the two
-accumulators. The `0x81` arm in `replay_step` applies record 0, advances
-`play` to 1, sets `cursor = play`/`cursor_limit = count`, and then runs the
-existing camera-0/target selection. `replay_exit` leaves the ring intact (the
+`replay_begin` keeps its gate; it additionally clears `cursor` (`play`), the
+playback `advance` (`[0x9AA8]`) and the input latch (`[0x9AC8]`); the ring's
+`stamp_acc` is not reset by the arm. The `0x81` arm in `replay_step` applies
+record 0 when `count > 0`, advances `cursor` to 1, sets
+`cursor_limit = count`, and then runs the existing camera-0/target selection.
+An empty ring still enters `0x82`. `replay_exit` leaves the ring intact (the
 next replay sees it) and restores the live camera.
 
 ### 7.3 Composer and capture
@@ -297,14 +321,16 @@ next replay sees it) and restores the live camera.
     (OL-80), frame = `frame`; hidden => `y = 0xFFFFD8F0`.
   - Slot 22 (the ball): `entities.ball.x/y/z` (the native
     `0x15880C/10/14` source), the packed heading `((0x400 - ball.heading) &
-    0x3FF) << 6`, appearance = `ball.appear_row` (the `0x158866` row id),
-    frame = 0.
+    0x3FF) << 6`, appearance = `ball.appear_row` (the `0x158866` row id), and
+    frame from the native `0x15887B` byte. The port does not model that byte
+    yet (FU-158 L14.8.b), so it stages 0 (RR-L9).
   - `+0x1AA..+0x1AD` (roll/queue/band/flag): the port's `render.ball_roll`
     and staged 0 for the queue/band/flag (RR-L3); `+0x1CC = 1` (the
     `FUN_000974D0` stub); `+0x1CE = (uint16_t)mr->state.frame_delta`
     (the `FUN_000492CC` stand-in; RR-L6).
   - Camera matrix: from
-    `render.native_view_cam[render.native_view_class]` when valid, else
+    `render.native_view_cam[render.native_view_class]` when
+    `native_view_class < 3 && native_view_valid[native_view_class]`, else
     `render.action_cam`; `+0xF6..+0x10D` = `pos_x/pos_y/pos_z, yaw, pitch,
     ratio`.
 - The live frame body calls `compose` then `capture(mr, 1)` once per granted
@@ -312,14 +338,17 @@ next replay sees it) and restores the live camera.
   tail, so the record is the frame the renderer draws. The freeze/replay path
   does not call it.
 - `capture` first updates the mode-window budget exactly (§5.3): if
-  `mr->state.phase` is in the increment set, `budget++`; else `budget = 0`;
-  no pack when `budget >= 0x5A`. It then mimics `FUN_0006408C`: gated on
-  `enabled`; add `ticks` (0 → 1); return while `< 2`; evict when
-  `count > 0x95` (`read = (read+1) % 150`, `count--`); write at `write`, pack
-  the view, stamp `+0x116 = stamp_acc` (low word),
-  `write = (write+1) % 150`, `count++`, `stamp_acc = 0`.
-- `ring_reset` zeroes the cursors/count/play/stamp/budget and sets `enabled`
-  from the caller; `fifa96_match_run_begin` calls reset(1);
+  `mr->state.phase` is in the increment set, `budget++`; else `budget = 0`.
+  **If `budget >= 0x5A`, return before touching `stamp_acc`** — the native
+  does not call the packer at all, so the accumulator does not advance while
+  the budget blocks. Otherwise mimic `FUN_0006408C`: gated on `enabled`; add
+  `ticks` (0 → 1); return while `< 2`; evict when `count > 0x95`
+  (`read = (read+1) % 150`, `count--`); write at `write`, pack the view, stamp
+  `+0x116 = stamp_acc` (low word), `write = (write+1) % 150`, `count++`,
+  `stamp_acc = 0`.
+- `ring_reset` zeroes the read/write cursors, the count, the play cursor
+  (`cursor`), the packer accumulator and the budget, and sets `enabled` from
+  the caller; `fifa96_match_run_begin` calls reset(1);
   `fifa96_match_run_end` calls reset(0). The act-9 reset does not reset the
   ring (the native setup caller is the only `FUN_00064030` caller).
 
@@ -327,24 +356,30 @@ next replay sees it) and restores the live camera.
 
 - `record_at(i)` = `record[(read + i) % 150]`.
 - `apply(mr, i)` unpacks the record into `replay_view` (all lanes, including
-  `+0x1CE = record+0x116`), syncs `render.ball_roll` from the applied roll
-  byte, and then sets the replay camera pose: when
+  `+0x1CE = record+0x116`) and syncs `render.ball_roll` from the applied roll
+  byte. It does **not** write the live view angles/eye; `fifa96_match_replay_pose`
+  does that after the live pose feed (below).
+- `fifa96_match_replay_pose(mr)`: when
   `camera_kind == FIFA96_CAMERA_REPLAY_POSE`, set
   `render.render_eye_* = matrix[0..2]`, `render_eye_valid = 1`,
   `render.yaw = matrix[3]`, `render.pitch = matrix[4]`,
   `render.view_ratio = matrix[5]`. Other camera kinds keep the existing
-  source-4 follow (RR-L5).
-- `step_forward`: if `play < count`, apply(`play`), `play++`; if
-  `play >= count`, the state becomes `0x82` (the native `FUN_000974D8` +
-  mode 0x82); update `cursor`. Returns 1 when a record was applied.
-- `step_back`: if `play > 0`, `play--`, apply(`play`); if `play < 1`, state
-  `0x82`; update `cursor`.
-- `stamp`: the `+0x116` word of `record_at(play)`, or 0 when
-  `play >= count`.
+  source-4 follow (RR-L5). The eye path is live-run only (the renderer's
+  `fifa96_match_run_render_eye` uses `render_eye_*` only when `live_start`),
+  so M1/M2 stay untouched.
+- `step_forward`: if `cursor < count`, apply(`cursor`), `cursor++`; if
+  `cursor >= count`, the state becomes `0x82` (the native `FUN_000974D8` +
+  mode 0x82; the hook is RR-L10); update `cursor_limit`. Returns 1 when a
+  record was applied.
+- `step_back`: if `cursor > 0`, `cursor--`, apply(`cursor`); if `cursor < 1`,
+  state `0x82`; update `cursor_limit`.
+- `stamp`: the `+0x116` word of `record_at(cursor)`, or 0 when
+  `cursor >= count`.
 - The `0x83` countdown uses the **ring tick** (1 per granted replay frame,
   not the Q8 `frame_delta`): `advance += 1`; while `stamp > 0 &&
-  stamp <= advance`: `advance -= stamp`, `step_forward`, re-read. The Q8
-  delta still drives the animation/staging; the two units are separate.
+  stamp <= advance`: `advance -= stamp`, `step_forward`, `FUN_0006428C`'s
+  re-sync (RR-L10), re-read. The Q8 delta still drives the
+  animation/staging; the two units are separate.
   (Recording ticks 1 and stamps 2; playback adds 1 per frame, so 150 records
   play over 300 frames — 10 s at 30 Hz, the native cadence.)
 - `0x84`/`0x85` perform two `step_forward`/`step_back` calls in the same
@@ -352,23 +387,28 @@ next replay sees it) and restores the live camera.
   `replay_step` call resets it to `0x82` before reading the input (the native
   top-of-call reset). `0x86` decrements `wait_timer`; at 0 it steps forward
   and reloads from `wait_reload`. `0x82` resets `wait_timer`.
-- Button mapping: `1` toggle `PLAY/PAUSE`; `8 → step back`; `4 → step
-  forward`; `2 → slow`; `0x20` camera; `0x80` exit. In `PLAY`, pressing `1`
-  when `play >= count` rewinds (`play = 0`, apply record 0, `play = 1`)
-  before entering `PAUSE`. `replay_family` remains `(state & 0x80) != 0`.
+- Button mapping: `1` toggles idle (`0x82`) ↔ playing (`0x83`); `8 → step
+  back`; `4 → step forward`; `2 → slow`; `0x20` camera; `0x80` exit. In
+  idle (`0x82`), pressing `1` when `cursor >= count` rewinds (`cursor = 0`,
+  apply record 0, `cursor = 1`) before entering `0x83`. `replay_family`
+  remains `(state & 0x80) != 0`.
 
 ### 7.5 Rendering
 
 - Add `fifa96_match_replay_stage(mr)` that writes
   `render.entities[slot].stage` from the view slots: pos, the **unfolded**
-  heading (`0x400 - (packed >> 6)` in the high word, so
+  heading `(0x400 - (packed >> 6)) & 0x3FF` shifted into the high word (so
   `fifa96_render_slot_stage` folds it correctly), appearance → `anim_id`,
   frame; `hidden = (y == 0xFFFFD8F0)`; slot 22 from the view's ball record.
   It writes render cells only. The replay stage must also re-derive
-  `bank_index` from the applied appearance (the record has no bank field);
-  use the same resolver the live stage uses.
-- The frozen frame order stays: `replay_step` → apply → pose feed → live view
-  driver (non-pose cameras) → display update → replay scene stage → camera
+  `bank_index` from the applied appearance (the record has no bank field):
+  `fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+  applied_anim_id, &row)` → `bank_index = row.sprite_bank`, the same resolver
+  `match_run_animate_entity` uses.
+- The frozen frame order is: `replay_step` (advance + apply the view) →
+  pose feed → live view driver (**non-pose cameras only**) →
+  `fifa96_match_replay_pose` (pose camera, applied **after** the pose feed so
+  it is not overwritten) → display update → replay scene stage → camera
   trace. The live pan/event walk stays skipped (C3) so no shared RNG is
   spent.
 - The HUD/overlay rows, audio duck and `mark_over` deferral are unchanged.
@@ -383,26 +423,26 @@ Add to `port/tests/test_engine_match_frame.c` and
   assert every byte and the record bytes at the pinned offsets
   (`+0xC4+i`, `+0xDB+i`, `+0xF2..+0xF5`, `+0x114`, `+0x116`); assert the
   applied `+0x1CE` equals the record's `+0x116` (the one asymmetric lane).
-- `test_replay_ring_capture_budget`: a reset phase (2) packs nothing; an
-  increment phase (0) packs one record per 2 frames for 90 frames (45
-  records), then stops while the phase stays; a reset phase clears the budget
-  and a return to phase 0 resumes. Fill to 151 packs across windows; assert
-  `count = 150`, `read = 1` (one eviction), the oldest record is the second
-  pack, and stamp 2.
-- `test_replay_ring_empty`: arm before any capture → PLAY, count 0, steps are
-  no-ops, exit works.
+- `test_replay_ring_capture_budget`: a reset phase (2) resets the budget and
+  **packs** (the gate is a counter, not a pause); an increment phase (0) packs
+  one record per 2 frames and stops once the budget reaches 90 (44 records:
+  frames 2..88, the 90th blocked); a reset phase clears the budget and
+  packing resumes. Fill to 151 packs across windows; assert `count = 150`,
+  `read = 1` (one eviction), the oldest record is the second pack, and stamp 2.
+- `test_replay_ring_empty`: arm before any capture → idle (`0x82`), count 0,
+  steps are no-ops, exit works.
 - `test_replay_playback_cadence`: 150 records; 300 replay grants advance
-  exactly one record per 2 grants; `play`/`cursor`/`cursor_limit` follow; the
-  last step leaves PLAY at `play == count`.
+  exactly one record per 2 grants; `cursor`/`cursor_limit` follow; the last
+  step leaves idle (`0x82`) at `cursor == count`.
 - `test_replay_step_modes`: `8` sets `0x85` and performs two back steps; `4`
   sets `0x84` and performs two forward steps; the state resets to `0x82` on
-  the next call; `2` slow timer; pause countdown consumes stamps; step back
-  at 0 → PLAY; play at end rewinds to record 0.
+  the next call; `2` slow timer; the `0x83` playing countdown consumes stamps;
+  step back at 0 → `0x82`; pressing `1` at the end rewinds to record 0.
 - `test_replay_view_render`: a record with distinct slot values stages into
   `render.entities`; the live pool is unchanged; hidden uses the y sentinel;
-  the heading is folded once (not twice); the pose camera sets
-  `render_eye_*`/`yaw`/`pitch`/`view_ratio` from the record; the applied
-  roll byte sets `render.ball_roll`.
+  the heading is folded once (not twice); with `live_start = 1`, the pose
+  camera sets `render_eye_*`/`yaw`/`pitch`/`view_ratio` from the record after
+  the pose feed; the applied roll byte sets `render.ball_roll`.
 - The existing replay tests are updated for the native enum values and the
   same-call double-step; `test_replay_input_edges` stays.
 
@@ -442,6 +482,35 @@ Add to `port/tests/test_engine_match_frame.c` and
   `state.phase` is the `[0x157A4A]>>24` model; the increment/reset sets are
   modeled as FU-111 records them. If a live phase is ever re-mapped, the
   budget gate follows the mode byte, not the phase table.
+- **RR-L9 — the ball frame byte.** The native composer copies `0x15887B`
+  (`obj+0x8F`, FU-158 L14.8.b) into the 23rd slot; the port does not model
+  the producer and stages 0.
+- **RR-L10 — the re-sync hooks.** `FUN_000974D8`/`FUN_000974DC` are called
+  on every replay transition (the `0x81` arm, play/pause, the step modes and
+  the countdown); the port's transitions are state-only and the hooks remain
+  unported (FU-108 §6 leg 2 / FU-107 leg 4).
+
+### 7.9 Documentary errata the slice appends
+
+Append-only, in the source docs:
+
+- **FU-108 §2.** `FUN_00063CBC` is the playback forward step, not the
+  append; the recorder/packer is `FUN_0006408C`.
+- **FU-109 §2.** The byte lanes are record `+0xC4+i` / `+0xDB+i` from view
+  `+0x17C` / `+0x193` (the decompiler's `puVar6 + 0x31` display is pointer
+  arithmetic); the axis order is x at `+0xC`, z at `+0x3A`, y at `+0x68`;
+  the `+0x116` stamp applies into the view's `+0x1CE`.
+- **FU-112 §1.** The first triple is the camera focus, not the ball record;
+  the 23rd frame byte is `[0x15887B]`, not 0.
+- **FU-107 / ENGINE.** The port enum labels were swapped; the native
+  `0x84` is forward (two `63CBC`) and `0x85` is back (two `63E54`), and the
+  input maps 8 → `0x85`, 4 → `0x84`. The port's `PLAY = 0x82` / `PAUSE = 0x83`
+  labels are also inverted: native `0x82` is idle/display and `0x83` is the
+  active playback countdown. The slice renames them `IDLE`/`PLAYING` with the
+  wire values unchanged.
+- **FU-111 §1.** The gate is a budget cap, not a pause: the reset modes set
+  the counter to 0 and the packer runs; an uninterrupted increment-mode run
+  yields 44 records (the 90th frame's pack is blocked).
 
 ## 8. What is left to the builder
 
@@ -453,8 +522,8 @@ Add to `port/tests/test_engine_match_frame.c` and
   native source is `[0x57A6F]` or `0x15774C`.
 - The view accessor helpers (byte/dword/word get/set and the slot-array
   addresses); the §5.1 offsets are binding.
-- The replay stage's bank re-derivation call and the exact
-  `fifa96_render_slot_stage` input order (fold once).
+- The exact `fifa96_render_slot_stage` input order (fold once) and the pose
+  application seam after the live pose feed.
 - The test fixture mechanics for the 90-frame budget and the 300-frame
   cadence (the existing `one_granted_frame` helper vs a direct pace loop).
 
@@ -464,9 +533,11 @@ Fresh Ghidra MCP on `/FIFA96.EXE` (2026-11-12):
 `disassemble_function` 0x6408C (131 insns), 0x63B80 (85), 0x63EBC (45),
 0x645B0 (64); `decompile_function` 0x63CBC, 0x63D34, 0x63E54, 0x64030,
 0x6408C, 0x63B80, 0x6428C, 0x64DFC, 0x642FC, 0x4A228, 0x53A48, 0x53DC4,
-0x492CC; `get_xrefs_to` 0x155AA4 (35), 0x155C52 (8), 0x6408C (2), 0x63CBC
-(8), 0x63EBC (2), 0x64030 (1), 0x64074 (2), 0x64080 (12), 0x36C70 (7);
-`disassemble_bytes` 0x4AE20, 0x4AF00, 0x4A020, 0x49F70, 0x645B0;
-`get_function_by_address` 0x70DE0/0x7131C/0x72AC4/0x72478/0x8A938 (the
-19-site campaign scope, not this slice). FU-111 §1 is the prior record of
-the 90-frame budget. Address mapping as FU-88.
+0x492CC, 0x4A068, 0x510DC; `get_xrefs_to` 0x155AA4 (35), 0x155C52 (8),
+0x6408C (2), 0x63CBC (8), 0x63EBC (2), 0x64030 (1), 0x64074 (2), 0x64080
+(12), 0x36C70 (7), 0x642FC (2); `disassemble_bytes` 0x4AE20, 0x4AF00,
+0x4A020, 0x49F70, 0x645B0, 0x36DF0; `get_function_by_address`
+0x70DE0/0x7131C/0x72AC4/0x72478/0x8A938 (the 19-site campaign scope, not
+this slice). FU-111 §1 is the prior record of the 90-frame budget; FU-158
+§2/§4 is the prior record of the ball `0x15887B` frame. Address mapping as
+FU-88.
