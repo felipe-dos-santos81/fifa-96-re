@@ -1309,6 +1309,45 @@ static void one_granted_frame(struct fifa96_match_run *mr) {
   assert(!"no granted frame within 16 ticks");
 }
 
+/* C3 (design §6.10): the replay family freezes the live match. The native draw
+ * loop FUN_000495B0 tests FUN_00063FD0 at 0x4974F and, while the family is
+ * set, skips the live path. The engine frame does the same: the pace grant is
+ * consumed directly (the state library would couple it to the clock), the
+ * frame delta is the same whole-frame 0x200 >> 8, and the replay step runs.
+ * The clock (`period_seconds`/`total_seconds`), `tick_total` and the entity
+ * pool must not move across the granted replay frames. On exit the next
+ * granted frame resumes `fifa96_match_state_tick`, so `tick_total` advances
+ * again. RED on the pre-freeze body: the live simulation runs during replay,
+ * so `tick_total` (and the record) advance. */
+static void test_replay_freezes_live_frame(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.state.phase = 2;                  /* clock class 1 */
+  mr.state.period_length = 90;
+  mr.state.period_seconds = 30;
+  mr.state.total_seconds = 30;
+  mr.state.tick_total = 0x1234;
+  mr.entities.team[0].records[0].pos_x = 77;
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  uint16_t seconds = mr.state.period_seconds;
+  uint16_t total = mr.state.total_seconds;
+  uint16_t ticks = mr.state.tick_total;
+  int16_t x = mr.entities.team[0].records[0].pos_x;
+  for (int i = 0; i < 3; i++) one_granted_frame(&mr);
+  assert(mr.state.period_seconds == seconds);
+  assert(mr.state.total_seconds == total);
+  assert(mr.state.tick_total == ticks);
+  assert(mr.entities.team[0].records[0].pos_x == x);
+  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(mr.state.frame_delta != 0);
+  fifa96_match_run_replay_exit(&mr);
+  one_granted_frame(&mr);
+  assert(mr.state.tick_total != ticks);   /* the clock resumed */
+  fifa96_match_run_init(&mr);
+}
+
 /* Phase-35 P1 (the +0x79 producer's measured pacing): the formation now
  * runs from the first frame, so at the phase-2 entry the slot record sits
  * off the row-04 half-line gate instead of the pre-producer lane-2 spot on
@@ -11016,6 +11055,7 @@ int main(void) {
   test_score_event_wired_run_path();
   test_goal_situation_dispatch_is_not_the_writer();
   test_natural_phase2_never_scores();
+  test_replay_freezes_live_frame();
   test_goal_zone_classifier();
   test_goal_arm_gates_and_snapshot();
   test_goal_arm_reflect_clear();

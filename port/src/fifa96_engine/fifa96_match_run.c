@@ -8072,6 +8072,73 @@ int fifa96_match_run_should_mark_over(const struct fifa96_match_run *mr) {
          !(mr->global_157ac2 == 4u && mr->global_157ac0 != 0u);
 }
 
+/* C3 (design §6.10): the frame body's common presentation/camera path. The
+ * camera pan/follow/pose feed are presentation state, not match simulation:
+ * the live frame and the frozen replay frame both run them, so the replay
+ * view keeps a live camera and the overlay keeps its render staging.
+ *
+ * - FU-148 §12.2 / FU-145 §1.8 (M2 phase-9 T3): the native FUN_000736AC reads
+ *   `([0x14C1D4]|[0x14C1D6]) & 4` at 0x70ab1..0x70ac2 for the pan-step walk
+ *   gate; the engine derives it from the range words FUN_0001C9BC built. The
+ *   image default is 0 (the config cells are BSS).
+ * - FU-152 §2.9 / FU-145 §1.2 (M2 phase-9 T3): the every-frame FUN_00071DF4
+ *   call site (FUN_000736AC 0x73B5B..0x73B6B) runs after the integrator and
+ *   before the armer. The first arm follows the tracked record's slot dir
+ *   bytes (`[[rec]+0x20] != 0`, event height > 0xF0) into the camera velocity;
+ *   the record class gate `[[rec]+4][0] == 0x18D8` reduces to the pool-record
+ *   identity (all three writers of [0x1577CA] store pool records or 0 — 0x71D27
+ *   the store, 0x70258/0x70054 the clears; the +4 descriptor is built at
+ *   runtime, statically unresolvable).
+ * - FU-148 §2.1(a)/§6.2 (S4): the FUN_000505D0 pose feed. The native driver
+ *   FUN_0004D2D4 runs from the draw loop (FUN_000495B0) with the replay/
+ *   `[0x107DD8]`/pad-idle gates (legs); the engine applies the staged pose
+ *   here, after the FU-71 update and before the armer, so a fed pose is
+ *   observable to the same frame's armer (the engine `pos` doubles as the
+ *   native 0x15774C event target per the FU-71 port mapping). view_mode 0
+ *   (the fresh-match default) is the unported handler arm: a no-op, so the
+ *   static tape is unaffected.
+ *
+ * Returns the camera-follow verdict for this frame's trace line. */
+static int match_run_frame_camera(struct fifa96_match_run *mr) {
+  uint16_t range = (uint16_t)(mr->input_range[0] | mr->input_range[1]);
+  (void)fifa96_camera_update_walk(&mr->render.camera, &mr->rng,
+                                  (int16_t)mr->state.frame_delta,
+                                  mr->difficulty_14c2f6 != 0,
+                                  mr->render.input_bit2,
+                                  (int)(range & 4u));
+  int follow_ran = fifa96_match_run_camera_follow(mr);
+  (void)fifa96_camera_pose_feed(&mr->render.camera, &mr->render.yaw,
+                                &mr->render.pitch, &mr->render.view_ratio,
+                                &mr->render.camera_pose);
+  return follow_ran;
+}
+
+/* FU313 §4.3: the per-granted-frame camera line at the loop tail. The follow
+ * verdict is the frame's saved return, so `follow` pairs this frame's verdict
+ * with the event/pan cells as the frame left them; `tick` is the 100 Hz
+ * counter for sub-second capture alignment. Default-off: one NULL test when
+ * the sink is not open. */
+static void match_run_frame_camera_trace(struct fifa96_match_run *mr,
+                                         int follow_ran) {
+  if (!mr->cam_trace) return;
+  const struct fifa96_camera *cam = &mr->render.camera;
+  fprintf(mr->cam_trace,
+          "f=%u clock=%02u:%02u ph=%u pos=%d,%d,%d vel=%d,%d spd=%u "
+          "fspd=%d ev=0x%X cur=0x%X trk=%d pan=%u tim=%u/%u ramp=%d "
+          "rate=%d,%d follow=%d tick=%u\n",
+          mr->cam_trace_frame++, (unsigned)(mr->state.total_seconds / 60u),
+          (unsigned)(mr->state.total_seconds % 60u),
+          (unsigned)mr->state.phase, cam->pos_x, cam->pos_y, cam->pos_z,
+          (int)cam->vel_x, (int)cam->vel_z, (unsigned)cam->speed,
+          (int)cam->follow_speed, (unsigned)cam->event_param,
+          (unsigned)cam->event_cursor, (int)cam->tracked,
+          (unsigned)cam->pan_counter, (unsigned)cam->timer,
+          (unsigned)cam->timer_limit, (int)cam->ramp_divisor,
+          (int)cam->rate_x, (int)cam->rate_z, follow_ran,
+          (unsigned)mr->ticks);
+  fflush(mr->cam_trace);
+}
+
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   uint32_t pending;
   uint32_t granted;
@@ -8079,6 +8146,36 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
   if (mr->sub_notice_ticks != 0u) mr->sub_notice_ticks--;
+  /* C3 (design §6.10): the live-match freeze. The native draw loop
+   * FUN_000495B0 tests FUN_00063FD0 at 0x4974F and, while the replay family
+   * is set, runs the replay path and skips the live path. The engine frame
+   * branches here the same way: the pace grant is consumed directly (the
+   * state library couples its grant to the clock, which would starve the
+   * replay step), `state.frame_delta` is the same whole-frame 0x200 >> 8 the
+   * library would stage, and the replay step runs with it. The clock,
+   * `tick_total`, the kickoff timers, the live input/control-slot model and
+   * the entity/ball pool are live-only and do not run, so the match is frozen
+   * until the exit (the next non-family frame resumes
+   * `fifa96_match_state_tick`). The presentation/camera/render path stays
+   * common to both frames. */
+  if (fifa96_match_run_replay_family(&mr->render.replay)) {
+    int frozen_granted = 0;
+    rc = fifa96_match_pace_tick(&mr->pace, 0, &frozen_granted);
+    if (rc != 0) return rc;
+    if (frozen_granted == 0) return 0;
+    mr->state.frame_delta = (uint16_t)(FIFA96_MATCH_STATE_STEP >> 8);
+    for (uint32_t i = 0; i < (uint32_t)frozen_granted; i++) {
+      (void)fifa96_match_run_replay_step(mr, mr->render.replay.input_buttons,
+                                         (int32_t)mr->state.frame_delta);
+      mr->render.replay.input_buttons = 0;
+      int follow_ran = match_run_frame_camera(mr);
+      (void)fifa96_match_display_update(&mr->render.display,
+                                        mr->state.frame_delta, 0);
+      if (mr->render.enabled) match_run_scene_stage(mr);
+      match_run_frame_camera_trace(mr, follow_ran);
+    }
+    return 1;
+  }
   /* One 100 Hz pace tick (FU-60), driven from fifa96_match_run_tick:
    * fifa96_match_state_tick consumes the pace grant and, when granted,
    * advances the Q8 clock by one FIFA96_MATCH_STATE_STEP with clock_halt = 0.
@@ -8100,10 +8197,6 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * most one frame today; the loop keeps one update per grant if that ever
    * changes. */
   for (uint32_t i = 0; i < granted; i++) {
-    if (fifa96_match_run_replay_family(&mr->render.replay))
-      (void)fifa96_match_run_replay_step(mr, mr->render.replay.input_buttons,
-                                         (int32_t)mr->state.frame_delta);
-    mr->render.replay.input_buttons = 0;
     /* FU-143 §10/§11 (M2 playable-match Task 2 / OL-84 residual): the act-1
      * (phase-0x17 handler FUN_00088DC8) stage-1 derived remainder. The native
      * body ticks the shared timeline timer [0x58818] by the frame delta and at
@@ -8121,39 +8214,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     (void)fifa96_control_slot_update(&mr->slot, mr->input_state[0],
                                      (uint8_t)mr->state.frame_delta, match_run_slot_map,
                                      match_run_anim_a, match_run_anim_b, match_run_anim_c);
-    /* M2 phase-9 T3 (FU-148 §12.2 / FU-145 §1.8): the native FUN_000736AC
-     * reads `([0x14C1D4]|[0x14C1D6]) & 4` at 0x70ab1..0x70ac2 for the pan-step
-     * walk gate; the engine derives it from the range words FUN_0001C9BC
-     * built. The image default is 0 (the config cells are BSS), so the tape's
-     * frame path is unchanged. */
-    {
-      uint16_t range = (uint16_t)(mr->input_range[0] | mr->input_range[1]);
-      (void)fifa96_camera_update_walk(&mr->render.camera, &mr->rng,
-                                      (int16_t)mr->state.frame_delta,
-                                      mr->difficulty_14c2f6 != 0,
-                                      mr->render.input_bit2,
-                                      (int)(range & 4u));
-    }
-    /* FU-152 §2.9 / FU-145 §1.2 (M2 phase-9 T3): the every-frame FUN_00071DF4
-     * call site (FUN_000736AC 0x73B5B..0x73B6B) runs after the integrator and
-     * before the armer. The first arm follows the tracked record's slot dir
-     * bytes (`[[rec]+0x20] != 0`, event height > 0xF0) into the camera
-     * velocity; the record class gate `[[rec]+4][0] == 0x18D8` reduces to the
-     * pool-record identity (all three writers of [0x1577CA] store pool records
-     * or 0 — 0x71D27 the store, 0x70258/0x70054 the clears; the +4 descriptor
-     * is built at runtime, statically unresolvable). */
-    int follow_ran = fifa96_match_run_camera_follow(mr);
-    /* FU-148 §2.1(a)/§6.2 (S4): the FUN_000505D0 pose feed. The native driver
-     * FUN_0004D2D4 runs from the draw loop (FUN_000495B0) with the replay/
-     * `[0x107DD8]`/pad-idle gates (legs); the engine applies the staged pose
-     * here, after the FU-71 update and before the armer, so a fed pose is
-     * observable to the same frame's armer (the engine `pos` doubles as the
-     * native 0x15774C event target per the FU-71 port mapping). view_mode 0
-     * (the fresh-match default) is the unported handler arm: a no-op, so the
-     * static tape is unaffected. */
-    (void)fifa96_camera_pose_feed(&mr->render.camera, &mr->render.yaw,
-                                  &mr->render.pitch, &mr->render.view_ratio,
-                                  &mr->render.camera_pose);
+    int follow_ran = match_run_frame_camera(mr);
     /* FU-145 S2 (0x73B70..0x73B9B): the native camera track FUN_000736AC
      * calls the boundary handler FUN_0007131C only when the camera is out of
      * bounds (|camX| > 0x6C0 || |camZ| > 0xAB0); the armer's own
@@ -8352,29 +8413,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * positions/animations reflect this frame. Rendering stays opt-in: the
      * Task 12-14 fixtures keep an unstaged scene. */
     if (mr->render.enabled) match_run_scene_stage(mr);
-    /* FU313 §4.3: the per-granted-frame camera line at the loop tail. The
-     * follow verdict is the saved return above, so `follow` pairs this frame's
-     * verdict with the event/pan cells as the frame left them; `tick` is the
-     * 100 Hz counter for sub-second capture alignment. Default-off: one NULL
-     * test when the sink is not open. */
-    if (mr->cam_trace) {
-      const struct fifa96_camera *cam = &mr->render.camera;
-      fprintf(mr->cam_trace,
-              "f=%u clock=%02u:%02u ph=%u pos=%d,%d,%d vel=%d,%d spd=%u "
-              "fspd=%d ev=0x%X cur=0x%X trk=%d pan=%u tim=%u/%u ramp=%d "
-              "rate=%d,%d follow=%d tick=%u\n",
-              mr->cam_trace_frame++, (unsigned)(mr->state.total_seconds / 60u),
-              (unsigned)(mr->state.total_seconds % 60u),
-              (unsigned)mr->state.phase, cam->pos_x, cam->pos_y, cam->pos_z,
-              (int)cam->vel_x, (int)cam->vel_z, (unsigned)cam->speed,
-              (int)cam->follow_speed, (unsigned)cam->event_param,
-              (unsigned)cam->event_cursor, (int)cam->tracked,
-              (unsigned)cam->pan_counter, (unsigned)cam->timer,
-              (unsigned)cam->timer_limit, (int)cam->ramp_divisor,
-              (int)cam->rate_x, (int)cam->rate_z, follow_ran,
-              (unsigned)mr->ticks);
-      fflush(mr->cam_trace);
-    }
+    match_run_frame_camera_trace(mr, follow_ran);
   }
   /* FU-232 §4.1/§4.3 (M2 phase-22 T3): the native frame-loop `mark_over` tail.
    * The trigger is the end-word consumer's exact condition — word 1
