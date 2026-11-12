@@ -228,6 +228,7 @@ static void test_engine_replay_key_arms(void) {
   assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM release */
   assert(fifa96_engine_step(f.engine) == 0);   /* R -> the 0x81 arm */
   assert(f.engine->match_run.render.replay.state == FIFA96_MATCH_REPLAY_ARMED);
+  assert(f.engine->match_run.replay_audio_armed == 1);
   assert(fifa96_engine_step(f.engine) == 0);   /* release: stays in the family */
   assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
   assert(fifa96_engine_step(f.engine) == 0);   /* QUIT down: ESC is replay exit */
@@ -244,6 +245,7 @@ static void test_engine_replay_key_arms(void) {
   }
   assert(!fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
   assert(f.engine->match_run.paused == 0);
+  assert(f.engine->match_run.replay_audio_armed == 0);
   drop_fixture(f);
 }
 
