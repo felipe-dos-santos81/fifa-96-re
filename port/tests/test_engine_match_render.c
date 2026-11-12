@@ -2842,9 +2842,9 @@ static void test_replay_arm_held_key(void) {
   fifa96_match_run_init(&mr);
 }
 
-/* A switch/tackle press latched before arming is dropped by the arm, and the
- * poll after the exit re-syncs the physical down levels so a fresh press
- * edges again instead of being swallowed by a stale level. */
+/* A switch/tackle press latched before arming is dropped by the arm; the
+ * first post-exit poll adopts the held physical level without firing an edge,
+ * and a fresh press after release edges again. */
 static void test_replay_switch_tackle_resync(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -2857,10 +2857,20 @@ static void test_replay_switch_tackle_resync(void) {
   assert(fifa96_match_run_replay_begin(&mr) == 0);
   assert(mr.live_switch_press == 0 && mr.live_tackle_press == 0);
   fifa96_match_run_replay_exit(&mr);
+  fifa96_platform_key sw = {FIFA96_ENGINE_KEY_SWITCH, 1};
+  /* The re-sync poll adopts SWITCH as held and suppresses its edge. */
+  assert(fifa96_match_run_input(&mr, &sw, 1) == 0);
+  assert(mr.live_switch_press == 0 && mr.live_tackle_press == 0);
+  assert(mr.live_switch_down == 1);
+  /* Still held: no second edge. */
+  assert(fifa96_match_run_input(&mr, &sw, 1) == 0);
+  assert(mr.live_switch_press == 0);
+  assert(mr.live_switch_down == 1);
+  /* Release, then press again: the ordinary edge branch is live. */
   fifa96_platform_key none = {0, 0};
   assert(fifa96_match_run_input(&mr, &none, 1) == 0);
-  assert(mr.live_switch_press == 0 && mr.live_tackle_press == 0);
-  fifa96_platform_key sw = {FIFA96_ENGINE_KEY_SWITCH, 1};
+  assert(mr.live_switch_press == 0);
+  assert(mr.live_switch_down == 0);
   assert(fifa96_match_run_input(&mr, &sw, 1) == 0);
   assert(mr.live_switch_press == 1);
   fifa96_match_run_init(&mr);

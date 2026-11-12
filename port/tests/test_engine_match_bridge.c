@@ -247,14 +247,16 @@ static void test_engine_replay_key_arms(void) {
   drop_fixture(f);
 }
 
-/* The host kickoff auto-PASS and its dwell must freeze while the replay arms:
- * the R edge is the arm step, so the auto PASS must not be injected into the
- * replay input (where it maps to 0x20/camera), and the dwell must not tick. */
+/* The host kickoff auto-PASS and its dwell must freeze while the replay is
+ * active: the R edge is the arm step, the auto PASS must not be injected into
+ * the replay input (where it maps to 0x20/camera), the dwell must not tick on
+ * later replay frames either, and it must resume after the exit. */
 static void test_kickoff_auto_pass_replay_gated(void) {
   const fifa96_platform_key tape[] = {
       {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
       {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
-      {FIFA96_ENGINE_KEY_REPLAY, 1},
+      {FIFA96_ENGINE_KEY_REPLAY, 1},  {FIFA96_ENGINE_KEY_REPLAY, 0},
+      {FIFA96_ENGINE_KEY_QUIT, 1},    {FIFA96_ENGINE_KEY_QUIT, 0},
   };
   struct fixture f = make_fixture(tape, sizeof tape / sizeof tape[0], NULL);
   assert(fifa96_engine_step(f.engine) == 0);   /* DECLINE -> panel */
@@ -273,7 +275,30 @@ static void test_kickoff_auto_pass_replay_gated(void) {
   f.engine->match_halftime_hold = 10u;
   assert(fifa96_engine_step(f.engine) == 0);   /* R: arm on this step */
   assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  /* The auto-PASS is not in the replay input word on the arming step. */
+  assert(f.engine->match_run.render.replay.input_buttons == 0);
   assert(f.engine->match_halftime_hold == 10u); /* the dwell paused */
+  assert(fifa96_engine_step(f.engine) == 0);   /* R release: a later replay frame */
+  assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(f.engine->match_halftime_hold == 10u); /* the later frame also froze */
+  assert(fifa96_engine_step(f.engine) == 0);   /* QUIT down: stage the replay exit */
+  assert(fifa96_engine_step(f.engine) == 0);   /* QUIT up */
+  /* The frame body consumes the staged 0x80 on the pace grant, not every step,
+   * so poll a bounded number of steps until the replay family clears. */
+  int loops = 0;
+  while (fifa96_match_run_replay_family(&f.engine->match_run.render.replay) &&
+         loops < 8) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    loops++;
+  }
+  assert(!fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  /* The dwell resumes after the exit: the auto-PASS decrement is observable. */
+  int resumed = 0;
+  for (int i = 0; i < 8 && !resumed; i++) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    resumed = f.engine->match_halftime_hold != 10u;
+  }
+  assert(resumed);
   drop_fixture(f);
 }
 
