@@ -1553,6 +1553,69 @@ static void test_reposition_same_zone_no_step(void) {
   assert(events == 0 && code == 0);
 }
 
+/* Slice-B Task 4: the bit-0x8 boundary arm and its two +3 tracked events. */
+
+/* 0x70f2c CMP [ESP+0x28],0x90 (boundary_y > 0x90) -> 0x70f44. prev (0,0x90,0xB00)
+ * is inside (flags 8); cur (0,0xA0,0xB40) is in the mouth band (flags 0), so
+ * changed = 8 and the boundary arm runs. target_z = 0xB11 (prev not inside),
+ * dz = 0x40, dz_word = 0x11 -> bnd = (0, 0x90 + 0x10*0x11/0x40 = 0x94, 0xB11),
+ * which classifies 0 (clean), so the high arm emits {0x70F44,3,TRACKED} and
+ * repositions to (0, 0x94, 0xAD4). */
+static void test_reposition_boundary_stat_high(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_stat_events stats;
+  uint8_t events = 0, code = 0;
+  memset(&stats, 0, sizeof stats);
+  fifa96_camera_init(&cam, 0, 0xA0, 0xB40);
+  assert(fifa96_camera_reposition(&cam, 0, 0x90, 0xB00, NULL, NULL, &events,
+                                  &code, &stats) == 1);
+  assert(stats.count == 1 && stats.overflow == 0);
+  assert(stats.event[0].site == 0x70F44);
+  assert(stats.event[0].delta == 3);
+  assert(stats.event[0].entity == FIFA96_CAMERA_STAT_TRACKED);
+  assert(events == 0x49 && code == 0x40);   /* the 0x8f188(0x49, tracked, 0x40) */
+  assert(cam.pos_x == 0 && cam.pos_y == 0x94 && cam.pos_z == 0xAD4);
+}
+
+/* 0x70fac arm: boundary_y <= 0x90 && boundary_x < -0xC0 -> 0x70fce. prev
+ * (0,0x80,0xB00) flags 8; cur (-0x300,0x80,0xB40) flags 1 (x < -0xD0), so
+ * changed = 9. bnd = (-0x300*0x11/0x40 = -0xCC, 0x80, 0xB11), which classifies
+ * 0 (x -0xCC is >= -0xD0), so the low arm emits {0x70FCE,3,TRACKED} and
+ * repositions to (-0xCC, 0x80, 0xAD4). */
+static void test_reposition_boundary_stat_low(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_stat_events stats;
+  uint8_t events = 0, code = 0;
+  memset(&stats, 0, sizeof stats);
+  fifa96_camera_init(&cam, -0x300, 0x80, 0xB40);
+  assert(fifa96_camera_reposition(&cam, 0, 0x80, 0xB00, NULL, NULL, &events,
+                                  &code, &stats) == 1);
+  assert(stats.count == 1 && stats.overflow == 0);
+  assert(stats.event[0].site == 0x70FCE);
+  assert(stats.event[0].delta == 3);
+  assert(stats.event[0].entity == FIFA96_CAMERA_STAT_TRACKED);
+  assert(events == 0x48 && code == 0x40);   /* the 0x8f188(0x48, tracked, 0x40) */
+  assert(cam.pos_x == -0xCC && cam.pos_y == 0x80 && cam.pos_z == 0xAD4);
+}
+
+/* boundary_y <= 0x90 with boundary_x inside [-0xC0, 0xC1]: no stat event. prev
+ * (0,0x80,0xB00) flags 8; cur (0,0x80,0xB40) flags 0 -> changed = 8. bnd =
+ * (0, 0x80, 0xB11) classifies 0, neither arm fires, so the 0x710df fallback
+ * reclassifies bnd as the new prev and the step-back sees same-zone (0 == 0) ->
+ * no step, camera stays at (0,0x80,0xB40). */
+static void test_reposition_boundary_no_event(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_stat_events stats;
+  uint8_t events = 0, code = 0;
+  memset(&stats, 0, sizeof stats);
+  fifa96_camera_init(&cam, 0, 0x80, 0xB40);
+  assert(fifa96_camera_reposition(&cam, 0, 0x80, 0xB00, NULL, NULL, &events,
+                                  &code, &stats) == 1);
+  assert(stats.count == 0);
+  assert(events == 0 && code == 0);
+  assert(cam.pos_x == 0 && cam.pos_y == 0x80 && cam.pos_z == 0xB40);
+}
+
 /* ---- FU-152 §2.9 (T2) + FU303/FU294-L2 (phase-28 T8): FUN_00071DF4's
  * table/keeper arm — the 0x10E169 compass + 0x11042B/0x11042C rate pair ---- */
 
@@ -3413,6 +3476,9 @@ int main(void) {
   test_reposition_steps_back();
   test_reposition_same_zone_no_step();
   test_reposition_invalid();
+  test_reposition_boundary_stat_high();
+  test_reposition_boundary_stat_low();
+  test_reposition_boundary_no_event();
   test_rate_table_arm();
   test_event_dir_byte();
   test_event_band_f6();

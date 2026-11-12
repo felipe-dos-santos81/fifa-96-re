@@ -5983,7 +5983,14 @@ static void test_goal_arm_gates_and_snapshot(void) {
  * With the zone classifier 0 and the reflect input bit 0 set, the native
  * clears both arm flags and mirrors the camera about X=±0xE40 / Z=±0x1620
  * (the ported `fifa96_camera_reflect`). Zone != 0 or a clear input bit take
- * the unported angle arm (FU-71 leg 9.6) with no clear. */
+ * the unported angle arm (FU-71 leg 9.6) with no clear.
+ *
+ * Slice-B Task 4: the armer's FUN_00070DE0 reposition now runs its bit-0x8
+ * boundary arm before this reflect, so a fixture that stages prev=(0,0,0)
+ * against a |z| >= 0xB10 current point would re-position the camera and break
+ * the reflect staging. The fixtures therefore stage prev == cur (a
+ * same-zone pair) so the reposition is a no-op; the boundary arm itself is
+ * pinned in `test_camera.c` (`test_reposition_boundary_*`). */
 static void test_goal_arm_reflect_clear(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -5991,6 +5998,7 @@ static void test_goal_arm_reflect_clear(void) {
   mr.goal_zone = 0;
   mr.render.input_bit0 = 1;
   fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  mr.render.camera.prev_z = 0x1300;   /* Task 4: prev == cur -> reposition no-op */
   mr.render.camera.vel_z = 0x40;
   assert(fifa96_match_goal_arm(&mr) == 1);
   assert(mr.goal_armed == 0 && mr.goal_zone == 0);
@@ -6003,6 +6011,7 @@ static void test_goal_arm_reflect_clear(void) {
   mr.goal_zone = 1;
   mr.render.input_bit0 = 1;
   fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  mr.render.camera.prev_z = 0x1300;   /* Task 4: prev == cur */
   assert(fifa96_match_goal_arm(&mr) == 0);
   assert(mr.goal_armed == 1 && mr.render.camera.pos_z == 0x1300);
 
@@ -6018,6 +6027,7 @@ static void test_goal_arm_reflect_clear(void) {
   mr.state.phase = 1;
   mr.render.input_bit0 = 1;
   fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  mr.render.camera.prev_z = 0x1300;   /* Task 4: prev == cur */
   mr.render.camera.vel_z = 0x40;
   assert(fifa96_match_goal_arm(&mr) == 1);
   assert(mr.goal_armed == 0 && mr.goal_zone == 0);
@@ -6043,6 +6053,7 @@ static void test_goal_arm_reflect_clear(void) {
   mr.goal_zone = 1;
   mr.render.input_bit0 = 1;
   fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  mr.render.camera.prev_z = 0x1300;   /* Task 4: prev == cur */
   assert(fifa96_match_goal_arm(&mr) == 0);
   assert(mr.goal_armed == 0 && mr.render.camera.pos_z == 0x1300);
 }
@@ -6087,6 +6098,7 @@ static void test_goal_arm_wall_arm(void) {
   mr.goal_armed = 1;
   mr.goal_zone = 1;
   fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  mr.render.camera.prev_z = 0x1300;   /* Task 4: prev == cur -> reposition no-op */
   assert(fifa96_match_goal_arm(&mr) == 0);
   assert(mr.goal_armed == 1 && mr.goal_zone == 1);
   assert(mr.render.camera.pos_z == 0x1300);
@@ -6098,6 +6110,7 @@ static void test_goal_arm_wall_arm(void) {
   mr.state.phase = 1;
   mr.render.input_bit0 = 0;
   fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  mr.render.camera.prev_z = 0x1300;   /* Task 4: prev == cur */
   assert(fifa96_match_goal_arm(&mr) == 0);
   assert(mr.goal_armed == 0 && mr.goal_zone == 0);
   assert(mr.render.camera.pos_z == 0x1300);
@@ -6144,6 +6157,10 @@ static void test_goal_arm_wall_arm(void) {
   mr.goal_armed = 1;
   mr.goal_zone = 1;
   fifa96_camera_init(&mr.render.camera, 0, 0x10, 0xE80);
+  /* Task 4: prev_z = 0xB90 keeps the reposition a no-op (same far-out zone as
+   * cur 0xE80 -> overlap) while staying < 0xE74 so the 0x719F5 corridor damp
+   * below still fires. */
+  mr.render.camera.prev_z = 0xB90;
   mr.render.camera.vel_z = 8;
   mr.render.camera.speed = 8;
   mr.render.camera.event_param = 0x10;
@@ -8422,13 +8439,12 @@ static void test_screen_advance_ring(void) {
 
 /* FU-148 S4: the FUN_000505D0 pose feed wired into the granted frame. Mode
  * 6/0x10 selects record 7 of the default behavior block (the +0x4C array
- * 0x107F1C, class 3): {x,y,z} = {-83, 320, 3631}; |z|_w > 0xB20 and the
- * camera lands out of bounds, so the frame's armer fires on the fed pose (the
- * arming gate is the native word-truncated |camZ| > 0xB20). The classifier
- * reports zone 0 (|z| >= 0xB90), so the scan takes the corner/goal-kick arm
- * (FU-149 P1): snap z positive and ball side 0 (the fresh run's
- * [0x1577CA] stand-in is unset) -> cond true -> sit 4, queued id 0 for the
- * side-1 kick in the byte-1 (Practise) session (staged; FU-166). */
+ * 0x107F1C, class 3): {x,y,z} = {-83, 320, 3631}. The view triple
+ * (yaw/pitch/ratio) is the pose feed's; the place itself is then corrected by
+ * the armer's FUN_00070DE0 boundary arm (Slice-B Task 4), which steps the
+ * prev(0,0,0) -> pose jump back to the mouth band so the goal-mouth gate no
+ * longer arms. The corner/goal-kick situation arm therefore stays queued-off
+ * (sit 0); the pre-Task-4 arming expectation is superseded. */
 static void test_view_pose_feed_arms_camera(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -8446,24 +8462,23 @@ static void test_view_pose_feed_arms_camera(void) {
 
   mr.render.camera_pose.view_mode = 0x10;
   one_granted_frame(&mr);
-  assert(mr.render.camera.pos_x == -83);
-  assert(mr.render.camera.pos_y == 320);
-  assert(mr.render.camera.pos_z == 3631);
+  /* Slice-B Task 4: the pose feed lands the camera at (-83, 320, 3631), but
+   * the armer's FUN_00070DE0 reposition runs first (0x7134F) and its bit-0x8
+   * boundary arm re-classifies the prev(0,0,0) -> cur(pose) jump as a
+   * 0xB10-zone crossing and steps the camera back to the mouth band
+   * (-41, 164, 1826). The arming gate then reads the repositioned camera
+   * (|z| = 0x722 <= 0xB20), so it no longer arms — the pose-fed place is
+   * corrected before the goal-mouth gate. The view triple (yaw/pitch/ratio)
+   * is the pose feed's, untouched by the reposition. */
+  assert(mr.render.camera.pos_x == -41);
+  assert(mr.render.camera.pos_y == 164);
+  assert(mr.render.camera.pos_z == 1826);
   assert(mr.render.yaw == 33732 && mr.render.pitch == 2203);
   assert(mr.render.view_ratio == 3712);
-  assert(mr.goal_armed == 1);
-  assert(mr.goal_snap_x == -83 && mr.goal_snap_y == 0 && mr.goal_snap_z == 3631);
+  assert(mr.goal_armed == 0);
+  assert(mr.goal_snap_x == 0 && mr.goal_snap_y == 0 && mr.goal_snap_z == 0);
   assert(mr.goal_zone == 0);
-  /* FU-149 P1: the corner/goal-kick arm fires (sit = 3 + cond, side =
-   * ball ^ 1) and the byte-1 (Practise) session queues the restart id. The
-   * ball side is the derived stand-in (the pool controlled actor, then the
-   * carrier; the native `[0x1577CA]` team byte is unported). FU-171 §7 rec 1
-   * (T2): the row-04 half-line admission now reads the live camera Y, so the
-   * settle frame's camY-0 claims survive (team 1) and the posed camera Y
-   * (320 > 0x50) closes the frame's own half-line; cond = ((+snap z) ==
-   * (ball == 1)) = 0 -> sit 3 (the corner arm), side = 1 ^ 1 = 0 -> id 9. */
-  assert(mr.situation_pending == 1);
-  assert(mr.situation_id == 9u);
+  assert(mr.situation_pending == 0);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);

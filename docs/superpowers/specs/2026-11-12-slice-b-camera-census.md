@@ -87,6 +87,42 @@ The `0x779DE..0x77E8B` tail posts its four sites across three separate routes
   proves live/unreachable/unproved per design §6/B6 and §9.
 - **B0-L4 — `REC_1575DA`.** No engine cell until the save block (B4) lands one.
 
+## Task 4 (B1) outcome — the `FUN_00070DE0` boundary arm (2026-11-12)
+
+Task 4 ports the `0x70E3C..0x710DA` bit-0x8 boundary arm into
+`fifa96_camera_reposition` (`fifa96_camera.c`). The two `+3` sites are now
+live:
+
+- `0x70F44` (`{0x70F44, +3, TRACKED}`) — boundary_y > 0x90 (the `0x70F2C CMP
+  [ESP+0x28],0x90` arm), plus the corner `0x8F188(0x49, tracked, 0x40)`.
+- `0x70FCE` (`{0x70FCE, +3, TRACKED}`) — boundary_y <= 0x90 && (boundary_x <
+  -0xC0 || boundary_x > 0xC1) (the `0x70FB0`/`0x70FB8` arm), plus the corner
+  `0x8F188(0x48, tracked, 0x40)`.
+
+Both record the corner `0x8F188` request in the reposition's `events` (0x49 /
+0x48) and `event_code` (0x40) out-params; the `0x8F188` ring post and its
+phase-2 gate (`[0x157A4A] >> 24 == 2`) stay the consumer's (OL-27). The
+"target" clamp (z snapped to ±0xAD4, sign from the entering current z) and the
+boundary-point projection (a 32-bit IMUL/IDIV per axis onto z = ±0xB0F/±0xB11)
+are ported. The boundary classify gates (`& 0x4` reclassify, `& 0x13` direct)
+re-enter the existing step-back.
+
+**New open leg (Task 4):**
+
+- **T4-L1 — the `0x71231` reseed.** The step-back tail reseeds
+  `[0x15781C] = [0x157A64]` (the armer counter := the frame-delta low byte)
+  when `changed != 0 && |cur_z| > 0xB21 && [0x15781C] == 0 && speed >= 0xA`
+  (native `0x711FB..0x71236`). Both inputs — the counter (`mr->
+  goal_counter_15781c`) and the frame delta (`mr->state.frame_delta`) — are
+  engine-owned, so the loader (`fifa96_camera_reposition`, no signature
+  change) cannot reseed them; the cell stays a leg. The Task 3 zero-guard
+  test remains the recorded behavior.
+
+**Still legs (OL-T11-79, unchanged):** the corner velocity updates (the high
+arm's `vel_z = ±max(4, |vel_z|/2)` fold and the low arm's `FUN_00092AC8`
+global-RNG velocity — neither owned by the loader), the
+`0x974DC/0x651F0/0x974F0` sound sinks, and the elevation loop.
+
 ## Provenance
 
 Ghidra MCP on `/FIFA96.EXE` (read-only): the reads listed in §Method. No

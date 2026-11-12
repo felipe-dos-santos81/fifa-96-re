@@ -688,23 +688,40 @@ typedef struct {
   uint8_t overflow;
 } fifa96_camera_stat_events;
 
-/* FU-152 §2.9 (T2): FUN_00070DE0's derived core — the boundary/reposition
- * handler the armer FUN_0007131C calls at 0x7134F. Classifies the previous
- * (0x157758/5C/60) and current triples; on a nonzero flag overlap it is a
- * no-op (returns 0). Otherwise, when the XOR has bit 0x8 clear, it walks from
- * the previous point toward the current one (FUN_0008DC50(delta, 1) per axis)
- * while the candidate keeps the previous flags (the adopted point is the
- * farthest one whose classification still equals the previous triple's), then
- * applies the mask effects over the changed flags (`prev ^ cur`): bits 3
+/* FU-152 §2.9 (T2): FUN_00070DE0's derived core + the bit-0x8 boundary arm —
+ * the boundary/reposition handler the armer FUN_0007131C calls at 0x7134F.
+ * Classifies the previous (0x157758/5C/60) and current triples; on a nonzero
+ * flag overlap it is a no-op (returns 0). When the XOR has bit 0x8 clear, it
+ * walks from the previous point toward the current one (FUN_0008DC50(delta, 1)
+ * per axis) while the candidate keeps the previous flags (the adopted point is
+ * the farthest one whose classification still equals the previous triple's),
+ * then applies the mask effects over the changed flags (`prev ^ cur`): bits 3
  * negate-quarter vel_x, bit 4 zeroes vel_z when the previous classify was
  * inside (flags_prev == 0), bit 0x10 jitters y when flags_prev != 0 (the
- * FUN_00070B94 elevation loop is the else leg), and recomputes the bearing. Returns 1 when the walk/reposition ran, 0 for
- * the overlap no-op, -FIFA96_ERR_INVALID on NULL. `type_off_x`/`type_off_z`
- * are the caller-staged 0x10F334/3C tables (unused by the derived core).
- * Legs (OL-T11-79): the bit-0x8 boundary arm (target z +-0xB11/+-0xB0F, the
- * 0x8ED40/0x8F188 corner events -> `events`/`event_code`, the target-y clamp),
- * the FUN_000974DC/FUN_000651F0/FUN_000974F0 sound sinks, the elevation loop
- * and the corner record classification. */
+ * FUN_00070B94 elevation loop is the else leg), and recomputes the bearing.
+ *
+ * Slice-B Task 4 ports the bit-0x8 boundary arm (0x70e3c..0x710da): the
+ * boundary z +-0xB0F/+-0xB11 (0xB0F when flags_prev == 0, sign from the
+ * current z), the prev->cur projection onto that plane (a 32-bit IMUL/IDIV
+ * per axis), the boundary reclassify, and — when the boundary classifies
+ * clean (no bits 0x4/0x13) — the two +3 tracked stat events:
+ * `{0x70F44, +3, TRACKED}` when boundary_y > 0x90, else `{0x70FCE, +3,
+ * TRACKED}` when boundary_x < -0xC0 or > 0xC1. Both arms record the corner
+ * `0x8F188` request in `*events` (0x49/0x48) and `*event_code` (0x40) and
+ * land the camera on the boundary point with z snapped to +-0xAD4 (the
+ * "target" clamp, sign from the entering current z). A boundary that fails
+ * the gate re-enters the step-back (the 0x710df reclassify of the boundary as
+ * the new previous triple). Returns 1 when the walk/reposition ran, 0 for the
+ * overlap no-op, -FIFA96_ERR_INVALID on NULL. `type_off_x`/`type_off_z` are
+ * the caller-staged 0x10F334/3C tables (unused). `stats` may be NULL.
+ *
+ * Legs (OL-T11-79): the corner velocity updates (the high arm's vel_z fold and
+ * the low arm's FUN_00092AC8 global-RNG velocity — neither owned by the
+ * loader), the FUN_000974DC/FUN_000651F0/FUN_000974F0 sound sinks, the
+ * elevation loop, and the 0x71231 `[0x15781C] = frame_delta` reseed (its
+ * inputs — the goal counter and the frame delta — are engine-owned; Slice-B
+ * Task 4 records it as a leg, T4-L1). The `0x8F188` ring post and its
+ * phase-2 (`[0x157A4A] >> 24 == 2`) gate are the consumer's (OL-27). */
 int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
                              int32_t prev_z, const int8_t *type_off_x,
                              const int8_t *type_off_z, uint8_t *events,

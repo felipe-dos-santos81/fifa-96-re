@@ -2416,19 +2416,36 @@ int32_t fifa96_camera_shift_step(int32_t v, int n) {
   return -((-v) >> n);
 }
 
-/* FU-152 §2.9 (T2): FUN_00070DE0 (0x70de0..0x71310) — the derived core. */
+/* Slice-B Task 4: append one stat event to the caller-supplied array. */
+static void camera_stat_emit(fifa96_camera_stat_events *stats, uint32_t site,
+                             int16_t delta, uint8_t entity) {
+  if (!stats) return;
+  if (stats->count < FIFA96_CAMERA_STAT_MAX) {
+    stats->event[stats->count].site = site;
+    stats->event[stats->count].delta = delta;
+    stats->event[stats->count].entity = entity;
+    stats->count++;
+  } else {
+    stats->overflow = 1;
+  }
+}
+
+/* FU-152 §2.9 (T2): FUN_00070DE0 (0x70de0..0x71310) — the derived core + the
+ * bit-0x8 boundary arm (Slice-B Task 4). */
 int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
                              int32_t prev_z, const int8_t *type_off_x,
                              const int8_t *type_off_z, uint8_t *events,
                              uint8_t *event_code,
                              fifa96_camera_stat_events *stats) {
   uint16_t flags_prev = 0, flags_cur = 0;
-  uint16_t overlap;
+  uint16_t changed;
   int32_t cur[3];
   int32_t prev[3] = {prev_x, prev_y, prev_z};
+  int32_t origin[3];
+  int32_t bnd[3];
+  uint16_t flags_origin;
   (void)type_off_x;
   (void)type_off_z;
-  (void)stats;                  /* the stat arms land in Task 4 (B1) */
   if (!cam || !events || !event_code) return -FIFA96_ERR_INVALID;
   cur[0] = cam->pos_x;
   cur[1] = cam->pos_y;
@@ -2437,19 +2454,88 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
   *event_code = 0;
   (void)fifa96_camera_classify(prev, &flags_prev);
   (void)fifa96_camera_classify(cur, &flags_cur);
-  overlap = (uint16_t)(flags_prev & flags_cur);
-  if (overlap != 0) return 0;                    /* 0x70e2x: the AND return */
+  if ((uint16_t)(flags_prev & flags_cur) != 0) return 0;   /* 0x70e2f */
+  changed = (uint16_t)(flags_prev ^ flags_cur);            /* 0x70e3a */
+  origin[0] = prev_x;
+  origin[1] = prev_y;
+  origin[2] = prev_z;
+  flags_origin = flags_prev;
+
+  /* 0x70e3c TEST AL,0x8: the bit-0x8 boundary arm (Slice-B Task 4). */
+  if ((changed & 0x8u) != 0) {
+    int32_t target_z;
+    int32_t dz;
+    int16_t dz_word;
+    uint16_t flags_bnd = 0;
+    /* 0x70e44..0x70e79: the boundary z — +-0xB0F when the previous triple was
+     * "inside" (flags_prev == 0), else +-0xB11; the sign follows cur_z. */
+    if (flags_prev == 0)
+      target_z = (cur[2] >= 0) ? 0xB0F : -0xB0F;
+    else
+      target_z = (cur[2] >= 0) ? 0xB11 : -0xB11;
+    /* 0x70e81..0x70ef9: project the prev->cur segment onto z = target_z. The
+     * numerator is the native 32-bit IMUL ((cur - prev) * sext16(target_z -
+     * prev_z), truncated) and the quotient the 32-bit IDIV; the int64 hold
+     * only avoids the C UB of the IMUL wrap. */
+    dz = cur[2] - prev[2];
+    dz_word = (int16_t)((uint16_t)target_z - (uint16_t)prev[2]);
+    if (dz_word == 0 || dz == 0) {
+      bnd[0] = prev[0];
+      bnd[1] = prev[1];
+      bnd[2] = target_z;
+    } else {
+      bnd[0] = prev[0] + (int32_t)((int64_t)(cur[0] - prev[0]) * dz_word) / dz;
+      bnd[1] = prev[1] + (int32_t)((int64_t)(cur[1] - prev[1]) * dz_word) / dz;
+      bnd[2] = target_z;
+    }
+    (void)fifa96_camera_classify(bnd, &flags_bnd);
+    /* 0x70f0a..0x70f26: boundary_flags & 4 -> reclassify the boundary as the
+     * new previous triple (0x710df); & 0x13 -> straight to the step-back
+     * (0x710fd). Both re-enter the step-back below. */
+    if ((flags_bnd & 0x4u) != 0) {
+      origin[0] = bnd[0];
+      origin[1] = bnd[1];
+      origin[2] = bnd[2];
+      flags_origin = flags_bnd;
+      goto step_back;
+    }
+    if ((flags_bnd & 0x13u) != 0) goto step_back;
+    /* 0x70f2c..0x70fbe: the two +3 tracked stat arms. */
+    if (bnd[1] > 0x90) {
+      camera_stat_emit(stats, 0x70F44, 3, FIFA96_CAMERA_STAT_TRACKED);
+      *events = 0x49;      /* 0x70f66 CALL 0x8f188 (0x49, tracked, 0x40) */
+      *event_code = 0x40;
+      goto reposition;
+    }
+    if (bnd[0] < -0xC0 || bnd[0] > 0xC1) {
+      camera_stat_emit(stats, 0x70FCE, 3, FIFA96_CAMERA_STAT_TRACKED);
+      *events = 0x48;      /* 0x70ff0 CALL 0x8f188 (0x48, tracked, 0x40) */
+      *event_code = 0x40;
+      goto reposition;
+    }
+    /* 0x710df: no stat event — reclassify the boundary point as the new
+     * previous triple and fall into the step-back. */
+    origin[0] = bnd[0];
+    origin[1] = bnd[1];
+    origin[2] = bnd[2];
+    flags_origin = flags_bnd;
+    goto step_back;
+  }
+
+step_back:
   /* 0x710fd/0x71101/0x71106: the step-back (and its mask tail) runs only when
-   * the XOR's bit 0x8 is clear AND the two classify words differ
-   * (`CMP AX,word[ESP+0x34]` / `JZ 0x71302`). Same-zone triples jump straight
-   * to the store, leaving the camera at the current point (the m 42 goal link
-   * is the live case: prev/cur both inside the mouth band, so no step). */
-  if (((flags_prev ^ flags_cur) & 0x8u) == 0 && flags_prev != flags_cur) {
-    /* 0x710fd..0x711d7 LAB: step the current triple back toward the previous
-     * one (FUN_0008DC50(delta, 1) per axis) while the candidate keeps the
-     * previous flags; adopt each adopted candidate. */
-    int32_t adopted[3] = {prev_x, prev_y, prev_z};
-    int32_t delta[3] = {cur[0] - prev[0], cur[1] - prev[1], cur[2] - prev[2]};
+   * the two classify words differ (`CMP AX,word[ESP+0x34]` / `JZ 0x71302`).
+   * Same-zone triples jump straight to the store, leaving the camera at the
+   * current point (the m 42 goal link is the live case: prev/cur both inside
+   * the mouth band, so no step). */
+  changed = (uint16_t)(flags_origin ^ flags_cur);
+  if (changed != 0) {
+    /* 0x710fd..0x711d7 LAB: step the current triple back toward the origin
+     * (the previous triple, or the boundary point after a 0x710df reclassify)
+     * by FUN_0008DC50(delta, 1) per axis while the candidate keeps the
+     * origin's flags; adopt each adopted candidate. */
+    int32_t adopted[3] = {origin[0], origin[1], origin[2]};
+    int32_t delta[3] = {cur[0] - origin[0], cur[1] - origin[1], cur[2] - origin[2]};
     for (;;) {
       int32_t candidate[3];
       delta[0] = fifa96_camera_shift_step(delta[0], 1);
@@ -2462,7 +2548,7 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
       {
         uint16_t candidate_flags = 0;
         (void)fifa96_camera_classify(candidate, &candidate_flags);
-        if (candidate_flags == flags_prev) {
+        if (candidate_flags == flags_origin) {
           adopted[0] = candidate[0];
           adopted[1] = candidate[1];
           adopted[2] = candidate[2];
@@ -2472,21 +2558,31 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
     cam->pos_x = adopted[0];
     cam->pos_y = adopted[1];
     cam->pos_z = adopted[2];
-    /* The mask effects, over the changed flags (`uVar5 = prev ^ cur`, the
-     * native 0x710fd tail). `local_1c` is the PREVIOUS classify's return byte
-     * (flags_prev == 0 when it returned 1): bit 4 zeroes vel_z only when
-     * flags_prev == 0; bit 0x10 takes the y jitter when flags_prev != 0 and the
-     * FUN_00070B94 elevation loop otherwise (leg, OL-T11-79). */
+    /* The mask effects, over the changed flags (`uVar5 = origin ^ cur`, the
+     * native 0x710fd tail). `local_1c` is the ORIGIN classify's return byte
+     * (flags_origin == 0 when it returned 1): bit 4 zeroes vel_z only when
+     * flags_origin == 0; bit 0x10 takes the y jitter when flags_origin != 0
+     * and the FUN_00070B94 elevation loop otherwise (leg, OL-T11-79). */
     {
-      uint16_t changed = (uint16_t)(flags_prev ^ flags_cur);
       if ((changed & 3u) != 0) cam->vel_x = (int16_t)fifa96_camera_shift_step(-cam->vel_x, 2);
-      if ((changed & 0x4u) != 0 && flags_prev == 0) cam->vel_z = 0;
-      if ((changed & 0x10u) != 0 && flags_prev != 0) {
+      if ((changed & 0x4u) != 0 && flags_origin == 0) cam->vel_z = 0;
+      if ((changed & 0x10u) != 0 && flags_origin != 0) {
         cam->pos_y += (cam->pos_y < 0 ? -4 : 4);   /* +-2*delta (delta 2 staged) */
       }
     }
     cam->speed = (uint16_t)(int16_t)fifa96_entity_distance(cam->vel_x, cam->vel_z);
   }
+  return 1;
+
+reposition:
+  /* 0x71092..0x710da: the reposition store — the camera lands on the boundary
+   * point with z snapped to +-0xAD4 (the "target" clamp; sign from the
+   * entering cur_z). The 0x974dc(8)/0x651f0(6)/0x974f0(0x3e8) sinks stay legs
+   * (OL-T11-79), as do the corner velocity updates (the low arm's is the
+   * unowned FUN_00092AC8 global RNG). */
+  cam->pos_x = bnd[0];
+  cam->pos_y = bnd[1];
+  cam->pos_z = (cur[2] >= 0) ? 0xAD4 : -0xAD4;
   return 1;
 }
 
