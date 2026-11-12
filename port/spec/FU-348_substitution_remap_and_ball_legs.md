@@ -455,3 +455,31 @@ below-`0x16` selectors, the omitted branch and its comment) stays.
   cells. Non-default kit cells (gates 6/7/8/10/0xB/0xC staging `0x16`/`0x17`)
   make it reachable at live setup; porting the `FUN_0001CAEC` option UI must
   port the branch. The default path stays omitted.
+
+## 9. Slice A closure (2026-11-12) — the 23rd-slot static proof and the option cells
+
+**Erratum (quoted).** §8 A1 records: "The runtime pointer indexing can reach
+the slot, so the runtime-indexed consumer remains the 23rd-slot leg." §8's
+remaining-legs list reads: "**FU348-L2d — non-default-cell special branch
+(reopened).** … Non-default kit cells (gates 6/7/8/10/0xB/0xC staging
+`0x16`/`0x17`) make it reachable at live setup; porting the `FUN_0001CAEC`
+option UI must port the branch. The default path stays omitted." These are
+narrowed — not closed — by the static census below.
+
+**The 23rd slot.** `get_xrefs_to 0x14BF9C` returns 0 (fresh, §8 A1): the 23rd
+remap-pool block has **no static consumer**. §8 A1 already records that the
+runtime pointer indexing (`(&DAT_0014BF60)[param_1]`, `param_1` 0 or `0xB`)
+can reach the slot, so the **runtime-indexed consumer remains a leg
+(A1-R/B)**. This section records the static negative only; it does not close
+small-legs A1 outright.
+
+**The option cells.** `get_xrefs_to 0x105284` returns four READs and
+`get_xrefs_to 0x105298` returns four READs, all in `FUN_0001CAEC` (§8 A3, the
+four `CMP dword[...], n` sites each); there is **no store**. The no-store
+proof is recorded; **FU348-L2c** (the option UI that writes the cells) and
+**FU348-L2d** (the non-default A4 branch) go to Slice B. FU348-L2d is **live
+at match setup**, not team-editor-only: `FUN_000481EC` runs at `0x4AE76` in
+`FUN_0004AD4C`, called from `0x49424` in `FUN_000493A0` (the match main loop),
+as well as from the team-editor path (`0x372B4` in `FUN_0003726C`).
+
+No code change; no golden movement.

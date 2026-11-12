@@ -395,3 +395,18 @@ identity ball remap so palette index 0 remains the opaque `ball.fsh` outline
 M1/M2 remain byte-exact. The physical asset observation stands: eight 16x16
 frames with index 0 outline and 0xFF background. L158.3 (trail/secondary
 draws) remains open.
+
+## 11. Slice A closure (2026-11-12) — RR-L9 has no static writer
+
+**Erratum (quoted).** The ring design §7.8 leg reads: "**RR-L9 — the ball
+frame byte.** The native composer copies `0x15887B` (`obj+0x8F`, FU-158
+L14.8.b) into the 23rd slot; the port does not model the producer and stages
+0." This is closed by the static census below.
+
+`get_xrefs_to 0x15887B` returns exactly one reference: a READ at `0x36E38` in
+`FUN_00036C70` (the composer, §2/§4.3), and **no static writer**. The byte is
+the `obj+0x8F` top byte of the `obj+0x8C` frame-counter dword advanced in
+`FUN_0006FE84` (§3); no byte-addressed store targets `0x15887B`. The port's
+staged 0 is therefore exact for the analyzed image; an indirect/runtime writer
+remains unproved and is not invented. RR-L9 is closed by this proof; the ring
+design §11 carries the closing line back to this section.

@@ -249,3 +249,11 @@ the port's staged 0 the selectors stay below `0x16`; with non-default kit
 cells the branch is reachable, which is the `FUN_0001CAEC` option-UI leg. The
 lineup-order producer remains `FUN_00012010`; `0x107080` is the
 template-selector table, not the order matrix. See FU-348 §8 (A4).
+
+## 8. Slice A cross-reference (2026-11-12) — the 23rd slot
+
+The 23rd remap-pool block's static census is recorded in FU-348 §9: no static
+consumer (`get_xrefs_to 0x14BF9C` = 0) and no static store to the option cells
+`0x105284`/`0x105298` (four `FUN_0001CAEC` READs each). This document's §6/§7
+open legs for the 23rd descriptor and the `FUN_0001CAEC` option UI stay as
+numbered legs and are narrowed/closed there, not here.
