@@ -667,3 +667,48 @@ roll, while the native byte is a phase/mode byte with the eight writers above;
 index while `stats_add`/`stats_bump` resolve `team.side ^ side_swap`, so a
 non-zero swap would move the lookup block unless the seed re-keys. A flip
 ships only after those are proved; until then the run keeps `side_swap = 0`.
+
+## Closure (2026-11-12) — B1 `FUN_0008ECC4` scorer counter
+
+**Native facts** (design §6.5, fresh 2026-11-11 session; recorded here, not
+re-read in this slice). `FUN_0008ECC4(entity, dword)` resolves the side
+through `FUN_000741B4([entity[0]+0x826])`, scans the 2×16 table for the key
+`[[entity+4]]`, increments the `+4` word, sets `[0x5B358] = (count == 3)` and
+returns. The sole caller is `0x8AD77` in `FUN_0008A938` case 6, in the
+`DAT_00157A9B == NULL` branch; the other arm calls
+`FUN_0008ED40(DAT_00157A9B, -0x96)`. The scan is one block
+(`off = n*0xA + block*0xA0`), not both, so a key that exists only in the other
+block is a miss. `stats_seed` clears and re-keys the table, so the counter is
+not preserved across a re-key.
+
+**Landed engine model.** `fifa96_match_run_stats_bump(mr, entity_id)` uses
+the `stats_add` resolution — `block = (team[side].side ^ side_swap) & 1`, the
+key `match_run_replay_roster_id(side, pitch)` searched in that block's 16
+slots — increments the `uint16_t` count (native word wrap) and sets
+`stats_third_selection = (count == 3)`. It returns 1 on a hit and 0 on a miss
+(NULL, out-of-range `side*11 + pitch`, or no matching key); a miss leaves the
+count and the flag unchanged, and the return is the hit/miss witness, not the
+flag. It never writes `activity_count` (that mirror belongs to `0x8ED40`).
+`match_run_replay_note_goal` calls it inside the existing `goal_record >= 0`
+block, the live scorer path (the engine has no `[0x157A9B]` producer). The run
+cell `stats_third_selection` is cleared by `fifa96_match_run_init`, by
+`fifa96_match_run_stats_seed` (with the table) and by `fifa96_match_run_end`
+(fix `51f3ef5`).
+
+**Tests** (`port/tests/test_engine_match_handlers.c`).
+`test_stats_counter_bump` pins three hits → count 3/flag 1; the moved key in
+the other block only → return 0 with count 3/flag 1 (one-block scan and
+no-clear-on-miss); the re-seed → count 0/flag 0; four more hits → count 4/flag
+0; `render.replay.activity_count[0][3] == 0` (no `0x8ED40` mirror write); NULL
+and out-of-range `0x99` misses. `test_stats_third_selection_cleared` pins a
+`memset 0xAA` struct through init and a running fixture through end.
+`test_stats_counter_score_event` pins the score-event wiring.
+
+**Leg.** The `[0x5B358]` consumer `0x8FF30` is unported; the
+`[0x157A9B] != NULL` arm (`FUN_0008ED40`) stays in the 19-site `0x8ED40`
+campaign.
+
+**FU-72 status after B1/B2/B3.** B1 closed here, B2 closed at the reset seam
+above (B2-L1 open), B3 closed by the `+0x8D`/`+0x8A` census above (the 1.25×
+arm stays dead). Remaining legs in this record: B2-L1, the `0x8FF30` consumer,
+the 19-site `0x8ED40` body campaign and the recorded-frame ring.

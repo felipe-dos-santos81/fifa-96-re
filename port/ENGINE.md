@@ -12444,3 +12444,76 @@ unproved. Test: `test_engine_match_handlers` `test_side_swap_value`. Gate:
 `make check` 124/124; M1/M2 `cmp` exact; no golden re-pin and no
 completion-number movement (a run-cell formula, no new body or dispatch row).
 Record: FU72 B2 closure (2026-11-12), design §6.6/§10.
+
+## Phase 120 — small-legs code closures (2026-11-12)
+
+The five code legs of the small-legs campaign landed with tests; the six
+documentary legs stay as Phase 118 recorded them, including the corrected A4
+scope (closed for the staged-0/default cells; the live setup writer's
+non-default kit-cell path is `FU348-L2d`) and the corrected C2 scope (the live
+event-0xB dispatch, the front-end screen and the pause/replay state machine
+produce the request; the host `R`/BACK key is the adapter; the request
+cells/ring stay a leg).
+
+**B1 (`FUN_0008ECC4`).** `fifa96_match_run_stats_bump` resolves the block
+`(team[side].side ^ side_swap) & 1`, scans that block's 16 slots only,
+increments the `uint16_t` count and sets `stats_third_selection =
+(count == 3)`; it returns 1 on a hit and 0 on a miss, and a miss leaves the
+count and the flag unchanged. The call sits in `match_run_replay_note_goal`
+(`goal_record >= 0`), the live scorer path (no `[0x157A9B]` producer). Init,
+seed and end clear the flag. Tests: `test_stats_counter_bump`,
+`test_stats_counter_score_event`, `test_stats_third_selection_cleared`
+(`test_engine_match_handlers`). Leg: the `[0x5B358]` consumer `0x8FF30`.
+
+**B2 (Phase 119).** The pure `fifa96_match_side_swap_value(a, b) = (a ^ b) &
+1` feeds both reset seams after the `global_157ac2` clear; `side_swap` stays
+0. Test: `test_side_swap_value`. Leg: B2-L1.
+
+**C1.** Replay input priming (`input_primed`: the first replay poll primes
+and consumes no edge), switch/tackle re-sync (`input_resync`: the arm clears
+the press latches, the exit flag makes the first non-replay poll adopt the
+levels with no edge) and the kickoff auto-PASS/dwell freeze
+(`replay_guard` computed before the kickoff block, which sits wholly inside
+`if (!replay_guard)`; the host auto-PASS is the adapter). Tests:
+`test_replay_arm_held_key`, `test_replay_switch_tackle_resync`,
+`test_kickoff_auto_pass_replay_gated`, plus the updated
+`test_replay_input_edges`.
+
+**C3.** `fifa96_match_run_frame` takes a frozen branch while the replay family
+holds: the pace grant is consumed directly (`fifa96_match_pace_tick`, no state
+tick), the whole-frame delta is staged and `fifa96_match_run_replay_step` runs
+once per granted frame with the replay input word. The clock, kickoff timers,
+live input/control-slot model, entity/ball pool, phase/driver, screen
+scheduler and shot/goal/act/end-word blocks are skipped; the kept tail is the
+pose feed, the live view driver (source-4 target consumer, live runs only), the
+FU-90 display timer, positions-only staging and the camera trace. The live
+pan/event walk is not run, so frozen frames spend no shared RNG. Tests:
+`test_replay_freezes_live_frame`, `test_replay_frozen_live_view_applies_target`,
+`test_replay_frozen_scene_stage_keeps_record_anim`
+(`test_engine_match_frame`). Legs: the `0x20` replay camera record cycle and
+the recorded-frame ring.
+
+**C4.** `fifa96_match_audio` gains `replay_ducked`: the arm stops the crowd
+loop, every component gain reads `sfx_percent / 3` while ducked, `audio_step`
+does not re-arm the crowd, and the release clears the flag so the next step
+re-arms. The run cell `replay_audio_armed` (set by `replay_begin`, cleared by
+`replay_exit`/init/begin) drives the engine's audio-step edge. Tests:
+`test_no_assets_is_silent`, the ISO-gated `test_retail_banks`,
+`test_engine_replay_key_arms`, `test_engine_replay_audio_duck_edge`. Leg:
+C4-L1 (the native `0x2B` channel map and the native restore).
+
+**Gate.** `make check` **124/124**, strict `-Wall -Wextra -Werror` build;
+`test_engine_m1`/`test_engine_m2` `cmp` byte-exact against the goldens;
+windowed smoke `timeout 20s env DISPLAY=:1 make game` exit 124 with a clean
+log. No golden re-pin and no completion-number movement (run cells, a
+frame-body branch and audio/input seams only — no new dispatch body or row).
+
+**Remaining legs.** The recorded-frame ring; the 19-site `0x8ED40` body
+campaign; the `FUN_0003BB1C` match-screen UI loop; the 23rd remap-pool slot's
+runtime-indexed consumer; the `FUN_0001CAEC` option UI and the A4 non-default
+kit-cell path (`FU348-L2d`); B2-L1; C4-L1; the `0x20` replay camera record
+cycle; the `0x8FF30` consumer; and the `FUN_0003BB1C` request path (the replay
+request cells/timed exit). The team-editor preview stays out of scope.
+
+Record: design §11, FU72 B1 closure (2026-11-12), FU-351 §26, PROGRESS
+Phase 119–120.

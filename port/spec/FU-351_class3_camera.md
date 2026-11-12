@@ -1197,3 +1197,97 @@ than it proves. No code in this slice.
 (`FUN_00063D34`/`FUN_00063CBC`/`FUN_0006428C`, the `0x118`-byte record
 pack/apply and the `0x55AA4` live block) stay one leg; the full
 `FUN_0003BB1C` match-screen loop stays a separate UI slice.
+
+## 26. C1/C3/C4 closure — replay input, live freeze and pre-arm audio (2026-11-12)
+
+**C1 — the three input minors (code).** (1) `struct fifa96_match_run_replay`
+gains `input_primed`: the first replay-family poll after `replay_begin` only
+primes `input_buttons_held` and consumes no edge, so a key held across the arm
+(the host kickoff auto-PASS is the reachable case) cannot fire a spurious
+`0x20`; later polls keep the rising-edge accumulation. (2)
+`struct fifa96_match_run` gains `input_resync`: `replay_begin` clears
+`live_switch_press`/`live_tackle_press` and the replay input word,
+`replay_exit` sets the flag, and the first non-replay poll adopts the current
+switch/tackle down levels, clears both press flags, clears the flag and skips
+the two edge branches (the FU-61 word fold still runs); `init`/`begin` clear
+it. (3) `fifa96_engine.c` computes `replay_down`/`replay_edge`/`replay_guard`
+before the kickoff block and puts the whole auto-PASS + `match_halftime_*`
+dwell block (including the non-wait reset) inside `if (!replay_guard)`, so the
+arming edge and every replay frame inject no PASS and do not tick the dwell;
+the first post-exit step resumes it. The auto-PASS is a host adapter (the
+native half-time gate is player-driven), hence the gate lives in the engine
+driver, not the match body.
+
+**C1 tests.** `test_engine_match_render` `test_replay_arm_held_key` (held PASS
+primes with no edge; release then press edges `0x20`) and
+`test_replay_switch_tackle_resync` (arm clears the latches; the exit poll
+adopts a held SWITCH with no edge, a second held poll adds none, a release
+clears the level, a fresh press edges once); the existing
+`test_replay_input_edges` primes with one explicit no-key poll and keeps its
+prior assertions. `test_engine_match_bridge`
+`test_kickoff_auto_pass_replay_gated` stages `live_start = 1`, arms on the R
+edge, asserts no injected PASS and `hold == 10` on the arm step and on a later
+replay frame, then a bounded post-exit dwell resume. Review `22e8d1d` added
+the exit re-sync and the later-frame/exit assertions and observed both
+relevant mutations as RED before reverting them.
+
+**C3 — the live-match freeze (code).** Native: the draw loop `FUN_000495B0`
+tests `FUN_00063FD0` at `0x4974F` and, while the family is set, runs the
+replay path (`FUN_0004A068`, `FUN_000635B8`, `FUN_00053D7C`, conditionally
+`FUN_00053BB8`) and skips the live path (`get_xrefs_to 0x63FD0` = 14
+readers). `fifa96_match_run_frame` branches at the top of the body: the pace
+grant is consumed directly with `fifa96_match_pace_tick` (the state library
+couples its grant to the clock and would starve the replay step),
+`state.frame_delta` is the same `FIFA96_MATCH_STATE_STEP >> 8` whole-frame
+delta, and `fifa96_match_run_replay_step` runs once per granted frame with the
+replay input word (cleared after each). The skipped live-only set is the
+clock/`tick_total`/period, the kickoff timer `[0x5882A]`, the live input and
+control-slot model, the camera out-of-bounds goal arm, the entity/ball pool
+and its shapers, the referee, the phase machine/driver, the screen scheduler,
+the shot/keeper/goal blocks, the ball machine, the act timer and the
+end-word/`mark_over` tail. The kept tail is the pose feed, the live view driver
+(`match_run_live_camera_follow`, the only source-4 `camera_target` consumer and
+live `render_eye_*` writer) for live runs, the FU-90 display timer,
+positions-only staging (`match_run_scene_stage_positions`) and the camera
+trace. The live pan/event walk is deliberately not run so frozen frames spend
+no shared `mr->rng` (review F3); the animator split keeps the sim-visible
+`rec->frame`/`rec->anim_id` frozen (review F2).
+
+**C3 tests** (`test_engine_match_frame`). `test_replay_freezes_live_frame`:
+three granted frozen frames leave the clock, `tick_total` and record `pos_x`
+unchanged with the replay state `PLAY` and `frame_delta != 0`; the next
+post-exit granted frame advances `tick_total`. This was the RED witness for the
+freeze. `test_replay_frozen_live_view_applies_target` pins the source-4 target
+consumed into `native_view_cam[1]`/`render_eye_*` on a frozen live frame.
+`test_replay_frozen_scene_stage_keeps_record_anim` pins the positions-only
+staging (render slot restaged, record/slot anim fields unchanged).
+
+**C4 — the pre-arm audio duck (code).** Native `FUN_0005865C` sets
+`[0x109014] = 0`, calls `FUN_00056B88(0x2B)` (a channel stop) and, when
+`[0x14E9B8] > 0x7F`, divides the 0x5C-byte channel-volume array by 3 and calls
+`FUN_00056894` (the audio setup). The engine applies the persistent shape to
+the one channel it owns: `replay_arm` stops the crowd voice
+(`fifa96_mixer_stop`, `crowd_voice = -1`) and sets `replay_ducked`;
+`match_audio_percent` returns `sfx_percent / 3` while ducked and every gain
+caller takes it; `audio_step` does not re-arm the crowd while ducked;
+`replay_release` only clears the flag and the next step re-arms through the
+existing voice-active check. Both hooks are idempotent and silent with no
+bank. The run cell `replay_audio_armed` (set in `replay_begin`, cleared in
+`replay_exit`/init/begin) is the engine edge: the non-headless
+`audio.active` branch calls arm/release before `fifa96_match_audio_step`.
+
+**C4 tests.** `test_engine_audio` `test_no_assets_is_silent` (flag set,
+`crowd_voice == -1`, release clears, no-bank silence) and the ISO-gated
+`test_retail_banks` (crowd stop on arm, no re-arm on a ducked zero-tick step,
+idempotent second arm, release re-arms, whistle/goal gains read
+`sfx_percent / 3` on both arms and `sfx_percent` after release).
+`test_engine_match_bridge` `test_engine_replay_key_arms` pins the run cell and
+`test_engine_replay_audio_duck_edge` (non-headless) pins the engine edge
+through the R arm, the R release and the replay exit. Review `5945cdb` added
+the engine-edge and 1/3-gain coverage and observed both mutations as RED.
+
+**Remaining.** The `0x20` replay camera record cycle in the native replay
+driver and the recorded-frame ring; the request cells/timed exit and the full
+`FUN_0003BB1C` match-screen loop from §25. **C4-L1:** the native `0x2B`
+channel identity (the stop may be commentary/music rather than crowd) and the
+native restore are unproved; the engine release is the adapter.

@@ -568,3 +568,199 @@ reused.
 the `FUN_0003BB1C` loop. The team-editor preview
 (`FUN_00048DC0`/`FUN_00048ED8`/`FUN_00048FF4` and the `0x372B4` path) also
 stays out of scope by §3.
+
+## 11. Closure record (code legs, 2026-11-12)
+
+Extends §10, which keeps the documentary A/B3/C2 record and its corrected
+A4/C2 scope. Tasks 2–6 of the plan landed the code legs below; each entry
+records the test evidence, the native facts it rests on, the adapter/leg
+split, and what stays open. Every entry uses the corrected A4/C2 scope from
+§10. Gate for the whole record: `make check` **124/124**, M1/M2 `cmp`
+byte-exact, windowed smoke exit 124 with a clean log.
+
+### 11.1 B1 — the `FUN_0008ECC4` counter (Tasks 2 + fix `51f3ef5`)
+
+**Native facts** (fresh 2026-11-11 session, design §6.5; recorded here, not
+re-read in this slice). `FUN_0008ECC4(entity, dword)` resolves the side
+through `FUN_000741B4([entity[0]+0x826])`, scans the 2×16 table for the key
+`[[entity+4]]`, increments the `+4` word, sets `[0x5B358] = (count == 3)`
+and returns. Its sole caller is `0x8AD77` in `FUN_0008A938` case 6, in the
+`DAT_00157A9B == NULL` branch; the other branch calls
+`FUN_0008ED40(DAT_00157A9B, -0x96)`. The native scan is one block
+(`off = n*0xA + block*0xA0`), not both. `stats_seed` clears and re-keys the
+table, so the counter is not preserved across a re-key.
+
+**Landed.** `fifa96_match_run_stats_bump(mr, entity_id)` resolves the block
+`(team[side].side ^ side_swap) & 1` exactly like `fifa96_match_run_stats_add`,
+scans that block's 16 slots for the replay roster id, increments the
+`uint16_t` count (native wrap) and sets `stats_third_selection = (count == 3)`.
+It returns 1 on a hit and 0 on a miss; a miss leaves the count and the flag
+unchanged, and the return is not the flag. It never writes `activity_count`
+(that mirror belongs to `0x8ED40`). `match_run_replay_note_goal` calls it
+inside the existing `goal_record >= 0` block, the live scorer path (the
+engine has no `[0x157A9B]` producer). The run cell `stats_third_selection`
+is cleared by `fifa96_match_run_init`, by `fifa96_match_run_stats_seed`
+(with the table) and by `fifa96_match_run_end` (fix `51f3ef5`).
+
+**Tests** (`test_engine_match_handlers`). `test_stats_counter_bump`: three
+hits reach count 3 and flag 1; a key moved to the other block only returns 0
+and leaves count 3/flag 1 (the one-block scan and the no-clear-on-miss are
+both pinned); the re-seed clears count and flag; four more hits reach count 4
+with flag 0; `render.replay.activity_count[0][3] == 0` (no `0x8ED40` write);
+NULL and out-of-range `0x99` are misses. `test_stats_third_selection_cleared`
+pins a `memset 0xAA` struct through init and a running fixture through end.
+`test_stats_counter_score_event` pins the score-event wiring.
+
+**Legs.** The `[0x5B358]` consumer `0x8FF30` is unported; the native
+`[0x157A9B] != NULL` branch (`FUN_0008ED40`) stays in the 19-site `0x8ED40`
+campaign.
+
+### 11.2 B2 — the `side_swap` formula at the reset seam (Task 3)
+
+**Native facts.** `FUN_0007417C` computes
+`[0x157ABE] = ([0x157AC2] ^ byte[0x157AC3]) & 1` and `[0x157ABF]` its
+complement. The `0x742B4` writer repeats the formula but its enclosing
+function is not created in the project (`get_function_by_address 0x74293` =
+none), so its caller is unproved. `0x157AC3` has exactly one store,
+`FUN_00073EE0 0x73F5E MOV byte[0x157AC3], BL` (0); `0x157AC2` is a phase/mode
+byte with 56 references and writers at `0x4B0DE`, `0x4BA20`, `0x4BA31`,
+`0x38990`, `0x73F82`, `0x88D6A`, `0x8B58A`, `0x8B61B`. Record: FU72
+(2026-11-12).
+
+**Landed.** The pure `fifa96_match_side_swap_value(native_157ac2,
+native_157ac3) = (native_157ac2 ^ native_157ac3) & 1u`. Both reset seams
+(`fifa96_match_run_init`, `fifa96_match_run_begin`) replace the unconditional
+`side_swap = 0` with the helper called with `(global_157ac2, 0u)` after the
+function's `global_157ac2 = 0`, so the reset value stays 0 and the non-live
+tapes/M1/M2 are unchanged. No non-zero flip is wired.
+
+**Tests** (`test_engine_match_handlers`). `test_side_swap_value` pins
+`(0,0)=0`, `(1,0)=1`, `(2,0)=0`, `(3,0)=1`, `(0,1)=1`, `(0xFF,0)=1` (only
+bit 0 is read). `test_engine_m2` asserts `side_swap == 0` after init/begin;
+`test_stats_permuted_roster_order` guards the block/key mapping the flip would
+have to preserve.
+
+**Leg — B2-L1.** The `[0x157AC2]`↔`global_157ac2` mapping, the `0x742B4`
+caller and the stats-key/block consistency across a flip are unproved (the
+seed keys by team index while `stats_add`/`stats_bump` resolve
+`team.side ^ side_swap`). The run keeps `side_swap = 0` until all three are
+proved.
+
+### 11.3 C1 — the three replay input minors (Tasks 4 + fix `22e8d1d`)
+
+**Landed.** (1) `struct fifa96_match_run_replay` gains `input_primed`; the
+first replay poll after `replay_begin` only primes `input_buttons_held` and
+consumes no edge, later polls keep the rising-edge accumulation. (2)
+`struct fifa96_match_run` gains `input_resync`; `replay_begin` clears the
+switch/tackle press latches and the replay input word, `replay_exit` sets the
+flag, and the first non-replay poll adopts the current down levels, clears the
+press flags, clears the flag and skips the two edge branches (the FU-61 word
+fold still runs). Init/begin clear the flag. (3) The engine computes
+`replay_down`/`replay_edge`/`replay_guard` before the kickoff block and puts
+the whole block (auto-PASS and the `match_halftime_*` dwell, including the
+non-wait reset) inside `if (!replay_guard)`, so the host-injected PASS cannot
+reach the replay `0x20` button and the dwell pauses for the arm edge and every
+replay frame, resuming on the first post-exit step. The auto-PASS itself is a
+host adapter (the native half-time gate is player-driven), which is why the
+gate lives in `fifa96_engine.c`, not the native body.
+
+**Tests.** `test_engine_match_render` `test_replay_arm_held_key` (held PASS at
+the arm primes, no edge; release then press edges `0x20`) and
+`test_replay_switch_tackle_resync` (arm clears the pre-latched presses; the
+exit poll adopts a held SWITCH with no edge, a second held poll adds none, a
+release clears the level, a fresh press edges once); the existing
+`test_replay_input_edges` now primes with one explicit no-key poll and keeps
+every prior assertion. `test_engine_match_bridge`
+`test_kickoff_auto_pass_replay_gated` stages `live_start = 1`, arms on the R
+edge, asserts no injected PASS and `hold == 10` on the arm and on a later
+replay frame, then a bounded post-exit resume of the dwell; the `input_resync
+= 0` and `replay_edge`-only mutations were both observed as RED and reverted.
+
+### 11.4 C3 — the live-match freeze (Tasks 5 + fix `fcab4a5`)
+
+**Native facts.** `FUN_000495B0` (the draw loop) calls `FUN_00063FD0` at
+`0x4974F`; while the replay family is set it runs the replay path
+(`FUN_0004A068`, `FUN_000635B8`, `FUN_00053D7C`, conditionally
+`FUN_00053BB8`) and skips the live path (`get_xrefs_to 0x63FD0` = 14
+readers).
+
+**Landed.** `fifa96_match_run_frame` takes a frozen branch while
+`fifa96_match_run_replay_family()` holds. It consumes the pace grant directly
+with `fifa96_match_pace_tick` (no `fifa96_match_state_tick`, which would
+couple the grant to the clock and starve the replay step), stages
+`state.frame_delta = FIFA96_MATCH_STATE_STEP >> 8`, and runs
+`fifa96_match_run_replay_step` once per granted frame with the replay input
+word, clearing the word after each. The clock, `tick_total`, the kickoff
+timers, the live input/control-slot model, the entity/ball pool, the phase
+machine, the screen scheduler, the shot/goal/act/end-word blocks and the
+`mark_over` tail are skipped. The kept tail is the pose feed, the live view
+driver (`match_run_live_camera_follow`, the only `camera_target.source == 4`
+consumer and live `render_eye_*` writer) for live runs, the FU-90 display
+timer, positions-only staging (`match_run_scene_stage_positions`, so the
+sim-visible `rec->frame`/`rec->anim_id` fields do not move) and the camera
+trace. The live pan/event camera walk is deliberately not run so replay
+frames spend no shared `mr->rng` (review F3); the replay record camera cycle
+is not ported.
+
+**Tests** (`test_engine_match_frame`). `test_replay_freezes_live_frame`: three
+granted frozen frames leave the clock, `tick_total` and record `pos_x`
+unchanged with the replay state `PLAY` and `frame_delta != 0`; the next
+granted post-exit frame advances `tick_total`.
+`test_replay_frozen_live_view_applies_target`: a `live_start` run arms, takes
+one frozen frame and sees `camera_target.source == 4` consumed into
+`native_view_cam[1]`/`render_eye_*` while the clock and the record stay put.
+`test_replay_frozen_scene_stage_keeps_record_anim`: render-enabled frozen
+staging restages the render slot (`stage.pos.x`, `stage.anim_id`) but leaves
+`records[0].frame`/`anim_id` and `stage.frame` unchanged; it was the RED
+witness for the animator split.
+
+**Legs.** The `0x20` replay camera record cycle in the native replay driver
+and the recorded-frame ring stay open.
+
+### 11.5 C4 — the pre-arm audio duck (Tasks 6 + fix `5945cdb`)
+
+**Native facts.** `FUN_0005865C` sets `[0x109014] = 0`, calls
+`FUN_00056B88(0x2B)` (a channel stop) and, when `[0x14E9B8] > 0x7F`, divides
+the 0x5C-byte channel-volume array by 3 and calls `FUN_00056894` (the audio
+setup). The `0x2B` channel map and the native restore are not proved.
+
+**Landed.** `struct fifa96_match_audio` gains `replay_ducked`;
+`fifa96_match_audio_replay_arm` stops the crowd voice
+(`fifa96_mixer_stop`, `crowd_voice = -1`) and sets the flag (idempotent: a
+second arm re-sets it, never divides twice); `match_audio_percent` returns
+`sfx_percent / 3` while ducked and scales all three gain callers; `audio_step`
+does not re-arm the crowd while ducked; `replay_release` clears the flag only,
+and the next step re-arms through the existing voice-active check. The run
+carries `replay_audio_armed` (set by `replay_begin`, cleared by
+`replay_exit`, init and begin), and the engine audio-step edge calls
+arm/release from it inside the existing non-headless `audio.active` guard. The
+release is the engine adapter; the native de-arm is unevidenced.
+
+**Tests.** `test_engine_audio` `test_no_assets_is_silent` (arm sets the flag
+and leaves `crowd_voice == -1`, release clears it, the no-bank path stays
+silent) and the ISO-gated `test_retail_banks` (crowd stop on arm, no re-arm on
+a zero-tick step, idempotent second arm, release re-arms the crowd, and the
+whistle/goal gains read `sfx_percent / 3` on the first and second arm and
+`sfx_percent` after release).
+`test_engine_match_bridge` `test_engine_replay_key_arms` pins the run cell
+across the arm/exit and `test_engine_replay_audio_duck_edge` runs a
+non-headless fixture and pins the engine edge (ducked on the R step,
+persistent on release, cleared after the exit); the `if (0 && ...)` and
+`match_audio_percent` mutations were both observed as RED and reverted.
+
+**Leg — C4-L1.** The native `0x2B` channel identity (the stop may be
+commentary/music rather than crowd) and the native restore are unproved.
+
+### 11.6 Remaining legs after the campaign
+
+The recorded-frame ring (`FUN_00063D34`/`FUN_00063CBC`/`FUN_0006428C`, the
+`0x118`-byte pack/apply and the `0x55AA4` live block); the 19-site `0x8ED40`
+body campaign (including the `[0x157A9B] != NULL` arm and the two row-1B /
+two `FUN_0007A490` tails); the full `FUN_0003BB1C` match-screen
+menu/scoreboard/audio loop; the 23rd remap-pool slot's runtime-indexed
+consumer; the `FUN_0001CAEC` option UI that writes the team-kit colour cells
+and the A4 non-default kit-cell path (`FU348-L2d`); B2-L1 (the non-zero
+`side_swap` flip); C4-L1 (the `0x2B` channel map and the native restore); the
+`0x20` replay camera record cycle; the `[0x5B358]` consumer `0x8FF30`; and the
+`FUN_0003BB1C` request path of the replay request cells/timed exit. The
+team-editor preview stays out of scope by §3.

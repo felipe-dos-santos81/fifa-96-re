@@ -1818,8 +1818,9 @@ struct fifa96_match_run {
   struct fifa96_match_stats stats;
   /* FU-72 §2.3 / `FUN_0008ECC4`: the native `[0x5B358]` "third selection"
    * flag. The bump sets it to `(slot count == 3)` on every hit (so a fourth
-   * hit clears it); it is not a latch. The `0x8FF30` consumer stays an open
-   * leg. Cleared by the stats seed with the rest of the table. */
+   * hit clears it); it is not a latch, and a miss leaves it unchanged. The
+   * `0x8FF30` consumer stays an open leg. Cleared by init, the stats seed and
+   * end (the seed clears it with the rest of the table). */
   uint8_t stats_third_selection;
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
@@ -1865,9 +1866,12 @@ int fifa96_match_run_stats_add(struct fifa96_match_run *mr, int32_t entity_id,
  * `(team[side].side ^ side_swap) & 1` (the same resolution as
  * `fifa96_match_run_stats_add`) and scans that block's 16 slots only; a key
  * that exists solely in the other block is a miss. On a hit increments the
- * `uint16_t` count and sets `stats_third_selection = (count == 3)` (0 for any
- * other count). Returns 1 on a hit, 0 on NULL/out-of-range/no matching key.
- * Does not touch `activity_count` (that mirror belongs to `0x8ED40`). */
+ * `uint16_t` count (native wrap) and sets
+ * `stats_third_selection = (count == 3)` (0 for any other count); a miss
+ * leaves both the count and the flag unchanged. Returns 1 on a hit and 0 on a
+ * miss (NULL, out-of-range or no matching key) — the return is the hit/miss
+ * witness, not the flag value. Does not touch `activity_count` (that mirror
+ * belongs to `0x8ED40`). */
 int fifa96_match_run_stats_bump(struct fifa96_match_run *mr, int32_t entity_id);
 
 /* Re-key the activity table from the current roster binding: every block/slot
@@ -2152,6 +2156,25 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
  * 0 = no frame was due; or a -fifa96_err_t. A period end marks the lifecycle
  * over, except when an exit is already staged: the staged EXIT wins because
  * the frame body runs in the clock advance before the exit step consumes it.
+ *
+ * Frozen replay branch (C3, design §6.10): while
+ * fifa96_match_run_replay_family() holds (the native FUN_00063FD0 test at
+ * 0x4974F in the FUN_000495B0 draw loop), the frame does not run the live
+ * body. It consumes the pace grant directly with fifa96_match_pace_tick (the
+ * state library couples its grant to the clock, which would starve the replay
+ * step), stages the same whole-frame delta (FIFA96_MATCH_STATE_STEP >> 8) in
+ * `state.frame_delta`, and runs fifa96_match_run_replay_step once per granted
+ * frame with the replay input word, which it then clears. The clock,
+ * `tick_total`, the kickoff timers, the live input/control-slot model and the
+ * entity/ball pool do not run, so positions, score and time are frozen. The
+ * kept presentation tail is the pose feed, the live view driver
+ * (match_run_live_camera_follow, the source-4 replay camera consumer) for live
+ * runs, the FU-90 display timer, the positions-only scene staging
+ * (match_run_scene_stage_positions) and the camera trace. The live pan/event
+ * camera walk is deliberately skipped so replay frames spend no shared match
+ * RNG. A frozen call returns 1 when it ran at least one granted replay frame
+ * (0 when no frame was due); the first non-family frame resumes
+ * fifa96_match_state_tick.
  *
  * Sole driver: the registered 100 Hz tick trampoline (fifa96_match_run_tick),
  * so one call happens per PIT tick. fifa96_match_run_step must NOT call it. */
