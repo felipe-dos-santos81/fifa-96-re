@@ -410,3 +410,32 @@ the `obj+0x8F` top byte of the `obj+0x8C` frame-counter dword advanced in
 staged 0 is therefore exact for the analyzed image; an indirect/runtime writer
 remains unproved and is not invented. RR-L9 is closed by this proof; the ring
 design §11 carries the closing line back to this section.
+
+## 12. Erratum (2026-11-12) — RR-L9 reopened: 0x15887B has an indirect writer
+
+**Erratum (quoted).** §11 closes RR-L9 with "`get_xrefs_to 0x15887B` returns
+exactly one reference: a READ at `0x36E38` in `FUN_00036C70` (the composer,
+§2/§4.3), and **no static writer**." and "RR-L9 is closed by this proof". The
+"no static writer" census is a static-xref illusion: the byte has a live
+**indirect** writer, so the §11 closure and the "staged 0 is exact" conclusion
+are withdrawn and RR-L9 is reopened as a live producer leg.
+
+Fresh evidence (this session, `/FIFA96.EXE`):
+
+- `FUN_0008BAF0` calls `FUN_0006FE84` at `0x8C05A` (the per-frame generic
+  appearance machine, §3).
+- `FUN_0006FE84` calls `FUN_0006E518` at `0x6FF60`.
+- `0x6E538` is `MOV byte ptr [EDX+0x15], BL`; with `EDX = obj+0x7A` and
+  `obj = 0x1587EC` (the ball block), this writes **`0x15887B`**
+  (`0x1587EC + 0x7A + 0x15 = 0x15887B`) — the same `obj+0x8F` byte the
+  composer stages at `0x36E38`.
+
+`0x15887B` is written through the computed `EDX = obj+0x7A` row pointer, which
+is why the byte-addressed `get_xrefs_to 0x15887B` shows only the READ: the
+writer is indirect and carries no static byte xref.
+
+**RR-L9 is reopened** as a live producer leg. The ball frame byte is not
+"exactly 0"; the port's staged 0 is a stand-in until the appearance machine's
+frame counter (`obj+0x8C`/`obj+0x8F`) is modeled. RR-L9 is assigned to
+**Slice B** (the ball appearance producer); it is explicitly **not**
+implemented in Slice A. The ring design §13 records the same reopening.

@@ -725,3 +725,60 @@ fresh from this session (2026-11-12) on `/FIFA96.EXE`:
   `0x4A040` (the recorder cadence, already pinned by
   `test_ring_capture_budget`/`test_ring_playback_cadence`); the view word
   `+0x1CE` is the separate `FUN_000492CC` (`[0x10732C]`) whole-frame delta.
+
+## 13. Slice A correction (2026-11-12) — RR-L9 reopened, RR-L6 scope, RR-L10 queue base
+
+Append-only; the §11/§12 lines quoted below are never rewritten. The re-read is
+fresh from this session (2026-11-12) on `/FIFA96.EXE`.
+
+### 13.1 RR-L9 is reopened (not closed)
+
+**Erratum (quoted).** §11 reads: "**RR-L9 — the ball frame byte (closed).**"
+and concludes "RR-L9 is closed by that proof." That closure rested on
+`get_xrefs_to 0x15887B` = 1 READ and no static writer. The byte has a live
+**indirect** writer:
+
+- `FUN_0008BAF0` calls `FUN_0006FE84` at `0x8C05A`; `FUN_0006FE84` calls
+  `FUN_0006E518` at `0x6FF60`.
+- `0x6E538` is `MOV byte ptr [EDX+0x15], BL`; with `EDX = obj+0x7A` and
+  `obj = 0x1587EC`, this writes **`0x15887B`** (`0x1587EC + 0x7A + 0x15`).
+
+RR-L9 is reopened as a live producer leg and assigned to **Slice B** (the ball
+appearance producer), not implemented in Slice A. The §7.8 line ("the port does
+not model the producer and stages 0") stands; only the §11 "closed" label is
+withdrawn. FU158 §12 records the same reopening.
+
+### 13.2 RR-L6 is narrowed, not fully closed
+
+**Erratum (quoted).** §12 labels "**RR-L6 — the tick source (closed).**" and
+"**Decision: proved.**" while the quoted §7.8 leg retains "The exact live
+frame-rate/tick reconciliation stays open." The §12 label is too broad: only the
+**view word/scale** question is closed. The exact `0x102`/`0x35C` frame-rate
+reconciliation remains an open remainder, now numbered **RR-L6-R** (owner: a
+later replay-timing follow-up).
+
+Additional drain evidence that makes the snapshot the per-call delta (the
+`[0x10732C]` value is consumed, not just snapshotted):
+
+- `0x4A056 MOV EAX,[0x10732C]`; `0x4A05B SUB [0x10731C],EAX`
+- `0x4A168 MOV EAX,[0x10732C]`; `0x4A16D SUB [0x10731C],EAX`
+
+so `[0x10731C]` is drained by the whole-frame delta each call, which is what
+makes the composer's `+0x1CE = state.frame_delta` the per-call value.
+
+Two citation/register fixes to §12:
+
+- `0x49320` is **not** a Ghidra function; the frame timer is read with
+  `disassemble_bytes 0x49320`, not `disassemble_function`/`FUN_00049320`
+  (the §12 body and the §9 provenance list both say the latter).
+- `0x4A0C9` is `MOV [0x10732C], EDX` (**not** EBX); `0x49BC2` is EBX.
+
+### 13.3 RR-L10 queue base correction
+
+**Erratum (quoted).** §11 RR-L10 says `FUN_00064EF0` is "the 20-entry
+`0x155C8C` queue push", and FU108 §8 repeats "the 20-entry `0x155C8C` queue
+push". FU-111 §3 proves the push **pre-increments** the head and stores before
+the wrap, so index 0 of the base is never written: the actual storage is
+**`0x155C90..0x155CDC`** (`0x55C90 + 4*i`, `i = 0..0x13`), and **`0x155C8C`
+is HUD state** (FU-111 §5), not the queue. The `0x974DC` half remains a
+**B** handoff, unchanged.

@@ -315,3 +315,33 @@ Fresh Ghidra MCP on `/FIFA96.EXE` (2026-11-12): `get_xrefs_to` 0x4B100 (3),
 0x64EF0, 0x65CC0, 0xA7705, 0x37AE4, 0x36BC8, 0x56B88, 0x56894, 0x4C478,
 0x5865C. Prior records: FU-348 §8, FU-350 §7, FU72, FU-351 §26/§27, design
 §7.8/§7.9.
+
+## 10. Post-review corrections (2026-11-12)
+
+The final whole-branch review of Slice A found four record errors. Each is
+corrected append-only in the owning doc, never by rewriting a prior section:
+
+- **RR-L9 is reopened, not closed.** §2/§6.2 closed RR-L9 on `get_xrefs_to
+  0x15887B` = 1 READ and no static writer. That is a static-xref illusion:
+  `FUN_0008BAF0` → `FUN_0006FE84` (`0x8C05A`) → `FUN_0006E518` (`0x6FF60`),
+  and `0x6E538 MOV byte ptr [EDX+0x15], BL` with `EDX = obj+0x7A`, `obj =
+  0x1587EC` writes `0x15887B` indirectly. RR-L9 is a live producer leg owned by
+  **Slice B** (the ball appearance producer); the FU158 §11 closure and the
+  ring design §11 "closed" label are withdrawn (FU158 §12, ring design §13).
+- **RR-L6 is narrowed, not fully closed.** §6.5/ring design §12 closed RR-L6
+  while the quoted §7.8 leg retains the frame-rate reconciliation. Only the
+  view word/scale is closed (`[0x10732C]` is the integer whole-frame counter;
+  the composer's `+0x1CE = state.frame_delta` is correct). The exact
+  `0x102`/`0x35C` reconciliation stays an open remainder **RR-L6-R** (a later
+  replay-timing follow-up). Drain evidence `0x4A056`/`0x4A05B` and
+  `0x4A168`/`0x4A16D` (`SUB [0x10731C],EAX`) confirms the per-call delta; the
+  `0x49320` citation is `disassemble_bytes`, not a function; `0x4A0C9` is
+  `MOV [0x10732C],EDX` (not EBX). (ring design §13.)
+- **RR-L10 queue base corrected.** §4.5/§6.6 called the queue storage
+  `0x155C8C`; FU-111 §3 proves the push pre-increments, so the storage is
+  `0x155C90..0x155CDC` and `0x155C8C` is HUD state (ring design §13, FU108 §9).
+- **FU-350 wording.** FU-350 §8's "narrowed/closed there" is wrong; nothing is
+  closed there (A1-R/FU348-L2c/L2d go to B). Corrected to "narrowed"
+  (FU-350 §9).
+
+The fix is docs-only: no code, no golden, no completion-number movement.

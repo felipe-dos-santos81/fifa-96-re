@@ -342,3 +342,23 @@ git commit -m "docs: close the open-items Slice A"
 - **Type consistency:** no new APIs; the only code seam is the existing `fifa96_match_replay_compose` `+0x1CE` assignment. The C4R-L1 name is used consistently in Tasks 1 and 5.
 - **Review Focus:** five lines, each owned by a task (1→Task 1, 2→Task 2, 3→Task 3, 4→Task 4, 5→Task 5).
 - **Proportion:** the plan is mostly exact facts and verification commands; the only code body left open is the RR-L6 disproved branch, which depends on the read.
+
+## Post-review corrections (2026-11-12)
+
+The final whole-branch review found four record errors. Each is corrected
+append-only in the owning doc (never a rewrite of a prior section):
+
+- **RR-L9 reopened (not closed).** The §11/§6.2 closure rested on a
+  byte-addressed xref census; the byte has a live indirect writer
+  (`FUN_0008BAF0` → `FUN_0006FE84` → `FUN_0006E518`; `0x6E538` writes
+  `[EDX+0x15]` with `EDX = 0x1587EC+0x7A`, i.e. `0x15887B`). RR-L9 is a live
+  producer leg owned by **Slice B** (ball appearance producer).
+- **RR-L6 narrowed.** Only the view word/scale is closed (`[0x10732C]` is the
+  whole-frame counter; `+0x1CE = state.frame_delta` is correct); the exact
+  `0x102`/`0x35C` reconciliation is the open remainder **RR-L6-R**.
+- **RR-L10 queue base.** The storage is `0x155C90..0x155CDC`; `0x155C8C` is
+  HUD state.
+- **FU-350 wording.** The legs are "narrowed", not "narrowed/closed".
+
+This fix wave is **docs-only**: no code, no goldens, no completion-number
+movement, no README/port-table/census/headline edits.

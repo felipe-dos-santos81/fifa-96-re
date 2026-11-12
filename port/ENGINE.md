@@ -12642,3 +12642,17 @@ dispatch body/row and no golden re-pin.
 Record: design `2026-11-12-open-items-closure-slice-a` §6/§7, FU-351 §28,
 FU158 §11, FU-348 §9, FU-350 §8, FU108 §8, FU111 §11, ring design §11/§12,
 PROGRESS Phase 122.
+
+**Phase 122 correction (2026-11-12, whole-branch review).** Three Slice A
+records are corrected append-only: (1) **RR-L9 is reopened**, not closed — the
+"no static writer" census was a static-xref illusion; `0x15887B` has a live
+indirect writer (`FUN_0008BAF0` → `FUN_0006FE84` `0x8C05A` → `FUN_0006E518`
+`0x6FF60`; `0x6E538 MOV [EDX+0x15],BL` with `EDX = 0x1587EC+0x7A`), so RR-L9 is
+a live producer leg assigned to **Slice B** (ball appearance producer), not
+implemented here (FU158 §12, ring design §13). (2) **RR-L6 is narrowed**, not
+fully closed — only the view word/scale is closed; the exact `0x102`/`0x35C`
+frame-rate reconciliation stays the open remainder **RR-L6-R** (ring design
+§13). (3) **RR-L10's queue base** is `0x155C90..0x155CDC`, not `0x155C8C`
+(which is HUD state); the `0x974DC` half stays a B handoff (FU108 §9, ring
+design §13). FU-350 §8's "narrowed/closed" is corrected to "narrowed" (FU-350
+§9). Docs-only; no code, golden or completion-number movement.

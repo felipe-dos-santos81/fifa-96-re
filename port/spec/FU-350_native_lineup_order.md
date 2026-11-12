@@ -257,3 +257,12 @@ consumer (`get_xrefs_to 0x14BF9C` = 0) and no static store to the option cells
 `0x105284`/`0x105298` (four `FUN_0001CAEC` READs each). This document's §6/§7
 open legs for the 23rd descriptor and the `FUN_0001CAEC` option UI stay as
 numbered legs and are narrowed/closed there, not here.
+
+## 9. Erratum (2026-11-12) — narrowed, not closed
+
+**Erratum (quoted).** §8's closing line reads: "This document's §6/§7 open legs
+for the 23rd descriptor and the `FUN_0001CAEC` option UI stay as numbered legs
+and are **narrowed/closed there, not here**." Nothing is closed in FU-348 §9:
+the 23rd-slot runtime consumer (**A1-R**), **FU348-L2c** (the option UI) and
+**FU348-L2d** (the non-default A4 branch) are all handed to **Slice B**, not
+closed. The correct word is **narrowed**, not "narrowed/closed".
