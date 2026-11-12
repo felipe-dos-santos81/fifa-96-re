@@ -1312,3 +1312,27 @@ mode-7 request/timed exit). The §25 request cells/timed exit, the §26 `0x20`
 view-consumption note and the `FUN_0003BB1C` UI loop are all folded into
 RR-L5/RR-L7 and the standing UI leg; C4-L1 is unchanged. No completion-number
 movement and no golden re-pin.
+
+## 28. Erratum (2026-11-12) — the C4-L1 audio attribution is a misread
+
+Fresh decompiles (the 2026-11-12 open-items-closure design §4.4/§9) show the
+C4 audio attribution is wrong. §26 records the arm as audio: `FUN_0005865C`
+"calls `FUN_00056B88(0x2B)` (a channel stop)" and "divides the 0x5C-byte
+channel-volume array by 3". Both are misreads of a screen/projection
+transform.
+
+`FUN_0005865C` at `0x5865C` is called from the replay arm `FUN_00064270` at
+`0x6427F`. `decompile_function 0x56B88` shows `FUN_00056B88(0x2B)` writes a
+12-dword table at `0x1543A4` from `param_1` and `-param_1`, copies it to
+`0x14E838`, adjusts `0x14E838`/`0x14E840`/`0x14E844`/`0x14E84C`/`0x14E850`/
+`0x14E85C`, and calls `FUN_0004C478` over `0x14E868..0x14E9B8`.
+`decompile_function 0x56894` shows `FUN_00056894` builds a 12-value `0x1543A0`
+matrix from `param_2`/`param_3 << 8` and the `FUN_000A1A60` outputs. The
+`0x14E9B8` 0x5C-byte array is transform data divided by 3, not a
+channel-volume array; there is no `0x2B` mixer channel stop at the arm.
+
+The engine audio duck is therefore an **adapter** with no native audio gate at
+the replay arm. C4-L1 is **closed as a misattribution**, not as a proved `0x2B`
+channel. The arm's real `0x5865C` screen/projection reset (the replay view
+setup) is a new **C4R-L1** leg owned by Slice B. No code, no golden and no
+completion-number movement.

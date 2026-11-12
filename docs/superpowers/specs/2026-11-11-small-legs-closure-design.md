@@ -776,3 +776,14 @@ and the A4 non-default kit-cell path (`FU348-L2d`); B2-L1 (the non-zero
 `0x20` replay camera record cycle; the `[0x5B358]` consumer `0x8FF30`; and the
 `FUN_0003BB1C` request path of the replay request cells/timed exit. The
 team-editor preview stays out of scope by §3.
+
+## 12. C4 erratum cross-reference (2026-11-12)
+
+§11.5's C4 audio duck and its C4-L1 leg rest on the misread corrected in
+FU-351 §28: `FUN_00056B88(0x2B)` is a screen/projection transform (the
+`0x1543A4`/`0x14E838` 12-dword table, the `0x14E868..0x14E9B8` block and the
+`0x1543A0` matrix), not a mixer channel stop, and the `0x14E9B8` 0x5C-byte
+array is transform data divided by 3, not a channel-volume array. C4-L1 is
+**closed as a misattribution**; the arm's real `0x5865C` screen/projection
+reset is the new **C4R-L1** leg owned by Slice B (FU-351 §28; open-items
+closure design §4.4/§9). §11.5 is not rewritten.
