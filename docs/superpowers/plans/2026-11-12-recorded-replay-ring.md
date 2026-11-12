@@ -330,7 +330,7 @@ In `fifa96_match_replay_ring.c`:
 - `stamp`: 0 when `cursor >= count`, else the `+0x116` word of `record[(read+cursor)%150]`.
 - `pose`: if `camera_kind == FIFA96_CAMERA_REPLAY_POSE`, set `render_eye_*` from the **view** matrix `+0x1AE/+0x1B2/+0x1B6`, `render_eye_valid=1`, `render.yaw = +0x1BA`, `render.pitch = +0x1BE`, `render.view_ratio = +0x1C2` (the record's `+0xF6/+0xFA/+0xFE/+0x102/+0x106/+0x10A` lanes after unpack).
 
-In `fifa96_match_run.h`: rename the enum values as above (the ring/view fields are from Task 1). Keep `fifa96_match_run_replay_playing` comparing the **0x82** enumerator (`IDLE`): it is the native `FUN_0006401C` `[0x9A98] == 0x82` predicate, not the active-playing state.
+In `fifa96_match_run.h`: rename the enum values as above (the ring/view fields are from Task 1); change the `fifa96_match_run_replay_step` declaration to the two-argument `(mr, buttons)` form; keep `fifa96_match_run_replay_playing` comparing the **0x82** enumerator (`IDLE`): it is the native `FUN_0006401C` `[0x9A98] == 0x82` predicate, not the active-playing state.
 
 In `fifa96_match_run.c`:
 - `replay_begin`: clear `cursor`, `advance`; keep the C1 input reset; state ARMED.
@@ -390,7 +390,7 @@ Add to `test_engine_match_frame.c` and register them in its `main()` (and regist
 
 Update the existing frozen-frame tests in the same step:
 - `test_replay_frozen_live_view_applies_target`: set `camera_kind = FIFA96_CAMERA_REPLAY_VIEW` (a non-POSE camera) before the frozen step so the live view driver still runs; keep the existing eye/target assertions. Add a second block with `camera_kind = POSE` asserting the recorded matrix/eye wins and the driver does not overwrite it.
-- `test_replay_frozen_scene_stage_keeps_record_anim`: seed a record (or the view block) with the expected slot positions/anim values before the frozen step; the stage now reads the view, not the live pool. Keep the assertion that the sim-visible record fields (`+0x28`/`+0x3D`) do not advance.
+- `test_replay_frozen_scene_stage_keeps_record_anim`: seed a **record** and arm the replay (the `0x81` arm applies record 0), or set the view block and arrange `count == 0` so the arm leaves it; the stage now reads the view, not the live pool. Keep the assertion that the sim-visible record fields (`+0x28`/`+0x3D`) do not advance.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
