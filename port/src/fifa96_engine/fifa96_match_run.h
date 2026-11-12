@@ -6,6 +6,7 @@
 #include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_engine/fifa96_match_phase_machine.h"
 #include "fifa96_engine/fifa96_match_act.h"
+#include "fifa96_engine/fifa96_match_replay_ring.h"
 #include "fifa96_engine/fifa96_pitch.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_loader/fifa96_action_handlers.h"
@@ -318,6 +319,12 @@ struct fifa96_match_run_replay {
   uint8_t input_buttons;
   uint8_t input_buttons_held;
   uint8_t input_primed;
+  /* The recorded-frame replay ring's view block (the native `0x155AA4`
+   * block, `0x1D0` bytes): the composer fills it from the staged render
+   * slots and camera state, the packer stores it and playback applies a
+   * record back into it. Zero at rest, so a fresh run draws no recorded
+   * frame. */
+  uint8_t replay_view[FIFA96_MATCH_REPLAY_VIEW_SIZE];
 };
 
 /* The R2 row gate (fresh 0x565BC decompile + the predicate bodies):
@@ -1822,6 +1829,12 @@ struct fifa96_match_run {
    * `0x8FF30` consumer stays an open leg. Cleared by init, the stats seed and
    * end (the seed clears it with the rest of the table). */
   uint8_t stats_third_selection;
+  /* The recorded-frame replay ring (`2026-11-12-recorded-replay-ring-design.md`
+   * §7.1): the native 150 x `0x118` record ring and its cursors, embedded in
+   * the run (150 x 0x118 = 42,000 bytes; the native allocator stays RR-L1).
+   * The playback index is `render.replay.cursor` (`[0x109A94]`), so the ring
+   * carries no second copy of it. */
+  struct fifa96_match_replay_ring replay_ring;
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
    * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/
