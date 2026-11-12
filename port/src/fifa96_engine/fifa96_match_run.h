@@ -311,9 +311,13 @@ struct fifa96_match_run_replay {
    * accumulate into `input_buttons` across polls and persist until the
    * granted-frame body consumes them (it clears the word after
    * `fifa96_match_run_replay_step`); `input_buttons_held` is the previous
-   * poll's level, so a held key produces no new edge. */
+   * poll's level, so a held key produces no new edge. `input_primed` makes
+   * the first replay poll after the arm a level-prime only: a key already
+   * held when `fifa96_match_run_replay_begin` fires (for example the host
+   * PASS auto-key) must not edge. */
   uint8_t input_buttons;
   uint8_t input_buttons_held;
+  uint8_t input_primed;
 };
 
 /* The R2 row gate (fresh 0x565BC decompile + the predicate bodies):
@@ -1524,6 +1528,11 @@ struct fifa96_match_run {
   uint16_t live_manual_frames;
   uint8_t live_switch_down;            /* physical key/pad level */
   uint8_t live_switch_press;           /* queued rising edge for one frame */
+  /* A replay exit re-syncs the physical SWITCH/TACKLE levels on the next
+   * non-replay poll (clear the queued edges, skip the edge branches for that
+   * poll) so a press made during the replay arms correctly and no pre-arm
+   * latch fires after the exit. Set by `fifa96_match_run_replay_exit`. */
+  uint8_t input_resync;
   /* Phase 77 derived human contact [D]. The stored human side survives the
    * native restart-side flip after a human foul; the tackle edge runs the
    * same contact/referee seam as the AI. */

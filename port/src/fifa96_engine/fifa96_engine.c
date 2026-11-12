@@ -368,12 +368,23 @@ int fifa96_engine_step(struct fifa96_engine *e) {
         continue;
       match_keys[match_count++] = keys[i];
     }
+    /* FU-351 (C1): the replay read is computed before the host kickoff block.
+     * The kickoff auto-PASS and its dwell freeze on the arming edge and for
+     * every replay frame: the injected PASS would otherwise reach the replay
+     * input and map to the 0x20 camera button, and the dwell would tick. */
+    const int replay_down = engine_keys_down(keys, n, FIFA96_ENGINE_KEY_REPLAY);
+    const int replay_edge = replay_down && !e->match_replay_held;
+    e->match_replay_held = (uint8_t)(replay_down != 0);
+    const int replay_guard =
+        e->match != NULL &&
+        (fifa96_match_run_replay_family(&e->match->render.replay) ||
+         replay_edge);
     /* P14: the native half-time/goal kickoff gate is player-driven. Inject one
      * KICK press after a visible 3 s dwell for the actual half-time gate and
      * for a second-half goal restart (both sit at phase 1); a manual KICK/PASS
      * moves the phase first and clears this path. The half-time flag keeps a
      * goal restart from drawing the HALF TIME panel. Live-only. */
-    {
+    if (!replay_guard) {
       int kickoff_wait = e->match && e->match->live_start &&
                          e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
                          (e->match->live_halftime_pending ||
@@ -398,9 +409,6 @@ int fifa96_engine_step(struct fifa96_engine *e) {
         e->match_halftime_hold = 0;
       }
     }
-    const int replay_down = engine_keys_down(keys, n, FIFA96_ENGINE_KEY_REPLAY);
-    const int replay_edge = replay_down && !e->match_replay_held;
-    e->match_replay_held = (uint8_t)(replay_down != 0);
     if (e->match && replay_edge &&
         e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE && !e->match->paused &&
         !fifa96_match_run_replay_family(&e->match->render.replay))

@@ -2791,6 +2791,12 @@ static void test_replay_input_edges(void) {
   mr.running = 1;
   mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
   assert(fifa96_match_run_replay_begin(&mr) == 0);
+  /* C1: the first replay poll after the arm only primes the held level; the
+   * edge accumulation starts on the next poll. */
+  fifa96_platform_key none = {0, 0};
+  assert(fifa96_match_run_input(&mr, &none, 1) == 0);
+  assert(mr.render.replay.input_buttons == 0);
+  assert(mr.render.replay.input_buttons_held == 0);
   fifa96_platform_key keys[3] = {
       {FIFA96_ENGINE_KEY_CONFIRM, 1},
       {FIFA96_ENGINE_KEY_RIGHT, 1},
@@ -2813,6 +2819,50 @@ static void test_replay_input_edges(void) {
   assert(fifa96_match_run_input(&mr, keys, 3) == 0);
   assert(mr.render.replay.input_buttons == 0);
   assert(mr.render.replay.input_buttons_held == 0);
+  fifa96_match_run_init(&mr);
+}
+
+/* A replay key already held when the replay arms must not produce a spurious
+ * first edge: the first replay poll primes the held level and consumes no
+ * edge; a fresh press afterwards still edges. */
+static void test_replay_arm_held_key(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  fifa96_platform_key held = {FIFA96_ENGINE_KEY_PASS, 1};
+  assert(fifa96_match_run_input(&mr, &held, 1) == 0);
+  assert(mr.render.replay.input_buttons == 0);   /* no edge from a held key */
+  assert(mr.render.replay.input_buttons_held == 0x20u);
+  fifa96_platform_key none = {0, 0};
+  assert(fifa96_match_run_input(&mr, &none, 1) == 0);
+  assert(fifa96_match_run_input(&mr, &held, 1) == 0);
+  assert(mr.render.replay.input_buttons == 0x20u); /* a fresh press does edge */
+  fifa96_match_run_init(&mr);
+}
+
+/* A switch/tackle press latched before arming is dropped by the arm, and the
+ * poll after the exit re-syncs the physical down levels so a fresh press
+ * edges again instead of being swallowed by a stale level. */
+static void test_replay_switch_tackle_resync(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.live_start = 1;
+  mr.state.phase = 2;                 /* the switch_accept phase gate */
+  mr.live_switch_press = 1;
+  mr.live_tackle_press = 1;
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  assert(mr.live_switch_press == 0 && mr.live_tackle_press == 0);
+  fifa96_match_run_replay_exit(&mr);
+  fifa96_platform_key none = {0, 0};
+  assert(fifa96_match_run_input(&mr, &none, 1) == 0);
+  assert(mr.live_switch_press == 0 && mr.live_tackle_press == 0);
+  fifa96_platform_key sw = {FIFA96_ENGINE_KEY_SWITCH, 1};
+  assert(fifa96_match_run_input(&mr, &sw, 1) == 0);
+  assert(mr.live_switch_press == 1);
   fifa96_match_run_init(&mr);
 }
 
@@ -3288,6 +3338,8 @@ int main(void) {
   test_replay_begin_and_step();
   test_replay_begin_edges();
   test_replay_input_edges();
+  test_replay_arm_held_key();
+  test_replay_switch_tackle_resync();
   test_replay_camera_set();
   test_sub_marks_and_numbers();
   test_overlay_rows_and_timeout();

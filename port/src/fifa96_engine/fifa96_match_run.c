@@ -613,6 +613,15 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
         }
       }
     }
+    if (!mr->render.replay.input_primed) {
+      /* First poll after `fifa96_match_run_replay_begin`: prime the held
+       * level only. A key already held across the arm (the host kickoff
+       * auto-PASS is the reachable case) must not produce an edge. */
+      mr->render.replay.input_buttons_held = held;
+      mr->render.replay.input_buttons = 0;
+      mr->render.replay.input_primed = 1;
+      return 0;
+    }
     mr->render.replay.input_buttons |=
         (uint8_t)(held & (uint8_t)~mr->render.replay.input_buttons_held);
     mr->render.replay.input_buttons_held = held;
@@ -640,16 +649,28 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
   int switch_accept = mr->live_start && !mr->paused &&
                       mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE &&
                       mr->state.phase == 2u && mr->live_kickoff_touch == 0u;
-  if (switch_down && !mr->live_switch_down && switch_accept)
-    mr->live_switch_press = 1u;
-  else if (!switch_accept)
+  if (mr->input_resync) {
+    /* First non-replay poll after `fifa96_match_run_replay_exit`: adopt the
+     * current physical levels and drop any queued edge. Skipping the edge
+     * branches for this one poll prevents a key held through the replay from
+     * firing on exit; a fresh press on the next poll still edges. */
+    mr->live_switch_down = switch_down ? 1u : 0u;
+    mr->live_tackle_down = tackle_down ? 1u : 0u;
     mr->live_switch_press = 0u;
-  mr->live_switch_down = switch_down ? 1u : 0u;
-  if (tackle_down && !mr->live_tackle_down && switch_accept)
-    mr->live_tackle_press = 1u;
-  else if (!switch_accept)
     mr->live_tackle_press = 0u;
-  mr->live_tackle_down = tackle_down ? 1u : 0u;
+    mr->input_resync = 0;
+  } else {
+    if (switch_down && !mr->live_switch_down && switch_accept)
+      mr->live_switch_press = 1u;
+    else if (!switch_accept)
+      mr->live_switch_press = 0u;
+    mr->live_switch_down = switch_down ? 1u : 0u;
+    if (tackle_down && !mr->live_tackle_down && switch_accept)
+      mr->live_tackle_press = 1u;
+    else if (!switch_accept)
+      mr->live_tackle_press = 0u;
+    mr->live_tackle_down = tackle_down ? 1u : 0u;
+  }
   (void)fifa96_input_map(raw, match_run_input_row, &mapped);
   current[0] = mapped;
   (void)fifa96_input_update(&mr->input, current);
@@ -5222,6 +5243,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   match_run_live_tackle_reset(mr);     /* Phase 77: no human contact edge */
   mr->live_switch_down = 0;
   mr->live_tackle_down = 0;
+  mr->input_resync = 0;                /* C1: no replay-exit re-sync pending */
   mr->live_human_side = 0;
   mr->live_kick_hold = 0;              /* P7: no live possession hold */
   mr->live_kick_active = 0;            /* P7: no live ball flight */
@@ -5308,6 +5330,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   match_run_live_tackle_reset(mr);     /* Phase 77: no human contact edge */
   mr->live_switch_down = 0;
   mr->live_tackle_down = 0;
+  mr->input_resync = 0;                /* C1: no replay-exit re-sync pending */
   mr->live_kick_hold = 0;              /* P7: fresh live possession hold */
   mr->live_kick_active = 0;            /* P7: fresh live ball flight */
   mr->live_kick_frames = 0;
@@ -9596,6 +9619,15 @@ int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
   r->phase_counter = 0;
   r->cursor = 0;
   r->camera_index = 0;
+  /* C1: the arm drops any switch/tackle edge latched before it and primes a
+   * fresh replay input poll; an exit pending from an earlier replay is
+   * superseded. */
+  r->input_buttons = 0;
+  r->input_buttons_held = 0;
+  r->input_primed = 0;
+  mr->live_switch_press = 0;
+  mr->live_tackle_press = 0;
+  mr->input_resync = 0;
   (void)fifa96_match_run_replay_camera_set(mr, 0);
   return FIFA96_OK;
 }
@@ -9661,6 +9693,9 @@ void fifa96_match_run_replay_exit(struct fifa96_match_run *mr) {
    * freed (the hero/selection release and the audio sinks stay legs). */
   mr->render.replay.state = FIFA96_MATCH_REPLAY_LIVE;
   mr->render.replay.hud_armed = 0;
+  /* C1: the next non-replay input poll re-syncs the switch/tackle physical
+   * levels and drops any edge made during the replay. */
+  mr->input_resync = 1;
   /* FUN_00036B98's camera reset: the normal view resumes on source 0. */
   if (mr->render.camera_target.source == 4) {
     mr->render.camera_target.source = 0;

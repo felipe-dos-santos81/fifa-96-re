@@ -247,6 +247,36 @@ static void test_engine_replay_key_arms(void) {
   drop_fixture(f);
 }
 
+/* The host kickoff auto-PASS and its dwell must freeze while the replay arms:
+ * the R edge is the arm step, so the auto PASS must not be injected into the
+ * replay input (where it maps to 0x20/camera), and the dwell must not tick. */
+static void test_kickoff_auto_pass_replay_gated(void) {
+  const fifa96_platform_key tape[] = {
+      {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
+      {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
+      {FIFA96_ENGINE_KEY_REPLAY, 1},
+  };
+  struct fixture f = make_fixture(tape, sizeof tape / sizeof tape[0], NULL);
+  assert(fifa96_engine_step(f.engine) == 0);   /* DECLINE -> panel */
+  assert(fifa96_engine_step(f.engine) == 0);   /* release */
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM -> bridge */
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM release */
+  assert(f.engine->match != NULL);
+  /* Fixture mechanic: the headless bridge begins the run non-live, while the
+   * host kickoff gate below requires the live run. The assertions are the
+   * brief's; only this cell is staged so the kickoff wait is reachable. */
+  f.engine->match->live_start = 1;
+  f.engine->match->state.phase = 1;            /* the kickoff wait */
+  f.engine->match->global_157ac2 = 0;
+  f.engine->match_halftime_steps = 300u;
+  f.engine->match_halftime_pressed = 1u;
+  f.engine->match_halftime_hold = 10u;
+  assert(fifa96_engine_step(f.engine) == 0);   /* R: arm on this step */
+  assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
+  assert(f.engine->match_halftime_hold == 10u); /* the dwell paused */
+  drop_fixture(f);
+}
+
 /* G1 live staging: with the retail ISO mounted, a successful bridge begin
  * stages the derived default match art pair (FU-86 §1/§2: /ART/PLAYART.PVI as
  * the 91-bank player animation container and /ART/GAMEART0.PVI as the match
@@ -339,6 +369,7 @@ int main(void) {
   test_bridge_starts_and_rebegins();
   test_engine_step_wires_bridge();
   test_engine_replay_key_arms();
+  test_kickoff_auto_pass_replay_gated();
   test_bridge_stages_render_with_iso();
   test_bridge_hands_off_appearance();
   puts("test_engine_match_bridge OK");
