@@ -124,11 +124,14 @@ records (each with the `+0x59/+0x5D/+0x61` position, `+0x7D` heading,
 triple is an erratum: the source is the camera focus, not the ball record.
 FU-112's "its `0x55C37+0x16` byte is written 0" is also an erratum: the
 composer copies `[0x15887B]` (FU-158 §2, fresh `0x36E38`). The port
-already models the focus as `render_focus_*` (FU-351-L1) and derives the same
-23 slot fields in `match_run_scene_stage_positions`; the ring composer reads
-the live pool and ball record directly with that derivation, independent of
-`render.enabled` (the native composer reads the live model, not the render
-slots).
+already models the focus as `render_focus_*` (FU-351-L1) and composes the same
+23 slot fields in `match_run_scene_stage_positions`; the ring composer copies
+those **staged render slots** (the values the renderer draws) plus the camera
+and focus state into the view. It runs after the scene staging, inside the
+render-enabled branch; a headless run (`render.enabled == 0`) stages no slots
+and is not a meaningful capture path. The native composer reads the live
+model, but the port's staged slots are its composer output and are the
+faithful source for "what was drawn".
 
 The composer's packed heading is `((0x400 - face7d) & 0x3FF) << 6` (FU-112).
 The port's `render.entities[].stage.heading` is the raw high word
@@ -141,9 +144,10 @@ fold twice.
 
 - `FUN_0006408C(ticks)` is the **packer**, called from the live frame event
   dispatch `FUN_00049B28` at `0x4A040` with `EAX = 1`, right after the
-  composer call at `0x49FF5`. It accumulates `[0x109AAC] += ticks` (0 → 1),
-  returns while the accumulator is `< 2`, then writes one record at the write
-  cursor, wraps at 150, evicts when the count exceeds 0x95, and stamps
+  composer call at `0x49FF5`. With `ticks == 0` it sets `[0x109AAC] = 1` and
+  **writes a record immediately** (a flush, stamp 1); with `ticks != 0` it
+  adds and returns while the accumulator is `< 2`. On a write it uses the
+  write cursor, wraps at 150, evicts when the count exceeds 0x95, and stamps
   `+0x116 = [0x109AAC]`.
 - **The 90-frame mode-window budget (FU-111 §1, fresh re-read).** The packer
   call sits inside `if ([0x107310] < 0x5A)`. Each frame, `FUN_0004B380()`
@@ -258,7 +262,7 @@ padding can silently move a lane. Accessors are the only accessors.
 #define FIFA96_MATCH_REPLAY_RECORD_SIZE  0x118
 #define FIFA96_MATCH_REPLAY_VIEW_SIZE    0x1D0   /* through 0x155C73 */
 #define FIFA96_MATCH_REPLAY_VIEW_SLOTS   23    /* 22 team records + ball */
-#define FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y 0xFFFFD8F0
+#define FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y (-10000)  /* native dword 0xFFFFD8F0 */
 
 struct fifa96_match_replay_ring {
   uint8_t record[FIFA96_MATCH_REPLAY_RING_RECORDS]
@@ -315,42 +319,45 @@ next replay sees it) and restores the live camera.
     `render_focus_valid`, else `camera_override_triple` when
     `camera_override_157a6f`, else `render.camera.pos_*`, clamped with
     `fifa96_camera_focus_clamp` (±6000, 0..16000).
-  - Slots 0..21: the live pool `entities.team[side].records[pitch]`
-    (`slot = side*11 + pitch`); `x/y/z = pos_x/pos_y/pos_z`; the packed
-    heading is `((0x400 - face7d) & 0x3FF) << 6`; appearance = `anim_id`
-    (OL-80), frame = `frame`; hidden => `y = 0xFFFFD8F0`.
-  - Slot 22 (the ball): `entities.ball.x/y/z` (the native
-    `0x15880C/10/14` source), the packed heading `((0x400 - ball.heading) &
-    0x3FF) << 6`, appearance = `ball.appear_row` (the `0x158866` row id), and
-    frame from the native `0x15887B` byte. The port does not model that byte
-    yet (FU-158 L14.8.b), so it stages 0 (RR-L9).
+  - Slots 0..21: the staged `render.entities[slot].stage` (the values the
+    renderer draws); `x/y/z = stage.pos`; the packed heading is
+    `((0x400 - (stage.heading >> 16)) & 0x3FF) << 6`; appearance =
+    `stage.anim_id` (OL-80), frame = `stage.frame`; `stage.hidden` =>
+    `y = 0xFFFFD8F0`.
+  - Slot 22 (the ball): the staged `render.entities[22].stage`; the packed
+    heading `((0x400 - (stage.heading >> 16)) & 0x3FF) << 6`, appearance =
+    `stage.anim_id` (the ball's `0x158866` row id), frame = `stage.frame`
+    (0 until the `0x15887B` producer lands, RR-L9).
   - `+0x1AA..+0x1AD` (roll/queue/band/flag): the port's `render.ball_roll`
     and staged 0 for the queue/band/flag (RR-L3); `+0x1CC = 1` (the
     `FUN_000974D0` stub); `+0x1CE = (uint16_t)mr->state.frame_delta`
     (the `FUN_000492CC` stand-in; RR-L6).
   - Camera matrix: from
     `render.native_view_cam[render.native_view_class]` when
-    `native_view_class < 3 && native_view_valid[native_view_class]`, else
-    `render.action_cam`; `+0xF6..+0x10D` = `pos_x/pos_y/pos_z, yaw, pitch,
-    ratio`.
+    `native_view_class >= 0 && native_view_class < 3 &&
+    native_view_valid[native_view_class]`, else `render.action_cam`;
+    **view** `+0x1AE..+0x1C5` (record `+0xF6..+0x10D`) = `pos_x/pos_y/pos_z,
+    yaw, pitch, ratio`.
 - The live frame body calls `compose` then `capture(mr, 1)` once per granted
-  live frame, immediately after `match_run_scene_stage` and before the render
-  tail, so the record is the frame the renderer draws. The freeze/replay path
-  does not call it.
+  live frame, immediately after `match_run_scene_stage` **inside the
+  `render.enabled` branch**, so the record is exactly the frame the renderer
+  draws. The freeze/replay path does not call it.
 - `capture` first updates the mode-window budget exactly (§5.3): if
   `mr->state.phase` is in the increment set, `budget++`; else `budget = 0`.
   **If `budget >= 0x5A`, return before touching `stamp_acc`** — the native
   does not call the packer at all, so the accumulator does not advance while
-  the budget blocks. Otherwise mimic `FUN_0006408C`: gated on `enabled`; add
-  `ticks` (0 → 1); return while `< 2`; evict when `count > 0x95`
+  the budget blocks. Otherwise mimic `FUN_0006408C`: gated on `enabled`; if
+  `ticks == 0`, set `stamp_acc = 1` and write immediately (the native flush);
+  else add `ticks` and return while `< 2`; evict when `count > 0x95`
   (`read = (read+1) % 150`, `count--`); write at `write`, pack the view, stamp
   `+0x116 = stamp_acc` (low word), `write = (write+1) % 150`, `count++`,
   `stamp_acc = 0`.
 - `ring_reset` zeroes the read/write cursors, the count, the play cursor
-  (`cursor`), the packer accumulator and the budget, and sets `enabled` from
-  the caller; `fifa96_match_run_begin` calls reset(1);
-  `fifa96_match_run_end` calls reset(0). The act-9 reset does not reset the
-  ring (the native setup caller is the only `FUN_00064030` caller).
+  (`render.replay.cursor`), its `cursor_limit`, the packer accumulator and the
+  budget, and sets `enabled` from the caller; `fifa96_match_run_begin` calls
+  reset(1); `fifa96_match_run_end` calls reset(0). `fifa96_match_run_replay_begin`
+  does **not** reset the ring. The act-9 reset does not reset the ring (the
+  native setup caller is the only `FUN_00064030` caller).
 
 ### 7.4 Playback
 
@@ -367,12 +374,14 @@ next replay sees it) and restores the live camera.
   source-4 follow (RR-L5). The eye path is live-run only (the renderer's
   `fifa96_match_run_render_eye` uses `render_eye_*` only when `live_start`),
   so M1/M2 stay untouched.
-- `step_forward`: if `cursor < count`, apply(`cursor`), `cursor++`; if
-  `cursor >= count`, the state becomes `0x82` (the native `FUN_000974D8` +
-  mode 0x82; the hook is RR-L10); update `cursor_limit`. Returns 1 when a
-  record was applied.
-- `step_back`: if `cursor > 0`, `cursor--`, apply(`cursor`); if `cursor < 1`,
-  state `0x82`; update `cursor_limit`.
+- `step_forward`: if `cursor < count`, apply(`cursor`), `cursor++`; **inside
+  that same guard**, when `cursor >= count`, set the state to `0x82` (the
+  native `FUN_000974D8` + mode 0x82; the hook is RR-L10). At the boundary
+  (`cursor >= count` on entry) the step is a complete no-op and the state is
+  left unchanged. `cursor_limit = count`. Returns 1 when a record was applied.
+- `step_back`: if `cursor > 0`, `cursor--`, apply(`cursor`); **inside that
+  same guard**, when `cursor < 1`, set the state to `0x82`. At `cursor == 0`
+  the step is a no-op. `cursor_limit = count`.
 - `stamp`: the `+0x116` word of `record_at(cursor)`, or 0 when
   `cursor >= count`.
 - The `0x83` countdown uses the **ring tick** (1 per granted replay frame,
@@ -427,7 +436,8 @@ Add to `port/tests/test_engine_match_frame.c` and
   **packs** (the gate is a counter, not a pause); an increment phase (0) packs
   one record per 2 frames and stops once the budget reaches 90 (44 records:
   frames 2..88, the 90th blocked); a reset phase clears the budget and
-  packing resumes. Fill to 151 packs across windows; assert `count = 150`,
+  packing resumes. A `ticks == 0` call is a flush (one record, stamp 1).
+  Fill to 151 packs across windows; assert `count = 150`,
   `read = 1` (one eviction), the oldest record is the second pack, and stamp 2.
 - `test_replay_ring_empty`: arm before any capture → idle (`0x82`), count 0,
   steps are no-ops, exit works.
@@ -514,6 +524,9 @@ Append-only, in the source docs:
 - **FU-111 §1.** The gate is a budget cap, not a pause: the reset modes set
   the counter to 0 and the packer runs; an uninterrupted increment-mode run
   yields 44 records (the 90th frame's pack is blocked).
+- **FU-351 §26 / FU72 remaining-leg paragraphs.** The recorded-frame ring is
+  no longer a leg; the replay camera record cycle (RR-L5) and the mode-7
+  request/timed exit (RR-L7) remain.
 
 ## 8. What is left to the builder
 
