@@ -33,10 +33,12 @@ No engine behavior changes; no golden is re-pinned.
   channel stop.
 - Close RR-L9 by proof: `0x15887B` has one static READ (`FUN_00036C70`) and
   no static writer.
-- Close the 23rd remap-pool slot by proof: `0x14BF9C` has zero static xrefs.
-- Close the `FUN_0001CAEC` option-UI / A4 branch by proof: the two option
-  cells have four READs each in `FUN_0001CAEC` and no static store; the
-  non-default branch is the team-editor preview (out of contract).
+- Record the 23rd remap-pool slot's **no-static-consumer** proof; the
+  runtime-indexed consumer stays a leg (FU-348 §8 A1 already notes the
+  runtime pointer indexing can reach the slot).
+- Record the option cells' **no-store** proof; the `FUN_0001CAEC` option UI
+  (FU348-L2c) and the non-default A4 branch (FU348-L2d, reachable at live
+  setup) go to Slice B, not closed here.
 - Close the `0x974D8` half of RR-L10 by proof (a one-byte `RET`).
 - Re-label RR-L1 (embedded ring by design), RR-L2 (presentation-overlay
   latch) and RR-L8 (phase mapping) with the fresh xref census.
@@ -54,6 +56,8 @@ Non-goals (all **Slice B** unless noted):
 - B2-L1 (the non-zero `side_swap` flip), RR-L3 (camera band/queue
   producers), RR-L4 (appearance-byte mapping), RR-L5 (`0x20` replay camera
   cycle/matrix precedence), RR-L7 (mode-7 request/timed exit).
+- The 23rd-slot **runtime** consumer (A1-R), FU348-L2c (the option UI that
+  writes the cells) and FU348-L2d (the non-default A4 branch, live at setup).
 - RR-L10's `0x974DC` half: the hook pushes the `0x155C8C` queue and updates
   the `0x10A254` scalar through `FUN_00065CC0`; its semantics are unproved
   and it is a camera/UI-path fact.
@@ -108,12 +112,17 @@ proximity, not asserted as the `FUN_0003BB1C` loop's.
 ### 4.3 The inert items are provable
 
 - `get_xrefs_to 0x14BF9C` = **0**. The 23rd remap-pool block has no static
-  consumer; the live tables are reached through the runtime pointer pair
-  `0x14BF60`/`0x14BF8C` (FU-348 §8, prior record).
+  consumer; FU-348 §8 A1 already records that the runtime pointer indexing
+  (`(&DAT_0014BF60)[param_1]`, `param_1` 0/0xB) can reach the slot, so the
+  runtime-indexed consumer remains a leg. This slice records the static
+  proof, not closure of the runtime leg.
 - `get_xrefs_to 0x105284` = 4 READs and `0x105298` = 4 READs, all in
-  `FUN_0001CAEC`; no store. The non-default A4 branch is the team-editor
-  preview (`FUN_000481EC` writer, `0x372B4` path), out of contract by the
-  small-legs design §3 (prior record).
+  `FUN_0001CAEC`; no store. The option UI that writes them is FU348-L2c
+  (unported). The non-default A4 branch is FU348-L2d and is **live at match
+  setup**: `FUN_000481EC` runs at `0x4AE76` in `FUN_0004AD4C`, called from
+  `0x49424` in `FUN_000493A0`, as well as from the team-editor path
+  (`0x372B4` in `FUN_0003726C`). It stays a B leg; the port's staged 0 models
+  the default path only (FU-348 §8 A4, FU-350 §7).
 - `get_xrefs_to 0x15887B` = 1 READ (`0x36E38` in `FUN_00036C70`), no
   static writer. RR-L9's staged 0 is exact for the analyzed image; an
   indirect/runtime writer remains unproved and is not invented.
@@ -127,8 +136,8 @@ Its body sets `[0x109014] = 0`, calls `FUN_00056B88(0x2B)`, and when
 
 Fresh `decompile_function 0x56B88`: it writes a 12-dword table at
 `0x1543A4` from `param_1` and `-param_1`, copies it to `0x14E838`, adjusts
-the six `0x14E8xx` cells, and calls `FUN_0004C478` over
-`0x14E868..0x14E9B8`. Fresh `decompile_function 0x56894`: it computes a
+`0x14E838/0x14E840/0x14E844/0x14E84C/0x14E850/0x14E85C`, and calls
+`FUN_0004C478` over `0x14E868..0x14E9B8`. Fresh `decompile_function 0x56894`: it computes a
 12-value matrix from `param_2/param_3 << 8` and the `FUN_000A1A60` outputs
 and writes the `0x1543A0` array. These are screen/projection transforms, not
 mixer channels. The C4 record's "`FUN_00056B88(0x2B)` (a channel stop)" and
@@ -141,9 +150,10 @@ B leg (the replay view setup).
 
 ### 4.5 RR-L10: one half proved, one half B
 
-- `FUN_000974D8` is a one-byte `RET` (`disassemble_bytes 0x974D0` shows
-  `MOV EAX,1; LEA EAX,[EAX]; RET`); the port's `replay_transition` no-op is
-  exact.
+- `FUN_000974D0` (`0x974D0`) is the `MOV EAX,1; LEA EAX,[EAX]; RET`
+  return-1 body; `FUN_000974D8` is the bare `RET` at `0x974D8`
+  (`disassemble_bytes 0x974D0`). The port's `replay_transition` no-op is
+  exact for `FUN_000974D8`.
 - `FUN_000974DC` calls `FUN_00064EC0` and `FUN_00065CC0`.
   `FUN_00064EC0` gates on `([0x109A98] & 0x80) == 0` **and**
   `FUN_00037AE4() == 0`; `FUN_00037AE4` returns 1 when the screen id
@@ -159,13 +169,17 @@ B leg (the replay view setup).
 
 ### 4.6 RR-L6 has live writers
 
-`get_xrefs_to 0x10732C` = 10. `FUN_000492CC` reads it (the port's
-`+0x1CE` stand-in); the writers are `0x492FD` in `FUN_000492E8`, `0x49B86`
+`get_xrefs_to 0x10732C` = 10. `FUN_000492CC` reads it (the composer's
+`+0x1CE` source); the writers are `0x492FD` in `FUN_000492E8`, `0x49B86`
 and `0x49BC2` in `FUN_00049B28`, and `0x4A08A`/`0x4A0C9` in
-`FUN_0004A068`; readers sit in the same three functions. The port's
-"1 per granted replay frame, `frame_delta` in the view" is a model, not yet
-a reconciliation. The slice reads those writes; if they prove the model, it
-is pinned with a test; if not, RR-L6 stays a numbered leg.
+`FUN_0004A068`; readers sit in the same three functions. The port's view
+word is `state.frame_delta`; the packer tick is separate and already fixed
+at 1 by the `FUN_0006408C(EAX=1)` call at `0x4A040` (ring spec §5.3), pinned
+by the capture/cadence tests. RR-L6 is the view word: the slice reads those
+writes; if they prove `frame_delta`, the composer is correct
+(`test_ring_compose`); if not, it writes the failing composer test and
+changes only the `+0x1CE` assignment. If the value cannot be proved, RR-L6
+stays a leg.
 
 ### 4.7 RR-L1/RR-L2/RR-L8
 
@@ -219,10 +233,13 @@ the analyzed image; an indirect writer remains unproved.
 
 ### 6.3 The 23rd slot and the option UI (docs-only)
 
-- `0x14BF9C` has zero xrefs. Append the proof to FU-348 §8/FU-350 §7 and
-  close the 23rd-slot leg (small-legs A1).
-- `0x105284`/`0x105298` have four READs each and no store. Append the proof
-  and close FU348-L2d as the team-editor preview (out of contract).
+- `0x14BF9C` has zero xrefs. Append the static proof to FU-348 §8/FU-350 §7
+  and keep the **runtime-indexed consumer** as a leg (A1-R/B); do not close
+  small-legs A1 outright.
+- `0x105284`/`0x105298` have four READs each and no store. Append the
+  no-store proof; hand FU348-L2c (the option UI) and FU348-L2d (the
+  non-default A4 branch, live at setup) to B. Do not close L2d as
+  team-editor-only.
 
 ### 6.4 RR-L1/RR-L2/RR-L8 (docs-only)
 
@@ -232,14 +249,22 @@ the analyzed image; an indirect writer remains unproved.
   item moves to B; if it is presentation-only, close it.
 - RR-L8: re-label as the documented phase mapping with the mode-byte rule.
 
-### 6.5 RR-L6 — the tick source (read; code only if proved)
+### 6.5 RR-L6 — the view tick word (read; code only if proved)
 
+- The packer tick is already fixed at 1 by the `FUN_0006408C(EAX=1)` call at
+  `0x4A040` (ring spec §5.3); the capture/cadence tests pin it. RR-L6 is the
+  **view word** `+0x1CE`: `FUN_000492CC` returns `[0x10732C]` and the
+  composer writes it.
 - Read the `0x10732C` writes in `FUN_00049B28` (`0x49B86/0x49BC2`) and
   `FUN_0004A068` (`0x4A08A/0x4A0C9`) and the `FUN_000492E8` write.
-- If they prove the port's 1/frame + `frame_delta` model, add one test
-  pinning the replay tick and close RR-L6.
-- If not, append the evidence and keep RR-L6 as a numbered leg. Do not
-  invent a tick.
+- If the native word equals `state.frame_delta` (2, the whole-frame delta),
+  the composer's `+0x1CE = state.frame_delta` is correct; close RR-L6 with
+  the evidence and `test_ring_compose`.
+- If it is `0x200` (the Q8 raw step) or another value, the composer is
+  wrong: write the failing composer test, change only the `+0x1CE`
+  assignment to the native word, and close RR-L6 with the proved value.
+- If the value cannot be proved, append the evidence and keep RR-L6 as a
+  numbered leg. Do not invent a tick.
 
 ### 6.6 RR-L10 (docs-only for A)
 
@@ -251,9 +276,10 @@ the analyzed image; an indirect writer remains unproved.
 ### 6.7 B/C handoff
 
 - **B:** 19 `0x8ED40` sites; B2-L1; RR-L3/L4/L5/L7; RR-L10's `0x974DC`
-  half; the arm's `0x5865C` view reset (C4R-L1); **RR-L2 only if** the
-  re-read proves the `0x14E574` latch gates the live match recorder (if it
-  is presentation-only, it closes in A).
+  half; the arm's `0x5865C` view reset (C4R-L1); the 23rd-slot runtime
+  consumer (A1-R); FU348-L2c and FU348-L2d; **RR-L2 only if** the re-read
+  proves the `0x14E574` latch gates the live match recorder (if it is
+  presentation-only, it closes in A).
 - **C:** `FUN_0003BB1C`, its screen table (`0x110C70`) and the `0x8FF30`
   third-selection consumer.
 
@@ -262,14 +288,15 @@ the analyzed image; an indirect writer remains unproved.
 - `make check` 125/125, strict-clean.
 - M1/M2 `cmp` byte-exact; no re-pin.
 - Windowed smoke exit 124 with a clean log.
-- New tests only if RR-L6 is proved (one tick test). The C4/ball/slot/option
-  closures are docs-only.
+- A new composer test only if RR-L6 is disproved (the proved branch uses the
+  existing `test_ring_compose`). The C4/ball/slot/option records are
+  docs-only.
 - No README/port-table/census/ENGINE headline/completion-number movement.
 
 ## 8. What is left to the builder
 
-- The RR-L6 read: whether the `0x10732C` writes prove 1/frame plus
-  `frame_delta`, or leave a numbered leg.
+- The RR-L6 read: whether the `0x10732C` writes prove the view word equals
+  `state.frame_delta` (2), or another value that changes the composer.
 - The RR-L2 re-read: whether the latch gates the live match recorder.
 - The append-only wording for each owning record; the design gives the
   facts, not the prose.
