@@ -239,6 +239,13 @@ EDI,0x14` / `0x48899 ADD ESI,0x4` / `0x488A3 CMP ECX,0x4` / `0x488A6 JL
 five `{0,0,14,15,13}` (all `< 0x16`); `0x106AFD`/`0x106AFE` read 6/5. The
 writer's four sources are `[ESP+0xc]`/`[ESP+0x34]` (the `0x105284` gates
 6/7/8) and `[ESP+0x20]`/`[ESP+0x48]` (the `0x105298` gates 10/0xB/0xC),
-staging `0x16`/`0x17`/`0x15`; that is the preview path, not the live lineup.
-The lineup-order producer remains `FUN_00012010`; `0x107080` is the
+staging `0x16`/`0x17`/`0x15`. The writer runs at live match setup (`0x4AE76`
+in `FUN_0004AD4C`, called from `0x49424` in `FUN_000493A0`, the match main
+loop) as well as from the front-end/team-editor path (`0x372B4` in
+`FUN_0003726C`); `FUN_00048D38` then calls `FUN_00047298(1)`, which reads the
+just-written selectors. The static image five is the pre-init image content;
+the runtime array is written from the lineup/kit cells at match init. With
+the port's staged 0 the selectors stay below `0x16`; with non-default kit
+cells the branch is reachable, which is the `FUN_0001CAEC` option-UI leg. The
+lineup-order producer remains `FUN_00012010`; `0x107080` is the
 template-selector table, not the order matrix. See FU-348 §8 (A4).

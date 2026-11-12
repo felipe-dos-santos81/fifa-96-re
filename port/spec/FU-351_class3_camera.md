@@ -1169,20 +1169,24 @@ does not set the receiver `has_slot`; that partial write left two slot holders
 and was removed. Row 29's source-2 store remains on the unwired row-29 entry;
 the source-4 non-goal activity updates and replay UI trigger are unchanged.
 
-## 25. C2 closure — the native mode-7 request is a menu producer (2026-11-11)
+## 25. C2 closure — the native mode-7 request and the host-key adapter (2026-11-11)
 
 **Fresh census.** `get_xrefs_to 0x64270` returns three callers: `0x383B3`
-in `FUN_00038004` (the menu dispatch's `param_1 == 0xB` case), `0x38E81` in
-`FUN_00038630` (menu case 3) and `0x5112D` in `FUN_000510DC` (the
-pause/replay state machine). The fresh `FUN_000510DC` decompile shows the
-begin arm (`param_1 != 0`): `[0x14E58C] = 1`, `FUN_00064270()`,
-`FUN_00037114(4)`, `[0x108E0C] = 1`, `[0x108E10] = 0`.
+in `FUN_00038004` (the live event-0xB dispatch: `FUN_00038004` is called from
+`0x49F14` in `FUN_00049B28`, the live frame's drain head, and its
+`param_1 == 0xB` arm calls `FUN_00064270`), `0x38E81` in `FUN_00038630` (the
+front-end screen case) and `0x5112D` in `FUN_000510DC` (the pause/replay
+state machine). The fresh `FUN_000510DC` decompile shows the begin arm
+(`param_1 != 0`): `[0x14E58C] = 1`, `FUN_00064270()`, `FUN_00037114(4)`,
+`[0x108E0C] = 1`, `[0x108E10] = 0`.
 
-**Verdict — documented adapter, no request seam.** The mode-7 request is the
-§23 menu/pause-screen producer (`FUN_0004B100` mode 7 → `FUN_000513EC`/
+**Verdict — documented adapter, no request seam.** The request is produced by
+the live event-0xB dispatch (`FUN_00038004` `0x383B3`), the front-end screen
+case (`FUN_00038630` `0x38E81`) and the pause/replay state (`FUN_000510DC`
+`0x5112D`); the §23 chain (`FUN_0004B100` mode 7 → `FUN_000513EC`/
 `FUN_00053BB8` → `FUN_00051270`/`0x51370`/`0x512B0` → `FUN_000510DC` →
-`FUN_00064270`), not a live-match event; the port has no replay menu item.
-The host `R`/BACK key remains the documented adapter at the arm
+`FUN_00064270`) still describes the request path. The port has no replay
+menu item; the host `R`/BACK key remains the documented adapter at the arm
 (`FUN_00064270`), and `replay_begin` already stores the native arm (`0x81`).
 The native request cells (`[0x8E0C]`/`[0x8E10]`/`[0x4E58C]`) and the timed
 exit (`FUN_00064E74`/`FUN_00064DFC`) stay a numbered leg: the request path is

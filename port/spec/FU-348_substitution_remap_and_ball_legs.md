@@ -338,22 +338,24 @@ The remaining sub-legs stay open:
 **Fresh census (this session, `/FIFA96.EXE`).** `get_xrefs_to 0x14BF9C`
 returns `count 0`; `get_xrefs_to 0x48DC0` returns two callers (`0x56478` in
 `FUN_000563d0`, `0x5721a` in `FUN_00057158`); `get_xrefs_to 0x1068E0`
-returns five (`0x48DCE` read in `FUN_00048dc0`, `0x48EE5` and `0x48FF8` reads
-in `FUN_00048ff4`, `0x48FE1` write in `FUN_00048ed8`, `0x4902F` write in
-`FUN_00048ff4`); `get_xrefs_to 0x107080` returns four (DATA reads `0x47450`,
-`0x47586`, `0x47769` in `FUN_00047298`; WRITE `0x487D9` in
-`FUN_000481ec`); and `get_xrefs_to 0x481EC` returns one (`0x48D57` in
-`FUN_00048d38`).
+returns five (`0x48DCE` read in `FUN_00048dc0`, `0x48EE5` read in
+`FUN_00048ed8`, `0x48FF8` read in `FUN_00048ff4`, `0x48FE1` write in
+`FUN_00048ed8`, `0x4902F` write in `FUN_00048ff4`); `get_xrefs_to 0x107080`
+returns four (DATA reads `0x47450`, `0x47586`, `0x47769` in
+`FUN_00047298`; WRITE `0x487D9` in `FUN_000481ec`); and `get_xrefs_to
+0x481EC` returns one (`0x48D57` in `FUN_00048d38`).
 
-### A1 — the 23rd pool slot is dormant
+### A1 — the 23rd pool slot has no static consumer
 
-Closed: the builder's 23rd output has no consumer. `get_xrefs_to 0x14BF9C`
-is 0 in the fresh session, and the fresh `FUN_00048dc0` decompile reaches the
-two team tables through `(&DAT_0014bf60)[param_1]` with `param_1` 0 or `0xB`
-(so `0x14BF60`/`0x14BF8C`); the image bytes at both pointer cells read 0, so
-the table is runtime-populated, and no static reference targets `0x14BF9C`.
-The engine keeps `render.remap_extra` as the stored 23rd block and keeps the
-consumer note; this is a documented dormant slot, not a removed one.
+No static consumer is evidenced: `get_xrefs_to 0x14BF9C` is 0 in the fresh
+session, and the fresh `FUN_00048dc0` decompile reaches the two team tables
+through `(&DAT_0014bf60)[param_1]` with `param_1` 0 or `0xB` (so
+`0x14BF60`/`0x14BF8C`); the image bytes at both pointer cells read 0, so the
+table is runtime-populated, and no static reference targets `0x14BF9C`. The
+runtime pointer indexing can reach the slot, so the runtime-indexed consumer
+remains the 23rd-slot leg. The engine keeps `render.remap_extra` as the
+stored block and keeps the consumer note; this is a documented negative, not
+a removed slot.
 
 ### A2 — `FUN_00048DC0` is the kit-editor preview palette transform
 
@@ -365,28 +367,39 @@ live GK patch.
 The gate is `[0x1068E0] == 1 && (param_1 == 0 || param_1 == 0xB)`; the body
 reads `(&DAT_0014bf60)[param_1]`, remaps `0x94..0x9A`/`0x9B..0xA5` (team 0)
 or `0x82..0x88`/`0x89..0x93` (team 1) through `0x107287`/`0x10727C`, fills the
-256-byte local table and commits through `FUN_000CE980`. The flag is written
-only by the preview cluster: `FUN_00048ED8` builds the `0x14B200` buffer and
-stores 1 at `0x48FE1` (the listing loads `0x48FCB MOV ECX,0x1`), and
-`FUN_00048FF4` restores `0x14B500` and stores 0 at `0x4902F`. The image cell
-`0x1068E0` reads 0 and the two callers are `0x56478`/`0x5721A`. The live match
-therefore never enters the body; the port's `0xFF` source-0 adapter stays the
-documented bridge, and the team-editor preview remains out of scope.
+256-byte local table and commits through `FUN_000CE980`. The flag's writers
+are the preview set/clear pair: `FUN_00048ED8` builds the `0x14B200` buffer
+and stores 1 at `0x48FE1` (the listing loads `0x48FCB MOV ECX,0x1`), and
+`FUN_00048FF4` restores `0x14B500` and stores 0 at `0x4902F`. Fresh xrefs
+bound the callers: `get_xrefs_to 0x48ED8` = 1 (`0x3BB45` in `FUN_0003BB1C`),
+and `get_xrefs_to 0x48FF4` = 2 (`0x384B0` in `FUN_00038448`, `0x3BF13` in
+`FUN_0003BB1C`). The only setter caller is the `FUN_0003BB1C`
+match-screen/menu loop (itself entered from `FUN_00038004` `0x381C2`,
+`FUN_00038630` `0x389DA` and `FUN_0003B708` `0x3BA09`); no direct live
+frame-body setter is evidenced. The image cell `0x1068E0` reads 0 and the two
+`FUN_00048DC0` callers are `0x56478`/`0x5721A`; the port's `0xFF` source-0
+adapter stays the documented bridge, and the team-editor preview remains out
+of scope. No live GK patch is evidenced.
 
 ### A3 — the option cells have no static store; staged 0 stays
+
+**Erratum (quoted).** §7's "FU348-L2c — option gates. The
+`FUN_0001CAEC(9/0xD)` skin/hair blanking gates are staged 0" is re-labelled:
+the fresh gates are the team-kit colour cells `[0x105284]`/`[0x105298]`
+(design §6.3), not skin/hair blanking.
 
 Fresh `FUN_0001CAEC` decompile: case 9 is `DAT_00105284 == 4` and case 0xD is
 `DAT_00105298 == 4`. `search_instructions` for `105284` returns four matches
 (`0x1CB3A`/`0x1CB4A`/`0x1CB5A`/`0x1CB6A`, all `CMP dword[0x105284], n` in
 `FUN_0001CAEC`); `105298` returns four (`0x1CB7A`/`0x1CB8A`/`0x1CB9A`/
-`0x1CBAA`, all `CMP dword[0x105298], n`). No static store to either cell
-exists in the image, so the cells are runtime-populated team-kit colour
-option state.
-The builder's explicit `home_blank`/`away_blank` parameters and the engine's
-staged 0 are unchanged; the option UI that writes the cells stays a leg
+`0x1CBAA`, all `CMP dword[0x105298], n`). No static store was found; the
+image cells `0x105284`/`0x105298` read 0; the `FUN_0001CAEC` gates (called
+from `FUN_000481EC`) read them. The option UI that writes them is the leg
 (below).
+The builder's explicit `home_blank`/`away_blank` parameters and the engine's
+staged 0 are unchanged.
 
-### A4 — the `0x107080[class] >= 0x16` branch is unreachable for the live lineup
+### A4 — the `0x107080` branch is unreachable for staged-0/default cells
 
 The array is the five-dword template-selector table. `0x487A0 MOV EBP,0x15`
 stages the blank-kit selector into `[ESP+0x34]`/`[ESP+0xc]` (and
@@ -399,30 +412,39 @@ EBX,[EAX*4+0x107080]` takes `EAX` from the slot map at `[ESP+EAX+0x480]`
 (the template index), and `0x47762 MOV EAX,[ESP+0x4ec]` + `0x47769 CMP
 dword[EAX*4+0x107080],0x16` + `0x47771 JL 0x477bb` test that selector.
 
-The fresh image read at `0x107080` is `{0,0,14,15,13}` — all five entries are
+The static image read at `0x107080` is `{0,0,14,15,13}` — all five entries are
 below `0x16` — and `0x106AFD`/`0x106AFE` read 6/5. The sole writer is
-`FUN_000481EC`, called only by `FUN_00048D38` (`0x48D57`), whose callers are
-`0x372B4` (`FUN_0003726c`, itself called from `0x372BC`/`0x38630`) and
-`0x4AE76` (`FUN_0004ad4c`, from `0x49424` in `FUN_000493a0`, itself called
-from `0x18014`/`0x18108`/`0x18680`) — the front-end/preview cluster, not the
-live-match frame loop. The writer's option-gated arms stage
-`0x15`/`0x16`/`0x17` into the four slots (gates 6/7/8 write
-`[ESP+0xc]`/`[ESP+0x34]`; gates 10/0xB/0xC write `[ESP+0x20]`/`[ESP+0x48]`),
-so a ported preview that runs those gates with a non-default kit cell could
-reach the branch; for the live lineup the array is the static five and the
-branch is unreachable. The port's omission and its comment stand. This closes
-FU348-L2d for the live path and records the preview caveat as the remaining
-half.
+`FUN_000481EC`, called only by `FUN_00048D38` (`0x48D57`); its two callers
+split: `0x372B4` in `FUN_0003726C` (front-end/team-editor; `FUN_0003726C` is
+called from `0x372BC`/`0x38630`) and `0x4AE76` in `FUN_0004AD4C` (live match
+setup: `FUN_0004AD4C` is called from `0x49424` in `FUN_000493A0`, the match
+main loop, which calls the draw loop `FUN_000495B0` at `0x494B5`). The
+`FUN_00048D38` body calls `FUN_000481EC` and then `FUN_00047298(1)`, so the
+branch is evaluated on the just-written array. The writer computes the four
+template selectors from the lineup/kit cells: gates 6/7/8 (`[0x105284]`) and
+10/0xB/0xC (`[0x105298]`) stage `0x16`/`0x17`/`0x15` into the four slots
+(`[ESP+0xc]`/`[ESP+0x34]` and `[ESP+0x20]`/`[ESP+0x48]`), while the default
+cells leave the base selectors. With non-default kit cells 1/2 a live match
+writes `0x16`/`0x17` and the `0x47769` branch is reachable; the port stages 0,
+so its default path keeps the builder's below-`0x16` selectors (the port
+models them as `0/0/14/15/13`) and the branch is unreachable only for that
+path. The static image five is the default-cell value the port models, not
+the runtime array in every match. The port's omission and its comment stand
+for the staged-0
+path; the non-default-cell path is the reopened leg below.
 
-**Remaining legs (unchanged).**
+**Remaining legs.**
 
-* **FU348-L2a — 23rd-slot consumer.** The block is stored, not drawn; no
-  static reader exists (`get_xrefs_to 0x14BF9C` = 0).
+* **FU348-L2a — 23rd-slot consumer.** No static reader exists
+  (`get_xrefs_to 0x14BF9C` = 0); the runtime-indexed consumer remains the
+  leg.
 * **FU348-L2b — team-editor preview.** The `FUN_00048DC0` palette transform
   and the `FUN_00048ED8`/`FUN_00048FF4` preview buffer pair stay out of scope;
   the label is now correct.
 * **FU348-L2c — option UI.** The `FUN_0001CAEC` UI that writes
   `0x105284`/`0x105298` is unported; the engine stages 0.
-* **FU348-L2d — preview special branch.** The `0x107080[class] >= 0x16`
-  branch is unreachable for the live array; it reopens only if the preview
-  builder is ported with non-default kit cells.
+* **FU348-L2d — non-default-cell special branch (reopened).** The
+  `0x107080[class] >= 0x16` branch is unreachable for the staged-0/default
+  cells. Non-default kit cells (gates 6/7/8/10/0xB/0xC staging `0x16`/`0x17`)
+  make it reachable at live setup; porting the `FUN_0001CAEC` option UI must
+  port the branch. The default path stays omitted.
