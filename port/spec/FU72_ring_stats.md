@@ -724,3 +724,23 @@ legs are **RR-L5** (the `0x20` replay camera record cycle / matrix precedence)
 and **RR-L7** (the mode-7 request/timed exit). The other FU-72 legs (B2-L1,
 the `0x8FF30` consumer, the 19-site `0x8ED40` campaign) are unchanged. No
 completion-number movement and no golden re-pin.
+
+## Slice B camera census (2026-11-12)
+
+Workstream **B0** of `2026-11-12-open-items-closure-slice-b-design.md` produced
+the 19-site camera/stat census (`2026-11-12-slice-b-camera-census.md`). It
+scopes the §Closure "Remaining sites (23)" bullet:
+
+> - 19 in unported bodies: `0x70F44`/`0x70FCE` (`FUN_00070DE0`), the six
+>   `FUN_0007131C` sites, `0x72DE3`/`0x72ED1` (`FUN_00072AC4`), the four
+>   `FUN_00072478` sites, the four row-1C tail sites
+>   (`0x77DFD`/`0x77E38`/`0x77E4E`/`0x77E61`, the `0x779DE..0x77E8B` block)
+>   and `0x8AD54` (`FUN_0008A938`).
+
+The census records those 19 sites one row each (body, native arm/gate,
+argument entity, delta, engine owner, port status, test) and the entity-kind
+table (`TRACKED`, `BALL_SUB7A6`, `REC_15B43C`, `REC_157A9B`, `LOCAL_EBP`,
+`REC_1575DA`). The four non-Slice-B sites stay carried, unchanged: the two
+row-1B tail sites `0x775FD`/`0x77613` (FU285-L8) and the two `FUN_0007A490`
+tail sites `0x7ADD2`/`0x7AE04`. No completion-number movement and no golden
+re-pin.
