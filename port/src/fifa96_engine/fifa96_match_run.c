@@ -5231,6 +5231,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   memset(mr->roster_number, 0, sizeof mr->roster_number);
   match_run_sub_roster_reset(mr);
   fifa96_match_stats_reset(&mr->stats);   /* FU-72: no inherited activity */
+  mr->stats_third_selection = 0;          /* FU-72 §2.3: no inherited [0x5B358] */
   mr->live_restart_pending = 0;
   mr->live_halftime_pending = 0;
   mr->live_halftime_frames = 0;
@@ -8779,6 +8780,7 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   mr->paused = 0;               /* FU-343 P4: fresh pause/POST state on reuse */
   match_run_sub_menu_reset(mr); /* P15: no stale menu across runs */
   fifa96_match_stats_reset(&mr->stats); /* FU-72: a reused run starts clean */
+  mr->stats_third_selection = 0;        /* FU-72 §2.3: [0x5B358] cleared too */
   mr->post_timer = 0;
   mr->post_skip = 0;
   /* FU-343 P3 fix: clear the live-only mode and its one-shot stage flags so a

@@ -7064,11 +7064,38 @@ static void test_stats_counter_bump(void) {
   assert(f.mr.stats.count[0][3] == 2 && f.mr.stats_third_selection == 0);
   assert(fifa96_match_run_stats_bump(&f.mr, 0 * 11 + 3) == 1);
   assert(f.mr.stats.count[0][3] == 3 && f.mr.stats_third_selection == 1);
-  assert(fifa96_match_run_stats_bump(&f.mr, 0 * 11 + 3) == 1);
-  assert(f.mr.stats.count[0][3] == 4 && f.mr.stats_third_selection == 0);
+  /* The key now exists only in block 1: the scan is block-local, so this is a
+   * miss even though the same key sits in the other block, and a miss leaves
+   * the third-selection flag unchanged. */
+  f.mr.stats.key[0][3] = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_run_stats_bump(&f.mr, 0 * 11 + 3) == 0);
+  assert(f.mr.stats.count[0][3] == 3 && f.mr.stats_third_selection == 1);
+  /* A re-key clears the table and the flag, including a set flag. */
   fifa96_match_run_stats_seed(&f.mr);
   assert(f.mr.stats.count[0][3] == 0 && f.mr.stats_third_selection == 0);
+  /* The fourth hit clears the flag (it is `count == 3`, not a latch). */
+  for (uint32_t i = 0; i < 4u; i++)
+    assert(fifa96_match_run_stats_bump(&f.mr, 0 * 11 + 3) == 1);
+  assert(f.mr.stats.count[0][3] == 4 && f.mr.stats_third_selection == 0);
+  /* The counter path must not write the `0x8ED40` activity mirror. */
+  assert(f.mr.render.replay.activity_count[0][3] == 0);
   drop_fixture(&f);
+}
+
+/* FU-72 §2.3: init accepts uninitialized memory and end clears the stats table,
+ * so both paths must clear the `[0x5B358]` flag, not only the seed. */
+static void test_stats_third_selection_cleared(void) {
+  struct fifa96_match_run mr;
+  struct fixture f;
+  memset(&mr, 0xAA, sizeof mr);
+  fifa96_match_run_init(&mr);
+  assert(mr.stats_third_selection == 0);
+  make_fixture(&f);
+  f.mr.stats_third_selection = 1;
+  assert(fifa96_match_run_end(&f.mr) == 0);
+  assert(f.mr.stats_third_selection == 0);
+  fifa96_engine_destroy(f.engine);
+  fifa96_platform_destroy(f.plat);
 }
 
 static void test_stats_counter_score_event(void) {
@@ -7228,6 +7255,7 @@ int main(void) {
   test_stats_permuted_roster_order();
   test_stats_counter_bump();
   test_stats_counter_score_event();
+  test_stats_third_selection_cleared();
   puts("test_engine_match_handlers OK");
   return 0;
 }
