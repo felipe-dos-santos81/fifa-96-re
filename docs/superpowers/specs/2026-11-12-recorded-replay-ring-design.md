@@ -690,3 +690,38 @@ is fresh from this session (2026-11-12) on `/FIFA96.EXE`:
   `0x155C8C` queue push); it then calls `FUN_00065CC0`, which updates
   `[0x10A254]` through `FUN_000A7705`. The `0x974D8` half is closed by the RET
   proof; the `0x974DC` queue/scalar half is a **B** handoff, not closed.
+
+## 12. Slice A closure (2026-11-12) — RR-L6 tick source
+
+Append-only; the §7.8 leg line quoted below is never rewritten. The re-read is
+fresh from this session (2026-11-12) on `/FIFA96.EXE`:
+`disassemble_function 0x492CC`/`0x49320`, `disassemble_bytes 0x36FA0`/`0x49B70`/
+`0x4A070`/`0x492E8`, `get_xrefs_to 0x10732C`/`0x10731C`/`0x155C72`.
+
+- **RR-L6 — the tick source (closed).** §7.8 read: "RR-L6 — the tick source.
+  `FUN_000492CC` is `[0x10732C]`; the port uses 1 per granted frame and
+  `frame_delta` for `+0x1CE`. The exact live frame-rate/tick reconciliation
+  stays open." `FUN_000492CC` is exactly `MOV EAX,[0x10732C]; RET` (returns the
+  word). The composer `FUN_00036C70` reads it and stores the low word into the
+  view: `0x36FB2 CALL 0x492CC` then `0x36FB7 MOV [0x155C72],AX` — the view
+  `+0x1CE` (`0x155C72`) is the `FUN_000492CC` word. The five live writes to
+  `[0x10732C]` are: `0x49B86` and `0x4A08A` copy `[0x10731C]` into it
+  (`MOV [0x10732C],EAX` with `EAX=[0x10731C]`, read at `0x49B81`/`0x4A085`);
+  `0x49BC2` and `0x4A0C9` reduce it by the loop remainder (`MOV [0x10732C],EBX`
+  with `EBX=[0x10732C]-[0x107328]`, the interrupted-path bookkeeping in
+  `FUN_00049B28`/`FUN_0004A068`); `0x492FD` zeroes it (`FUN_000492E8` reset).
+  None writes `0x200`.
+  `[0x10731C]` — the value `[0x10732C]` snapshots — is a whole-frame integer
+  counter: the frame timer `FUN_00049320` adds `0x102` to the accumulator
+  `[0x107320]` (`0x4933B`) and, once it reaches `0x35C` (`0x49347`), increments
+  `[0x10731C]` by one (`INC EDI` at `0x4935B`, stored `0x49362`) and carries the
+  remainder. `[0x10732C]` is therefore the **whole-frame delta** (an integer
+  frame count), not the Q8 raw step `0x200`.
+  **Decision: proved.** The composer's `+0x1CE = state.frame_delta` (the
+  whole-frame delta; `0x200 >> 8 = 2` at the standard step) is the correct
+  scale, and `test_ring_compose` pins it (`+0x1CE == 2` from `frame_delta == 2`).
+  No code change, no new test.
+  The packer tick stays split: `FUN_0006408C` is called with `EAX = 1` at
+  `0x4A040` (the recorder cadence, already pinned by
+  `test_ring_capture_budget`/`test_ring_playback_cadence`); the view word
+  `+0x1CE` is the separate `FUN_000492CC` (`[0x10732C]`) whole-frame delta.
