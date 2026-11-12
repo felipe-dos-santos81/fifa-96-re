@@ -779,6 +779,6 @@ Two citation/register fixes to §12:
 `0x155C8C` queue push", and FU108 §8 repeats "the 20-entry `0x155C8C` queue
 push". FU-111 §3 proves the push **pre-increments** the head and stores before
 the wrap, so index 0 of the base is never written: the actual storage is
-**`0x155C90..0x155CDC`** (`0x55C90 + 4*i`, `i = 0..0x13`), and **`0x155C8C`
+**`0x155C90..0x155CDC`** (`0x155C90 + 4*i`, `i = 0..0x13`), and **`0x155C8C`
 is HUD state** (FU-111 §5), not the queue. The `0x974DC` half remains a
 **B** handoff, unchanged.

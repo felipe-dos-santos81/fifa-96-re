@@ -155,6 +155,6 @@ No code, golden or completion-number movement.
 **Erratum (quoted).** §8 says `FUN_00064EF0` is "the 20-entry `0x155C8C`
 queue push". FU-111 §3 proves the push **pre-increments** the head and stores
 before the wrap, so index 0 of the base is never written: the actual storage is
-**`0x155C90..0x155CDC`** (`0x55C90 + 4*i`, `i = 0..0x13`), and **`0x155C8C`
+**`0x155C90..0x155CDC`** (`0x155C90 + 4*i`, `i = 0..0x13`), and **`0x155C8C`
 is HUD state** (FU-111 §5), not the queue. The `0x974DC` half remains a
 **B** handoff, unchanged.

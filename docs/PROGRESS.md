@@ -5396,8 +5396,9 @@ close-out below).
   **Phase 122 correction (2026-11-12, whole-branch review).** Three Slice A
   records are corrected append-only: **RR-L9 is reopened**, not closed — the
   byte has a live indirect writer (`FUN_0008BAF0` → `FUN_0006FE84` `0x8C05A` →
-  `FUN_0006E518` `0x6FF60`; `0x6E538 MOV [EDX+0x15],BL` with
-  `EDX = 0x1587EC+0x7A` = `0x15887B`), so RR-L9 is a live producer leg assigned
+  `FUN_0006E518` `0x6FF60`; `0x6E538 MOV byte[EDX+0x15],BL` stores to
+  `0x15887B` with `EDX = 0x1587EC+0x7A = 0x158866`), so RR-L9 is a live
+  producer leg assigned
   to **Slice B** (ball appearance producer) (FU158 §12, ring design §13). **RR-L6
   is narrowed**, not fully closed — the exact `0x102`/`0x35C` frame-rate
   reconciliation stays the open remainder **RR-L6-R** (ring design §13).
