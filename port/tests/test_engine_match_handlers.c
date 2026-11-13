@@ -6398,6 +6398,94 @@ static void test_action_1c_offtarget_anim_ids(void) {
   run_1c_offtarget_anim_case(0x000, 0x180, 0x3D, 0xFF00u); /* >=0x40, cross 0 */
 }
 
+/* Row-0x1C tail (0x779DE..0x77E8B, FU186-L2): the three stat routes. Entry
+ * requires word[+0x81] == 0 (0x779DE CMP/JNZ). Each fixture stages
+ * `timer81 = 0`, the route's phase (`[0x157A4A]>>24` = state.phase) and the
+ * product `(int16)vel_x * pos_z` (0x77DE6/0x77E19 IMUL), then asserts the
+ * exact `stats.value` cell and `activity_count` mirror at the 2x weight:
+ *   +0x64 -> 200 (EBP), +0x19 -> 50 (EBP), +5 -> 10 (EBP or tracked). */
+
+/* Phase 0x10, product < 0: 0x77DFD +0x64 -> 200; no 0x19/5 follow. */
+static void test_action_1c_tail_phase10_negative(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;               /* reach the tail directly */
+  f.mr.record.row44 = 0;                 /* no 0x779D1 reset */
+  f.mr.record.timer81 = 0;               /* 0x779DE entry gate */
+  f.mr.record.delta = 0;
+  f.mr.state.phase = 0x10;               /* 0x77DD3 CMP EAX,0x10 */
+  f.mr.render.camera.vel_x = 1;          /* (int16)vel_x */
+  f.mr.render.camera.pos_z = -1;         /* product = -1 < 0 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(f.mr.stats.value[0][0] == 200);        /* 0x64 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 200);
+  assert(f.mr.stats.value[0][1] == 0);          /* no tracked +5 */
+  drop_fixture(&f);
+}
+
+/* Phase != 0x10, product >= 0: 0x77E38 +0x19 -> 50 (EBP) and, when tracked is
+ * non-NULL, 0x77E4E +5 -> 10 on the tracked record. */
+static void test_action_1c_tail_nonphase10_positive(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.delta = 0;
+  f.mr.state.phase = 2;                  /* non-0x10 */
+  f.mr.render.camera.vel_x = 1;
+  f.mr.render.camera.pos_z = 1;          /* product = 1 >= 0 */
+  f.mr.render.camera.tracked = 1;        /* [0x1577CA] != 0 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(f.mr.stats.value[0][0] == 50);         /* +0x19 * 2 on EBP (entity 0) */
+  assert(f.mr.stats.value[0][1] == 10);         /* +5 * 2 on tracked (entity 1) */
+  assert(f.mr.render.replay.activity_count[0][0] == 50);
+  assert(f.mr.render.replay.activity_count[0][1] == 10);
+  drop_fixture(&f);
+}
+
+/* Phase != 0x10, product < 0: 0x77E61 +5 -> 10 on EBP only, even when tracked
+ * is non-NULL (the negative route never reads [0x1577CA]). */
+static void test_action_1c_tail_nonphase10_negative(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.delta = 0;
+  f.mr.state.phase = 2;                  /* non-0x10 */
+  f.mr.render.camera.vel_x = 1;
+  f.mr.render.camera.pos_z = -1;         /* product = -1 < 0 */
+  f.mr.render.camera.tracked = 1;        /* must NOT receive a stat */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(f.mr.stats.value[0][0] == 10);         /* +5 * 2 on EBP */
+  assert(f.mr.stats.value[0][1] == 0);          /* tracked untouched */
+  assert(f.mr.render.replay.activity_count[0][0] == 10);
+  assert(f.mr.render.replay.activity_count[0][1] == 0);
+  drop_fixture(&f);
+}
+
+/* Phase 0x10, product >= 0: no stat (0x77DEB JGE -> 0x77E6F). */
+static void test_action_1c_tail_phase10_nonnegative(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.delta = 0;
+  f.mr.state.phase = 0x10;
+  f.mr.render.camera.vel_x = 1;
+  f.mr.render.camera.pos_z = 1;          /* product = 1 >= 0 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(f.mr.stats.value[0][0] == 0);          /* no stat */
+  assert(f.mr.render.replay.activity_count[0][0] == 0);
+  drop_fixture(&f);
+}
+
 /* Row 0x1B stage 1 (FU-180 §2; completed this slice): the native movement
  * block 0x76E3B..0x76FC7 — the 0x8DCD4 metric, the 0x79C50 face, the
  * 0xCD474 heading into word[+0x7F], +0x51 += 0x20, the 0x114E04/0x795A4
@@ -7586,6 +7674,10 @@ int main(void) {
   test_action_1c_lunge_arm();
   test_action_1c_offtarget_rotated_arm();
   test_action_1c_offtarget_anim_ids();
+  test_action_1c_tail_phase10_negative();
+  test_action_1c_tail_nonphase10_positive();
+  test_action_1c_tail_nonphase10_negative();
+  test_action_1c_tail_phase10_nonnegative();
   test_action_1c_live_route();
   test_action_1b_stage1_rotation_steering();
   test_action_1a_runs_body();
