@@ -6960,9 +6960,13 @@ int fifa96_match_tracker_decision(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
 
   /* Head (0x7247E..0x724C8): the three FUN_00092998 history searches and the
-   * `[0x15759D] = 1` latch store. The searches are numbered legs — their
-   * results (EDX/ESI/EDI) only feed the unported command-ring arms below. The
-   * latch is live engine state the save block (Task 9) reads and clears. */
+   * `[0x15759D] = 1` latch store. The searches are numbered legs. Their
+   * register dataflow (fresh disassembly): `0x72492 MOVZX EDI,AL` makes EDI the
+   * precomputed `pos_z < 0` flag (from `0x7247E CMP [0x157754],0`/`0x72485
+   * SETL AL`), NOT a search result; the first search's EAX result is
+   * overwritten at `0x724A9 MOV EAX,EDX` (discarded); the second result is
+   * saved to ESI at `0x724BA`; the third result to EDX at `0x724C6`. The latch
+   * is live engine state the save block (Task 9) reads and clears. */
   mr->tracker_15759d = 1;
 
   /* Prev-phase arm (0x724CF..0x724DC -> 0x72A48..0x72A52): `prev_phase ==
@@ -6975,32 +6979,31 @@ int fifa96_match_tracker_decision(struct fifa96_match_run *mr) {
     return FIFA96_OK;
   }
 
-  /* Fall-through (prev_phase != 0x10). The intervening arms — the [0x157823]
-   * one-shot sit latch (0x724E2), the third-search-result arm (0x72502), and
-   * the controlled-actor arm (0x72568) — only post 0x92040/0x651F0/0x8F188
-   * command-ring events and emit no stat, so they are numbered legs. */
+  /* Fall-through (prev_phase != 0x10). Two intervening arms can bypass the
+   * fall-through pair entirely, so they gate whether `0x72649` may fire:
+   *   - the `[0x157823]` one-shot sit-latch arm (`0x724E2..0x724FA`) clears the
+   *     latch and increments the `[0x157ACC]` counter, then falls through to
+   *     `0x72502` — it is not itself a bypass;
+   *   - the third-search-result arm (`0x72502..0x72563`): taken when the
+   *     `FUN_00092998(1,4,-1)` result (EDX) is non-NULL, its `[+5]` entity is
+   *     non-NULL, and `team[entity].side == (pos_z >= 0)`; it posts
+   *     `0x92040`/`0x651F0`/`0x8F188(0x35)` and `JMP 0x72AAF` -> epilogue
+   *     `0x72ABA` (RET), never reaching `0x725E8`;
+   *   - the controlled-actor arm (`0x72568..0x725E3`): taken when `[0x157A83]`
+   *     is non-NULL, its `[+0x8D]` is non-zero, and `team[controlled].side !=
+   *     ([0x157784] < 0)`; it posts `0x92040`/`0x651F0`/`0x8F188(0x35)` and
+   *     `JMP 0x72AB5` -> epilogue `0x72ABA` (RET), never reaching `0x725E8`.
+   * The search-result arm depends on the unported `FUN_00092998(1,4,-1)`
+   * result and the controlled arm on the unported `[0x157784]` cell, so
+   * neither early exit can be evaluated from engine state today.
 
-  /* Fall-through pair (0x725E8..0x72660). */
-  {
-    int32_t tracked = mr->render.camera.tracked;
-    int32_t pos_z = mr->render.camera.pos_z;
-    if (tracked >= 0 &&
-        tracked < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
-      uint32_t team = (uint32_t)tracked / FIFA96_MATCH_ENTITY_RECORDS;
-      /* 0x72610..0x72639: `[0x1577CA] != 0` and `team[tracked].side ==
-       * (pos_z < 0)` (`0x72615`/`0x72617`, `0x72637`/`0x72639`). */
-      if ((uint32_t)mr->entities.team[team].side == (pos_z < 0 ? 1u : 0u)) {
-        /* 0x7263F MOV EDX,0x32 / 0x72644 MOV EAX,[0x1577CA] */
-        (void)fifa96_match_run_stats_add(mr, tracked, 0x32); /* 0x72649 */
-        /* 0x72655 MOV EDX,0xFFFFFFB5 / 0x7265A MOV EAX,[EAX+0x7A6]: the second
-         * call targets `[team+0x7A6]`, the ball record (BALL_SUB7A6). The ball
-         * has no stats-table roster id (`fifa96_match_run_stats_add` accepts
-         * 0..21 only) -> numbered leg, no fabricated id. */
-        /* 0x72665..0x726E8: the `tracked == [0x157A8B] && [0x157A97] > 0x12C`
-         * event-post arm (`0x8F188` 0x30/0x3C) is a numbered leg. */
-      }
-    }
-  }
+   * Fall-through pair `0x72649` (`+0x32`, tracked, gate `0x72615`/`0x72637`:
+   * `[0x1577CA] != 0` && `team[tracked].side == (pos_z < 0)`): numbered OPEN
+   * leg. Emitting it without the two early-exit gates would fabricate `+0x32`
+   * where native emits nothing, so the arm stays unwired until those producers
+   * exist. Its ordered second call `0x72660` (`-0x4B`, `[team+0x7A6]`, the ball
+   * record) is also a leg (BALL_SUB7A6 has no stats-table id). The
+   * `0x72665..0x726E8` `tracked == [0x157A8B]` event-post arm is a leg too. */
 
   /* Staging arm (0x726E9..0x7270F): `[0x15B43C] != 0 && byte[0] == 0xB`
    * (`0x726EE`/`0x726F0`, `0x726F6`/`0x726F9`). `[0x15B43C]` is the last

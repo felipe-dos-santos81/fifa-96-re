@@ -1935,9 +1935,16 @@ int fifa96_match_run_stats_bump(struct fifa96_match_run *mr, int32_t entity_id);
 /* Slice-B Task 8 (FUN_00072478 0x72478..0x72AC0, FU-71 §6): the stat-bearing
  * subset of the tracker/command-ring decision pass, in native emitting order:
  *   `0x72A52` +0xF  — prev_phase == 0x10 (`0x724D9 CMP EAX,0x10`/`JZ 0x72A48`),
- *                     tracked.
- *   `0x72649` +0x32 — fall-through pair, first: tracked != NULL &&
- *                     `team[tracked].side == (pos_z < 0)` (`0x72615`/`0x72637`).
+ *                     tracked. The only arm ported today: it branches away at
+ *                     `0x724DC` before every intervening decision arm.
+ *   `0x72649` +0x32 — fall-through pair, first (tracked != NULL &&
+ *                     `team[tracked].side == (pos_z < 0)`, `0x72615`/`0x72637`).
+ *                     OPEN leg: its reachability depends on two intervening
+ *                     early-exit arms — the `FUN_00092998(1,4,-1)` result arm
+ *                     (`0x72502`, JMP 0x72AAF) and the controlled-actor arm
+ *                     (`0x72568`, gated on the unported `[0x157784]`, JMP
+ *                     0x72AB5). Until those producers exist the engine cannot
+ *                     decide whether the pair is reached, so it must not emit.
  *   `0x72660` -0x4B — the same arm's second call, `[team+0x7A6]` (the ball
  *                     record). BALL_SUB7A6 has no stats-table id -> numbered leg.
  *   `0x7270F` +0x19 — staging arm `[0x15B43C] != NULL && byte[0] == 0xB`,

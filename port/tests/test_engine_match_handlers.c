@@ -5804,11 +5804,15 @@ static void test_goal_post_arm_rng_plus5(void) {
 }
 
 /* Slice-B Task 8 (FUN_00072478): the tracker decision's stat-bearing subset.
- * The prev-phase arm (0x72A52 +0xF) and the fall-through pair's first call
- * (0x72649 +0x32) resolve to TRACKED and are pinned at the 2x weight; the
- * pair's second call (0x72660 -0x4B, BALL_SUB7A6) and the staging arm
- * (0x7270F +0x19, REC_15B43C) are numbered legs — no fabricated id, so the
- * tests assert their absence rather than a value. */
+ * Only the prev-phase arm (0x72A52 +0xF) is ported and pinned at the 2x
+ * weight. The fall-through pair's +0x32 (0x72649) is a numbered open leg: its
+ * native reachability depends on two intervening early-exit arms that the
+ * engine cannot yet decide (the FUN_00092998(1,4,-1) result arm 0x72502 JMP
+ * 0x72AAF, and the controlled-actor arm 0x72568 JMP 0x72AB5, gated on the
+ * unported [0x157784]), so emitting it would fabricate 100 where native emits
+ * nothing. The -0x4B (0x72660, BALL_SUB7A6) and +0x19 (0x7270F, REC_15B43C)
+ * arms are open-entity legs. The tests pin the emitted +0xF and assert the
+ * absence of any fabricated +0x32/+0x19. */
 static void test_tracker_stats_prev_phase10(void) {
   struct fixture f;
   make_fixture(&f);
@@ -5821,6 +5825,12 @@ static void test_tracker_stats_prev_phase10(void) {
   drop_fixture(&f);
 }
 
+/* Negative fixture: staging the pair's local gates (tracked valid + side
+ * match) must NOT fabricate the +0x32. In native the pair is only reached when
+ * BOTH intervening early-exit arms fall through — the search-result arm
+ * (0x72502, gated on the unported FUN_00092998(1,4,-1) result) and the
+ * controlled-actor arm (0x72568, gated on the unported [0x157784]). Neither
+ * can be decided from engine state, so the +0x32 arm (0x72649) stays unwired. */
 static void test_tracker_stats_fallthrough_pair(void) {
   struct fixture f;
   make_fixture(&f);
@@ -5829,10 +5839,8 @@ static void test_tracker_stats_fallthrough_pair(void) {
   f.mr.render.camera.pos_z = 0;             /* pos_z >= 0 -> flag 0 == side 0 */
   f.mr.entities.team[0].side = 0;           /* [0x1577CA][+0x826] side byte */
   assert(fifa96_match_tracker_decision(&f.mr) == 0);
-  assert(f.mr.stats.value[0][0] == 100);    /* +0x32 * 2 */
-  /* The ordered second call 0x72660 (-0x4B) targets [team+0x7A6] (the ball,
-   * BALL_SUB7A6): no stats id -> leg, so no second accumulation. */
-  assert(f.mr.render.replay.activity_count[0][0] == 100);
+  assert(f.mr.stats.value[0][0] == 0);      /* +0x32 is a numbered open leg */
+  assert(f.mr.render.replay.activity_count[0][0] == 0);
   drop_fixture(&f);
 }
 
@@ -5840,15 +5848,15 @@ static void test_tracker_stats_staging(void) {
   struct fixture f;
   make_fixture(&f);
   f.mr.state.prev_phase = 0;
-  f.mr.render.camera.tracked = 0;           /* the pair fires first (native order) */
+  f.mr.render.camera.tracked = 0;
   f.mr.render.camera.pos_z = 0;
   f.mr.entities.team[0].side = 0;
   /* The staging arm 0x7270F (+0x19) gates on `[0x15B43C] != 0 && byte[0]==0xB`;
    * the engine has no [0x15B43C] cell (REC_15B43C open leg), so nothing is
-   * fabricated. */
+   * fabricated — and the +0x32 pair is unwired too (see the pair fixture). */
   assert(fifa96_match_tracker_decision(&f.mr) == 0);
-  assert(f.mr.stats.value[0][0] == 100);    /* only the +0x32 pair call */
-  assert(f.mr.stats.value[0][1] == 0);      /* no +0x19 on any other slot */
+  assert(f.mr.stats.value[0][0] == 0);      /* no fabricated +0x32 (open leg) */
+  assert(f.mr.stats.value[0][1] == 0);      /* no fabricated +0x19 on any slot */
   assert(f.mr.render.replay.activity_count[0][1] == 0);
   drop_fixture(&f);
 }
