@@ -8614,6 +8614,66 @@ static void test_frame_camera_pause_bridge(void) {
   assert(mr.render.camera.timer == timer);
 }
 
+/* Slice-B Task 9: jitter/commit -> save-head tracker -> save tail -> the
+ * walk's previous-triple capture -> pause/walk. The previous-phase tracker
+ * decision contributes +0xF at the native 2x weight exactly once while the
+ * goal gates hold; dropping goal_zone clears its latch on the next frame. */
+static void test_frame_camera_order(void) {
+  struct fifa96_match_run mr;
+  int32_t before_x;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.prev_phase = 0x10;
+  mr.state.period_length = 90;
+  mr.goal_zone = 1;
+  mr.goal_armed = 1;
+  mr.tracker_15759d = 0;
+  for (uint32_t side = 0; side < 2u; side++) {
+    for (uint32_t slot = 0; slot < FIFA96_PCCD_ROSTER_COUNT; slot++)
+      mr.roster_order[side][slot] = (uint8_t)slot;
+    mr.roster_order_ok[side] = 1;
+  }
+  fifa96_match_run_stats_seed(&mr);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      mr.entities.team[t].records[i].skip_9a = 1;
+  assert(fifa96_camera_init(&mr.render.camera, 0x40, 0, 0) == FIFA96_OK);
+  mr.render.camera.tracked = 0;
+  mr.render.camera.vel_x = 4;
+  mr.render.camera.vel_z = 0;
+  mr.render.camera.speed = 4;          /* no jitter; delta 2 walks +8 */
+  mr.render.camera.timer_limit = 0x7FFF;
+
+  before_x = mr.render.camera.pos_x;
+  one_granted_frame(&mr);
+  assert(mr.stats.value[0][0] == 30);  /* 0x72A52 +0xF, before the walk */
+  assert(mr.render.replay.activity_count[0][0] == 30);
+  assert(mr.render.camera.shadow_speed_157825 == 4 &&
+         mr.render.camera.shadow_vel_157827 == 4);  /* 0x73728..0x73750 */
+  assert(mr.render.camera.save.age_delta_157a8f == 2);  /* the save tail ran */
+  assert(mr.render.camera.prev_x == before_x);  /* 0x7375B capture */
+  assert(mr.render.camera.pos_x == before_x + 8);
+  assert(mr.tracker_15759d == 1);
+
+  before_x = mr.render.camera.pos_x;
+  mr.state.phase = 2;                 /* hold the native save-tail phase gate */
+  mr.state.prev_phase = 0x10;
+  one_granted_frame(&mr);
+  assert(mr.stats.value[0][0] == 30);  /* the set latch suppresses a re-call */
+  assert(mr.render.camera.save.age_delta_157a8f == 4);
+  assert(mr.render.camera.prev_x == before_x);
+  assert(mr.render.camera.pos_x == before_x + 8);
+  assert(mr.tracker_15759d == 1);
+
+  mr.state.phase = 2;
+  mr.state.prev_phase = 0x10;
+  mr.goal_zone = 0;
+  one_granted_frame(&mr);
+  assert(mr.tracker_15759d == 0);
+  assert(mr.stats.value[0][0] == 30);
+  assert(mr.render.camera.save.age_delta_157a8f == 6);
+}
+
 /* FU303/FU294-L2 + FU292-L2/L3 (phase-28 T8): the visible-motion rate chain
  * on the real frame path. The event setter produces the pan-direction byte
  * `[0x157815]` (the compass row of the actor's slot dirs at set time), the
@@ -11548,6 +11608,7 @@ int main(void) {
   test_view_pose_feed_boundary_reposition();
   test_camera_pan_event_chain();
   test_frame_camera_pause_bridge();
+  test_frame_camera_order();
   test_camera_rate_chain_sustained_pan();
   test_camera_band_cells_seam();
   test_row04_live_pan_arms_camera();

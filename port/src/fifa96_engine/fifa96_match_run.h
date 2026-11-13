@@ -1152,8 +1152,9 @@ struct fifa96_match_run {
    * duplicate is kept — row 0x1A and the goal-screen selection read the camera
    * fields directly. `bounce_15759f`/`bounce_1575cc`/`bounce_1575d0` = the
    * goal-bounce cells `[0x15759F]`/`word[0x1575CC]`/`word[0x1575D0]` the id-1
-   * ladder arm reads (producer FUN_00072AC4 unported, FU-145 / FU300-L3;
-   * staged zero). */
+   * ladder arm reads. Slice-B Task 9 binds them to the 0x72AC4 save-tail
+   * snapshot/metric; before that producer they were staged zero (FU-145 /
+   * FU300-L3). */
   uint8_t global_157c2c;
   int32_t bounce_15759f;
   int16_t bounce_1575cc;
@@ -1167,8 +1168,9 @@ struct fifa96_match_run {
    * `0x7FFFFFFF` by FUN_00072AC4 `0x72B7D`; gates `< 0x1E0` and
    * `!= 0 && < 0x30`), `flag_1575e8` = `[0x1575E8]` (the approach latch byte,
    * FUN_000721C8 `0x72210` / FUN_00072AC4 `0x72B77`; gates the `0x71689`
-   * min-update). Producers FUN_00072AC4 / FUN_000721C8 are unported (Task 9),
-   * so all three are staged zero like `bounce_15759f`; init/begin reset them. */
+   * min-update). Task 9 landed the FUN_00072AC4 reset/copy producer and
+   * binds these cells through the save-tail adapter; FUN_000721C8 remains a
+   * numbered leg. Init/begin reset them. */
   int32_t bounce_1575a7;
   int32_t bounce_15758d;
   uint8_t flag_1575e8;
@@ -1176,8 +1178,9 @@ struct fifa96_match_run {
    * `[0x15759D]`, the one-shot tracker-decision latch. `fifa96_match_tracker_decision`
    * stores 1 at its head (0x724C8); the save block `FUN_00072AC4` reads it
    * (0x72ADC, skips the re-call while set) and clears it (0x72AEE) when its own
-   * gates fail, so the decision re-arms next frame. The save block is Task 9;
-   * init/begin reset the cell to 0 (the image BSS default). */
+   * gates fail, so the decision re-arms next frame. Task 9 wires that save
+   * block before the save tail and walk; init/begin reset the cell to 0 (the
+   * image BSS default). */
   uint8_t tracker_15759d;
   /* FU296 Seam A (phase-27 T3) + FU299 (phase-28 T2, Option B): the record-0
    * machine `FUN_000782D0` view the FU-141 walk steps in its `i == 0` branch.
@@ -1809,8 +1812,8 @@ struct fifa96_match_run {
    *  - `screen_period_frames` = [0x15B694] the per-leg/mode duration
    *    (`0x1110EC[mode*24+leg] * 60`, seeded by screen_install);
    *  - `screen_install_hint` = [0x15B6C4] (1 after FUN_000935A0);
-   *  - `screen_actor_age` = [0x157A97] the camera-track actor age (producer
-   *    FUN_00072AC4 unported, staged 0);
+   *  - `screen_actor_age` = [0x157A97] the camera-track actor age (Task 9's
+   *    FUN_00072AC4 save-tail cache/age adapter);
    *  - the native lead words `word[0x1577C0]`/`word[0x1577C2]` are NOT
    *    duplicated here: they are `camera.vel_x`/`vel_z` (the one native pan
    *    pair; the row-0x1A `'T'` arm and row-0x1B Block E write them, and the

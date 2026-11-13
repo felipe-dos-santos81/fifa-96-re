@@ -1383,6 +1383,70 @@ static void test_camera_walk_jitter_draws(void) {
   assert(next == 0x2BBB);   /* the fourth draw: three were consumed */
 }
 
+/* Slice-B Task 9: FUN_00072AC4's post-tracker save tail. The stat arm needs
+ * the native two-frame shape: the no-controlled call caches [0x157A87] in
+ * [0x1575DA]/[0x157A8B], then a new controlled record takes the
+ * previous-cache-NULL arm. A known-empty 0x92998 result makes both early
+ * ring exits false, so the same-side +1 and the far-z +2 land in order. */
+static void test_camera_save_tail(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_stat_events stats;
+  memset(&stats, 0, sizeof stats);
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  cam.target_x = 0x111;
+  cam.target_y = 0x112;
+  cam.target_z = 0x113;
+  cam.event_param = 0x44;
+  cam.save.phase_157a4d = 2;
+  cam.save.frame_delta_157a64 = 2;
+  cam.save.controlled_157a83 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam.save.tracked_157a87 = 3;
+  cam.save.target_157a8b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam.save.rec_1575da = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam.save.tracked_side = 0;
+  cam.save.history_known = 1;
+  cam.save.history_present = 0;
+  cam.save.count_1575cb = 7;       /* 0x72BA6 clears it during the init arm */
+
+  assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
+  assert(stats.count == 0 && stats.overflow == 0);
+  assert(cam.save.rec_1575da == 3);
+  assert(cam.save.target_157a8b == 3);
+  assert(cam.save.tracked_157a87 == FIFA96_CAMERA_SAVE_ENTITY_NONE);
+  assert(cam.save.mode_15758c == 1 && cam.save.flag_15759e == 0);
+  assert(cam.save.flag_1575e8 == 0 && cam.save.approach_15758d == 0x7FFFFFFF);
+  assert(cam.save.prev_x_15759f == 0 && cam.save.prev_y_1575a3 == 0 &&
+         cam.save.prev_z_1575a7 == 0);
+  assert(cam.save.target_x_1575b7 == 0x111 &&
+         cam.save.target_y_1575bb == 0x112 &&
+         cam.save.target_z_1575bf == 0x113);
+  assert(cam.save.event_1575c7 == 0x44);
+  assert(cam.save.count_1575cb == 0);
+  assert(cam.save.age_delta_157a8f == 2 && cam.save.age_157a97 == 0);
+
+  cam.pos_x = 0x100;
+  cam.pos_y = 0x20;
+  cam.pos_z = 0x800;
+  cam.save.controlled_157a83 = 4;
+  cam.save.controlled_side = 0;
+  cam.save.age_157a97 = 99;       /* the new-target block resets this to zero */
+  assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
+  assert(stats.count == 2 && stats.overflow == 0);
+  assert(stats.event[0].site == 0x72DE3 && stats.event[0].delta == 1 &&
+         stats.event[0].entity == FIFA96_CAMERA_STAT_REC_1575DA);
+  assert(stats.event[1].site == 0x72ED1 && stats.event[1].delta == 2 &&
+         stats.event[1].entity == FIFA96_CAMERA_STAT_REC_1575DA);
+  assert(cam.save.current_x_1575ab == 0x100 &&
+         cam.save.current_y_1575af == 0x20 &&
+         cam.save.current_z_1575b3 == 0x800);
+  assert(cam.save.band_1575cc ==
+         (int16_t)fifa96_entity_hypot(0x100, 0x800));
+  assert(cam.save.dx_1575ce == 0x100 && cam.save.dz_1575d0 == 0x800);
+  assert(cam.save.tracked_157a87 == 4 && cam.save.target_157a8b == 3);
+  assert(cam.save.age_delta_157a8f == 2 && cam.save.age_157a97 == 2);
+  assert(fifa96_camera_save_tail(NULL, &stats) == -FIFA96_ERR_INVALID);
+}
+
 /* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08 — the
  * per-record camera event FUN_0007BF20's tail (0x7C8FC) runs for every
  * record. First-hand body 0x70C08..0x70DDD (disassemble_bytes this task). */
@@ -3600,6 +3664,7 @@ int main(void) {
   test_camera_commit_shadows();
   test_camera_walk_jitter_gates();
   test_camera_walk_jitter_draws();
+  test_camera_save_tail();
   test_wall_arm_gate_and_head();
   test_wall_arm_z_chain_edges();
   test_wall_arm_x_chain_edges();

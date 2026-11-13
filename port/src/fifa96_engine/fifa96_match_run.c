@@ -2957,6 +2957,13 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   struct fifa96_match_run_render *r = &mr->render;
   memset(r, 0, sizeof *r);
   (void)fifa96_camera_init(&r->camera, 0, 0, 0);
+  /* Slice-B Task 9: the 0x72AC4 cells are independent of FUN_000700F4. This
+   * is the whole-render BSS reset, not a camera cut, so the native NULL caches
+   * are initialized here and subsequently persist across camera_init calls. */
+  r->camera.save.controlled_157a83 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.tracked_157a87 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.target_157a8b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.rec_1575da = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   (void)fifa96_window_init(&r->window, 0, 0);
   (void)fifa96_match_display_init(&r->display, 0);
   /* FU-158 §8.1 (phase-13 T2): no ball bank until a pitch container stages
@@ -8377,14 +8384,64 @@ int fifa96_match_run_should_mark_over(const struct fifa96_match_run *mr) {
  * Returns the camera-follow verdict for this frame's trace line. */
 static int match_run_frame_camera(struct fifa96_match_run *mr) {
   uint16_t range = (uint16_t)(mr->input_range[0] | mr->input_range[1]);
-  /* Slice-B Task 6 + Task 5: the native order is the `0x736B2..0x73722` head
-   * jitter -> the `0x73723 CALL 0x92864` commit + shadow stores -> the
-   * `0x73756` save tail (Task 9, still absent) -> the prev-triple capture ->
-   * the `0x7375E` pause gate (`[0x157820]`) -> the walk. The jitter consumes
-   * match RNG before the commit, and the pause bridge stages `cam->paused`
-   * from the engine's `flag_157820` cell between the commit and the walk. */
+  fifa96_camera_save_state *save = &mr->render.camera.save;
+  int32_t controlled = mr->entities.controlled;
+  fifa96_camera_stat_events save_stats;
+  /* Slice-B Task 9 + Task 6 + Task 5: the native order is the
+   * `0x736B2..0x73722` head jitter -> the `0x73723 CALL 0x92864` commit and
+   * 0x73728..0x73750 shadow stores -> the 0x73756 save-head gate / tracker ->
+   * the 0x72AEA..0x736A9 save tail -> the 0x7375B..0x7375D prev-triple capture
+   * -> the 0x7375E pause gate (`[0x157820]`) -> the walk. */
   (void)fifa96_camera_walk_jitter(&mr->render.camera, &mr->rng);
   (void)fifa96_camera_commit(&mr->render.camera);
+  /* 0x72ACA..0x72AEA: FUN_00072478 sets the latch at its own 0x724C8 head;
+   * do not write it a second time here. */
+  if (mr->goal_zone == 0 || mr->goal_armed == 0) {
+    mr->tracker_15759d = 0;
+  } else if (mr->tracker_15759d == 0) {
+    (void)fifa96_match_tracker_decision(mr);
+  }
+
+  /* Engine-to-loader staging for the save tail. The two native side reads are
+   * team back-pointer +0x826 reads; ids 0..21 map to the two engine teams. */
+  save->phase_157a4d = mr->state.phase;
+  save->frame_delta_157a64 = mr->state.frame_delta;
+  save->controlled_157a83 = controlled;
+  save->controlled_side =
+      (controlled >= 0 &&
+       controlled < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS *
+                              FIFA96_MATCH_ENTITY_RECORDS))
+          ? mr->entities.team[controlled / FIFA96_MATCH_ENTITY_RECORDS].side
+          : 0;
+  save->tracked_side =
+      (save->tracked_157a87 >= 0 &&
+       save->tracked_157a87 < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS *
+                                        FIFA96_MATCH_ENTITY_RECORDS))
+          ? mr->entities.team[save->tracked_157a87 /
+                              FIFA96_MATCH_ENTITY_RECORDS].side
+          : 0;
+  /* These cells already have goal/armer consumers in the run. Bind their
+   * current values in both directions rather than creating duplicate latches. */
+  save->prev_x_15759f = mr->bounce_15759f;
+  save->prev_z_1575a7 = mr->bounce_1575a7;
+  save->band_1575cc = mr->bounce_1575cc;
+  save->dz_1575d0 = mr->bounce_1575d0;
+  save->approach_15758d = mr->bounce_15758d;
+  save->flag_1575e8 = mr->flag_1575e8;
+  save->age_157a97 = mr->screen_actor_age;
+  memset(&save_stats, 0, sizeof save_stats);
+  (void)fifa96_camera_save_tail(&mr->render.camera, &save_stats);
+  /* REC_1575DA remains an OPEN drain kind: both events are emitted by the
+   * loader and honestly skipped here until its stats-table projection exists. */
+  (void)fifa96_match_run_stats_drain(mr, &save_stats, mr->record.entity_id);
+  mr->bounce_15759f = save->prev_x_15759f;
+  mr->bounce_1575a7 = save->prev_z_1575a7;
+  mr->bounce_1575cc = save->band_1575cc;
+  mr->bounce_1575d0 = save->dz_1575d0;
+  mr->bounce_15758d = save->approach_15758d;
+  mr->flag_1575e8 = save->flag_1575e8;
+  mr->screen_actor_age = save->age_157a97;
+
   mr->render.camera.paused = mr->flag_157820;
   (void)fifa96_camera_update_walk(&mr->render.camera, &mr->rng,
                                   (int16_t)mr->state.frame_delta,

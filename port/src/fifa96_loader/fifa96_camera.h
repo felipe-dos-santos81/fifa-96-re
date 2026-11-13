@@ -4,6 +4,43 @@
 
 struct fifa96_rng;
 
+/* Slice-B Task 9: caller-owned state for FUN_00072AC4's post-0x72AE5 tail.
+ * Entity ids use the engine's 0..21 record numbering; NONE is the native NULL
+ * pointer (not native record 0). The 0x1575xx cells persist independently of
+ * FUN_000700F4 / fifa96_camera_init, which does not reset them. The engine
+ * stages phase/delta/controlled and the two side bytes before each call. */
+#define FIFA96_CAMERA_SAVE_ENTITY_NONE (-1)
+
+typedef struct fifa96_camera_save_state {
+  uint8_t phase_157a4d;
+  uint16_t frame_delta_157a64;
+  int32_t controlled_157a83;
+  int32_t tracked_157a87;
+  int32_t target_157a8b;
+  int32_t age_delta_157a8f;
+  int32_t age_157a97;
+  int32_t rec_1575da;
+  uint8_t controlled_side;       /* [[0x157A83]] + 0x826 */
+  uint8_t tracked_side;          /* [[0x157A87]] + 0x826, staged for the init arm */
+  uint8_t rec_side_1575d2;       /* [[0x1575D2]] + 0x826 */
+  /* The 0x72BD5 FUN_00092998 result is a staged producer input. `known` says
+   * whether presence/type is evidence rather than an unported producer; this
+   * gates only the post-+1 arms whose early exits need that result. */
+  uint8_t history_known;
+  uint8_t history_present;
+  int8_t history_type_157599;
+  uint8_t mode_15758c;
+  int32_t approach_15758d;
+  uint8_t flag_15759e;
+  int32_t prev_x_15759f, prev_y_1575a3, prev_z_1575a7;
+  int32_t current_x_1575ab, current_y_1575af, current_z_1575b3;
+  int32_t target_x_1575b7, target_y_1575bb, target_z_1575bf;
+  int32_t event_1575c7;          /* sign-extended word[0x1577F0] */
+  uint8_t count_1575cb;
+  int16_t band_1575cc, dx_1575ce, dz_1575d0;
+  uint8_t flag_1575e8;
+} fifa96_camera_save_state;
+
 typedef struct fifa96_camera {
   int32_t pos_x, pos_y, pos_z;
   /* FU316-L2: the native `[0x15775C]` landing cell — the previous frame's
@@ -110,6 +147,7 @@ typedef struct fifa96_camera {
   uint16_t shadow_speed_157825;
   int16_t shadow_vel_157827;
   int16_t shadow_vel_157829;
+  fifa96_camera_save_state save;
 } fifa96_camera;
 
 #define FIFA96_CAMERA_TRACKED_NONE (-1)
@@ -736,6 +774,18 @@ typedef struct {
   uint8_t count;
   uint8_t overflow;
 } fifa96_camera_stat_events;
+
+/* Slice-B Task 9: FUN_00072AC4 after the 0x72AE5 tracker call, native extent
+ * 0x72AEA..0x736A9. Ports the phase/cache/timestamp flow, the no-controlled
+ * initialization, the new-controlled metric block and both stat-bearing arms:
+ * {0x72DE3,+1,REC_1575DA} then {0x72ED1,+2,REC_1575DA}. FUN_000795B4's band
+ * reuses the already-ported exact FUN_000CD514 (fifa96_entity_hypot).
+ * FUN_000721C8 (0x72B19) and FUN_00072270 (0x7369E) are numbered legs and are
+ * not called. The command-ring/sit/RNG-only sub-bodies are also legs; an
+ * unknown 0x92998 result never guesses past the two early ring exits to +2.
+ * No engine code is called. `stats` may be NULL. Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID on NULL cam. */
+int fifa96_camera_save_tail(fifa96_camera *cam, fifa96_camera_stat_events *stats);
 
 /* FU-152 §2.9 (T2): FUN_00070DE0's derived core + the bit-0x8 boundary arm —
  * the boundary/reposition handler the armer FUN_0007131C calls at 0x7134F.
