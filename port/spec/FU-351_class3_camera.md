@@ -1336,3 +1336,32 @@ the replay arm. C4-L1 is **closed as a misattribution**, not as a proved `0x2B`
 channel. The arm's real `0x5865C` screen/projection reset (the replay view
 setup) is a new **C4R-L1** leg owned by Slice B. No code, no golden and no
 completion-number movement.
+
+## 29. Closure (2026-11-13) — the Slice B camera/stats spine landed
+
+The class-3 camera's live chain (the spine the FU-71/FU-72 stat sites hang from)
+is now ported end-to-end in the engine frame, in native order:
+
+```text
+fifa96_camera_walk_jitter   (0x736B2..0x73722 — head jitter, Task 6)
+fifa96_camera_commit        (0x73723 + shadows 0x73728..0x73750, Task 5)
+save-head gate / tracker    (0x72ACA..0x72AEA, called at 0x73756)
+fifa96_camera_save_tail     (0x72AEA..0x736A9, Task 9) + stats drain
+cam->paused = flag_157820   (0x7375E bridge, Task 6)
+fifa96_camera_update_walk   (prev capture, pause test, walk)
+```
+
+The armer head (`[0x15781C]` counter age/cap + the unconditional `0x7134F`
+`fifa96_camera_reposition` call) and the six `FUN_0007131C` post-arm sites run
+in `fifa96_match_goal_arm` / `match_run_goal_post_arm`. The reposition's bit-0x8
+boundary arm and its same-zone `flags_prev != flags_cur` step-back guard
+(`0x710FD/0x71101/0x71106`) are ported; the `0x71231` reseed stays **T4-L1**.
+
+**Actual wired count (19):** 13 emitting + resolving (the two `0x70F44`/`0x70FCE`
++3 boundary arms, the six post-arm sites, the tracker `0x72A52` +0xF, and the
+four row-1C tail sites `0x77DFD`/`0x77E38`/`0x77E4E`/`0x77E61`), 2 emitted but
+drained to zero (`0x72DE3` +1 / `0x72ED1` +2, `REC_1575DA` OPEN), and 4 parked
+open legs (`0x72649` +0x32, `0x72660` −0x4B, `0x7270F` +0x19, `0x8AD54` −0x96).
+The M2 golden is re-pinned (SHA `3bdfbbe…`, 3,978-frame hash-only diff) because
+the abridged stream omitted the native `0x72CF9`/`0x7309E` target-block draws.
+Completion unchanged (78/78, 61/80 wired / 64/80 install-live).

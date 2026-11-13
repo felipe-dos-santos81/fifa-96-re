@@ -12656,3 +12656,82 @@ frame-rate reconciliation stays the open remainder **RR-L6-R** (ring design
 (which is HUD state); the `0x974DC` half stays a B handoff (FU108 §9, ring
 design §13). FU-350 §8's "narrowed/closed" is corrected to "narrowed" (FU-350
 §9). Docs-only; no code, golden or completion-number movement.
+
+**Phase 123 open-items closure, Slice B camera/stats (2026-11-13).** The
+Slice-B `0x8ED40` campaign (design
+`2026-11-12-open-items-closure-slice-b-design.md` §2 goal 1) closes in three
+groups. The census table and per-site byte evidence are
+`docs/superpowers/specs/2026-11-12-slice-b-camera-census.md`; each arm's gate is
+native-pinned, not hand-picked.
+
+**Actual wired count — 13 emitting + resolving, 2 emitted-but-drained-to-zero,
+4 parked open legs (19 total).**
+
+- **Emitting + resolving (13),** every one drained into the stats table at the
+  2x weight (`fifa96_match_run_stats_add` / the armer's `stats_drain`):
+  - the two `FUN_00070DE0` boundary arms — `0x70F44` +3 and `0x70FCE` +3,
+    both TRACKED, emitted by `fifa96_camera_reposition` (camera.c:3020/3038)
+    and drained by the armer head's `fifa96_match_run_stats_drain`;
+  - the six `FUN_0007131C` post-arm sites — `0x714BE` +5, `0x7157C` −100,
+    `0x715DD` −5, `0x716C7` −100, `0x71732` −5, `0x717E3` +5 — all TRACKED,
+    `match_run_goal_post_arm` (match_run.c:6888) calling `stats_add` directly;
+  - the tracker `0x72A52` +0xF, TRACKED, `fifa96_match_tracker_decision`
+    (match_run.c:7025);
+  - the four row-1C tail sites — `0x77DFD` +0x64 (EBP), `0x77E38` +0x19 (EBP),
+    `0x77E4E` +5 (tracked), `0x77E61` +5 (EBP) — `fifa96_match_action_1C`
+    (handlers.c:6021/6027/6031/6034).
+- **Emitted but drained to zero (2),** because `REC_1575DA` stays OPEN (B0-L4):
+  `0x72DE3` +1 and `0x72ED1` +2, both emitted by `fifa96_camera_save_tail`
+  (camera.c:2827/2861) and skipped by the drain (never folded into entity 0).
+- **Parked open legs (4),** never a fabricated id: `0x72649` +0x32 (unwired —
+  its two intervening early-exit arms gate on the unported history/search
+  result, so the port treats them not-taken and reaches the pair directly, a
+  documented stat-only narrowing), `0x72660` −0x4B (BALL_SUB7A6, T8-L1/B0-L1),
+  `0x7270F` +0x19 (REC_15B43C, T8-L2/B0-L2), and `0x8AD54` −0x96 (REC_157A9B,
+  unproved producer, B0-L3/Task 11 outcome 3).
+
+**The spine that carries the 13 live sites.** `fifa96_match_goal_arm` runs the
+`[0x15781C]` counter head (`0x71325..0x71349`, byte age/cap at `> 0x1E`) then
+calls `fifa96_camera_reposition` unconditionally at the `0x7134F` point, before
+the armed/phase/boundary branches (Task 3; this is the caller FU145 L1 / FU164
+§3.4 item 2 recorded as missing). The reposition's bit-0x8 boundary arm
+(`0x70E44..0x710DA`) and its same-zone `flags_prev != flags_cur` step-back guard
+(`0x710FD/0x71101/0x71106`) are ported (Tasks 3–4); the `0x71231` reseed of the
+counter stays **T4-L1** (engine-owned counter + frame-delta inputs). The frame
+spine is jitter → commit → save head/tracker → save tail → `flag_157820 →
+paused` bridge → walk (Tasks 5/6/9): `fifa96_camera_commit` ports the three
+16-bit shadow stores (`0x7372E`/`0x7373F`/`0x73750`) with the event-ring append
+left as **T5-L1**; `fifa96_camera_walk_jitter` ports `0x736B2..0x73722`. The
+save tail (`0x72AEA..0x736A9`) emits the two REC events and carries its honest
+legs **T9-L1..L5** (`FUN_000721C8`/`FUN_00072270`, the `0x72BD5` history
+producer, the non-stat command/sink/RNG sub-bodies, and the `REC_1575DA`
+projection).
+
+**M2 re-pin (approved).** SHA `3bdfbbe…`, a **3,978-frame hash-only diff**
+(frames 2545–6522, state/score text unchanged), because the abridged stream
+omitted the native save-tail target-block draws at `0x72CF9` and `0x7309E`.
+M1 (`09b726b7…`) is unmoved.
+
+**Row-1C tail.** The `0x779DE..0x77E8B` tail's three stat routes and the
+post-stat timer81/keeper_latch tail (the `FUN_0006E444` animation-duration sum
++ 0xA) are ported (Task 10); the `0x779EC..0x77D67` anim/camera body and the
+`0x8F188` requests stay FU186-L2 legs. Superseded leg line (FU186-L2):
+
+> FU186-L2 — row-0x1C rotated arm + tail steering. The `0x77856` rotated arm
+> (`0x114E04` sine + `0x795A4`), the `0x779D1` stage-2 body and the
+> `0x779DE..0x77E8B` tail incl. the `0x779B4` `FUN_00076B28` call. Carries
+> FU-140 OL-35.
+
+The `0x779DE..0x77E8B` tail (and its three stat routes) is now closed; the
+rotated arm (`0x77856`) and the stage-2 body (`0x779D1`) remain FU186-L2.
+
+**Case-6.** `0x8AD54` is outcome 3 (unproved open leg, no fabricated −300): the
+arm is natively reachable through `FUN_00088940`'s team-mismatch write, but the
+engine has no `[0x157A9B]` cell (Task 11).
+
+**Numbers unchanged.** 78/78 ported (100%), 61/80 naturally wired (64/80
+install-live) — the camera bodies are not dispatch rows, so no completion-number
+movement. The four non-Slice-B `0x8ED40` sites (`0x775FD`/`0x77613`,
+`0x7ADD2`/`0x7AE04`) remain carried, unchanged. Record: census
+`2026-11-12-slice-b-camera-census.md`, FU72/FU-351/FU145/FU164/FU186 append
+closures, PROGRESS Phase 123.

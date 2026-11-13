@@ -623,3 +623,31 @@ next granted body's scheduler -> leg-0 handler post -> FUN_00093944 writer
 scores 1-0 with the untracked arm's 0xD3 post. The §5 arming-bounds and
 word-trap derivations need no change; the S2 "static camera" tape-dormancy
 notes are superseded by this addendum.
+
+## Closure (2026-11-13) — the armer head is now ported (leg L1 superseded)
+
+The armer-head leg quoted below is **superseded** — Slice-B Task 3 (design
+`2026-11-12-open-items-closure-slice-b-design.md` §B1) ported the head it
+declared out of scope:
+
+> The armer **head** (`0x71325..0x71354`: the `[0x15781C]` counter
+> age/cap and `FUN_00070DE0`) is out of the port contract window and is not
+> ported (no `goal_counter` field; leg L1).
+
+`fifa96_match_goal_arm` now runs the `[0x15781C]` counter head
+(`0x71325..0x71349`: zero skips aging, a nonzero counter adds the frame-delta
+low byte and resets only when strictly `> 0x1E`) then calls
+`fifa96_camera_reposition` unconditionally at the `0x7134F` point, before the
+armed/phase/boundary branches, and drains its stat events in native order. The
+reposition's bit-0x8 boundary arm (`0x70E44..0x710DA`) and its same-zone
+`flags_prev != flags_cur` step-back guard (`0x710FD/0x71101/0x71106`) are ported
+(Tasks 3–4). The `0x71231` reseed of `[0x15781C]` stays **T4-L1** (its inputs —
+the engine-owned counter and frame delta — are outside the loader signature).
+
+The six `FUN_0007131C` post-arm sites (`0x714BE` +5 / `0x7157C` −100 / `0x715DD`
+−5 / `0x716C7` −100 / `0x71732` −5 / `0x717E3` +5, all TRACKED) are wired in
+`match_run_goal_post_arm` (Task 7); the tracker `0x72A52` +0xF is the sole
+emitting arm of `fifa96_match_tracker_decision` (Task 8). The case-6
+`[0x157A9B]` arm is outcome 3 (unproved open leg, no fabricated −300; Task 11).
+Completion unchanged (78/78, 61/80 wired / 64/80 install-live); M2 re-pinned
+only for the save-tail native `0x72CF9`/`0x7309E` draws (SHA `3bdfbbe…`).

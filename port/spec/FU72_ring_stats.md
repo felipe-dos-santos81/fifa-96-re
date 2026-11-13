@@ -780,3 +780,44 @@ arm stays an open leg; a `-300` test would need a fabricated producer and is
 not added. The NULL branch (`fifa96_match_run_stats_bump`) remains the live
 scorer path, and the `FIFA96_CAMERA_STAT_REC_157A9B` kind stays OPEN in
 `fifa96_match_run_stats_drain` (skipped, never entity 0). No code change.
+
+## Closure (2026-11-13) — the Slice B 19-site campaign, actual wired count
+
+The §Closure "Remaining sites (23)" bullet quoted below is now **superseded** —
+the 19 Slice-B sites it lists are all closed (ported or a numbered leg), leaving
+only the four non-Slice-B sites carried:
+
+> - 19 in unported bodies: `0x70F44`/`0x70FCE` (`FUN_00070DE0`), the six
+>   `FUN_0007131C` sites, `0x72DE3`/`0x72ED1` (`FUN_00072AC4`), the four
+>   `FUN_00072478` sites, the four row-1C tail sites
+>   (`0x77DFD`/`0x77E38`/`0x77E4E`/`0x77E61`, the `0x779DE..0x77E8B` block)
+>   and `0x8AD54` (`FUN_0008A938`).
+
+**Actual wired count (19): 13 emitting + resolving, 2 emitted-but-drained, 4
+parked open legs.**
+
+- **13 emitting + resolving** (drained at the 2x weight): the two `FUN_00070DE0`
+  boundary arms `0x70F44`/`0x70FCE` +3 (TRACKED, via `fifa96_camera_reposition`
+  → the armer's `fifa96_match_run_stats_drain`); the six `FUN_0007131C` post-arm
+  sites `0x714BE` +5 / `0x7157C` −100 / `0x715DD` −5 / `0x716C7` −100 /
+  `0x71732` −5 / `0x717E3` +5 (TRACKED, `match_run_goal_post_arm` → `stats_add`);
+  the tracker `0x72A52` +0xF (TRACKED, `fifa96_match_tracker_decision`); the four
+  row-1C tail sites `0x77DFD` +0x64 / `0x77E38` +0x19 / `0x77E4E` +5 (tracked) /
+  `0x77E61` +5 (`fifa96_match_action_1C`).
+- **2 emitted but drained to zero** (`REC_1575DA` OPEN, B0-L4): `0x72DE3` +1 /
+  `0x72ED1` +2 (`fifa96_camera_save_tail`).
+- **4 parked open legs** (no fabricated id): `0x72649` +0x32 (unwired behind the
+  two unported `FUN_00092998`/controlled early-exit arms), `0x72660` −0x4B
+  (BALL_SUB7A6, B0-L1), `0x7270F` +0x19 (REC_15B43C, B0-L2), `0x8AD54` −0x96
+  (REC_157A9B, B0-L3 — outcome 3, unproved, no fabricated −300).
+
+The `fifa96_match_tracker_decision` stat-only subset (Task 8) emits only the
+`0x72A52` +0xF arm; its `+0x32`/`−0x4B` pair and the `+0x19` staging arm are the
+numbered legs above (T8-L1..L5). The save tail (Task 9) emits the two REC events
+and carries T9-L1..L5 (`FUN_000721C8`/`FUN_00072270`, the `0x72BD5` history
+producer, the non-stat sinks, the `REC_1575DA` projection). The M2 golden is
+re-pinned (SHA `3bdfbbe…`, 3,978-frame hash-only diff, frames 2545–6522) because
+the abridged stream omitted the native `0x72CF9`/`0x7309E` target-block draws;
+M1 is unchanged. Completion unchanged (78/78, wired 61/80 / 64/80 install-live);
+the four non-Slice-B sites (`0x775FD`/`0x77613`, `0x7ADD2`/`0x7AE04`) stay
+carried.

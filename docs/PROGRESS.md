@@ -5419,3 +5419,40 @@ close-out below).
   unchanged. First: `frame=2545 hash=d0e91d189461dd5a →
   254cf86cee7af780 state=19/1-0`. Last: `frame=6522
   hash=10649db6f0a3c5fe → cae078c5b24326e0 state=19/1-0`. M1 is unchanged.
+
+- **Phase 123 — Slice B camera/stats closure (2026-11-13).** The Slice-B
+  `0x8ED40` campaign closes; the operator chose the full-campaign approach, so
+  every site is either ported or a numbered open leg, never a fabricated stat.
+  **Actual wired count (19 total): 13 emitting + resolving, 2 emitted but
+  drained to zero, 4 parked open legs.**
+
+  - **Emitting + resolving (13):** the two `FUN_00070DE0` boundary arms
+    `0x70F44`/`0x70FCE` +3 (TRACKED, `fifa96_camera_reposition` → the armer's
+    drain); the six `FUN_0007131C` post-arm sites `0x714BE` +5 / `0x7157C` −100
+    / `0x715DD` −5 / `0x716C7` −100 / `0x71732` −5 / `0x717E3` +5 (TRACKED,
+    `match_run_goal_post_arm`); the tracker `0x72A52` +0xF (TRACKED,
+    `fifa96_match_tracker_decision`); the four row-1C tail sites `0x77DFD` +0x64
+    / `0x77E38` +0x19 / `0x77E4E` +5 (tracked) / `0x77E61` +5
+    (`fifa96_match_action_1C`).
+  - **Emitted but drained to zero (2):** `0x72DE3` +1 / `0x72ED1` +2
+    (`fifa96_camera_save_tail`; `REC_1575DA` stays OPEN, B0-L4).
+  - **Parked open legs (4):** `0x72649` +0x32 (unwired behind the unported
+    history early-exit arms), `0x72660` −0x4B (BALL_SUB7A6, B0-L1), `0x7270F`
+    +0x19 (REC_15B43C, B0-L2), `0x8AD54` −0x96 (REC_157A9B, B0-L3, unproved).
+
+  **Landed pieces.** The armer head (`[0x15781C]` counter age/cap + the
+  unconditional `0x7134F` reposition call — the caller FU145 L1 / FU164 §3.4
+  item 2 recorded as missing), the reposition boundary arm and its same-zone
+  `flags_prev != flags_cur` guard, the commit shadows + T5-L1 (the
+  `FUN_00092864` event-ring append), the walk head jitter + `flag_157820 →
+  paused` bridge, the save tail with its honest legs T9-L1..L5, and the row-1C
+  three routes + the post-stat timer81/keeper_latch tail. The `0x71231` reseed
+  stays **T4-L1** (engine-owned counter + frame-delta inputs). The M2 golden is
+  re-pinned (SHA `3bdfbbe…`, 3,978-frame hash-only diff, frames 2545–6522;
+  reason: the abridged stream omitted the native `0x72CF9`/`0x7309E` save-tail
+  target-block draws). The case-6 `[0x157A9B]` arm is outcome 3 (unproved open
+  leg). **Numbers unchanged:** 78/78 ported (100%), 61/80 naturally wired
+  (64/80 install-live); the camera bodies are not dispatch rows. The four
+  non-Slice-B `0x8ED40` sites (`0x775FD`/`0x77613`, `0x7ADD2`/`0x7AE04`) remain
+  carried. Record: census `2026-11-12-slice-b-camera-census.md`, FU72/FU-351/
+  FU145/FU164/FU186 closures, ENGINE Phase 123.

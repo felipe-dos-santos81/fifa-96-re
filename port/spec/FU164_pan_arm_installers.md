@@ -552,3 +552,27 @@ the row-0D RET + row-0E prologue), `0x82A50` (80 B), `0x82A9F` (48 B),
 `port/src/fifa96_engine/fifa96_match_run.h` (285-300, 590-610).
 No writes: no rename, comment, label, function, script or project save;
 `/FIFA96.EXE` untouched. No git commands.
+
+## Closure (2026-11-13) — the `FUN_0007131C` armer-head reposition now has its caller
+
+The §3.4 item 2 requirement quoted below is **superseded** — Slice-B Task 3
+(design `2026-11-12-open-items-closure-slice-b-design.md` §B1) wired the caller
+it recorded as missing:
+
+> 2. **The armer-head reposition wiring.** The native head calls `FUN_00070DE0`
+>    unconditionally at `0x7134F`; the port exists (`fifa96_camera_reposition`,
+>    camera.c:930) but has **no src caller** (fresh grep). The same prev triple
+>    feeds it.
+
+`fifa96_match_goal_arm` now runs the `[0x15781C]` counter head
+(`0x71325..0x71349`) and calls `fifa96_camera_reposition` unconditionally at the
+`0x7134F` point, before the armed/phase/boundary branches. The reposition's
+bit-0x8 boundary arm and its same-zone `flags_prev != flags_cur` step-back guard
+(`0x710FD/0x71101/0x71106`) are ported; the `0x71231` reseed stays **T4-L1**
+(engine-owned counter + frame-delta inputs). The six post-arm `0x8ED40` sites
+(`0x714BE`/`0x7157C`/`0x715DD`/`0x716C7`/`0x71732`/`0x717E3`) are wired in
+`match_run_goal_post_arm` (Task 7). The angle arm itself (`0x719A0..0x71B98`,
+FU-71 leg 9.6) and the other §3 requirement lists are unchanged and remain open
+legs. Completion unchanged (78/78, 61/80 wired / 64/80 install-live); M2
+re-pinned only for the save-tail native `0x72CF9`/`0x7309E` draws (SHA
+`3bdfbbe…`).
