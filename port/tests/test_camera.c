@@ -1285,6 +1285,91 @@ static void test_camera_commit_shadows(void) {
   assert(fifa96_camera_commit(NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* ---- Slice-B Task 6: the walk head jitter (0x736B2..0x73723) ---- */
+
+/* 0x736ba/0x736bd and 0x736c3/0x736cd: `speed <= 0xC` or `pos_y <= 0xA0` is a
+ * full no-op — no velocity change and no match-RNG draw. `NULL` cam is
+ * -FIFA96_ERR_INVALID (a NULL rng on the accepted path is the same error). */
+static void test_camera_walk_jitter_gates(void) {
+  struct fifa96_rng rng;
+  struct fifa96_rng snap;
+  fifa96_camera cam = fresh_camera();
+
+  /* speed 0xC (the JLE boundary) -> no-op even with pos_y above the band. */
+  cam.pos_y = 0xB0;
+  cam.speed = 0xC;
+  cam.vel_x = 7;
+  cam.vel_z = 9;
+  assert(fifa96_rng_seed(&rng, 0x1234u) == FIFA96_OK);
+  snap = rng;
+  assert(fifa96_camera_walk_jitter(&cam, &rng) == FIFA96_OK);
+  assert(cam.vel_x == 7 && cam.vel_z == 9);
+  assert(memcmp(&rng, &snap, sizeof rng) == 0);   /* no draw */
+
+  /* pos_y 0xA0 (the JLE boundary) -> no-op even with speed above 0xC. */
+  cam.speed = 0x1E;
+  cam.pos_y = 0xA0;
+  cam.vel_x = 7;
+  cam.vel_z = 9;
+  assert(fifa96_rng_seed(&rng, 0x1234u) == FIFA96_OK);
+  snap = rng;
+  assert(fifa96_camera_walk_jitter(&cam, &rng) == FIFA96_OK);
+  assert(cam.vel_x == 7 && cam.vel_z == 9);
+  assert(memcmp(&rng, &snap, sizeof rng) == 0);   /* no draw */
+
+  assert(fifa96_camera_walk_jitter(NULL, &rng) == -FIFA96_ERR_INVALID);
+}
+
+/* 0x736cf..0x73722: the draw chain. Each `draw` is one `fifa96_rng_step`
+ * (FUN_00092AC8's new w[0] word). Seeded draws (the additive generator):
+ *   seed 0x0000: 0x200 0x725 0x133F 0x2BBB 0x584D ...
+ *   seed 0x002C: 0xBA01 0xD728 0x6344 0x13C3 0xA059 ...
+ *   seed 0x1234: 0x0A01 0xB728 0x4345 ...
+ * speed 0x10 (< 0x19): the modulo draw runs with EBX = 0x21 - 0x10 = 0x11.
+ *   seed 0x2C: 0xBA01 % 0x11 == 0 -> proceed; 0xD728 & 7 == 0; 0x6344 & 1 == 0
+ *   -> vel_x -= 1; 0x13C3 & 1 == 1 -> vel_z += 1 (four draws consumed).
+ *   seed 0x1234: 0x0A01 % 0x11 == 11 != 0 -> no-op (one draw consumed).
+ * speed 0x20 (>= 0x19): the modulo draw is skipped; seed 0: 0x200 & 7 == 0;
+ *   0x725 & 1 == 1 -> vel_x += 1; 0x133F & 1 == 1 -> vel_z += 1 (three draws). */
+static void test_camera_walk_jitter_draws(void) {
+  struct fifa96_rng rng;
+  uint16_t next;
+  fifa96_camera cam = fresh_camera();
+
+  /* < 0x19 accepted path: vel_x -1, vel_z +1, four draws consumed. */
+  cam.pos_y = 0xB0;
+  cam.speed = 0x10;
+  cam.vel_x = 10;
+  cam.vel_z = -10;
+  assert(fifa96_rng_seed(&rng, 0x2Cu) == FIFA96_OK);
+  assert(fifa96_camera_walk_jitter(&cam, &rng) == FIFA96_OK);
+  assert(cam.vel_x == 9 && cam.vel_z == -9);
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK);
+  assert(next == 0xA059);   /* the fifth draw: all four were consumed */
+
+  /* < 0x19 nonzero-remainder no-op: only the modulo draw is consumed. */
+  cam.pos_y = 0xB0;
+  cam.speed = 0x10;
+  cam.vel_x = 10;
+  cam.vel_z = -10;
+  assert(fifa96_rng_seed(&rng, 0x1234u) == FIFA96_OK);
+  assert(fifa96_camera_walk_jitter(&cam, &rng) == FIFA96_OK);
+  assert(cam.vel_x == 10 && cam.vel_z == -10);
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK);
+  assert(next == 0xB728);   /* the second draw: only one was consumed */
+
+  /* >= 0x19 accepted path: no modulo draw, three draws (the & 7 and two & 1). */
+  cam.pos_y = 0xB0;
+  cam.speed = 0x20;
+  cam.vel_x = 10;
+  cam.vel_z = -10;
+  assert(fifa96_rng_seed(&rng, 0u) == FIFA96_OK);
+  assert(fifa96_camera_walk_jitter(&cam, &rng) == FIFA96_OK);
+  assert(cam.vel_x == 11 && cam.vel_z == -9);
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK);
+  assert(next == 0x2BBB);   /* the fourth draw: three were consumed */
+}
+
 /* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08 — the
  * per-record camera event FUN_0007BF20's tail (0x7C8FC) runs for every
  * record. First-hand body 0x70C08..0x70DDD (disassemble_bytes this task). */
@@ -3500,6 +3585,8 @@ int main(void) {
   test_update_walk_landing_pan();
   test_update_walk_captures_prev_triple();
   test_camera_commit_shadows();
+  test_camera_walk_jitter_gates();
+  test_camera_walk_jitter_draws();
   test_wall_arm_gate_and_head();
   test_wall_arm_z_chain_edges();
   test_wall_arm_x_chain_edges();

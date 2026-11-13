@@ -2217,8 +2217,10 @@ static void test_input_options_producer_sets_range_bits(void) {
  * camera event (`0x7C7D3..0x7C8FC`, CALL 0x70C08) now runs in the frame. The
  * fixture satisfies every outer gate (lane 0 <= 0x10 and < bound, both
  * 0x157820/22 flags clear, bearing 5 > 4, camera height 0x10, no tracked
- * record, the +0x5D band) on a paused camera so the lane refresh keeps lane 0;
- * the record event's reflect arm re-seeds the event height to the ball height.
+ * record, the +0x5D band) on a naturally-frozen camera (Slice-B Task 6: the
+ * walk no-ops with `speed == 0 && event_param == 0` and its tail recomputes
+ * `speed = distance(vel) = 5`), so the lane refresh keeps lane 0; the record
+ * event's reflect arm re-seeds the event height to the ball height.
  * M2 phase-11 T1: the height word is the live `dword[0x157750]` = the camera
  * Y (`camera.pos_y`, the FUN_00070B94 arc producer); this fixture stages the
  * value directly (the producer-driven wake is the sibling test below). */
@@ -2242,8 +2244,7 @@ static void test_record_event_tail_gate_fires_in_frame(void) {
   mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
   mr.entities.controlled = 11;       /* team 1: the chase/user gates */
   mr.render.camera.pos_y = 0x10;     /* 0x157750 (T1/L14.7) */
-  mr.render.camera.paused = 1;       /* no integration: lane stays 0 */
-  mr.render.camera.speed = 5;        /* [0x1577BE] bearing > 4 */
+  mr.render.camera.vel_z = 5;        /* walk no-op (speed 0), tail speed = 5 > 4 */
   mr.render.camera.event_param = 0;
   /* isolate the fixture to record 1 (other records' rows would move the
    * camera event state the gate reads). */
@@ -2326,8 +2327,7 @@ static void test_record_event_uses_live_height_5d(void) {
   mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
   mr.entities.controlled = 11;
   mr.render.camera.pos_y = 0x10;     /* 0x157750 */
-  mr.render.camera.paused = 1;
-  mr.render.camera.speed = 5;        /* [0x1577BE] > 4 */
+  mr.render.camera.vel_z = 5;        /* walk no-op (speed 0), tail speed = 5 > 4 */
   mr.render.camera.event_param = 0;
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
     for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
@@ -2344,16 +2344,24 @@ static void test_record_event_uses_live_height_5d(void) {
  * to the firing record (`0x71D27`), so a record fires once per tracking epoch
  * and a different in-band record hands the window over.
  *
+ * Slice-B Task 6 rework: the old fixture froze the walk with the free-standing
+ * `cam->paused = 1`; that cell is now the engine's `[0x157820]` bridge, which
+ * also skips the record event (`0x7C7F0`), so a frozen walk can no longer fire
+ * it. The walk is instead frozen by staging `speed == 0 && event_param == 0`
+ * (a natural no-op whose tail recomputes `speed = distance(vel) = 5 > 4`) with
+ * a small seed (`event_step_x = 0x2BC -> v1 = 0xAF -> vel_x 5`), so the camera
+ * walks slowly (+10 x/frame) and the records stay in the lane band:
+ *
  *   frame 1: nothing tracked -> record 2 (id 2) fires in the ramp arm
- *            (target height_5d+0x70 = 0x70, event 0x10 -> event_param 0x40,
- *            clamped up to camY 0x68 by FUN_00071C94); tracked := 2 and the
- *            setter's pan-counter reset re-opens follow gate 1;
- *   frame 2: record 2 is still in band and approaching (lane 8 < bound 0x10)
+ *            (target height_5d+0x70 = 0x70, event 0 -> event_param clamped up
+ *            to camY 0x68 by FUN_00071C94); tracked := 2 and the setter's
+ *            pan-counter reset re-opens follow gate 1;
+ *   frame 2: record 2 is still in band and approaching (lane 2 < bound 0x10)
  *            and is now the tracked record -> 0x7C83E skips it; event_param
- *            stays 0x68 (a second fire would ramp it to 0x6C);
- *   frame 3: record 1 (id 1) enters the band while record 2 leaves it ->
- *            the non-tracked record fires and hands the tracking over
- *            (tracked := 1, event_param := 0x6C). */
+ *            stays 0x68 (a second fire would ramp it further);
+ *   frame 3: record 1 (id 1) enters the band while record 2 leaves it -> the
+ *            non-tracked record fires, reflects the now-lower camera Y into
+ *            event_param and hands the tracking over (tracked := 1). */
 static void test_record_event_one_shot_rearm(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *b;
@@ -2377,11 +2385,10 @@ static void test_record_event_one_shot_rearm(void) {
   mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
   mr.entities.controlled = 11;
   mr.render.camera.pos_y = 0x68;     /* 0x157750: the +0x70 band's upper edge */
-  mr.render.camera.paused = 1;
-  mr.render.camera.speed = 5;
-  mr.render.camera.event_param = 0x10;
-  mr.render.camera.event_step_x = 0x7FFF;   /* v1/v2 = 0x1FFF: the event keeps */
-  mr.render.camera.event_step_z = 0x7FFF;   /* the post-fire bearing > 4 */
+  mr.render.camera.vel_x = 5;        /* walk no-op (speed 0), tail speed = 5 > 4 */
+  mr.render.camera.event_param = 0;
+  mr.render.camera.event_step_x = 0x2BC;   /* v1 = 0xAF -> the setter vel_x 5 */
+  mr.render.camera.event_step_z = 0;
   mr.render.camera.pan_counter = 7;         /* the setter's reset observable */
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
     for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
@@ -2410,7 +2417,9 @@ static void test_record_event_one_shot_rearm(void) {
   c->skip_9a = 0;                           /* enters the walk */
   one_granted_frame(&mr);                   /* frame 3: rec 1 takes over */
   assert(mr.render.camera.tracked == 1);
-  assert(mr.render.camera.event_param == 0x6C);
+  /* the live reflect arm re-seeds the event height to the current camera Y
+   * (the walk's FUN_00070B94 arc has moved it below the +0x68 upper band). */
+  assert(mr.render.camera.event_param == (uint16_t)mr.render.camera.pos_y);
 }
 
 /* M2 phase-9 T1 / FU-75 L4.6 (FU-138 OL-18): the live held-key movement on the
@@ -3009,8 +3018,15 @@ static void test_live_long_ball_mode40_band2_follow(void) {
       window++;
       if (mr.render.camera.pan_counter == 0) {
         assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
-        assert(mr.render.camera.pos_x ==
-               prev_pos_x + 15 * (int32_t)mr.state.frame_delta);
+        /* Slice-B Task 6: the head jitter (0x736B2..0x73723) fires on this
+         * window (speed 15 > 0xC and the FUN_00070B94 arc Y > 0xA0) and may
+         * INC/DEC vel_x by 1 before the walk; the follow re-seeds vel_x to 15
+         * after it, so the position advances by (15 -1|0|+1) * delta. */
+        {
+          int32_t advance = mr.render.camera.pos_x - prev_pos_x;
+          assert(advance >= 14 * (int32_t)mr.state.frame_delta);
+          assert(advance <= 16 * (int32_t)mr.state.frame_delta);
+        }
         prev_pos_x = mr.render.camera.pos_x;
       }
     }
@@ -8571,6 +8587,29 @@ static void test_camera_pan_event_chain(void) {
   drop_fixture(f);
 }
 
+/* Slice-B Task 6: the `[0x157820]` pause bridge. `flag_157820` is staged to
+ * `cam->paused` before the walk (0x7375E), so a granted frame leaves the camera
+ * position and timer untouched. The camera is staged with a live walk (vel_x 4
+ * -> pos_x would advance 8, timer 0 -> 2 at delta 2) but a no-jitter gate
+ * (speed 4 <= 0xC), so only the pause is under test. */
+static void test_frame_camera_pause_bridge(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.flag_157820 = 1;
+  assert(fifa96_camera_init(&mr.render.camera, 100, 0, 200) == FIFA96_OK);
+  mr.render.camera.vel_x = 4;
+  mr.render.camera.vel_z = 0;
+  mr.render.camera.speed = 4;
+  int32_t pos_x = mr.render.camera.pos_x;
+  uint16_t timer = mr.render.camera.timer;
+  one_granted_frame(&mr);
+  assert(mr.render.camera.paused == 1);      /* the bridge wired it */
+  assert(mr.render.camera.pos_x == pos_x);   /* the walk held */
+  assert(mr.render.camera.timer == timer);
+}
+
 /* FU303/FU294-L2 + FU292-L2/L3 (phase-28 T8): the visible-motion rate chain
  * on the real frame path. The event setter produces the pan-direction byte
  * `[0x157815]` (the compass row of the actor's slot dirs at set time), the
@@ -11504,6 +11543,7 @@ int main(void) {
   test_view_pose_feed_arms_camera();
   test_view_pose_feed_boundary_reposition();
   test_camera_pan_event_chain();
+  test_frame_camera_pause_bridge();
   test_camera_rate_chain_sustained_pan();
   test_camera_band_cells_seam();
   test_row04_live_pan_arms_camera();

@@ -489,6 +489,38 @@ int fifa96_camera_commit(fifa96_camera *cam) {
   return FIFA96_OK;
 }
 
+/* Slice-B Task 6: the native `0x736B2..0x73723` walk head jitter. */
+int fifa96_camera_walk_jitter(fifa96_camera *cam, struct fifa96_rng *rng) {
+  int16_t speed;
+  uint16_t value;
+  if (!cam) return -FIFA96_ERR_INVALID;
+  speed = (int16_t)cam->speed;               /* 0x736b2/0x736b7 */
+  if (speed <= 0xC) return FIFA96_OK;        /* 0x736ba/0x736bd */
+  if (cam->pos_y <= 0xA0) return FIFA96_OK;  /* 0x736c3/0x736cd */
+  if (speed < 0x19) {                        /* 0x736cf/0x736d2 */
+    value = 0;
+    if (fifa96_rng_step(rng, &value) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    /* 0x736dd/0x736e2/0x736e4: DIV EBX with EBX = 0x21 - speed (EDX = 0). */
+    if ((uint32_t)value % (0x21u - (uint32_t)speed) != 0u) return FIFA96_OK;
+  }
+  value = 0;
+  if (fifa96_rng_step(rng, &value) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  if ((value & 7u) != 0u) return FIFA96_OK;  /* 0x736e8/0x736ed/0x736ef */
+  value = 0;
+  if (fifa96_rng_step(rng, &value) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  if (value & 1u)                            /* 0x736f1/0x736f6/0x736fa/0x73703 */
+    cam->vel_x = (int16_t)((uint16_t)cam->vel_x + 1u);
+  else
+    cam->vel_x = (int16_t)((uint16_t)cam->vel_x - 1u);
+  value = 0;
+  if (fifa96_rng_step(rng, &value) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  if (value & 1u)                            /* 0x7370a/0x7370f/0x73713/0x7371c */
+    cam->vel_z = (int16_t)((uint16_t)cam->vel_z + 1u);
+  else
+    cam->vel_z = (int16_t)((uint16_t)cam->vel_z - 1u);
+  return FIFA96_OK;
+}
+
 int fifa96_camera_target(const fifa96_camera *cam, int16_t *x, int16_t *z) {
   if (!cam || !x || !z) return -FIFA96_ERR_INVALID;
   if ((int16_t)cam->timer < (int16_t)cam->anchor_time) {

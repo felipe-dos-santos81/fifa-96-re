@@ -139,6 +139,30 @@ int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
  * -FIFA96_ERR_INVALID on NULL. */
 int fifa96_camera_commit(fifa96_camera *cam);
 
+/* Slice-B Task 6: the native `0x736B2..0x73723` walk head jitter, run before
+ * the `0x73723` commit. First-hand `disassemble_function 0x736AC`:
+ *
+ *   speed = (int16)word[0x1577BE]  (the dword[0x1577BC] >> 16 extract)
+ *   if (speed <= 0xC) return;                      // 0x736ba/0x736bd
+ *   if (pos_y <= 0xA0) return;                     // 0x736c3/0x736cd
+ *   if (speed < 0x19) {                            // 0x736cf/0x736d2
+ *     draw = FUN_00092AC8();                       // 0x736dd
+ *     if (draw % (0x21 - speed) != 0) return;      // 0x736e2/0x736e4/0x736e6
+ *   }
+ *   draw = FUN_00092AC8(); if (draw & 7) return;   // 0x736e8/0x736ed/0x736ef
+ *   draw = FUN_00092AC8();                         // 0x736f1/0x736f6
+ *   vel_x += (draw & 1) ? 1 : -1;                  // 0x736fa/0x73703
+ *   draw = FUN_00092AC8();                         // 0x7370a/0x7370f
+ *   vel_z += (draw & 1) ? 1 : -1;                  // 0x73713/0x7371c
+ *
+ * Each `draw` is one `fifa96_rng_step` (the native FUN_00092AC8's new w[0]
+ * word), the same convention as `fifa96_camera_pan_step`. The `% (0x21 -
+ * speed)` is the native unsigned `DIV EBX` with EDX=0 (the `XOR EDX,EDX` at
+ * 0x736d9 survives the CALL: FUN_00092AC8 pushes/pops EDX). The 16-bit
+ * INC/DEC wrap. Returns FIFA96_OK on every non-NULL path (gated or applied),
+ * -FIFA96_ERR_INVALID on NULL or a NULL rng on the accepted path. */
+int fifa96_camera_walk_jitter(fifa96_camera *cam, struct fifa96_rng *rng);
+
 /* FU-152 §2.9 (T3): FUN_00071C94 0x71D27's `[0x1577CA] = rec` write. The id
  * is the engine pool id (team*11 + index) or FIFA96_CAMERA_TRACKED_NONE.
  * Returns FIFA96_OK, -FIFA96_ERR_INVALID on NULL or an id < -1. */
