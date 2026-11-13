@@ -5406,3 +5406,16 @@ close-out below).
   the `0x974DC` half stays a B handoff (FU108 §9, ring design §13). FU-350 §8's
   "narrowed/closed" is corrected to "narrowed" (FU-350 §9). Docs-only; no code,
   golden or completion-number movement.
+
+- **2026-11-13 — Slice B camera/stats: approved M2 re-pin for `7251d07`.** The
+  regenerated M2 transcript is **295,089 bytes**, SHA-256
+  `3bdfbbeca03709f7aafbd73e145f161796bd15f7720c0bf83384dbbb6df73726`.
+  The old golden encoded the abridged RNG stream that omitted the native
+  target-block draws at `0x72CF9` and `0x7309E`; the camera traces are
+  byte-identical (SHA-256
+  `535529ccc03e0be54add5811e62b3e5c7ce213a81f8a930d8f57f437f6eb2006`).
+  Frames through 2544 are unchanged. Frames **2545-6522 inclusive (3,978
+  frames)** differ by hash only; frame numbers and state/score text are
+  unchanged. First: `frame=2545 hash=d0e91d189461dd5a →
+  254cf86cee7af780 state=19/1-0`. Last: `frame=6522
+  hash=10649db6f0a3c5fe → cae078c5b24326e0 state=19/1-0`. M1 is unchanged.
