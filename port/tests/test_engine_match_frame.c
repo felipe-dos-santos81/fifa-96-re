@@ -2878,15 +2878,13 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
   begin_isolated(&mr, f.engine);
-  /* Phase-35 P1: the produced movement consumes extra RNG draws before the
-   * kick (the row-04 chase/tackle arms), shifting the code-4 arm's
-   * `r & 7` traj draw to 0xB0 (r & 7 == 2). The chain is pumped seven RNG
-   * steps at its head (v29 measured under the act-9 placement: pump 7 lands
-   * r & 7 == 7, traj 0x100, the > 0xF0 height the follow event arm needs;
-   * deterministic on the null tape). */
+  /* The full save tail adds the native target-block draws at 0x72CF9 and
+   * 0x7309E before the kick. The chain is pumped five RNG steps at its head:
+   * the accepted code-4 draw is 0x43BF (r & 7 == 7), so traj 0x100 and the
+   * > 0xF0 follow gate are both produced, with no trajectory assertion swap. */
   {
     uint16_t dump;
-    for (int i = 0; i < 7; i++) assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
+    for (int i = 0; i < 5; i++) assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
   }
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
@@ -8643,6 +8641,12 @@ static void test_frame_camera_order(void) {
   mr.render.camera.vel_z = 0;
   mr.render.camera.speed = 4;          /* no jitter; delta 2 walks +8 */
   mr.render.camera.timer_limit = 0x7FFF;
+  mr.render.camera.save.tracked_157a87 = 3;
+  mr.render.camera.save.tracked_side = 0;
+  /* Staged producer evidence, not a zero-default assumption: a NULL history
+   * result and two absent best lanes are KNOWN for this order fixture. */
+  mr.render.camera.save.history_known = 1;
+  mr.render.camera.save.lanes_known = 1;
 
   before_x = mr.render.camera.pos_x;
   one_granted_frame(&mr);
@@ -8658,11 +8662,16 @@ static void test_frame_camera_order(void) {
   before_x = mr.render.camera.pos_x;
   mr.state.phase = 2;                 /* hold the native save-tail phase gate */
   mr.state.prev_phase = 0x10;
+  mr.entities.controlled = 4;         /* the new-controlled 0x1575AB snapshot */
   one_granted_frame(&mr);
   assert(mr.stats.value[0][0] == 30);  /* the set latch suppresses a re-call */
-  assert(mr.render.camera.save.age_delta_157a8f == 4);
+  assert(mr.render.camera.save.age_delta_157a8f == 2);
   assert(mr.render.camera.prev_x == before_x);
+  assert(mr.render.camera.prev_x == mr.render.camera.save.current_x_1575ab);
   assert(mr.render.camera.pos_x == before_x + 8);
+  assert(mr.render.camera.pos_x != mr.render.camera.prev_x);
+  /* Moving save_tail after update_walk changes current_x_1575ab to the
+   * post-walk position, so the equality above is the order-sensitive witness. */
   assert(mr.tracker_15759d == 1);
 
   mr.state.phase = 2;
@@ -8671,7 +8680,7 @@ static void test_frame_camera_order(void) {
   one_granted_frame(&mr);
   assert(mr.tracker_15759d == 0);
   assert(mr.stats.value[0][0] == 30);
-  assert(mr.render.camera.save.age_delta_157a8f == 6);
+  assert(mr.render.camera.save.age_delta_157a8f == 4);
 }
 
 /* FU303/FU294-L2 + FU292-L2/L3 (phase-28 T8): the visible-motion rate chain

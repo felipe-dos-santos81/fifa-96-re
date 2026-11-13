@@ -11,34 +11,103 @@ struct fifa96_rng;
  * stages phase/delta/controlled and the two side bytes before each call. */
 #define FIFA96_CAMERA_SAVE_ENTITY_NONE (-1)
 
+#define FIFA96_CAMERA_SAVE_LANES 11
+#define FIFA96_CAMERA_SAVE_LEG_MAX 40
+
+typedef struct fifa96_camera_save_lane {
+  uint8_t active;                /* slot +0 */
+  int32_t approach;              /* slot +1 (unaligned native dword) */
+  int32_t distance;              /* slot +9 (unaligned native dword) */
+} fifa96_camera_save_lane;
+
+typedef struct fifa96_camera_save_leg {
+  uint32_t site;                 /* native CALL address */
+  int32_t a, b, c;               /* SIT: EAX; POST: id, target, code */
+  uint8_t kind;
+} fifa96_camera_save_leg;
+
+enum {
+  FIFA96_CAMERA_SAVE_LEG_SIT = 1,
+  FIFA96_CAMERA_SAVE_LEG_POST,
+  FIFA96_CAMERA_SAVE_LEG_HISTORY,
+  FIFA96_CAMERA_SAVE_LEG_SCAN,
+  FIFA96_CAMERA_SAVE_LEG_LANES,
+  FIFA96_CAMERA_SAVE_LEG_PRODUCER
+};
+
 typedef struct fifa96_camera_save_state {
+  /* Caller-staged native inputs and external producer cells. */
   uint8_t phase_157a4d;
   uint16_t frame_delta_157a64;
   int32_t controlled_157a83;
+  uint8_t controlled_side;       /* [[0x157A83]] + 0x826 */
+  uint32_t controlled_class;     /* [[0x157A83]+4][0] */
+  uint8_t class_known;           /* 0 parks 0x72C6C..0x72C8D */
+  int32_t controlled_pos[3];     /* controlled +0x59/+0x5D/+0x61 */
+  int16_t controlled_vel73;      /* controlled word +0x73 */
+  int16_t controlled_vel75;      /* controlled word +0x75 */
+  int32_t opponent_target;       /* [[[0x157A83]]+0x7A6]+0x7B2 */
+  int32_t opponent_pos[3];       /* that record's +0x59/+0x5D/+0x61 */
+  int16_t opponent_lane_x;       /* that record's word +0x6B */
+  uint8_t tracked_side;          /* [[0x157A87]] + 0x826 */
+  uint8_t side_swap_157abe;
+  uint8_t global_158743;         /* [0x158740] >> 24 */
+  int32_t tick_112e88;           /* FUN_000CB2A4's native tick */
+  int32_t actor_15b33c;          /* FUN_00092194's native return */
+  uint8_t actor_known;           /* 0 parks the 0x73665 comparison/post */
+  struct fifa96_rng *rng_92ac8;  /* the shared match RNG */
+
+  /* Native persistent selection/history state. */
   int32_t tracked_157a87;
   int32_t target_157a8b;
   int32_t age_delta_157a8f;
   int32_t age_157a97;
-  int32_t rec_1575da;
-  uint8_t controlled_side;       /* [[0x157A83]] + 0x826 */
-  uint8_t tracked_side;          /* [[0x157A87]] + 0x826, staged for the init arm */
-  uint8_t rec_side_1575d2;       /* [[0x1575D2]] + 0x826 */
-  /* The 0x72BD5 FUN_00092998 result is a staged producer input. `known` says
-   * whether presence/type is evidence rather than an unported producer; this
-   * gates only the post-+1 arms whose early exits need that result. */
-  uint8_t history_known;
-  uint8_t history_present;
+  int32_t stamp_157591;
+  int32_t previous_age_delta_157595;
+  int32_t history_record_157599; /* opaque native ring-record token; 0 = NULL */
   int8_t history_type_157599;
+  uint8_t history_known;         /* 0 parks the same-side stat/RNG path */
+  uint8_t lanes_known;           /* 0 parks 0x72F69..0x72FCC */
+  int32_t team_1575d2;
+  uint8_t rec_side_1575d2;       /* [[0x1575D2]] + 0x826 */
+  int32_t opponent_1575d6;
+  int32_t rec_1575da;
+  int32_t controlled_1575de;
   uint8_t mode_15758c;
   int32_t approach_15758d;
   uint8_t flag_15759e;
   int32_t prev_x_15759f, prev_y_1575a3, prev_z_1575a7;
   int32_t current_x_1575ab, current_y_1575af, current_z_1575b3;
   int32_t target_x_1575b7, target_y_1575bb, target_z_1575bf;
+  int32_t previous_1575c3;       /* external producer; read at 0x72F17 */
   int32_t event_1575c7;          /* sign-extended word[0x1577F0] */
   uint8_t count_1575cb;
   int16_t band_1575cc, dx_1575ce, dz_1575d0;
   uint8_t flag_1575e8;
+  int32_t lane_best_a_1575e9;    /* lane index, NONE = native NULL */
+  int32_t lane_best_b_1575ed;
+  fifa96_camera_save_lane lane[FIFA96_CAMERA_SAVE_LANES];
+
+  /* The complete native target block 0x157710..0x15773B. */
+  uint8_t flag_157710;
+  uint8_t flag_157711;
+  int32_t stamp_157712;
+  int32_t clear_157716;
+  int32_t delay_15771a;
+  int32_t target_15771e;
+  int32_t stat_actor_157722;
+  int32_t opponent_157726;
+  uint8_t latch_15772a;
+  int32_t history_15772b;        /* the 0x157599 token copied at 0x72DD3 */
+  int32_t target_x_15772f, target_y_157733, target_z_157737;
+  int32_t controlled_15773b;
+  uint8_t side_15773b;           /* cached [[0x15773B]] + 0x826 */
+
+  /* Adapter-only evidence for unported 0x651F0/0x8F188/0x92998 calls and the
+   * two sanctioned callee legs. Reset for each save-tail invocation. */
+  fifa96_camera_save_leg legs[FIFA96_CAMERA_SAVE_LEG_MAX];
+  uint8_t leg_count;
+  uint8_t leg_overflow;
 } fifa96_camera_save_state;
 
 typedef struct fifa96_camera {
@@ -775,16 +844,19 @@ typedef struct {
   uint8_t overflow;
 } fifa96_camera_stat_events;
 
-/* Slice-B Task 9: FUN_00072AC4 after the 0x72AE5 tracker call, native extent
- * 0x72AEA..0x736A9. Ports the phase/cache/timestamp flow, the no-controlled
- * initialization, the new-controlled metric block and both stat-bearing arms:
- * {0x72DE3,+1,REC_1575DA} then {0x72ED1,+2,REC_1575DA}. FUN_000795B4's band
- * reuses the already-ported exact FUN_000CD514 (fifa96_entity_hypot).
- * FUN_000721C8 (0x72B19) and FUN_00072270 (0x7369E) are numbered legs and are
- * not called. The command-ring/sit/RNG-only sub-bodies are also legs; an
- * unknown 0x92998 result never guesses past the two early ring exits to +2.
+/* Slice-B Task 9: the complete FUN_00072AC4 control flow and direct state
+ * writes after the 0x72AE5 tracker call, native extent 0x72AEA..0x736A9.
+ * FUN_000795B4/0x8DC68/0x741B4 reuse existing loader helpers; 0xCB2A4 and
+ * 0x92194 are their exact native getters. 0x92AC8 consumes `rng_92ac8` at all
+ * three native sites. {0x72DE3,+1,REC_1575DA} and {0x72ED1,+2,REC_1575DA}
+ * retain their native positions. FUN_000721C8/FUN_00072270 and the history /
+ * command / situation sinks stay numbered legs; their call points and
+ * arguments are preserved in `legs` rather than deleting the surrounding flow.
+ * Unknown history, lane, class, and actor producers park only their dependent
+ * paths: they are never converted into known-empty/zero evidence. The pan-step
+ * writes `[0x1575C3]` and `[0x1575CB]` before incrementing `[0x157821]`.
  * No engine code is called. `stats` may be NULL. Returns FIFA96_OK or
- * -FIFA96_ERR_INVALID on NULL cam. */
+ * -FIFA96_ERR_INVALID on NULL cam or a required NULL RNG. */
 int fifa96_camera_save_tail(fifa96_camera *cam, fifa96_camera_stat_events *stats);
 
 /* FU-152 §2.9 (T2): FUN_00070DE0's derived core + the bit-0x8 boundary arm —

@@ -823,6 +823,7 @@ static void test_pan_step_band_decay_rearm(void) {
   cam.ramp_divisor = 50;
   cam.event_step_x = 0;
   cam.event_step_z = 20 * 50;
+  cam.save.tick_112e88 = 0x1234;
   assert(cam.pan_counter == 0);
   int32_t class_of = 0, param = 0;
   assert(fifa96_camera_pan_step(&cam, NULL, 0, &class_of, &param) == FIFA96_OK);
@@ -833,6 +834,9 @@ static void test_pan_step_band_decay_rearm(void) {
   assert(cam.timer == 0 && cam.timer_limit == 30);
   assert(cam.ramp_divisor == 30);
   assert(cam.event_step_z == 10 * 30);
+  /* 0x70A55/0x70A5F precede the 0x70A65 pan-counter increment. */
+  assert(cam.save.previous_1575c3 == 0x1234);
+  assert(cam.save.count_1575cb == 1);
 }
 
 static void test_pan_step_idle_height_band_skipped(void) {
@@ -1383,34 +1387,63 @@ static void test_camera_walk_jitter_draws(void) {
   assert(next == 0x2BBB);   /* the fourth draw: three were consumed */
 }
 
-/* Slice-B Task 9: FUN_00072AC4's post-tracker save tail. The stat arm needs
- * the native two-frame shape: the no-controlled call caches [0x157A87] in
- * [0x1575DA]/[0x157A8B], then a new controlled record takes the
- * previous-cache-NULL arm. A known-empty 0x92998 result makes both early
- * ring exits false, so the same-side +1 and the far-z +2 land in order. */
+static void camera_save_reset_for_test(fifa96_camera *cam) {
+  cam->save.controlled_157a83 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.tracked_157a87 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.target_157a8b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.rec_1575da = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.team_1575d2 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.opponent_1575d6 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.controlled_1575de = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.lane_best_a_1575e9 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.lane_best_b_1575ed = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.actor_15b33c = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.opponent_target = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.opponent_157726 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.target_15771e = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.stat_actor_157722 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.controlled_15773b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.side_15773b = 0;
+  cam->save.history_known = 0;
+  cam->save.lanes_known = 0;
+  cam->save.class_known = 0;
+  cam->save.actor_known = 0;
+  cam->save.delay_15771a = 100;  /* FUN_000927E0 0x9280A/0x92815 */
+}
+
+/* Slice-B Task 9: the complete FUN_00072AC4 post-tracker tail. The stat arm
+ * needs the native two-frame shape: the no-controlled call caches [0x157A87]
+ * in [0x1575DA]/[0x157A8B], then a new controlled record takes the
+ * previous-cache-NULL arm. A NULL 0x92998 result makes both early ring exits
+ * false, so the same-side +1 and far-z +2 land in order. */
 static void test_camera_save_tail(void) {
   fifa96_camera cam = fresh_camera();
   fifa96_camera_stat_events stats;
+  struct fifa96_rng rng;
+  uint16_t next;
   memset(&stats, 0, sizeof stats);
   assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  camera_save_reset_for_test(&cam);
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  cam.save.rng_92ac8 = &rng;
+  cam.save.tick_112e88 = 0x123;
+  cam.save.opponent_target = 12;
   cam.target_x = 0x111;
   cam.target_y = 0x112;
   cam.target_z = 0x113;
   cam.event_param = 0x44;
   cam.save.phase_157a4d = 2;
   cam.save.frame_delta_157a64 = 2;
-  cam.save.controlled_157a83 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   cam.save.tracked_157a87 = 3;
-  cam.save.target_157a8b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
-  cam.save.rec_1575da = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   cam.save.tracked_side = 0;
-  cam.save.history_known = 1;
-  cam.save.history_present = 0;
+  cam.save.history_known = 1;     /* staged proof: the history result is NULL */
+  cam.save.lanes_known = 1;       /* staged proof: both best lanes are NULL */
   cam.save.count_1575cb = 7;       /* 0x72BA6 clears it during the init arm */
 
   assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
   assert(stats.count == 0 && stats.overflow == 0);
   assert(cam.save.rec_1575da == 3);
+  assert(cam.save.team_1575d2 == 0 && cam.save.opponent_1575d6 == 1);
   assert(cam.save.target_157a8b == 3);
   assert(cam.save.tracked_157a87 == FIFA96_CAMERA_SAVE_ENTITY_NONE);
   assert(cam.save.mode_15758c == 1 && cam.save.flag_15759e == 0);
@@ -1421,7 +1454,13 @@ static void test_camera_save_tail(void) {
          cam.save.target_y_1575bb == 0x112 &&
          cam.save.target_z_1575bf == 0x113);
   assert(cam.save.event_1575c7 == 0x44);
-  assert(cam.save.count_1575cb == 0);
+  assert(cam.save.count_1575cb == 0 && cam.save.stamp_157591 == 0x123);
+  for (int i = 0; i < 11; i++) {
+    assert(cam.save.lane[i].active == 0 && cam.save.lane[i].approach == 0 &&
+           cam.save.lane[i].distance == 0x3C0);
+  }
+  assert(cam.save.lane_best_a_1575e9 == FIFA96_CAMERA_SAVE_ENTITY_NONE &&
+         cam.save.lane_best_b_1575ed == FIFA96_CAMERA_SAVE_ENTITY_NONE);
   assert(cam.save.age_delta_157a8f == 2 && cam.save.age_157a97 == 0);
 
   cam.pos_x = 0x100;
@@ -1429,6 +1468,9 @@ static void test_camera_save_tail(void) {
   cam.pos_z = 0x800;
   cam.save.controlled_157a83 = 4;
   cam.save.controlled_side = 0;
+  cam.save.controlled_pos[0] = 0x100;
+  cam.save.controlled_pos[1] = 0x20;
+  cam.save.controlled_pos[2] = 0x800;
   cam.save.age_157a97 = 99;       /* the new-target block resets this to zero */
   assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
   assert(stats.count == 2 && stats.overflow == 0);
@@ -1442,9 +1484,267 @@ static void test_camera_save_tail(void) {
   assert(cam.save.band_1575cc ==
          (int16_t)fifa96_entity_hypot(0x100, 0x800));
   assert(cam.save.dx_1575ce == 0x100 && cam.save.dz_1575d0 == 0x800);
+  assert(cam.save.controlled_1575de == 4 &&
+         cam.save.previous_age_delta_157595 == 2 &&
+         cam.save.stamp_157712 == 0x123 && cam.save.delay_15771a == 0x36);
+  assert(cam.save.target_x_15772f == 0x100 &&
+         cam.save.target_y_157733 == 0x20 &&
+         cam.save.target_z_157737 == 0x800);
+  assert(cam.save.controlled_15773b == 4 &&
+         cam.save.target_15771e == FIFA96_CAMERA_SAVE_ENTITY_NONE &&
+         cam.save.opponent_157726 == 12 && cam.save.latch_15772a == 1);
+  assert(cam.save.stat_actor_157722 == 3 && cam.save.history_15772b == 0);
   assert(cam.save.tracked_157a87 == 4 && cam.save.target_157a8b == 3);
   assert(cam.save.age_delta_157a8f == 2 && cam.save.age_157a97 == 2);
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK && next == 0x725);
+
+  /* The native +1/+2 arm is also safe with no event output and with an
+   * already-full array. Both calls take a fresh previous-cache-NULL path. */
+  {
+    fifa96_camera null_stats = cam;
+    fifa96_camera full_stats = cam;
+    null_stats.save.tracked_157a87 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+    full_stats.save.tracked_157a87 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+    assert(fifa96_camera_save_tail(&null_stats, NULL) == FIFA96_OK);
+    stats.count = FIFA96_CAMERA_STAT_MAX;
+    stats.overflow = 0;
+    assert(fifa96_camera_save_tail(&full_stats, &stats) == FIFA96_OK);
+    assert(stats.count == FIFA96_CAMERA_STAT_MAX && stats.overflow == 1);
+  }
   assert(fifa96_camera_save_tail(NULL, &stats) == -FIFA96_ERR_INVALID);
+}
+
+static void test_camera_save_tail_full_flow(void) {
+  fifa96_camera cam = fresh_camera();
+  struct fifa96_rng rng;
+  uint16_t next;
+
+  /* 0x73062: changed tracked target block, including its tick/RNG/timestamp
+   * and the old tracked id in [0x15771E]/[0x157A8B]. */
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  camera_save_reset_for_test(&cam);
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  cam.save.rng_92ac8 = &rng;
+  cam.save.tick_112e88 = 0x123;
+  cam.save.phase_157a4d = 2;
+  cam.save.frame_delta_157a64 = 2;
+  cam.save.controlled_157a83 = 4;
+  cam.save.tracked_157a87 = 3;
+  cam.save.controlled_pos[0] = 0x100;
+  cam.save.controlled_pos[1] = 0x20;
+  cam.save.controlled_pos[2] = 0x300;
+  cam.save.opponent_target = 12;
+  assert(fifa96_camera_save_tail(&cam, NULL) == FIFA96_OK);
+  assert(cam.save.stamp_157712 == 0x123 && cam.save.delay_15771a == 0x46);
+  assert(cam.save.target_x_15772f == 0x100 &&
+         cam.save.target_y_157733 == 0x20 &&
+         cam.save.target_z_157737 == 0x300);
+  assert(cam.save.controlled_15773b == 4 && cam.save.target_157a8b == 3 &&
+         cam.save.target_15771e == 3 && cam.save.opponent_157726 == 12 &&
+         cam.save.latch_15772a == 1);
+  assert(cam.save.controlled_1575de == FIFA96_CAMERA_SAVE_ENTITY_NONE &&
+         cam.save.previous_age_delta_157595 == 0);
+  assert(cam.save.tracked_157a87 == 4 && cam.save.age_157a97 == 2);
+  assert(cam.save.leg_count == 1 &&
+         cam.save.legs[0].kind == FIFA96_CAMERA_SAVE_LEG_PRODUCER &&
+         cam.save.legs[0].site == 0x72C6C);  /* unknown controlled class */
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK && next == 0x725);
+
+  /* 0x73114: the side-0 opponent comparator and goal-side arm. The opponent
+   * is farther from the goal line by >0x20, so 0x65 fires before 0x96. */
+  cam = fresh_camera();
+  assert(fifa96_camera_init(&cam, 0, 0, 0x700) == FIFA96_OK);
+  camera_save_reset_for_test(&cam);
+  cam.save.phase_157a4d = 2;
+  cam.save.frame_delta_157a64 = 2;
+  cam.save.controlled_157a83 = 4;
+  cam.save.tracked_157a87 = 4;
+  cam.save.controlled_15773b = 4;
+  cam.save.side_15773b = 0;
+  cam.save.target_157a8b = 3;
+  cam.save.rec_1575da = 3;
+  cam.save.controlled_pos[2] = 0xB00;
+  cam.save.controlled_vel75 = -1;
+  cam.save.opponent_target = 12;
+  cam.save.opponent_157726 = 12;
+  cam.save.opponent_pos[2] = 0;
+  cam.save.opponent_lane_x = 0;
+  cam.save.target_z_157737 = 0x2000;
+  cam.save.delay_15771a = 0x7FFF;
+  cam.save.actor_15b33c = 4;
+  assert(fifa96_camera_save_tail(&cam, NULL) == FIFA96_OK);
+  assert(cam.save.latch_15772a == 1 && cam.save.target_z_157737 == 0xB00);
+  assert(cam.save.age_delta_157a8f == 2 && cam.save.age_157a97 == 2);
+  assert(cam.save.leg_count == 5);
+  assert(cam.save.legs[0].kind == FIFA96_CAMERA_SAVE_LEG_SIT &&
+         cam.save.legs[0].site == 0x731C3 && cam.save.legs[0].a == 1);
+  assert(cam.save.legs[1].site == 0x731D2 && cam.save.legs[1].a == 1);
+  assert(cam.save.legs[2].kind == FIFA96_CAMERA_SAVE_LEG_POST &&
+         cam.save.legs[2].site == 0x731E2 && cam.save.legs[2].a == 0x65 &&
+         cam.save.legs[2].b == 4 && cam.save.legs[2].c == 8);
+  assert(cam.save.legs[3].site == 0x73391 && cam.save.legs[3].a == 0xC);
+  assert(cam.save.legs[4].site == 0x733A6 && cam.save.legs[4].a == 0x96 &&
+         cam.save.legs[4].b == 4 && cam.save.legs[4].c == 4);
+
+  /* 0x73665: the 0x92194 getter is live state [0x15B33C]; a different actor
+   * takes the 0xD8/code-0x21 branch after the preceding gates fall through. */
+  cam = fresh_camera();
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  camera_save_reset_for_test(&cam);
+  cam.save.phase_157a4d = 2;
+  cam.save.frame_delta_157a64 = 2;
+  cam.save.controlled_157a83 = 4;
+  cam.save.tracked_157a87 = 4;
+  cam.save.controlled_15773b = 4;
+  cam.save.side_15773b = 0;
+  cam.save.actor_15b33c = 3;
+  cam.save.actor_known = 1;
+  cam.save.age_157a97 = 100;      /* delta 2 crosses the native delay 100 */
+  cam.save.delay_15771a = 100;
+  cam.save.opponent_target = 12;
+  cam.save.opponent_157726 = 12;
+  assert(fifa96_camera_save_tail(&cam, NULL) == FIFA96_OK);
+  assert(cam.save.leg_count == 1);
+  assert(cam.save.legs[0].kind == FIFA96_CAMERA_SAVE_LEG_POST &&
+         cam.save.legs[0].site == 0x73680 && cam.save.legs[0].a == 0xD8 &&
+         cam.save.legs[0].b == 4 && cam.save.legs[0].c == 0x21);
+
+  /* The cached [0x15773B] side, not the current controlled side, selects the
+   * goal-side arm. Current side 0 would suppress this post; cached side 1
+   * takes 0x73323/0x73338 with select 8 and id 0x96. */
+  cam = fresh_camera();
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  camera_save_reset_for_test(&cam);
+  cam.save.phase_157a4d = 2;
+  cam.save.frame_delta_157a64 = 2;
+  cam.save.controlled_157a83 = 4;
+  cam.save.tracked_157a87 = 4;
+  cam.save.controlled_side = 0;
+  cam.save.controlled_15773b = 4;
+  cam.save.side_15773b = 1;
+  cam.save.controlled_pos[0] = 0x20;
+  cam.save.controlled_pos[1] = 0x30;
+  cam.save.controlled_pos[2] = 0x1000;
+  cam.save.controlled_vel75 = 1;
+  cam.save.target_z_157737 = 0;
+  cam.save.delay_15771a = 0x7FFF;
+  cam.save.opponent_target = 12;
+  cam.save.opponent_157726 = 12;
+  assert(fifa96_camera_save_tail(&cam, NULL) == FIFA96_OK);
+  assert(cam.save.leg_count == 2);
+  assert(cam.save.legs[0].site == 0x73323 && cam.save.legs[0].a == 8);
+  assert(cam.save.legs[1].site == 0x73338 && cam.save.legs[1].a == 0x96 &&
+         cam.save.legs[1].b == 4 && cam.save.legs[1].c == 4);
+  assert(cam.save.target_x_15772f == 0x20 &&
+         cam.save.target_y_157733 == 0x30 &&
+         cam.save.target_z_157737 == 0x1000);
+}
+
+static int camera_save_has_leg(const fifa96_camera *cam, uint32_t site) {
+  for (uint32_t i = 0; i < cam->save.leg_count; i++)
+    if (cam->save.legs[i].site == site) return 1;
+  return 0;
+}
+
+static void camera_save_stage_same_side(fifa96_camera *cam,
+                                        struct fifa96_rng *rng) {
+  assert(fifa96_camera_init(cam, 0x100, 0, 0x700) == FIFA96_OK);
+  camera_save_reset_for_test(cam);
+  cam->save.rng_92ac8 = rng;
+  cam->save.phase_157a4d = 2;
+  cam->save.frame_delta_157a64 = 2;
+  cam->save.controlled_157a83 = 4;
+  cam->save.controlled_side = 0;
+  cam->save.tracked_157a87 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.target_157a8b = 3;
+  cam->save.rec_1575da = 3;
+  cam->save.team_1575d2 = 0;
+  cam->save.rec_side_1575d2 = 0;
+  cam->save.controlled_pos[0] = 0x100;
+  cam->save.controlled_pos[2] = 0x700;
+  cam->save.opponent_target = 12;
+  cam->save.history_known = 1;       /* known NULL history result */
+  cam->save.lanes_known = 1;         /* known NULL best-lane results */
+}
+
+static void test_camera_save_tail_guards(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_stat_events stats;
+  struct fifa96_rng rng;
+  uint16_t next;
+
+  /* Unknown history starts at 0x72E15. The native prefix still consumes the
+   * target-block draw, clears/restarts age, and emits the independently proven
+   * +1; no history-dependent stat, post, or second RNG draw is allowed. */
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  camera_save_stage_same_side(&cam, &rng);
+  cam.save.history_known = 0;
+  memset(&stats, 0, sizeof stats);
+  assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
+  assert(stats.count == 1 && stats.overflow == 0);
+  assert(stats.event[0].site == 0x72DE3 && stats.event[0].delta == 1 &&
+         stats.event[0].entity == FIFA96_CAMERA_STAT_REC_1575DA);
+  assert(cam.save.delay_15771a == 0x38 && cam.save.age_157a97 == 2);
+  assert(cam.save.target_x_15772f == 0x100 &&
+         cam.save.target_z_157737 == 0x700);
+  assert(camera_save_has_leg(&cam, 0x72E15));
+  assert(!camera_save_has_leg(&cam, 0x72E51) &&
+         !camera_save_has_leg(&cam, 0x72E98) &&
+         !camera_save_has_leg(&cam, 0x72EED) &&
+         !camera_save_has_leg(&cam, 0x72FE9) &&
+         !camera_save_has_leg(&cam, 0x73680));
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK && next == 0x725);
+
+  /* Known-empty history but unknown lane outputs: +1 is proven, while the
+   * 0x72F69..0x72FCC lane/RNG path is parked with no second draw. */
+  cam = fresh_camera();
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  camera_save_stage_same_side(&cam, &rng);
+  cam.save.lanes_known = 0;
+  memset(&stats, 0, sizeof stats);
+  assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
+  assert(stats.count == 1 && stats.event[0].site == 0x72DE3);
+  assert(camera_save_has_leg(&cam, 0x72F69));
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK && next == 0x725);
+
+  /* With both producer results known empty, 0x72FCC is reachable. Seed 0's
+   * second draw 0x725 has draw&3 == 1: no 0x55 post. */
+  cam = fresh_camera();
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  camera_save_stage_same_side(&cam, &rng);
+  memset(&stats, 0, sizeof stats);
+  assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
+  assert(!camera_save_has_leg(&cam, 0x72FE9));
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK && next == 0x133F);
+
+  /* Seed 0x2C's second draw 0xD728 has draw&3 == 0: the 0x55 post lands. */
+  cam = fresh_camera();
+  assert(fifa96_rng_seed(&rng, 0x2C) == FIFA96_OK);
+  camera_save_stage_same_side(&cam, &rng);
+  memset(&stats, 0, sizeof stats);
+  assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
+  assert(camera_save_has_leg(&cam, 0x72FE9));
+  assert(fifa96_rng_step(&rng, &next) == FIFA96_OK && next == 0x6344);
+}
+
+static void test_camera_save_tail_b4_failed_gate_returns(void) {
+  fifa96_camera cam = fresh_camera();
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  camera_save_reset_for_test(&cam);
+  cam.save.phase_157a4d = 2;
+  cam.save.frame_delta_157a64 = 2;
+  cam.save.controlled_157a83 = 4;
+  cam.save.tracked_157a87 = 4;
+  cam.save.controlled_15773b = 4;
+  cam.save.side_15773b = 0;
+  cam.save.age_157a97 = 0xB3;       /* 0xB3 + 2 crosses 0xB4 */
+  cam.save.delay_15771a = 0;        /* would otherwise enter the delay arm */
+  cam.save.actor_15b33c = 3;
+  cam.save.actor_known = 1;
+  assert(fifa96_camera_save_tail(&cam, NULL) == FIFA96_OK);
+  assert(cam.save.age_157a97 == 0xB5);
+  /* The side-0 Z test fails. Native 0x734AB returns here: no delayed D8. */
+  assert(cam.save.leg_count == 0);
 }
 
 /* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08 — the
@@ -3665,6 +3965,9 @@ int main(void) {
   test_camera_walk_jitter_gates();
   test_camera_walk_jitter_draws();
   test_camera_save_tail();
+  test_camera_save_tail_full_flow();
+  test_camera_save_tail_guards();
+  test_camera_save_tail_b4_failed_gate_returns();
   test_wall_arm_gate_and_head();
   test_wall_arm_z_chain_edges();
   test_wall_arm_x_chain_edges();

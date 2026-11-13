@@ -7361,6 +7361,21 @@ static void test_stats_drain_events(void) {
     assert(fifa96_match_run_stats_drain(&f.mr, &events, 1) == 0);
     assert(stats_snapshot_equal(&f.mr, &snap));
   }
+  /* Both Task-9 save-tail events use REC_1575DA. They must take the same OPEN
+   * default branch without touching the table or the replay activity mirror. */
+  {
+    struct stats_snapshot snap;
+    events.event[0].site = 0x72DE3;
+    events.event[0].delta = 1;
+    events.event[0].entity = FIFA96_CAMERA_STAT_REC_1575DA;
+    events.event[1].site = 0x72ED1;
+    events.event[1].delta = 2;
+    events.event[1].entity = FIFA96_CAMERA_STAT_REC_1575DA;
+    events.count = 2;
+    stats_snapshot_take(&f.mr, &snap);
+    assert(fifa96_match_run_stats_drain(&f.mr, &events, 1) == 0);
+    assert(stats_snapshot_equal(&f.mr, &snap));
+  }
   /* A TRACKED event whose tracked id is unresolved (NONE) is a stats_add miss:
    * it drains to 0 and leaves the table/mirror untouched. */
   {

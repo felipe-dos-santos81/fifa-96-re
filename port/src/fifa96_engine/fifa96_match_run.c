@@ -2964,6 +2964,21 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->camera.save.tracked_157a87 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   r->camera.save.target_157a8b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   r->camera.save.rec_1575da = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.team_1575d2 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.opponent_1575d6 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.controlled_1575de = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.lane_best_a_1575e9 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.lane_best_b_1575ed = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.actor_15b33c = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.opponent_target = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.opponent_157726 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.target_15771e = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.stat_actor_157722 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.controlled_15773b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  /* FUN_000927E0 0x9280A/0x92815: the native reset delay is 100, not zero.
+   * history/lane/class/actor_known stay zero: unported producers are UNKNOWN,
+   * never known-empty. */
+  r->camera.save.delay_15771a = 100;
   (void)fifa96_window_init(&r->window, 0, 0);
   (void)fifa96_match_display_init(&r->display, 0);
   /* FU-158 §8.1 (phase-13 T2): no ball bank until a pitch container stages
@@ -8420,6 +8435,49 @@ static int match_run_frame_camera(struct fifa96_match_run *mr) {
           ? mr->entities.team[save->tracked_157a87 /
                               FIFA96_MATCH_ENTITY_RECORDS].side
           : 0;
+  save->rng_92ac8 = &mr->rng;
+  save->tick_112e88 = (int32_t)mr->ticks;
+  save->side_swap_157abe = mr->side_swap;
+  save->global_158743 = mr->entities.ball.pair.code;
+  /* controlled_class/class_known and actor_15b33c/actor_known are not forced:
+   * their unported producers remain unknown rather than known zero. */
+  save->controlled_pos[0] = 0;
+  save->controlled_pos[1] = 0;
+  save->controlled_pos[2] = 0;
+  save->controlled_vel73 = 0;
+  save->controlled_vel75 = 0;
+  save->opponent_target = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  save->opponent_pos[0] = 0;
+  save->opponent_pos[1] = 0;
+  save->opponent_pos[2] = 0;
+  save->opponent_lane_x = 0;
+  if (controlled >= 0 &&
+      controlled < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS *
+                             FIFA96_MATCH_ENTITY_RECORDS)) {
+    const struct fifa96_match_entity *actor =
+        &mr->entities.team[controlled / FIFA96_MATCH_ENTITY_RECORDS]
+             .records[controlled % FIFA96_MATCH_ENTITY_RECORDS];
+    uint32_t opponent_team =
+        1u - (uint32_t)controlled / FIFA96_MATCH_ENTITY_RECORDS;
+    int32_t opponent = mr->entities.team[opponent_team].target;
+    save->controlled_pos[0] = actor->pos_x;
+    save->controlled_pos[1] = actor->pos_y;
+    save->controlled_pos[2] = actor->pos_z;
+    save->controlled_vel73 = actor->vel73;
+    save->controlled_vel75 = actor->vel75;
+    save->opponent_target = opponent;
+    if (opponent >= 0 &&
+        opponent < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS *
+                             FIFA96_MATCH_ENTITY_RECORDS)) {
+      const struct fifa96_match_entity *other =
+          &mr->entities.team[opponent / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[opponent % FIFA96_MATCH_ENTITY_RECORDS];
+      save->opponent_pos[0] = other->pos_x;
+      save->opponent_pos[1] = other->pos_y;
+      save->opponent_pos[2] = other->pos_z;
+      save->opponent_lane_x = other->lane_x;
+    }
+  }
   /* These cells already have goal/armer consumers in the run. Bind their
    * current values in both directions rather than creating duplicate latches. */
   save->prev_x_15759f = mr->bounce_15759f;

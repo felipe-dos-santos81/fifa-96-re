@@ -2434,8 +2434,15 @@ int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
     if (class_of) *class_of = c;                 /* FUN_00065CF8 sink (leg) */
     if (param) *param = p;
   }
-  /* 0x70a3f..0x70a65: the [0x157821] counter, capped at 100. */
-  if (cam->pan_counter < 100) cam->pan_counter++;
+  /* 0x70a3f..0x70a65: while [0x157821] < 100, a zero counter first
+   * timestamps [0x1575C3] through FUN_000CB2A4, then [0x1575CB] and the pan
+   * counter increment in that order. The engine stages tick_112e88 per frame. */
+  if (cam->pan_counter < 100) {
+    if (cam->pan_counter == 0)
+      cam->save.previous_1575c3 = cam->save.tick_112e88;
+    cam->save.count_1575cb++;
+    cam->pan_counter++;
+  }
   /* 0x70a6b..0x70a90: event_param = event_height * [0x157819] / 0x20. */
   cam->event_param =
       (uint16_t)(int16_t)(((int32_t)(int16_t)cam->event_param *
@@ -2493,23 +2500,239 @@ static int camera_save_entity_valid(int32_t id) {
   return id != FIFA96_CAMERA_SAVE_ENTITY_NONE && id >= 0;
 }
 
-/* Slice-B Task 9: the loader-owned part of FUN_00072AC4 after 0x72AE5. The
- * labels below mirror the native join points 0x730F8 (publish the controlled
- * cache and frame delta) and 0x73404 (the controlled-age/common tail). */
+static int32_t camera_save_add32(int32_t a, int32_t b) {
+  return (int32_t)((uint32_t)a + (uint32_t)b);
+}
+
+static int32_t camera_save_sub32(int32_t a, int32_t b) {
+  return (int32_t)((uint32_t)a - (uint32_t)b);
+}
+
+static int32_t camera_save_team_for_record(int32_t id) {
+  return camera_save_entity_valid(id) && id < 22 ? id / 11
+                                                 : FIFA96_CAMERA_SAVE_ENTITY_NONE;
+}
+
+static int32_t camera_save_opponent_for_record(int32_t id) {
+  int32_t team = camera_save_team_for_record(id);
+  return team >= 0 ? 1 - team : FIFA96_CAMERA_SAVE_ENTITY_NONE;
+}
+
+static void camera_save_leg(fifa96_camera_save_state *s, uint8_t kind,
+                            uint32_t site, int32_t a, int32_t b, int32_t c) {
+  if (s->leg_count < FIFA96_CAMERA_SAVE_LEG_MAX) {
+    fifa96_camera_save_leg *leg = &s->legs[s->leg_count++];
+    leg->site = site;
+    leg->a = a;
+    leg->b = b;
+    leg->c = c;
+    leg->kind = kind;
+  } else {
+    s->leg_overflow = 1;
+  }
+}
+
+static void camera_save_sit(fifa96_camera_save_state *s, uint32_t site,
+                            int32_t value) {
+  camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_SIT, site, value, 0, 0);
+}
+
+static void camera_save_post(fifa96_camera_save_state *s, uint32_t site,
+                             int32_t id, int32_t target, int32_t code) {
+  camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_POST, site, id, target, code);
+}
+
+static int camera_save_rng(fifa96_camera_save_state *s, uint16_t *value) {
+  return fifa96_rng_step(s->rng_92ac8, value);
+}
+
+static void camera_save_copy_controlled_pos(fifa96_camera_save_state *s) {
+  s->target_x_15772f = s->controlled_pos[0];
+  s->target_y_157733 = s->controlled_pos[1];
+  s->target_z_157737 = s->controlled_pos[2];
+}
+
+/* Shared 0x72CBC..0x72D53 (new controlled) and 0x73062..0x730F3 (changed
+ * tracked) target block. `changed` selects only the writes present natively. */
+static int camera_save_target_block(fifa96_camera *cam,
+                                    fifa96_camera_save_state *s, int changed) {
+  uint16_t draw = 0;
+  int32_t magnitude;
+  s->flag_157710 = 0;
+  s->flag_157711 = 0;
+  s->stamp_157712 = s->tick_112e88;       /* FUN_000CB2A4 */
+  s->clear_157716 = 0;
+  magnitude = camera_abs(cam->pos_z);
+  if (camera_save_rng(s, &draw) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  s->delay_15771a = camera_save_add32(0x46 - (magnitude >> 7), draw & 0xFu);
+  camera_save_copy_controlled_pos(s);
+  s->controlled_15773b = s->controlled_157a83;
+  s->side_15773b = s->controlled_side;
+  s->opponent_157726 = s->opponent_target;
+  s->latch_15772a = 1;
+  if (changed) {
+    s->age_157a97 = 0;
+    s->target_157a8b = s->tracked_157a87;
+    s->target_15771e = s->tracked_157a87;
+  } else {
+    s->controlled_1575de = s->controlled_157a83;
+    s->target_15771e = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+    s->stat_actor_157722 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+    s->previous_age_delta_157595 = s->age_delta_157a8f;
+  }
+  return FIFA96_OK;
+}
+
+static void camera_save_metric(fifa96_camera_save_state *s) {
+  s->dx_1575ce = (int16_t)((uint16_t)s->current_x_1575ab -
+                           (uint16_t)s->prev_x_15759f);
+  s->dz_1575d0 = (int16_t)((uint16_t)s->current_z_1575b3 -
+                           (uint16_t)s->prev_z_1575a7);
+  s->band_1575cc = (int16_t)fifa96_entity_hypot(s->dx_1575ce, s->dz_1575d0);
+}
+
+/* 0x73114..0x732C6: opponent identity refresh and the two goal-line metric
+ * comparisons. All four 0x8DC68 calls reuse fifa96_entity_distance. */
+static void camera_save_opponent_compare(fifa96_camera *cam,
+                                         fifa96_camera_save_state *s) {
+  int32_t controlled_metric, opponent_metric;
+  if (!camera_save_entity_valid(s->opponent_157726) ||
+      s->opponent_157726 != s->opponent_target) {
+    s->opponent_157726 = s->opponent_target;
+    s->latch_15772a = 1;
+    return;
+  }
+  if (s->controlled_side == 0) {
+    if (cam->pos_z <= 0x660 || s->opponent_lane_x >= 0xC0) return;
+  } else {
+    if (cam->pos_z >= -0x660 || s->opponent_lane_x >= 0xC0) return;
+  }
+  controlled_metric = (int16_t)fifa96_entity_distance(
+      (int16_t)s->controlled_pos[0],
+      (int16_t)(0xB10 - (int16_t)s->controlled_pos[2]));
+  opponent_metric = (int16_t)fifa96_entity_distance(
+      (int16_t)s->opponent_pos[0],
+      (int16_t)(0xB10 - (int16_t)s->opponent_pos[2]));
+  if (opponent_metric > controlled_metric + 0x20) {
+    if (s->latch_15772a == 0) {
+      if (s->controlled_side == 0) {
+        camera_save_sit(s, 0x731C3, 1);
+        camera_save_sit(s, 0x731D2, 1);
+        camera_save_post(s, 0x731E2, 0x65, s->controlled_157a83, 8);
+      } else {
+        camera_save_sit(s, 0x73274, 1);
+        camera_save_sit(s, 0x73283, 1);
+        camera_save_post(s, 0x73293, 0x65, s->controlled_157a83, 8);
+      }
+      s->latch_15772a = 1;
+    }
+  } else {
+    s->latch_15772a = 0;
+  }
+}
+
+/* 0x732CB..0x733BC: the goal-side position/velocity arm and its 0x741B4
+ * selection. A successful post refreshes the target position triple. */
+static void camera_save_goal_side(fifa96_camera_save_state *s) {
+  /* 0x732CB..0x732DD reads the cached record [0x15773B], not the current
+   * [0x157A83]. Its cached team side is staged with that record. */
+  if (s->side_15773b == 1) {
+    if (camera_save_sub32(s->controlled_pos[2], 0x690) > s->target_z_157737 &&
+        s->controlled_vel75 > 0) {
+      int32_t select = (1u ^ s->side_swap_157abe) & 1u;
+      camera_save_sit(s, 0x73323, select != 0 ? 8 : 0xC);
+      camera_save_post(s, 0x73338, 0x96, s->controlled_157a83, 4);
+      camera_save_copy_controlled_pos(s);
+    }
+  } else {
+    if (camera_save_add32(s->controlled_pos[2], 0x690) < s->target_z_157737 &&
+        s->controlled_vel75 < 0) {
+      int32_t select = s->side_swap_157abe & 1u;
+      camera_save_sit(s, 0x73391, select != 0 ? 8 : 0xC);
+      camera_save_post(s, 0x733A6, 0x96, s->controlled_157a83, 4);
+      camera_save_copy_controlled_pos(s);
+    }
+  }
+}
+
+/* 0x73428..0x7368B: both age-crossing arms, the position/velocity gate, the
+ * target-id/side gates, and the exact FUN_00092194 actor comparison. */
+static void camera_save_late(fifa96_camera *cam, fifa96_camera_save_state *s) {
+  int32_t previous_age = camera_save_sub32(s->age_157a97, s->frame_delta_157a64);
+  if (s->age_157a97 > 0xB4 && previous_age <= 0xB4) {
+    if (s->controlled_side != 0) {
+      if (camera_save_sub32(s->target_z_157737, 0x3C0) > cam->pos_z &&
+          cam->pos_z < 0x588) {
+        camera_save_sit(s, 0x7347D, 8);
+        camera_save_post(s, 0x7348D, 0xD9, s->controlled_157a83, 0x21);
+      }
+    } else {
+      if (camera_save_add32(s->target_z_157737, 0x3C0) < cam->pos_z &&
+          cam->pos_z > 0x588) {
+        camera_save_sit(s, 0x734C7, 8);
+        camera_save_post(s, 0x734D7, 0xD9, s->controlled_157a83, 0x21);
+      }
+    }
+    /* A recognized 0xB4 crossing returns on BOTH inner-gate outcomes
+     * (0x73461/0x7346D and 0x734AB/0x734B7); it never reaches the delay arm. */
+    return;
+  }
+
+  if (s->age_157a97 <= s->delay_15771a || previous_age > s->delay_15771a)
+    return;
+  {
+    int32_t abs_x = camera_abs(s->target_x_15772f);
+    if (abs_x > 0x6E0 && abs_x < 0x720 &&
+        camera_abs(s->target_z_157737) < 0xA80) {
+      int fire = s->controlled_vel73 == 0;
+      if (!fire)
+        fire = (s->controlled_vel73 > 0) != (cam->pos_x > 0);
+      if (fire) {
+        camera_save_sit(s, 0x73596, 0xF);
+        camera_save_post(s, 0x735A6, 0x68, s->controlled_157a83, 4);
+        return;
+      }
+    }
+  }
+  if (camera_save_entity_valid(s->target_15771e)) {
+    camera_save_sit(s, 0x735C5, 1);
+    camera_save_post(s, 0x735D5, 0xB2, s->controlled_157a83, 0x21);
+    return;
+  }
+  if (s->controlled_side != 0 && cam->pos_z < -0x660) {
+    camera_save_sit(s, 0x73607, 8);
+    camera_save_post(s, 0x73617, 0xD9, s->controlled_157a83, 0x21);
+    return;
+  }
+  if (s->controlled_side == 0 && cam->pos_z > 0x660) {
+    camera_save_sit(s, 0x73649, 8);
+    camera_save_post(s, 0x73659, 0xD9, s->controlled_157a83, 0x21);
+    return;
+  }
+  /* 0x73665: FUN_00092194 itself is only a getter, but the [0x15B33C]
+   * producer is unported. Unknown actor state parks the comparison/post. */
+  if (!s->actor_known) {
+    camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_PRODUCER, 0x73665, 0, 0, 0);
+    return;
+  }
+  if (s->actor_15b33c != s->controlled_157a83)
+    camera_save_post(s, 0x73680, 0xD8, s->controlled_157a83, 0x21);
+}
+
+/* Slice-B Task 9: the complete FUN_00072AC4 after 0x72AE5. The labels mirror
+ * native join 0x730F8 (publish cache/delta) and 0x73404 (common age tail). */
 int fifa96_camera_save_tail(fifa96_camera *cam, fifa96_camera_stat_events *stats) {
   fifa96_camera_save_state *s;
   if (!cam) return -FIFA96_ERR_INVALID;
   s = &cam->save;
+  s->leg_count = 0;
+  s->leg_overflow = 0;
 
-  /* 0x72AF4..0x72B19: FUN_000721C8 is T9-L1. Its scan-speed/latch producer
-   * is deliberately not guessed; the gate itself is preserved here. */
+  /* 0x72AF4..0x72B19: the sanctioned FUN_000721C8 leg, at its native point. */
   if (s->flag_1575e8 == 0 && cam->tracked != FIFA96_CAMERA_TRACKED_NONE &&
-      !camera_save_entity_valid(s->controlled_157a83) && (int16_t)cam->speed > 0) {
-    /* CALL 0x721C8 -- open leg, no substitute state writes. */
-  }
+      !camera_save_entity_valid(s->controlled_157a83) && (int16_t)cam->speed > 0)
+    camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_SCAN, 0x72B19, 0, 0, 0);
 
-  /* 0x72B1E..0x72B37: outside phase 2 the two native caches clear and the
-   * function returns without touching the save timestamps or stat table. */
   if (s->phase_157a4d != 2u) {
     s->tracked_157a87 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
     s->target_157a8b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
@@ -2518,18 +2741,26 @@ int fifa96_camera_save_tail(fifa96_camera *cam, fifa96_camera_stat_events *stats
 
   if (s->tracked_157a87 == s->controlled_157a83) goto same_tracked;
   if (!camera_save_entity_valid(s->controlled_157a83)) goto initialize;
+
+  /* 0x72C6C..0x72C8D: [[controlled]+4][0] is an unported producer.
+   * Unknown class parks only these two no-return-value situation calls. */
+  if (!s->class_known) {
+    camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_PRODUCER, 0x72C6C, 0, 0, 0);
+  } else if (s->controlled_class == 0x18DAu) {
+    camera_save_sit(s, 0x72C8D, 4);
+  } else if (s->controlled_class == 0x18DEu) {
+    camera_save_sit(s, 0x72C8D, 0xA);
+  }
+
   if (camera_save_entity_valid(s->tracked_157a87)) goto changed_tracked;
   if (s->controlled_157a83 == s->target_157a8b) {
-    /* 0x72CAC..0x72CB7: same target as the prior pass. */
-    s->age_157a97 = (int32_t)((uint32_t)s->age_157a97 +
-                              (uint32_t)s->age_delta_157a8f);
+    s->age_157a97 = camera_save_add32(s->age_157a97, s->age_delta_157a8f);
     goto publish;
   }
   goto new_controlled;
 
 initialize:
-  /* 0x72B57..0x72C67: no controlled record, but a non-NULL previous cache.
-   * Cache the camera and target triples and the previous-current record. */
+  /* 0x72B57..0x72C67: the complete no-controlled initialization. */
   s->mode_15758c = 1;
   s->flag_15759e = 0;
   s->flag_1575e8 = 0;
@@ -2537,103 +2768,179 @@ initialize:
   s->prev_x_15759f = cam->pos_x;
   s->prev_y_1575a3 = cam->pos_y;
   s->prev_z_1575a7 = cam->pos_z;
-  s->target_x_1575b7 = cam->target_x;       /* native 0x157770 */
+  s->target_x_1575b7 = cam->target_x;
   s->target_y_1575bb = cam->target_y;
   s->target_z_1575bf = cam->target_z;
   s->event_1575c7 = (int32_t)(int16_t)cam->event_param;
-  s->count_1575cb = 0;                         /* 0x72BA6 */
+  s->count_1575cb = 0;
   s->rec_1575da = s->tracked_157a87;
-  s->rec_side_1575d2 = s->tracked_side;
-  /* 0x72BD5's FUN_00092998 result is caller-staged in history_*. The 0xCB2A4
-   * stamp, the lane slots and their two best pointers are non-stat legs. */
+  if (camera_save_entity_valid(s->rec_1575da)) {
+    /* 0x72BB1..0x72BB7 and 0x72C09..0x72C1B are NULL-guarded stores. */
+    s->team_1575d2 = camera_save_team_for_record(s->rec_1575da);
+    s->rec_side_1575d2 = s->tracked_side;
+    s->opponent_1575d6 = camera_save_opponent_for_record(s->rec_1575da);
+  }
+  {
+    /* 0x72BD5: the additional history-producer leg returns its staged native
+     * record token/type; the store and all dependent branches stay intact. */
+    int32_t native_result = s->history_record_157599;
+    camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_HISTORY, 0x72BD5, 1, 2,
+                    s->rec_side_1575d2);
+    s->history_record_157599 = native_result;
+  }
   if (s->rec_side_1575d2 != 0) {
     s->prev_z_1575a7 = camera_save_neg32(s->prev_z_1575a7);
     s->target_z_1575bf = camera_save_neg32(s->target_z_1575bf);
+  }
+  s->stamp_157591 = s->tick_112e88;           /* FUN_000CB2A4 */
+  s->lane_best_a_1575e9 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  s->lane_best_b_1575ed = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  for (int i = 0; i < FIFA96_CAMERA_SAVE_LANES; i++) {
+    s->lane[i].active = 0;
+    s->lane[i].approach = 0;
+    s->lane[i].distance = 0x3C0;
   }
   s->target_157a8b = s->tracked_157a87;
   goto publish;
 
 changed_tracked:
-  /* 0x73062..0x730F3: an existing cache changed to a new controlled record.
-   * The target block rebuild's ring/RNG/event posts are non-stat legs. */
-  s->age_157a97 = 0;
-  s->target_157a8b = s->tracked_157a87;
+  if (camera_save_target_block(cam, s, 1) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
   goto publish;
 
 new_controlled:
-  /* 0x72CBC..0x72D94: the previous cache is NULL and the controlled record
-   * differs from [0x157A8B]. Snapshot the current camera and run 0x795B4. */
+  if (camera_save_target_block(cam, s, 0) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
   s->current_x_1575ab = cam->pos_x;
   s->current_y_1575af = cam->pos_y;
   s->current_z_1575b3 = cam->pos_z;
   if (s->rec_side_1575d2 != 0)
     s->current_z_1575b3 = camera_save_neg32(s->current_z_1575b3);
-  s->dx_1575ce = (int16_t)((uint16_t)s->current_x_1575ab -
-                           (uint16_t)s->prev_x_15759f);
-  s->dz_1575d0 = (int16_t)((uint16_t)s->current_z_1575b3 -
-                           (uint16_t)s->prev_z_1575a7);
-  /* FUN_000795B4 0x795E2 calls FUN_000CD514(dx,dz), already ported exactly
-   * by fifa96_entity_hypot. Only AX is stored into [0x1575CC]. */
-  s->band_1575cc = (int16_t)fifa96_entity_hypot(s->dx_1575ce, s->dz_1575d0);
+  camera_save_metric(s);
   s->age_157a97 = 0;
 
-  /* 0x72D99..0x72DE3: both cached records exist and the controlled and saved
-   * records' team sides match. This call precedes every ring-result gate. */
   if (camera_save_entity_valid(s->target_157a8b) &&
       camera_save_entity_valid(s->rec_1575da) &&
       s->controlled_side == s->rec_side_1575d2) {
+    s->history_15772b = s->history_record_157599;
+    s->stat_actor_157722 = s->rec_1575da;
     camera_stat_emit(stats, 0x72DE3, 1, FIFA96_CAMERA_STAT_REC_1575DA);
 
-    /* The 0x651F0 calls at 0x72DF6..0x72E10 are non-stat legs. The next two
-     * arms can bypass +2 and need the 0x72BD5 history result; without that
-     * producer's value, emitting +2 would invent a fall-through (T9-L3). */
-    if (!s->history_known) goto publish;
-    /* 0x72E15..0x72E56: type 0xA, band > 0xF0 and count < 3. */
-    if (s->history_present && s->history_type_157599 == 0xA &&
-        (int32_t)s->band_1575cc > 0xF0 && s->count_1575cb < 3u)
+    /* 0x72DE8..0x72E10: both native situation-call shapes, including the
+     * >0x660 arm's two consecutive EAX=0 calls. */
+    if (s->current_z_1575b3 > 0x660) {
+      camera_save_sit(s, 0x72DF8, 0);
+      camera_save_sit(s, 0x72E10, 0);
+    } else if (s->current_z_1575b3 > 0x1B0) {
+      camera_save_sit(s, 0x72E10, 1);
+    } else {
+      camera_save_sit(s, 0x72E10, 0);
+    }
+
+    /* 0x72E15 is the FIRST history-dependent branch. Everything above it is
+     * independently proven: the 0x72CF9 draw, target/metric writes, age clear,
+     * current-Z situation calls, and the 0x72DE3 +1. Unknown history parks
+     * only the early exits and their fall-through (including +2 and 0x72FCC),
+     * then rejoins 0x730F8 with fresh target/age state for the late arm. */
+    if (!s->history_known) {
+      camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_PRODUCER, 0x72E15, 0, 0, 0);
       goto publish;
-    /* 0x72E5B..0x72E9D: type 0x13, dz < -0x90 and current z > 0x3C0. */
-    if (s->history_present && s->history_type_157599 == 0x13 &&
-        (int32_t)s->dz_1575d0 < -0x90 && s->current_z_1575b3 > 0x3C0)
+    }
+    if (s->history_record_157599 != 0 && s->history_type_157599 == 0xA &&
+        (int32_t)s->band_1575cc > 0xF0 && s->count_1575cb < 3u) {
+      camera_save_post(s, 0x72E51, 0x6E, s->controlled_157a83, 4);
       goto publish;
-    /* 0x72EA2..0x72ED1: the second stat call, in native order after +1. */
+    }
+    if (s->history_record_157599 != 0 && s->history_type_157599 == 0x13 &&
+        (int32_t)s->dz_1575d0 < -0x90 && s->current_z_1575b3 > 0x3C0) {
+      camera_save_post(s, 0x72E98, 0x64, s->rec_1575da, 4);
+      goto publish;
+    }
     if (s->current_z_1575b3 > 0x750 &&
         camera_abs(s->current_x_1575ab) < 0x2D0) {
       camera_stat_emit(stats, 0x72ED1, 2, FIFA96_CAMERA_STAT_REC_1575DA);
+      camera_save_sit(s, 0x72EDD, 0);
+      camera_save_post(s, 0x72EED, 0x5A, s->rec_1575da, 4);
       goto publish;
     }
-    /* 0x72EF7..0x7305D: lane/RNG/commentary-only arms; no further stats. */
+
+    /* 0x72EF7..0x72F64: the previous-delta / external-[0x1575C3] gate. */
+    if ((int32_t)s->event_1575c7 > 0xC0 && (int32_t)s->dz_1575d0 > 0x5A0 &&
+        camera_save_sub32(s->previous_age_delta_157595,
+                          s->previous_1575c3) < 0x3C) {
+      if (s->current_z_1575b3 > 0x3C0) {
+        camera_save_sit(s, 0x72F35, 0);
+        camera_save_post(s, 0x72F45, 0x59, s->rec_1575da, 4);
+      } else {
+        camera_save_post(s, 0x72F5F, 0x58, s->rec_1575da, 4);
+      }
+      goto publish;
+    }
+
+    /* 0x72F69..0x72FCC: FUN_00072270 is a sanctioned leg, but its two best
+     * lane outputs are unknown until ported. Park both lane comparisons and
+     * the downstream RNG draw instead of treating them as known-empty. */
+    if (!s->lanes_known) {
+      camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_PRODUCER, 0x72F69, 0, 0, 0);
+      goto publish;
+    }
+    /* 0x72F69..0x72FC7: both best-lane pointers and their +9 distances. */
+    if (camera_save_entity_valid(s->lane_best_a_1575e9) &&
+        camera_save_entity_valid(s->lane_best_b_1575ed) &&
+        s->lane_best_a_1575e9 < FIFA96_CAMERA_SAVE_LANES &&
+        s->lane_best_b_1575ed < FIFA96_CAMERA_SAVE_LANES &&
+        s->lane[s->lane_best_a_1575e9].distance < 0x60 &&
+        s->lane[s->lane_best_b_1575ed].distance < 0x60 &&
+        (int32_t)s->dz_1575d0 > 0xF0 && (int32_t)s->band_1575cc > 0x1E0 &&
+        s->current_z_1575b3 > 0x3C0) {
+      camera_save_post(s, 0x72FC2, 0x5C, s->rec_1575da, 4);
+      goto publish;
+    }
+
+    /* 0x72FCC: the third distinct shared-RNG call site in this function. */
+    {
+      uint16_t draw = 0;
+      if (camera_save_rng(s, &draw) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+      if ((draw & 3u) == 0)
+        camera_save_post(s, 0x72FE9, 0x55, s->rec_1575da, 4);
+    }
+    goto publish;
   }
-  /* 0x72FF3..0x7305D is the opposite-side/no-stat continuation. */
+
+  /* 0x72FF3..0x7305D: the opposite-side 0xB6 arm. */
+  if (camera_save_entity_valid(s->target_157a8b) &&
+      camera_save_entity_valid(s->rec_1575da) &&
+      s->controlled_side != s->rec_side_1575d2 &&
+      s->global_158743 == 2u && (int32_t)s->band_1575cc > 0x1E0)
+    camera_save_post(s, 0x73058, 0xB6, s->controlled_157a83, 4);
   goto publish;
 
 same_tracked:
-  if (!camera_save_entity_valid(s->controlled_157a83)) {
-    /* 0x733BE..0x733E8: the null-controlled arm's two latch updates. */
+  if (camera_save_entity_valid(s->controlled_157a83)) {
+    camera_save_opponent_compare(cam, s);
+    camera_save_goal_side(s);
+  } else {
     if (s->flag_15759e == 0 &&
         (int16_t)cam->timer > (int16_t)cam->event_peak)
       s->flag_15759e = 1;
     if (s->mode_15758c != 0) s->mode_15758c = 0;
   }
-  /* 0x73114..0x733BC: the opponent/goal-side comparator and event posts are
-   * non-stat legs. Every route that reaches 0x733EE then accrues the delta. */
-  s->age_delta_157a8f = (int32_t)((uint32_t)s->age_delta_157a8f +
-                                  (uint32_t)s->frame_delta_157a64);
+  s->age_delta_157a8f = camera_save_add32(s->age_delta_157a8f,
+                                          s->frame_delta_157a64);
   goto finish;
 
 publish:
-  /* 0x730F8..0x7310A. */
   s->tracked_157a87 = s->controlled_157a83;
   s->age_delta_157a8f = (int32_t)s->frame_delta_157a64;
 
 finish:
   if (camera_save_entity_valid(s->controlled_157a83)) {
-    /* 0x73404..0x73422: age advances before all timer-event exits. The event
-     * posts through 0x7368B are non-stat legs. */
-    s->age_157a97 = (int32_t)((uint32_t)s->age_157a97 +
-                              (uint32_t)s->frame_delta_157a64);
+    s->age_157a97 = camera_save_add32(s->age_157a97, s->frame_delta_157a64);
+    camera_save_late(cam, s);
   } else if (camera_save_entity_valid(s->target_157a8b)) {
-    /* 0x7368C..0x7369E: CALL FUN_00072270([[target]+0x7A6]) -- T9-L2. */
+    /* 0x7369E: the sanctioned FUN_00072270 leg and its opponent argument. */
+    camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_LANES, 0x7369E,
+                    camera_save_opponent_for_record(s->target_157a8b), 0, 0);
   }
   return FIFA96_OK;
 }
