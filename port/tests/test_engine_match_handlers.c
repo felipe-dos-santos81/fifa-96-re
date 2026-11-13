@@ -5803,6 +5803,56 @@ static void test_goal_post_arm_rng_plus5(void) {
   drop_fixture(&f);
 }
 
+/* Slice-B Task 8 (FUN_00072478): the tracker decision's stat-bearing subset.
+ * The prev-phase arm (0x72A52 +0xF) and the fall-through pair's first call
+ * (0x72649 +0x32) resolve to TRACKED and are pinned at the 2x weight; the
+ * pair's second call (0x72660 -0x4B, BALL_SUB7A6) and the staging arm
+ * (0x7270F +0x19, REC_15B43C) are numbered legs — no fabricated id, so the
+ * tests assert their absence rather than a value. */
+static void test_tracker_stats_prev_phase10(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.prev_phase = 0x10;             /* 0x724D9 CMP EAX,0x10 / JZ 0x72A48 */
+  f.mr.render.camera.tracked = 0;           /* [0x1577CA] = team 0, record 0 */
+  assert(fifa96_match_tracker_decision(&f.mr) == 0);
+  assert(f.mr.stats.value[0][0] == 30);     /* +0xF * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 30);
+  assert(f.mr.tracker_15759d == 1);         /* 0x724C8 latch store */
+  drop_fixture(&f);
+}
+
+static void test_tracker_stats_fallthrough_pair(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.prev_phase = 0;                /* not 0x10 -> fall-through */
+  f.mr.render.camera.tracked = 0;           /* valid (team 0, record 0) */
+  f.mr.render.camera.pos_z = 0;             /* pos_z >= 0 -> flag 0 == side 0 */
+  f.mr.entities.team[0].side = 0;           /* [0x1577CA][+0x826] side byte */
+  assert(fifa96_match_tracker_decision(&f.mr) == 0);
+  assert(f.mr.stats.value[0][0] == 100);    /* +0x32 * 2 */
+  /* The ordered second call 0x72660 (-0x4B) targets [team+0x7A6] (the ball,
+   * BALL_SUB7A6): no stats id -> leg, so no second accumulation. */
+  assert(f.mr.render.replay.activity_count[0][0] == 100);
+  drop_fixture(&f);
+}
+
+static void test_tracker_stats_staging(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.prev_phase = 0;
+  f.mr.render.camera.tracked = 0;           /* the pair fires first (native order) */
+  f.mr.render.camera.pos_z = 0;
+  f.mr.entities.team[0].side = 0;
+  /* The staging arm 0x7270F (+0x19) gates on `[0x15B43C] != 0 && byte[0]==0xB`;
+   * the engine has no [0x15B43C] cell (REC_15B43C open leg), so nothing is
+   * fabricated. */
+  assert(fifa96_match_tracker_decision(&f.mr) == 0);
+  assert(f.mr.stats.value[0][0] == 100);    /* only the +0x32 pair call */
+  assert(f.mr.stats.value[0][1] == 0);      /* no +0x19 on any other slot */
+  assert(f.mr.render.replay.activity_count[0][1] == 0);
+  drop_fixture(&f);
+}
+
 /* The `0x774DD` re-place block (reached from the `0x76FF4` latch): with
  * `[0x157C5C]` set the body clears it, re-places the camera, and runs the
  * **ungated self-actor** `0x77568 [0x157A83] = EBP` + the sit-7 emit `0x77589`,
@@ -7504,6 +7554,9 @@ int main(void) {
   test_goal_post_arm_prev_phase10_neg100();
   test_goal_post_arm_distance_neg5();
   test_goal_post_arm_rng_plus5();
+  test_tracker_stats_prev_phase10();
+  test_tracker_stats_fallthrough_pair();
+  test_tracker_stats_staging();
   test_action_1b_replace_self_actor_reaches_emit();
   test_action_1b_mutual_exclusion_skips_wide();
   test_action_1c_runs_body();

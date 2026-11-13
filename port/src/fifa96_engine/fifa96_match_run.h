@@ -1172,6 +1172,13 @@ struct fifa96_match_run {
   int32_t bounce_1575a7;
   int32_t bounce_15758d;
   uint8_t flag_1575e8;
+  /* Slice-B Task 8 (FU-71 §6 / FUN_00072478 0x724C8): `tracker_15759d` =
+   * `[0x15759D]`, the one-shot tracker-decision latch. `fifa96_match_tracker_decision`
+   * stores 1 at its head (0x724C8); the save block `FUN_00072AC4` reads it
+   * (0x72ADC, skips the re-call while set) and clears it (0x72AEE) when its own
+   * gates fail, so the decision re-arms next frame. The save block is Task 9;
+   * init/begin reset the cell to 0 (the image BSS default). */
+  uint8_t tracker_15759d;
   /* FU296 Seam A (phase-27 T3) + FU299 (phase-28 T2, Option B): the record-0
    * machine `FUN_000782D0` view the FU-141 walk steps in its `i == 0` branch.
    * `fifa96_match_run_init`/`_begin` reset it; `fifa96_match_run_frame` hands
@@ -1924,6 +1931,21 @@ int fifa96_match_run_stats_drain(struct fifa96_match_run *mr,
  * witness, not the flag value. Does not touch `activity_count` (that mirror
  * belongs to `0x8ED40`). */
 int fifa96_match_run_stats_bump(struct fifa96_match_run *mr, int32_t entity_id);
+
+/* Slice-B Task 8 (FUN_00072478 0x72478..0x72AC0, FU-71 §6): the stat-bearing
+ * subset of the tracker/command-ring decision pass, in native emitting order:
+ *   `0x72A52` +0xF  — prev_phase == 0x10 (`0x724D9 CMP EAX,0x10`/`JZ 0x72A48`),
+ *                     tracked.
+ *   `0x72649` +0x32 — fall-through pair, first: tracked != NULL &&
+ *                     `team[tracked].side == (pos_z < 0)` (`0x72615`/`0x72637`).
+ *   `0x72660` -0x4B — the same arm's second call, `[team+0x7A6]` (the ball
+ *                     record). BALL_SUB7A6 has no stats-table id -> numbered leg.
+ *   `0x7270F` +0x19 — staging arm `[0x15B43C] != NULL && byte[0] == 0xB`,
+ *                     `[0x15B43C]+5`. REC_15B43C has no engine cell -> leg.
+ * The three `FUN_00092998` history searches and every `0x8F188`/`0x651F0`/
+ * `0x92040`/`0x92AC8` command-ring post are numbered legs. Returns FIFA96_OK,
+ * -FIFA96_ERR_INVALID on NULL. */
+int fifa96_match_tracker_decision(struct fifa96_match_run *mr);
 
 /* Re-key the activity table from the current roster binding: every block/slot
  * key becomes `match_run_replay_roster_id(side, slot)`, which is the engine's

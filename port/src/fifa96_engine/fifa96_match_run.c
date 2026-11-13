@@ -5190,6 +5190,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->bounce_1575a7 = 0;       /* FU-71 §6 post-arm gate cells (Task 7; staged) */
   mr->bounce_15758d = 0;
   mr->flag_1575e8 = 0;
+  mr->tracker_15759d = 0;      /* FU-71 §6 tracker-decision latch (Task 8) */
   mr->match1a_event_id = 0;
   mr->match1a_anim = 0;
   mr->match1d_event_id = 0;
@@ -5504,6 +5505,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->bounce_1575a7 = 0;       /* FU-71 §6 post-arm gate cells (Task 7; staged) */
   mr->bounce_15758d = 0;
   mr->flag_1575e8 = 0;
+  mr->tracker_15759d = 0;      /* FU-71 §6 tracker-decision latch (Task 8) */
   mr->match1a_event_id = 0;
   mr->match1a_anim = 0;
   mr->match1d_event_id = 0;
@@ -6949,6 +6951,65 @@ int fifa96_match_goal_arm(struct fifa96_match_run *mr) {
    * 0x71400..0x71463 goal_zone!=0 history-ring block stays a leg). */
   match_run_goal_post_arm(mr);
   return 1;
+}
+
+/* Slice-B Task 8 (FU-71 §6): the stat-bearing subset of FUN_00072478
+ * (0x72478..0x72AC0), the tracker/command-ring decision pass, in native
+ * emitting order. See the match_run.h declaration for the arm table. */
+int fifa96_match_tracker_decision(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+
+  /* Head (0x7247E..0x724C8): the three FUN_00092998 history searches and the
+   * `[0x15759D] = 1` latch store. The searches are numbered legs — their
+   * results (EDX/ESI/EDI) only feed the unported command-ring arms below. The
+   * latch is live engine state the save block (Task 9) reads and clears. */
+  mr->tracker_15759d = 1;
+
+  /* Prev-phase arm (0x724CF..0x724DC -> 0x72A48..0x72A52): `prev_phase ==
+   * 0x10` (`0x724D9 CMP EAX,0x10` / `0x724DC JZ 0x72A48`). */
+  if (mr->state.prev_phase == 0x10u) {
+    /* 0x72A48 MOV EDX,0xF / 0x72A4D MOV EAX,[0x1577CA] */
+    (void)fifa96_match_run_stats_add(mr, mr->render.camera.tracked, 0xF); /* 0x72A52 */
+    /* 0x72A57..0x72AC0: the pos_x vs +0xA0/-0xA0 `0x8F188` event posts
+     * (0x33/0x34/0x32) are numbered legs (ring post, OL-27). */
+    return FIFA96_OK;
+  }
+
+  /* Fall-through (prev_phase != 0x10). The intervening arms — the [0x157823]
+   * one-shot sit latch (0x724E2), the third-search-result arm (0x72502), and
+   * the controlled-actor arm (0x72568) — only post 0x92040/0x651F0/0x8F188
+   * command-ring events and emit no stat, so they are numbered legs. */
+
+  /* Fall-through pair (0x725E8..0x72660). */
+  {
+    int32_t tracked = mr->render.camera.tracked;
+    int32_t pos_z = mr->render.camera.pos_z;
+    if (tracked >= 0 &&
+        tracked < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+      uint32_t team = (uint32_t)tracked / FIFA96_MATCH_ENTITY_RECORDS;
+      /* 0x72610..0x72639: `[0x1577CA] != 0` and `team[tracked].side ==
+       * (pos_z < 0)` (`0x72615`/`0x72617`, `0x72637`/`0x72639`). */
+      if ((uint32_t)mr->entities.team[team].side == (pos_z < 0 ? 1u : 0u)) {
+        /* 0x7263F MOV EDX,0x32 / 0x72644 MOV EAX,[0x1577CA] */
+        (void)fifa96_match_run_stats_add(mr, tracked, 0x32); /* 0x72649 */
+        /* 0x72655 MOV EDX,0xFFFFFFB5 / 0x7265A MOV EAX,[EAX+0x7A6]: the second
+         * call targets `[team+0x7A6]`, the ball record (BALL_SUB7A6). The ball
+         * has no stats-table roster id (`fifa96_match_run_stats_add` accepts
+         * 0..21 only) -> numbered leg, no fabricated id. */
+        /* 0x72665..0x726E8: the `tracked == [0x157A8B] && [0x157A97] > 0x12C`
+         * event-post arm (`0x8F188` 0x30/0x3C) is a numbered leg. */
+      }
+    }
+  }
+
+  /* Staging arm (0x726E9..0x7270F): `[0x15B43C] != 0 && byte[0] == 0xB`
+   * (`0x726EE`/`0x726F0`, `0x726F6`/`0x726F9`). `[0x15B43C]` is the last
+   * FUN_00092998(1,4,any) ring-search result (written 0x71463); the engine
+   * ports the ring mechanics but keeps no match-run cell for it, so the
+   * `+0x19` on `[0x15B43C]+5` (REC_15B43C) is a numbered leg. The trailing
+   * 0x8F188 posts and the 0x727D8..0x72A47 FUN_0008EEC8/event-post region are
+   * legs too. */
+  return FIFA96_OK;
 }
 
 /* FU-145 §1.6 (S2): the scanner's derived possession nearest — the native
