@@ -5668,6 +5668,141 @@ static void test_action_1b_stats_phase10(void) {
   drop_fixture(&f);
 }
 
+/* ===== Slice-B Task 7 (FU-71 §6): the six FUN_0007131C post-arm stat arms ===
+ *
+ * Each fixture arms `fifa96_match_goal_arm` (phase in {2,0x10}, |camZ|_w >
+ * 0xB20) and stages the exact census gate for one of the six `0x8ED40` sites,
+ * then asserts the `stats.value` cell and the `activity_count` mirror at the
+ * 2x weight. The camera prev triple is staged == cur so the armer's
+ * FUN_00070DE0 reposition is a no-op (the Task 4 same-zone fixture note).
+ *
+ *   site   native     delta  expected
+ *   ----   ------     -----  --------
+ *   0x714BE +5         10    phase 2, |camX|>0x1E0, no controlled, tracked,
+ *                            FUN_0008F078(tracked) > 0x1260
+ *   0x7157C -100      -200    phase 0x10, goal_zone 0, |camZ|>0x960,
+ *                            |camX|<0x3C0, word(|camX|)<0xD0
+ *   0x715DD -5        -10     phase !=0x10, bounce<0x1E0, bounce_1575a7>0x840
+ *   0x716C7 -100      -200    word(|camX|)>=0xD0, prev or current phase 0x10
+ *   0x71732 -5        -10     prev/current !=0x10, bounce<0x1E0, a7>0x840
+ *   0x717E3 +5         10     [0x15758D] != 0 && < 0x30
+ */
+static void test_goal_post_arm_plus5(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.render.camera.pos_x = 0x800;      /* |camX|_w > 0x730 arms; |.| > 0x1E0 */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0;          /* side ^ (z>0) == 0 -> no later site */
+  f.mr.render.camera.prev_x = 0x800;
+  f.mr.render.camera.prev_y = 0;
+  f.mr.render.camera.prev_z = 0;
+  f.mr.render.camera.tracked = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].records[0].pos_z = -0x800;   /* dist = 0xB10+0x800 > 0x1260 */
+  assert(fifa96_match_goal_arm(&f.mr) == 1);
+  assert(f.mr.stats.value[0][0] == 10);      /* +5 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 10);
+  drop_fixture(&f);
+}
+
+static void test_goal_post_arm_neg100(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 0x10;
+  f.mr.render.camera.pos_x = 0x50;       /* word(|.|) < 0xD0 -> sites 2/3 */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0xC00;      /* |camZ|_w > 0xB20 arms; > 0x960 */
+  f.mr.render.camera.prev_x = 0x50;
+  f.mr.render.camera.prev_y = 0;
+  f.mr.render.camera.prev_z = 0xC00;
+  f.mr.render.camera.tracked = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_goal_arm(&f.mr) == 1);
+  assert(f.mr.stats.value[0][0] == -200);     /* -100 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == -200);
+  drop_fixture(&f);
+}
+
+static void test_goal_post_arm_neg5(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;                  /* non-0x10, still arming-capable */
+  f.mr.render.camera.pos_x = 0x50;       /* < 0x1E0 (site 1 silent), < 0xD0 word */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0xC00;
+  f.mr.render.camera.prev_x = 0x50;
+  f.mr.render.camera.prev_y = 0;
+  f.mr.render.camera.prev_z = 0xC00;
+  f.mr.render.camera.tracked = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.bounce_1575a7 = 0x900;            /* > 0x840 */
+  /* bounce_15759f stays 0 -> |.| < 0x1E0 */
+  assert(fifa96_match_goal_arm(&f.mr) == 1);
+  assert(f.mr.stats.value[0][0] == -10);      /* -5 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == -10);
+  drop_fixture(&f);
+}
+
+static void test_goal_post_arm_prev_phase10_neg100(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.state.prev_phase = 0x10;          /* site 4: prev phase 0x10 */
+  f.mr.render.camera.pos_x = 0x100;      /* word(|.|) >= 0xD0 -> sites 4..6 */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0xC00;
+  f.mr.render.camera.prev_x = 0x100;
+  f.mr.render.camera.prev_y = 0;
+  f.mr.render.camera.prev_z = 0xC00;
+  f.mr.render.camera.tracked = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_goal_arm(&f.mr) == 1);
+  assert(f.mr.stats.value[0][0] == -200);     /* -100 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == -200);
+  drop_fixture(&f);
+}
+
+static void test_goal_post_arm_distance_neg5(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.state.prev_phase = 0;             /* neither prev nor current 0x10 */
+  f.mr.render.camera.pos_x = 0x100;      /* word(|.|) >= 0xD0 -> sites 4..6 */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0xC00;
+  f.mr.render.camera.prev_x = 0x100;
+  f.mr.render.camera.prev_y = 0;
+  f.mr.render.camera.prev_z = 0xC00;
+  f.mr.render.camera.tracked = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.bounce_1575a7 = 0x900;            /* site 5: |bounce| < 0x1E0 && > 0x840 */
+  assert(fifa96_match_goal_arm(&f.mr) == 1);
+  assert(f.mr.stats.value[0][0] == -10);      /* -5 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == -10);
+  drop_fixture(&f);
+}
+
+static void test_goal_post_arm_rng_plus5(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.state.prev_phase = 0;
+  f.mr.render.camera.pos_x = 0xE0;       /* bounce_15758d = 0xE0-0xD0 = 0x10 */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0xC00;
+  f.mr.render.camera.prev_x = 0xE0;
+  f.mr.render.camera.prev_y = 0;
+  f.mr.render.camera.prev_z = 0xC00;
+  f.mr.render.camera.tracked = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.bounce_1575a7 = 0;                /* <= 0x840 -> site 5 silent, site 6 */
+  assert(fifa96_match_goal_arm(&f.mr) == 1);
+  assert(f.mr.stats.value[0][0] == 10);      /* +5 * 2 */
+  assert(f.mr.render.replay.activity_count[0][0] == 10);
+  drop_fixture(&f);
+}
+
 /* The `0x774DD` re-place block (reached from the `0x76FF4` latch): with
  * `[0x157C5C]` set the body clears it, re-places the camera, and runs the
  * **ungated self-actor** `0x77568 [0x157A83] = EBP` + the sit-7 emit `0x77589`,
@@ -7363,6 +7498,12 @@ int main(void) {
   test_action_1b_stage1_anim_table();
   test_action_1b_wide_route_binds_pan();
   test_action_1b_stats_phase10();
+  test_goal_post_arm_plus5();
+  test_goal_post_arm_neg100();
+  test_goal_post_arm_neg5();
+  test_goal_post_arm_prev_phase10_neg100();
+  test_goal_post_arm_distance_neg5();
+  test_goal_post_arm_rng_plus5();
   test_action_1b_replace_self_actor_reaches_emit();
   test_action_1b_mutual_exclusion_skips_wide();
   test_action_1c_runs_body();

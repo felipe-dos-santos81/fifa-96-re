@@ -5187,6 +5187,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->bounce_15759f = 0;
   mr->bounce_1575cc = 0;
   mr->bounce_1575d0 = 0;
+  mr->bounce_1575a7 = 0;       /* FU-71 §6 post-arm gate cells (Task 7; staged) */
+  mr->bounce_15758d = 0;
+  mr->flag_1575e8 = 0;
   mr->match1a_event_id = 0;
   mr->match1a_anim = 0;
   mr->match1d_event_id = 0;
@@ -5498,6 +5501,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->bounce_15759f = 0;
   mr->bounce_1575cc = 0;
   mr->bounce_1575d0 = 0;
+  mr->bounce_1575a7 = 0;       /* FU-71 §6 post-arm gate cells (Task 7; staged) */
+  mr->bounce_15758d = 0;
+  mr->flag_1575e8 = 0;
   mr->match1a_event_id = 0;
   mr->match1a_anim = 0;
   mr->match1d_event_id = 0;
@@ -6707,6 +6713,15 @@ static int16_t match_run_goal_abs_word(int32_t value) {
   return (int16_t)(uint16_t)magnitude;
 }
 
+/* Full-32-bit absolute value with the native NEG wrap (INT_MIN stays negative,
+ * so `abs(INT_MIN) > bound` is false) — the `0x71475..0x71487` /
+ * `0x71519..0x7152B` / `0x71536..0x71548` and the bounce-cell forms. */
+static int32_t match_run_goal_abs32(int32_t value) {
+  uint32_t magnitude = (uint32_t)value;
+  if (value < 0) magnitude = 0u - magnitude;
+  return (int32_t)magnitude;
+}
+
 int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z) {
   uint32_t magnitude = (uint32_t)z;
   int32_t zw;
@@ -6784,6 +6799,101 @@ static int match_run_goal_boundary(struct fifa96_match_run *mr) {
   return 0;
 }
 
+/* Slice-B Task 7 (FU-71 §6): `FUN_0008F078(record)` — the distance of `record`
+ * from its attacking goal line. `0x8F07B..0x8F0A5`: `EDX = [record]` (the team
+ * block), `side = byte[EDX+0x826]`; side != 0 -> `-0xB10 - record.pos_z`, else
+ * `0xB10 - record.pos_z` (`0x8F086/0x8F096` + the `+0x61` pos_z read). The
+ * gate is `> 0x1260` (site 1, 0x714A8). */
+static int32_t match_run_goal_line_dist(const struct fifa96_match_run *mr,
+                                        int32_t id) {
+  uint32_t team = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  const struct fifa96_match_entity *e =
+      &mr->entities.team[team].records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  int32_t z = e->pos_z;                    /* native +0x61 */
+  if (mr->entities.team[team].side != 0u) return -0xB10 - z;
+  return 0xB10 - z;
+}
+
+/* Slice-B Task 7 (FU-71 §6): the six post-arming activity-stat sites of
+ * FUN_0007131C, in native order, gated byte-exactly:
+ *   `0x714BE` +5   — phase 2, `abs(pos_x) > 0x1E0`, `[0x157A83]==0`,
+ *                    `[0x1577CA]!=0`, `FUN_0008F078(tracked) > 0x1260`.
+ *   `0x7157C` -100 — goal_zone 0, phase 0x10, `abs(pos_z) > 0x960`,
+ *                    `abs(pos_x) < 0x3C0`, `word(abs(pos_x)) < 0xD0`.
+ *   `0x715DD` -5   — goal_zone 0, phase != 0x10 (side check), the same
+ *                    distance gates, `abs(bounce) < 0x1E0 && bounce_1575a7 >
+ *                    0x840`.
+ *   `0x716C7` -100 — goal_zone 0, `word(abs(pos_x)) >= 0xD0`, the `0x71665`
+ *                    approach update, `bounce_15758d < 0x1E0`, prev or current
+ *                    phase 0x10.
+ *   `0x71732` -5   — prev and current phase != 0x10, `abs(bounce) < 0x1E0 &&
+ *                    bounce_1575a7 > 0x840`.
+ *   `0x717E3` +5   — `bounce_15758d != 0 && < 0x30` (the 0x52/0x44 height/
+ *                    speed/RNG sub-gate only selects the sibling 0x8F188
+ *                    event, never the stat).
+ * The `0x8F188`/`0x6E598` siblings, the `0x71400..0x71463` goal_zone!=0
+ * history-ring block (`0x928F0` push / `0x92998` -> `[0x15B43C]`), and the
+ * `0x71811..0x7189E` no-stat event arms stay numbered legs. */
+static void match_run_goal_post_arm(struct fifa96_match_run *mr) {
+  struct fifa96_camera *cam = &mr->render.camera;
+  int32_t tracked = cam->tracked;         /* [0x1577CA] */
+  int32_t pos_x = cam->pos_x;             /* [0x15774C] */
+  int32_t pos_z = cam->pos_z;             /* [0x157754] */
+  const int32_t valid = (tracked >= 0 &&
+      tracked < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS));
+
+  /* Site 1 (0x71468..0x714CE) — runs regardless of goal_zone. */
+  if (mr->state.phase == 2u && valid &&
+      mr->entities.controlled == FIFA96_MATCH_ENTITY_NONE &&
+      match_run_goal_abs32(pos_x) > 0x1E0 &&
+      match_run_goal_line_dist(mr, tracked) > 0x1260) {
+    (void)fifa96_match_run_stats_add(mr, tracked, 5);
+  }
+
+  /* Sites 2..6 require goal_zone == 0 (0x714D3) and a live tracked record. */
+  if (mr->goal_zone != 0u) return;
+  if (!valid) return;
+
+  /* Side check (0x714E0..0x71513): a non-0x10 phase needs side ^ (pos_z>0). */
+  if (mr->state.phase != 0x10u) {
+    uint32_t team = (uint32_t)tracked / FIFA96_MATCH_ENTITY_RECORDS;
+    uint32_t side = mr->entities.team[team].side;
+    if ((side ^ ((pos_z > 0) ? 1u : 0u)) == 0u) return;
+  }
+
+  /* Distance gates (0x71519..0x7155F). */
+  if (match_run_goal_abs32(pos_z) <= 0x960) return;
+  if (match_run_goal_abs32(pos_x) >= 0x3C0) return;
+  if (match_run_goal_abs_word(pos_x) >= 0xD0) {
+    /* The 0x71665 approach block — sites 4..6. */
+    int32_t new_dist = (int32_t)match_run_goal_abs_word(pos_x) - 0xD0;
+    if (mr->flag_1575e8 == 0u || new_dist < mr->bounce_15758d)
+      mr->bounce_15758d = new_dist;
+    if (mr->bounce_15758d >= 0x1E0) return;
+    if (mr->state.prev_phase == 0x10u || mr->state.phase == 0x10u) {
+      (void)fifa96_match_run_stats_add(mr, tracked, -100);   /* site 4 */
+      return;
+    }
+    if (match_run_goal_abs32(mr->bounce_15759f) < 0x1E0 &&
+        mr->bounce_1575a7 > 0x840) {
+      (void)fifa96_match_run_stats_add(mr, tracked, -5);     /* site 5 */
+      return;
+    }
+    if (mr->bounce_15758d != 0 && mr->bounce_15758d < 0x30)
+      (void)fifa96_match_run_stats_add(mr, tracked, 5);      /* site 6 */
+    return;
+  }
+
+  /* The word(abs(pos_x)) < 0xD0 arm — sites 2/3 (0x71565..0x71616). */
+  if (mr->state.phase == 0x10u) {
+    (void)fifa96_match_run_stats_add(mr, tracked, -100);     /* site 2 */
+    return;
+  }
+  if (match_run_goal_abs32(mr->bounce_15759f) < 0x1E0 &&
+      mr->bounce_1575a7 > 0x840)
+    (void)fifa96_match_run_stats_add(mr, tracked, -5);       /* site 3 */
+}
+
 int fifa96_match_goal_arm(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   /* FU-145 S2 / Slice-B Task 3 (FUN_0007131C 0x71325..0x7134F): the counter
@@ -6834,6 +6944,10 @@ int fifa96_match_goal_arm(struct fifa96_match_run *mr) {
   mr->goal_zone = (uint8_t)fifa96_match_goal_zone(mr->render.camera.pos_x,
                                                   mr->render.camera.pos_y,
                                                   mr->render.camera.pos_z);
+  /* Slice-B Task 7: the post-arm continuation — the six activity-stat arms at
+   * 0x71468..0x718A9 (after the native 0x713FC TEST/JZ continuation; the
+   * 0x71400..0x71463 goal_zone!=0 history-ring block stays a leg). */
+  match_run_goal_post_arm(mr);
   return 1;
 }
 

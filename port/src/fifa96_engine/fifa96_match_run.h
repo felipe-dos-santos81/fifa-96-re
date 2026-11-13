@@ -1158,6 +1158,20 @@ struct fifa96_match_run {
   int32_t bounce_15759f;
   int16_t bounce_1575cc;
   int16_t bounce_1575d0;
+  /* Slice-B Task 7 (FU-71 §6): the three remaining goal-bounce state cells the
+   * six `FUN_0007131C` post-arm `0x8ED40` sites gate on, beyond `bounce_15759f`
+   * above. `bounce_1575a7` = `[0x1575A7]` (signed goal-side distance, gate
+   * `> 0x840`; negated by FUN_00072AC4 `0x72BFD` for the away side),
+   * `bounce_15758d` = `[0x15758D]` (approach distance, written by the armer's
+   * `0x71689` as `word(abs(pos_x)) - 0xD0`, by FUN_000721C8 `0x72263`, and to
+   * `0x7FFFFFFF` by FUN_00072AC4 `0x72B7D`; gates `< 0x1E0` and
+   * `!= 0 && < 0x30`), `flag_1575e8` = `[0x1575E8]` (the approach latch byte,
+   * FUN_000721C8 `0x72210` / FUN_00072AC4 `0x72B77`; gates the `0x71689`
+   * min-update). Producers FUN_00072AC4 / FUN_000721C8 are unported (Task 9),
+   * so all three are staged zero like `bounce_15759f`; init/begin reset them. */
+  int32_t bounce_1575a7;
+  int32_t bounce_15758d;
+  uint8_t flag_1575e8;
   /* FU296 Seam A (phase-27 T3) + FU299 (phase-28 T2, Option B): the record-0
    * machine `FUN_000782D0` view the FU-141 walk steps in its `i == 0` branch.
    * `fifa96_match_run_init`/`_begin` reset it; `fifa96_match_run_frame` hands
