@@ -1318,6 +1318,19 @@ static void test_camera_walk_jitter_gates(void) {
   assert(memcmp(&rng, &snap, sizeof rng) == 0);   /* no draw */
 
   assert(fifa96_camera_walk_jitter(NULL, &rng) == -FIFA96_ERR_INVALID);
+
+  /* A NULL rng on the accepted gate (speed > 0xC and pos_y > 0xA0): the first
+   * draw fails -FIFA96_ERR_INVALID through fifa96_rng_step before any velocity
+   * store, so the velocities are left untouched. */
+  cam.pos_y = 0xB0;
+  cam.speed = 0x10;                  /* < 0x19: the modulo draw runs first */
+  cam.vel_x = 7;
+  cam.vel_z = 9;
+  assert(fifa96_camera_walk_jitter(&cam, NULL) == -FIFA96_ERR_INVALID);
+  assert(cam.vel_x == 7 && cam.vel_z == 9);
+  cam.speed = 0x20;                  /* >= 0x19: the & 7 draw runs first */
+  assert(fifa96_camera_walk_jitter(&cam, NULL) == -FIFA96_ERR_INVALID);
+  assert(cam.vel_x == 7 && cam.vel_z == 9);
 }
 
 /* 0x736cf..0x73722: the draw chain. Each `draw` is one `fifa96_rng_step`

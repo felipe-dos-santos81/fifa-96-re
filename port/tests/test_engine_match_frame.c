@@ -3018,14 +3018,18 @@ static void test_live_long_ball_mode40_band2_follow(void) {
       window++;
       if (mr.render.camera.pan_counter == 0) {
         assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
-        /* Slice-B Task 6: the head jitter (0x736B2..0x73723) fires on this
-         * window (speed 15 > 0xC and the FUN_00070B94 arc Y > 0xA0) and may
-         * INC/DEC vel_x by 1 before the walk; the follow re-seeds vel_x to 15
-         * after it, so the position advances by (15 -1|0|+1) * delta. */
         {
           int32_t advance = mr.render.camera.pos_x - prev_pos_x;
-          assert(advance >= 14 * (int32_t)mr.state.frame_delta);
-          assert(advance <= 16 * (int32_t)mr.state.frame_delta);
+          /* Slice-B Task 6: the head jitter (0x736B2..0x73723) fires on this
+           * window (speed 15 > 0xC and the FUN_00070B94 arc Y > 0xA0). It
+           * spends one modulo draw every such frame; exactly one deterministic
+           * frame (window 36) also passes the `& 7` and two `& 1` gates, INC
+           * vel_x 15->16 and DEC vel_z 0->-1, so that frame advances pos_x by
+           * 16*delta = 32 (pos_z by -2) instead of 15*delta = 30. Pinning the
+           * exact 32 proves the jitter is wired — a disconnected jitter leaves
+           * every frame at 30. */
+          assert(advance ==
+                 (window == 36 ? 16 : 15) * (int32_t)mr.state.frame_delta);
         }
         prev_pos_x = mr.render.camera.pos_x;
       }
