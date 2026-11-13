@@ -47,7 +47,7 @@ All reads this slice, program `/FIFA96.EXE`:
 | `0x77E38` | row-1C tail | phase-non-0x10 nonnegative product (`0x77E0B`; `0x77E19 IMUL`; `0x77E1E JL 0x77E55` fall-through; `0x77E31 MOV EDX,0x19`) | `EBP` (LOCAL_EBP) | `+0x19` | `fifa96_match_action_1C` | block missing (tail) | B5 |
 | `0x77E4E` | row-1C tail | phase-non-0x10 nonnegative product, optional tracked `+5` (`0x77E3D MOV ECX,[0x1577CA]`/`0x77E43 TEST`/`JZ`; `0x77E47 MOV EDX,0x5`) | `[0x1577CA]` (TRACKED) | `+5` | `fifa96_match_action_1C` | block missing (tail) | B5 |
 | `0x77E61` | row-1C tail | phase-non-0x10 negative product (`0x77E1E JL 0x77E55`; `0x77E55 MOV EDX,0x5`) | `EBP` (LOCAL_EBP) | `+5` | `fifa96_match_action_1C` | block missing (tail) | B5 |
-| `0x8AD54` | `FUN_0008A938` case 6 | `[0x157A9B] != NULL` (`0x8AD49 TEST EBP,EBP`/`0x8AD4B JZ 0x8AD69`; `0x8AD4D MOV EDX,0xFFFFFF6A`) | `[0x157A9B]` (REC_157A9B) | `-0x96` | `match_run_replay_note_goal` | block missing (non-NULL arm) | B6 |
+| `0x8AD54` | `FUN_0008A938` case 6 | `[0x157A9B] != NULL` (`0x8AD49 TEST EBP,EBP`/`0x8AD4B JZ 0x8AD69`; `0x8AD4D MOV EDX,0xFFFFFF6A`) | `[0x157A9B]` (REC_157A9B) | `-0x96` | `match_run_replay_note_goal` | unproved producer (open leg B0-L3) | B6 |
 
 > The `FUN_00072478` rows follow the FU-67 pairing and are **not** in address
 > order: `0x72A52` is the previous-phase-0x10 arm; `0x72649`/`0x72660` are the
@@ -83,8 +83,10 @@ The `0x779DE..0x77E8B` tail posts its four sites across three separate routes
   fabricated id.
 - **B0-L2 — `REC_15B43C`.** No match-run cell holds the last ring-search
   result's entity; B3 resolves it or carries a numbered leg.
-- **B0-L3 — `REC_157A9B`.** No producer in the engine (FU-72 B1 closure); B6
-  proves live/unreachable/unproved per design §6/B6 and §9.
+- **B0-L3 — `REC_157A9B`.** Resolved by Task 11 (B6): **unproved** — the native
+  arm is reachable through `FUN_00088940`'s team-mismatch write (`0x88A1C`,
+  FU145 L2/L3) but the engine has no `[0x157A9B]` cell, so it is neither live
+  nor census-proven dead. Stays an open leg; no test, no fabricated `-300`.
 - **B0-L4 — `REC_1575DA`.** No engine cell until the save block (B4) lands one.
 
 ## Task 4 (B1) outcome — the `FUN_00070DE0` boundary arm (2026-11-12)
@@ -160,6 +162,38 @@ are the `0x73756 CALL 0x72AC4` save-tail's `MOVSD` setup, not shadow stores.)
   event ring, and the engine's `fifa96_event_queue` has no driver for the
   camera-motion commit. The three shadow stores are ported and tested
   (`test_camera_commit_shadows`).
+
+## Task 11 outcome — the `FUN_0008A938` case-6 `[0x157A9B]` arm (2026-11-13)
+
+Fresh reads, program `/FIFA96.EXE` (Ghidra MCP, read-only):
+
+| read | result |
+|---|---|
+| `get_xrefs_to 0x157A9B` | 9 refs: WRITE `0x8895B`/`0x88A1C`/`0x88AA4` (all `FUN_00088940`); READ `0x88A3A`/`0x88A5B` (`FUN_00088940`), `0x4BB61`/`0x4BB7E` (`FUN_0004BB5C`), `0x8AD2E`/`0x8AD59` (`FUN_0008A938`). No engine-side producer. |
+| `disassemble_bytes 0x8AD2E` (len 0x80) | the case-6 arm: `0x8AD2E MOV EBP,[0x157A9B]`; `0x8AD49 TEST EBP,EBP`/`0x8AD4B JZ 0x8AD69`; non-NULL arm `0x8AD4D MOV EDX,0xFFFFFF6A` (`-0x96`)/`0x8AD52 MOV EAX,EBP`/`0x8AD54 CALL 0x8ED40`; NULL arm `0x8AD69 MOV EAX,[0x157A9F]`/`0x8AD77 CALL 0x8ECC4`. |
+| `disassemble_function 0x88940` | the producer: `0x8895B` clears `[0x157A9B]=0`; the team-mismatch arm `0x88A16..0x88A1C` writes `[0x157A9B]=[search+5]`; `0x88AA4` writes `[0x157A9B]=EAX` (0) on the no-search-result path; the same function writes `[0x157A9F]` at `0x889E0` and calls `FUN_0008A938` with `EAX=6` at `0x88B44`. |
+| `disassemble_function 0x4bb5c` | a consumer: reads `[0x157A9B]`, falls back to `[0x157A9F]` when NULL. |
+
+**Outcome 3 — unproved (open leg), no port, no test.**
+
+- The native arm **is reachable**: `FUN_00088940`'s team-mismatch arm writes
+  `[0x157A9B]` non-NULL at `0x88A1C` and then reaches `0x88B44 CALL 0x8A938`
+  with `EAX=6`. So this is **not** a census-proven-unreachable (native-dead)
+  site — and it is **not** engine-live, since the engine has no `[0x157A9B]`
+  cell.
+- The engine's derived goal scanner `fifa96_match_run_goal_scan` (FU-145 S2)
+  writes only `mr->goal_record` (`[0x157A9F]`); the `[0x157A9B]` producer chain
+  — the unported `FUN_00092998(1,4,-1)` possession search and the
+  team-mismatch arm — is FU145 L2/L3. The `FIFA96_CAMERA_STAT_REC_157A9B` kind
+  stays OPEN in the drain (skipped, never entity 0).
+- **Why no test:** outcome 1 (live) requires an engine-produced `[0x157A9B]`
+  cell and outcome 2 (dead) requires native unreachability; neither holds. A
+  `-300` test would have to fabricate a producer — forbidden. No code is added.
+
+**Row/leg update.** The `0x8AD54` row's port status moves from "block missing
+(non-NULL arm)" to **unproved producer — open leg B0-L3** (FU145 L2/L3). B0-L3
+is resolved *unproved* and stays open; the NULL branch
+(`fifa96_match_run_stats_bump`) remains the engine's live scorer path.
 
 ## Provenance
 

@@ -744,3 +744,39 @@ table (`TRACKED`, `BALL_SUB7A6`, `REC_15B43C`, `REC_157A9B`, `LOCAL_EBP`,
 row-1B tail sites `0x775FD`/`0x77613` (FU285-L8) and the two `FUN_0007A490`
 tail sites `0x7ADD2`/`0x7AE04`. No completion-number movement and no golden
 re-pin.
+
+## Closure (2026-11-13) — `FUN_0008A938` case-6 `[0x157A9B]` arm is an open leg
+
+Slice-B Task 11 (design `2026-11-12-open-items-closure-slice-b-design.md` §B6)
+resolves the `0x8AD54` `[0x157A9B] != NULL` arm. Outcome 3 (unproved): the site
+is neither engine-live nor native-dead, so it stays a numbered open leg and no
+code or test is added.
+
+**Fresh reads** (program `/FIFA96.EXE`, Ghidra MCP, read-only):
+
+- `get_xrefs_to 0x157A9B` → 9 refs. Writers: `0x8895B`/`0x88A1C`/`0x88AA4`,
+  all in `FUN_00088940` (the goal scanner). Readers: `0x88A3A`/`0x88A5B`
+  (`FUN_00088940`), `0x4BB61`/`0x4BB7E` (`FUN_0004BB5C` — a consumer that
+  falls back to `[0x157A9F]` when NULL), `0x8AD2E`/`0x8AD59` (`FUN_0008A938`
+  case 6).
+- `disassemble_bytes 0x8AD2E` (len 0x80): `0x8AD2E MOV EBP,[0x157A9B]`;
+  `0x8AD49 TEST EBP,EBP` / `0x8AD4B JZ 0x8AD69`; the non-NULL arm
+  `0x8AD4D MOV EDX,0xFFFFFF6A` (`-0x96`) / `0x8AD52 MOV EAX,EBP` /
+  `0x8AD54 CALL 0x8ED40`; the NULL arm `0x8AD69 MOV EAX,[0x157A9F]` /
+  `0x8AD77 CALL 0x8ECC4`.
+- `disassemble_function 0x88940`: `0x8895B` clears `[0x157A9B]=0`; the
+  team-mismatch arm writes `[0x157A9B]=[search+5]` at `0x88A1C`; `0x88AA4`
+  writes `[0x157A9B]=EAX` (0) on the no-search-result path. The same function
+  writes `[0x157A9F]` at `0x889E0` and calls `FUN_0008A938` with `EAX=6` at
+  `0x88B44` — so the non-NULL arm **is reachable** natively.
+
+**Conclusion.** The native arm is reachable (not census-proven unreachable),
+and the engine has no `[0x157A9B]` cell: the derived goal scanner
+`fifa96_match_run_goal_scan` (FU-145 S2) writes only `goal_record`
+(`[0x157A9F]`), leaving the `[0x157A9B]` producer chain — the unported
+`FUN_00092998(1,4,-1)` possession search and the team-mismatch arm (FU145
+L2/L3) — unmodelled. Outcome 1 (live) and outcome 2 (dead) both fail, so the
+arm stays an open leg; a `-300` test would need a fabricated producer and is
+not added. The NULL branch (`fifa96_match_run_stats_bump`) remains the live
+scorer path, and the `FIFA96_CAMERA_STAT_REC_157A9B` kind stays OPEN in
+`fifa96_match_run_stats_drain` (skipped, never entity 0). No code change.
