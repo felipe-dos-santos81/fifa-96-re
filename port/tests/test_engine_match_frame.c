@@ -8461,9 +8461,9 @@ static void test_screen_advance_ring(void) {
  * camera lands out of bounds, so the frame's armer fires on the fed pose (the
  * arming gate is the native word-truncated |camZ| > 0xB20). The classifier
  * reports zone 0 (|z| >= 0xB90), so the scan takes the corner/goal-kick arm
- * (FU-149 P1): snap z positive and ball side 0 (the fresh run's [0x1577CA]
- * stand-in is unset) -> cond true -> sit 4, queued id 0 for the side-1 kick in
- * the byte-1 (Practise) session (staged; FU-166).
+ * (FU-149 P1): snap z positive and the derived ball side 1 make cond false ->
+ * sit 3, queued id 9 for the side-0 corner in the byte-1 (Practise) session
+ * (staged; FU-166/FU-171).
  *
  * Slice-B Task 4: the armer's FUN_00070DE0 reposition runs first, so the
  * fixture stages the camera far-out (z = 0xC00) — the pose's own classify word

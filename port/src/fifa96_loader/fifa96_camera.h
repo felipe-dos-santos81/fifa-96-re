@@ -10,6 +10,10 @@ struct fifa96_rng;
  * FUN_000700F4 / fifa96_camera_init, which does not reset them. The engine
  * stages phase/delta/controlled and the two side bytes before each call. */
 #define FIFA96_CAMERA_SAVE_ENTITY_NONE (-1)
+/* Adapter-only unknown marker for [[record]+0x7A6]. That native value is the
+ * ball-record pointer, not an opposing team/entity id; unlike NONE, this does
+ * not claim that the native pointer is NULL. */
+#define FIFA96_CAMERA_SAVE_BALL_RECORD_UNKNOWN (-2)
 
 #define FIFA96_CAMERA_SAVE_LANES 11
 #define FIFA96_CAMERA_SAVE_LEG_MAX 40
@@ -70,7 +74,7 @@ typedef struct fifa96_camera_save_state {
   uint8_t lanes_known;           /* 0 parks 0x72F69..0x72FCC */
   int32_t team_1575d2;
   uint8_t rec_side_1575d2;       /* [[0x1575D2]] + 0x826 */
-  int32_t opponent_1575d6;
+  int32_t ball_record_1575d6;    /* [[0x1575DA]+0x7A6]; opaque/unknown */
   int32_t rec_1575da;
   int32_t controlled_1575de;
   uint8_t mode_15758c;

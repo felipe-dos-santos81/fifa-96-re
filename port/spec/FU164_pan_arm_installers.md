@@ -576,3 +576,14 @@ FU-71 leg 9.6) and the other §3 requirement lists are unchanged and remain open
 legs. Completion unchanged (78/78, 61/80 wired / 64/80 install-live); M2
 re-pinned only for the save-tail native `0x72CF9`/`0x7309E` draws (SHA
 `3bdfbbe…`).
+
+## Whole-slice review erratum (2026-11-13) — residual wall-arm legs only
+
+> The angle arm itself (`0x719A0..0x71B98`, FU-71 leg 9.6) and the other §3
+> requirement lists are unchanged and remain open legs.
+
+That wording is too broad: `match_run_goal_boundary` invokes
+`fifa96_camera_wall_arm`, and the continuation drives `fifa96_camera_event_set`.
+The residual legs are the `0x71B5B`/`0x974DC` audio sink (only its announce
+token is recorded), the unread `0x1577B8` `FUN_000CD514` store (FU168-L2), and
+the separate §3 requirements. The whole `0x719A0..0x71B98` arm is not open.

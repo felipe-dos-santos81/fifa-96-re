@@ -203,3 +203,15 @@ and `port/spec/FU72_ring_stats.md` (append-only). The 19 sites are the fixed
 list `0x70F44, 0x70FCE, 0x714BE, 0x7157C, 0x715DD, 0x716C7, 0x71732, 0x717E3,
 0x72649, 0x72660, 0x7270F, 0x72A52, 0x72DE3, 0x72ED1, 0x77DFD, 0x77E38,
 0x77E4E, 0x77E61, 0x8AD54` — all 19 unique, no duplicates.
+
+## Whole-slice review errata (2026-11-13)
+
+The historical rows above stay unchanged; these corrections apply to them:
+
+- **`0x8AD54` owner.** The census row names `match_run_replay_note_goal`; the
+  case-6 owner is `match_run_goal_fallback` (`fifa96_match_run.c`, the direct
+  situation-6 fallback), as Task 11's outcome above also establishes.
+- **Ball-record citation.** The `BALL_SUB7A6` entity row's FU-67 structural
+  proof is supplemented by the stronger identity evidence in FU-220 §2 (record
+  `+0x00` team pointer, team `+0x7A6` ball record) and §4(a) (`0x84FBF MOV
+  EAX,[EAX+0x7A6]`). This changes the citation, not the OPEN verdict.

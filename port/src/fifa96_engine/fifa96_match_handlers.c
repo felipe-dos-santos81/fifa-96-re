@@ -6014,8 +6014,10 @@ static int fifa96_match_action_1C(struct fifa96_match_run *mr) {
    * re-gate on a nonzero `word[+0x81]`. The 0x8F188 requests (0x77E2C,
    * 0x77E6A) and the 0x779EC..0x77D67 anim/camera body stay FU186-L2 legs. */
   if (r->timer81 == 0u) {                           /* 0x779DE */
-    int32_t product = (int32_t)mr->render.camera.vel_x *
-                      mr->render.camera.pos_z;      /* 0x77DE6/0x77E19 IMUL */
+    int32_t product = (int32_t)((uint32_t)mr->render.camera.vel_x *
+                                (uint32_t)mr->render.camera.pos_z);
+    /* 0x77DE6/0x77E19 IMUL: unsigned intermediates retain the low 32 bits;
+     * the signed TEST/JL/JGE comparisons consume that wrapped value. */
     if (mr->state.phase == 0x10u) {                 /* 0x77DD3 CMP EAX,0x10 */
       if (product < 0) {                            /* 0x77DE9 TEST/0x77DEB JGE */
         (void)fifa96_match_run_stats_add(mr, r->entity_id, 0x64); /* 0x77DFD */

@@ -2992,7 +2992,7 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->camera.save.target_157a8b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   r->camera.save.rec_1575da = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   r->camera.save.team_1575d2 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
-  r->camera.save.opponent_1575d6 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  r->camera.save.ball_record_1575d6 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   r->camera.save.controlled_1575de = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   r->camera.save.lane_best_a_1575e9 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   r->camera.save.lane_best_b_1575ed = FIFA96_CAMERA_SAVE_ENTITY_NONE;
@@ -6879,9 +6879,9 @@ static int32_t match_run_goal_line_dist(const struct fifa96_match_run *mr,
  *                    phase 0x10.
  *   `0x71732` -5   — prev and current phase != 0x10, `abs(bounce) < 0x1E0 &&
  *                    bounce_1575a7 > 0x840`.
- *   `0x717E3` +5   — `bounce_15758d != 0 && < 0x30` (the 0x52/0x44 height/
- *                    speed/RNG sub-gate only selects the sibling 0x8F188
- *                    event, never the stat).
+ *   `0x717E3` +5   — `bounce_15758d != 0 && < 0x30`; when tracked |pos_z| <
+ *                    0x750 and signed speed > 0x17, the 0x717AF draw runs
+ *                    before the sibling 0x8F188 selection and unconditional stat.
  * The `0x8F188`/`0x6E598` siblings, the `0x71400..0x71463` goal_zone!=0
  * history-ring block (`0x928F0` push / `0x92998` -> `[0x15B43C]`), and the
  * `0x71811..0x7189E` no-stat event arms stay numbered legs. */
@@ -6930,8 +6930,18 @@ static void match_run_goal_post_arm(struct fifa96_match_run *mr) {
       (void)fifa96_match_run_stats_add(mr, tracked, -5);     /* site 5 */
       return;
     }
-    if (mr->bounce_15758d != 0 && mr->bounce_15758d < 0x30)
+    if (mr->bounce_15758d != 0 && mr->bounce_15758d < 0x30) {
+      const struct fifa96_match_entity *e =
+          &mr->entities.team[(uint32_t)tracked / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)tracked % FIFA96_MATCH_ENTITY_RECORDS];
+      if (match_run_goal_abs32(e->pos_z) < 0x750 && (int16_t)cam->speed > 0x17) {
+        uint16_t draw = 0;
+        /* 0x717AF: the draw's low bits select only the unported 0x8F188
+         * sibling; consuming it here preserves every later RNG consumer. */
+        (void)fifa96_rng_step(&mr->rng, &draw);
+      }
       (void)fifa96_match_run_stats_add(mr, tracked, 5);      /* site 6 */
+    }
     return;
   }
 

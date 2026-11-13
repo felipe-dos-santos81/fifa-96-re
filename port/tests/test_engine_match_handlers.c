@@ -5785,6 +5785,7 @@ static void test_goal_post_arm_distance_neg5(void) {
 
 static void test_goal_post_arm_rng_plus5(void) {
   struct fixture f;
+  uint16_t next;
   make_fixture(&f);
   f.mr.state.phase = 2;
   f.mr.state.prev_phase = 0;
@@ -5795,11 +5796,16 @@ static void test_goal_post_arm_rng_plus5(void) {
   f.mr.render.camera.prev_y = 0;
   f.mr.render.camera.prev_z = 0xC00;
   f.mr.render.camera.tracked = 0;
+  f.mr.render.camera.speed = 0x18;        /* 0x717AA: signed speed > 0x17 */
   f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].records[0].pos_z = 0x100; /* tracked |pos_z| < 0x750 */
   f.mr.bounce_1575a7 = 0;                /* <= 0x840 -> site 5 silent, site 6 */
+  assert(fifa96_rng_seed(&f.mr.rng, 0) == FIFA96_OK);
   assert(fifa96_match_goal_arm(&f.mr) == 1);
   assert(f.mr.stats.value[0][0] == 10);      /* +5 * 2 */
   assert(f.mr.render.replay.activity_count[0][0] == 10);
+  assert(fifa96_rng_step(&f.mr.rng, &next) == FIFA96_OK);
+  assert(next == 0x725);  /* second word: the 0x717AF draw consumed the first */
   drop_fixture(&f);
 }
 
@@ -6443,6 +6449,26 @@ static void test_action_1c_tail_phase10_negative(void) {
   assert(f.mr.stats.value[0][0] == 200);        /* 0x64 * 2 */
   assert(f.mr.render.replay.activity_count[0][0] == 200);
   assert(f.mr.stats.value[0][1] == 0);          /* no tracked +5 */
+  drop_fixture(&f);
+}
+
+/* 0x77DE6 IMUL keeps the low 32 bits: INT16_MAX * 0x10003 = 0x80007FFD,
+ * whose signed wrapped value is negative even though the mathematical product
+ * exceeds INT32_MAX. Native therefore takes the phase-0x10 +0x64 route. */
+static void test_action_1c_tail_imul_wrap(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.delta = 0;
+  f.mr.state.phase = 0x10;
+  f.mr.render.camera.vel_x = INT16_MAX;
+  f.mr.render.camera.pos_z = 0x10003;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(f.mr.stats.value[0][0] == 200);
+  assert(f.mr.render.replay.activity_count[0][0] == 200);
   drop_fixture(&f);
 }
 
@@ -7705,6 +7731,7 @@ int main(void) {
   test_action_1c_offtarget_rotated_arm();
   test_action_1c_offtarget_anim_ids();
   test_action_1c_tail_phase10_negative();
+  test_action_1c_tail_imul_wrap();
   test_action_1c_tail_nonphase10_positive();
   test_action_1c_tail_nonphase10_negative();
   test_action_1c_tail_phase10_nonnegative();

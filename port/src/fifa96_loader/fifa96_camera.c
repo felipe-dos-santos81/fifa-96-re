@@ -2513,11 +2513,6 @@ static int32_t camera_save_team_for_record(int32_t id) {
                                                  : FIFA96_CAMERA_SAVE_ENTITY_NONE;
 }
 
-static int32_t camera_save_opponent_for_record(int32_t id) {
-  int32_t team = camera_save_team_for_record(id);
-  return team >= 0 ? 1 - team : FIFA96_CAMERA_SAVE_ENTITY_NONE;
-}
-
 static void camera_save_leg(fifa96_camera_save_state *s, uint8_t kind,
                             uint32_t site, int32_t a, int32_t b, int32_t c) {
   if (s->leg_count < FIFA96_CAMERA_SAVE_LEG_MAX) {
@@ -2778,7 +2773,10 @@ initialize:
     /* 0x72BB1..0x72BB7 and 0x72C09..0x72C1B are NULL-guarded stores. */
     s->team_1575d2 = camera_save_team_for_record(s->rec_1575da);
     s->rec_side_1575d2 = s->tracked_side;
-    s->opponent_1575d6 = camera_save_opponent_for_record(s->rec_1575da);
+    /* 0x72C13..0x72C1B stores [[rec]+0x7A6], the ball-record pointer.
+     * Its producer is not projected into the engine, so record UNKNOWN rather
+     * than manufacturing an opposing team/player id. */
+    s->ball_record_1575d6 = FIFA96_CAMERA_SAVE_BALL_RECORD_UNKNOWN;
   }
   {
     /* 0x72BD5: the additional history-producer leg returns its staged native
@@ -2938,9 +2936,10 @@ finish:
     s->age_157a97 = camera_save_add32(s->age_157a97, s->frame_delta_157a64);
     camera_save_late(cam, s);
   } else if (camera_save_entity_valid(s->target_157a8b)) {
-    /* 0x7369E: the sanctioned FUN_00072270 leg and its opponent argument. */
+    /* 0x73696..0x7369E passes [[0x157A8B]+0x7A6], the same opaque ball-record
+     * kind as 0x72C1B; its unprojected producer stays explicitly UNKNOWN. */
     camera_save_leg(s, FIFA96_CAMERA_SAVE_LEG_LANES, 0x7369E,
-                    camera_save_opponent_for_record(s->target_157a8b), 0, 0);
+                    FIFA96_CAMERA_SAVE_BALL_RECORD_UNKNOWN, 0, 0);
   }
   return FIFA96_OK;
 }
@@ -2979,7 +2978,7 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
   /* 0x70e3c TEST AL,0x8: the bit-0x8 boundary arm (Slice-B Task 4). */
   if ((changed & 0x8u) != 0) {
     int32_t target_z;
-    int32_t dz;
+    int32_t dz, dx, dy, quotient;
     int16_t dz_word;
     uint16_t flags_bnd = 0;
     /* 0x70e44..0x70e79: the boundary z — +-0xB0F when the previous triple was
@@ -2989,18 +2988,21 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
     else
       target_z = (cur[2] >= 0) ? 0xB11 : -0xB11;
     /* 0x70e81..0x70ef9: project the prev->cur segment onto z = target_z. The
-     * numerator is the native 32-bit IMUL ((cur - prev) * sext16(target_z -
-     * prev_z), truncated) and the quotient the 32-bit IDIV; the int64 hold
-     * only avoids the C UB of the IMUL wrap. */
-    dz = cur[2] - prev[2];
+     * SUB/IMUL/ADD operations retain their low 32 bits before FUN_000A2AEE's
+     * signed IDIV. Unsigned intermediates reproduce that wrap without C UB. */
+    dz = (int32_t)((uint32_t)cur[2] - (uint32_t)prev[2]);
+    dx = (int32_t)((uint32_t)cur[0] - (uint32_t)prev[0]);
+    dy = (int32_t)((uint32_t)cur[1] - (uint32_t)prev[1]);
     dz_word = (int16_t)((uint16_t)target_z - (uint16_t)prev[2]);
     if (dz_word == 0 || dz == 0) {
       bnd[0] = prev[0];
       bnd[1] = prev[1];
       bnd[2] = target_z;
     } else {
-      bnd[0] = prev[0] + (int32_t)((int64_t)(cur[0] - prev[0]) * dz_word) / dz;
-      bnd[1] = prev[1] + (int32_t)((int64_t)(cur[1] - prev[1]) * dz_word) / dz;
+      quotient = (int32_t)((uint32_t)dx * (uint32_t)(int32_t)dz_word) / dz;
+      bnd[0] = (int32_t)((uint32_t)prev[0] + (uint32_t)quotient);
+      quotient = (int32_t)((uint32_t)dy * (uint32_t)(int32_t)dz_word) / dz;
+      bnd[1] = (int32_t)((uint32_t)prev[1] + (uint32_t)quotient);
       bnd[2] = target_z;
     }
     (void)fifa96_camera_classify(bnd, &flags_bnd);
@@ -3062,16 +3064,19 @@ step_back:
      * by FUN_0008DC50(delta, 1) per axis while the candidate keeps the
      * origin's flags; adopt each adopted candidate. */
     int32_t adopted[3] = {origin[0], origin[1], origin[2]};
-    int32_t delta[3] = {cur[0] - origin[0], cur[1] - origin[1], cur[2] - origin[2]};
+    int32_t delta[3] = {
+        (int32_t)((uint32_t)cur[0] - (uint32_t)origin[0]),
+        (int32_t)((uint32_t)cur[1] - (uint32_t)origin[1]),
+        (int32_t)((uint32_t)cur[2] - (uint32_t)origin[2])};
     for (;;) {
       int32_t candidate[3];
       delta[0] = fifa96_camera_shift_step(delta[0], 1);
       delta[1] = fifa96_camera_shift_step(delta[1], 1);
       delta[2] = fifa96_camera_shift_step(delta[2], 1);
       if (delta[0] == 0 && delta[1] == 0 && delta[2] == 0) break;
-      candidate[0] = adopted[0] + delta[0];
-      candidate[1] = adopted[1] + delta[1];
-      candidate[2] = adopted[2] + delta[2];
+      candidate[0] = (int32_t)((uint32_t)adopted[0] + (uint32_t)delta[0]);
+      candidate[1] = (int32_t)((uint32_t)adopted[1] + (uint32_t)delta[1]);
+      candidate[2] = (int32_t)((uint32_t)adopted[2] + (uint32_t)delta[2]);
       {
         uint16_t candidate_flags = 0;
         (void)fifa96_camera_classify(candidate, &candidate_flags);

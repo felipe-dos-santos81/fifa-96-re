@@ -12735,3 +12735,19 @@ movement. The four non-Slice-B `0x8ED40` sites (`0x775FD`/`0x77613`,
 `0x7ADD2`/`0x7AE04`) remain carried, unchanged. Record: census
 `2026-11-12-slice-b-camera-census.md`, FU72/FU-351/FU145/FU164/FU186 append
 closures, PROGRESS Phase 123.
+
+**Phase 123 whole-slice review errata (2026-11-13).** Two closure descriptions
+are narrowed without rewriting the record above:
+
+> `0x72649` +0x32 (unwired — its two intervening early-exit arms gate on the
+> unported history/search result, so the port treats them not-taken and reaches
+> the pair directly, a documented stat-only narrowing)
+
+The port cannot decide those early exits, so it does not emit the pair;
+`0x72649` remains unwired.
+
+> The `0x779DE..0x77E8B` tail (and its three stat routes) is now closed.
+
+Only the three stat routes and the post-stat timer81/keeper_latch tail are
+closed. The `0x779EC..0x77D67` anim/camera body and the `0x8F188` requests
+remain FU186-L2 legs; the entire native tail is not claimed closed.

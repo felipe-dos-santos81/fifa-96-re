@@ -1393,7 +1393,7 @@ static void camera_save_reset_for_test(fifa96_camera *cam) {
   cam->save.target_157a8b = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   cam->save.rec_1575da = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   cam->save.team_1575d2 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
-  cam->save.opponent_1575d6 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
+  cam->save.ball_record_1575d6 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   cam->save.controlled_1575de = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   cam->save.lane_best_a_1575e9 = FIFA96_CAMERA_SAVE_ENTITY_NONE;
   cam->save.lane_best_b_1575ed = FIFA96_CAMERA_SAVE_ENTITY_NONE;
@@ -1443,9 +1443,14 @@ static void test_camera_save_tail(void) {
   assert(fifa96_camera_save_tail(&cam, &stats) == FIFA96_OK);
   assert(stats.count == 0 && stats.overflow == 0);
   assert(cam.save.rec_1575da == 3);
-  assert(cam.save.team_1575d2 == 0 && cam.save.opponent_1575d6 == 1);
+  assert(cam.save.team_1575d2 == 0);
+  assert(cam.save.ball_record_1575d6 == FIFA96_CAMERA_SAVE_BALL_RECORD_UNKNOWN);
   assert(cam.save.target_157a8b == 3);
   assert(cam.save.tracked_157a87 == FIFA96_CAMERA_SAVE_ENTITY_NONE);
+  assert(cam.save.leg_count == 2 &&
+         cam.save.legs[1].kind == FIFA96_CAMERA_SAVE_LEG_LANES &&
+         cam.save.legs[1].site == 0x7369E);
+  assert(cam.save.legs[1].a == FIFA96_CAMERA_SAVE_BALL_RECORD_UNKNOWN);
   assert(cam.save.mode_15758c == 1 && cam.save.flag_15759e == 0);
   assert(cam.save.flag_1575e8 == 0 && cam.save.approach_15758d == 0x7FFFFFFF);
   assert(cam.save.prev_x_15759f == 0 && cam.save.prev_y_1575a3 == 0 &&
@@ -2116,6 +2121,36 @@ static void test_reposition_boundary_no_event(void) {
   assert(stats.count == 0);
   assert(events == 0 && code == 0);
   assert(cam.pos_x == 0 && cam.pos_y == 0x80 && cam.pos_z == 0xB40);
+}
+
+/* 0x70EC2/0x70EDE retain the low 32 bits before FUN_000A2AEE's IDIV. Here
+ * 0x3C3C3C40 * 0x11 = 0x400000040, which wraps to 0x40 and divides by dz 0x40
+ * to boundary_x = 1 (not the untruncated quotient 0x10000001). The clean
+ * boundary therefore takes the high +3 arm and lands at (1, 0x94, 0xAD4). */
+static void test_reposition_boundary_imul_wrap(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_stat_events stats;
+  uint8_t events = 0, code = 0;
+  memset(&stats, 0, sizeof stats);
+  fifa96_camera_init(&cam, 0x3C3C3C40, 0xA0, 0xB40);
+  assert(fifa96_camera_reposition(&cam, 0, 0x90, 0xB00, NULL, NULL, &events,
+                                  &code, &stats) == 1);
+  assert(stats.count == 1 && stats.event[0].site == 0x70F44 &&
+         stats.event[0].delta == 3);
+  assert(events == 0x49 && code == 0x40);
+  assert(cam.pos_x == 1 && cam.pos_y == 0x94 && cam.pos_z == 0xAD4);
+
+  /* The native SUBs and ADDs wrap too. cur - prev = 0x10000000 and its *0x11
+   * product = 0x110000000 -> 0x10000000; the projected x then wraps to
+   * 0x803FFFFF. No candidate can rejoin the origin class, so the step-back
+   * leaves the original triple unchanged without signed-overflow UB. */
+  memset(&stats, 0, sizeof stats);
+  events = code = 0;
+  fifa96_camera_init(&cam, (int32_t)0x8FFFFFFF, 0xA0, 0xB40);
+  assert(fifa96_camera_reposition(&cam, INT32_MAX, 0x90, 0xB00, NULL, NULL,
+                                  &events, &code, &stats) == 1);
+  assert(stats.count == 0 && events == 0 && code == 0);
+  assert(cam.pos_x == INT32_MAX && cam.pos_y == 0x90 && cam.pos_z == 0xB00);
 }
 
 /* ---- FU-152 §2.9 (T2) + FU303/FU294-L2 (phase-28 T8): FUN_00071DF4's
@@ -3988,6 +4023,7 @@ int main(void) {
   test_reposition_boundary_stat_high();
   test_reposition_boundary_stat_low();
   test_reposition_boundary_no_event();
+  test_reposition_boundary_imul_wrap();
   test_rate_table_arm();
   test_event_dir_byte();
   test_event_band_f6();
