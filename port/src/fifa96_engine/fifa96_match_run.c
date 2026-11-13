@@ -1454,6 +1454,33 @@ static uint16_t match_run_frame_aux(uint8_t anim_id, uint8_t frame) {
                     ((uint16_t)match_run_frame_records[off + 1u] << 8));
 }
 
+/* FU-186-L2 (Slice-B Task 10): FUN_0006E444 (0x6E444..0x6E488) — the
+ * animation-duration summation the row-1C tail calls at 0x77E74 to reseed
+ * `timer81`. Native: `ESI = rec+0x28`, `idx = (int8)byte[rec+0x3D]` (0x6E45E
+ * MOVSX AX, byte[EAX+0x15]), `ptr = [rec+0x28]`, `base = [ptr+0x4]`
+ * (frame_table), `count = byte[ptr+0x1]` (last_frame); then sums
+ * `word[base + j*5]` (the frame duration word) for `j = idx..count` and
+ * returns `((uint16)sum) >> 4` (0x6E480 SHR AX,0x4). The engine models the
+ * native row pointer / frame byte as `anim_id` / `frame`; the frame durations
+ * come from the ported `match_run_frame_records`. */
+uint16_t fifa96_match_run_anim_duration(uint8_t anim_id, uint8_t frame) {
+  fifa96_anim_row row;
+  uint32_t sum = 0;
+  int32_t idx = (int32_t)(int8_t)frame;   /* 0x6E45E MOVSX AX, byte[rec+0x3D] */
+  if (idx < 0) return 0;                  /* native OOB read; never live */
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  (int32_t)anim_id, &row) != FIFA96_OK)
+    return 0;
+  if (row.frame_table < 0x10E200u) return 0;
+  for (; idx <= (int32_t)row.last_frame; idx++) {   /* 0x6E479 CMP AX,CX / JLE */
+    uint32_t off = (row.frame_table - 0x10E200u) + (uint32_t)idx * 5u;
+    if (off + 2u > (uint32_t)sizeof match_run_frame_records) break;
+    sum += (uint16_t)match_run_frame_records[off] |        /* 0x6E46A word[EDX] */
+           ((uint16_t)match_run_frame_records[off + 1u] << 8);
+  }
+  return (uint16_t)(((uint16_t)sum) >> 4);                /* 0x6E480 SHR AX,0x4 */
+}
+
 /* FU-159 §4.1 (T3): the native +0x44 producer — `row_flags & 1` written by
  * every row install (`FUN_0006E598` `0x6E6CC`; pool twin `FUN_0008DF84`
  * `0x8DFC1`). The engine derives it from the live `anim_id` (the same value

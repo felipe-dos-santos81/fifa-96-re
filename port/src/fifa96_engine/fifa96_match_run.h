@@ -2336,6 +2336,16 @@ int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e);
  * 0 (leaving `*bank_index` untouched) on a miss or a NULL `bank_index`. */
 int fifa96_match_run_anim_bank(int32_t anim_id, uint8_t *bank_index);
 
+/* FU-186-L2 (Slice-B Task 10): FUN_0006E444 — the animation-duration
+ * summation the row-1C tail (`0x77E6F..0x77E8B`) calls to reseed `timer81`.
+ * Reads the record's anim row pointer (`[rec+0x28]`) and frame byte
+ * (`byte[rec+0x3D]`, the engine's `anim_id`/`frame` byte models), sums the
+ * `duration` word of every 5-byte frame record from the current frame through
+ * the row's `last_frame`, and returns `((uint16_t)sum) >> 4` (0x6E480 SHR
+ * AX,0x4). Returns 0 on a row/frame outside the ported bounds (the native
+ * negative-frame read is out-of-bounds and never live). */
+uint16_t fifa96_match_run_anim_duration(uint8_t anim_id, uint8_t frame);
+
 /* M2 phase-9 T3 (FU-152 §2.9 / FU-145 §1.2): the every-frame FUN_00071DF4
  * call site (FUN_000736AC 0x739C6..0x73B6B). Runs the ported first arm when
  * the call-site gates hold — `pan_counter == 0`, the bearing word

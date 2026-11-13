@@ -6247,7 +6247,8 @@ static void test_action_1c_runs_body(void) {
   assert(f.mr.record.ran == 1u);          /* 0x7776A +0x9E */
   assert(f.mr.record.stage92 == 2u);      /* 0 -> 1 -> 2 */
   assert(f.mr.record.timer89 == 0);       /* 0x77777 / 0x779B9 */
-  assert(f.mr.keeper_latch[2] == 0);      /* 0x157C56 cleared */
+  assert(f.mr.keeper_latch[2] == 1);      /* stage 0 clears it (0x77783); the
+                                             tail re-sets it (0x77E7E) */
   assert(f.mr.keeper_latch[1] == 1);      /* 0x157C55 survives */
   drop_fixture(&f);
 }
@@ -6398,6 +6399,27 @@ static void test_action_1c_offtarget_anim_ids(void) {
   run_1c_offtarget_anim_case(0x000, 0x180, 0x3D, 0xFF00u); /* >=0x40, cross 0 */
 }
 
+/* Whole-table stats snapshot (the drain test's helper, shared by the no-stat
+ * tail control): captures `mr->stats` and the replay `activity_count` mirror. */
+struct stats_snapshot {
+  struct fifa96_match_stats stats;
+  int32_t activity[2][FIFA96_CAMERA_REPLAY_SLOTS];
+};
+
+static void stats_snapshot_take(const struct fifa96_match_run *mr,
+                                struct stats_snapshot *snap) {
+  memcpy(&snap->stats, &mr->stats, sizeof snap->stats);
+  memcpy(snap->activity, mr->render.replay.activity_count,
+         sizeof snap->activity);
+}
+
+static int stats_snapshot_equal(const struct fifa96_match_run *mr,
+                                const struct stats_snapshot *snap) {
+  return memcmp(&snap->stats, &mr->stats, sizeof snap->stats) == 0 &&
+         memcmp(snap->activity, mr->render.replay.activity_count,
+                sizeof snap->activity) == 0;
+}
+
 /* Row-0x1C tail (0x779DE..0x77E8B, FU186-L2): the three stat routes. Entry
  * requires word[+0x81] == 0 (0x779DE CMP/JNZ). Each fixture stages
  * `timer81 = 0`, the route's phase (`[0x157A4A]>>24` = state.phase) and the
@@ -6468,9 +6490,12 @@ static void test_action_1c_tail_nonphase10_negative(void) {
   drop_fixture(&f);
 }
 
-/* Phase 0x10, product >= 0: no stat (0x77DEB JGE -> 0x77E6F). */
+/* Phase 0x10, product >= 0: no stat (0x77DEB JGE -> 0x77E6F). The whole
+ * stats table and its activity mirror must stay byte-identical (no stat to
+ * any entity — a stray emission to another slot would change the snapshot). */
 static void test_action_1c_tail_phase10_nonnegative(void) {
   struct fixture f;
+  struct stats_snapshot snap;
   make_fixture(&f);
   f.mr.record.entity_id = 0;
   f.mr.record.stage92 = 2;
@@ -6480,9 +6505,33 @@ static void test_action_1c_tail_phase10_nonnegative(void) {
   f.mr.state.phase = 0x10;
   f.mr.render.camera.vel_x = 1;
   f.mr.render.camera.pos_z = 1;          /* product = 1 >= 0 */
+  stats_snapshot_take(&f.mr, &snap);
   assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
-  assert(f.mr.stats.value[0][0] == 0);          /* no stat */
-  assert(f.mr.render.replay.activity_count[0][0] == 0);
+  assert(stats_snapshot_equal(&f.mr, &snap));   /* no stat anywhere */
+  drop_fixture(&f);
+}
+
+/* Two-dispatch regression: the 0x77E6F..0x77E84 post-stat tail reseeds
+ * `timer81` (FUN_0006E444 duration sum + 0xA) and sets `keeper_latch[2] = 1`,
+ * so a second dispatch re-gates on a nonzero `word[+0x81]` and must NOT
+ * re-emit the stat (value stays 200, not 400). */
+static void test_action_1c_tail_no_reeemit_on_second_dispatch(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.delta = 0;
+  f.mr.state.phase = 0x10;
+  f.mr.render.camera.vel_x = 1;
+  f.mr.render.camera.pos_z = -1;         /* product = -1 < 0 -> +0x64 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(f.mr.stats.value[0][0] == 200);        /* first emit: 0x64 * 2 */
+  assert(f.mr.keeper_latch[2] == 1);            /* 0x77E7E byte[0x157C56] */
+  assert(f.mr.record.timer81 != 0);             /* 0x77E84 reseed */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(f.mr.stats.value[0][0] == 200);        /* no second emit */
   drop_fixture(&f);
 }
 
@@ -7395,25 +7444,6 @@ static void test_stats_counter_score_event(void) {
 /* Slice-B Task 2: the typed stat-event contract. The drain resolves TRACKED
  * (cam->tracked) and LOCAL_EBP (the passed id) in array order and skips every
  * OPEN kind; the 2x weight turns +3 into 6 and +1 into 2. */
-struct stats_snapshot {
-  struct fifa96_match_stats stats;
-  int32_t activity[2][FIFA96_CAMERA_REPLAY_SLOTS];
-};
-
-static void stats_snapshot_take(const struct fifa96_match_run *mr,
-                                struct stats_snapshot *snap) {
-  memcpy(&snap->stats, &mr->stats, sizeof snap->stats);
-  memcpy(snap->activity, mr->render.replay.activity_count,
-         sizeof snap->activity);
-}
-
-static int stats_snapshot_equal(const struct fifa96_match_run *mr,
-                                const struct stats_snapshot *snap) {
-  return memcmp(&snap->stats, &mr->stats, sizeof snap->stats) == 0 &&
-         memcmp(snap->activity, mr->render.replay.activity_count,
-                sizeof snap->activity) == 0;
-}
-
 static void test_stats_drain_events(void) {
   struct fixture f;
   make_fixture(&f);
@@ -7678,6 +7708,7 @@ int main(void) {
   test_action_1c_tail_nonphase10_positive();
   test_action_1c_tail_nonphase10_negative();
   test_action_1c_tail_phase10_nonnegative();
+  test_action_1c_tail_no_reeemit_on_second_dispatch();
   test_action_1c_live_route();
   test_action_1b_stage1_rotation_steering();
   test_action_1a_runs_body();
