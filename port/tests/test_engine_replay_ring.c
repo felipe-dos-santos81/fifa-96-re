@@ -878,6 +878,37 @@ static void test_ring_compose_queue6(void) {
   }
 }
 
+/* Task 6 (C4R-L1): the arm's projection-reset flag `[0x109014]`. The native
+ * `FUN_0005865C` arm writes `[0x109014]=0` (0x58666) before its three
+ * presentation calls — `FUN_00056B88(0x2B)`, the `0x14E9B8 >= 0x80` /3 loop
+ * over 23 dwords, and `FUN_00056894` — which stay numbered legs.
+ * `FUN_000585E4` is the separate setup writer that sets 1 (0x585F2); the flag
+ * has several consumer functions (including the read-write FUN_000586C0), so
+ * only the state is modeled here. init and the replay arm clear it; the
+ * replay exit leaves it 0. */
+static void test_replay_arm_view_reset(void) {
+  struct fifa96_match_run mr;
+
+  /* Fresh init writes the field even on a 0xAA-filled run (the run is not
+   * memset by init). */
+  memset(&mr, 0xAA, sizeof mr);
+  fifa96_match_run_init(&mr);
+  assert(mr.replay_view_reset_109014 == 0);
+
+  /* The arm clears a pre-set flag and leaves it 0 through exit. */
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.paused = 0;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.replay_view_reset_109014 = 1;
+  assert(fifa96_match_run_replay_begin(&mr) == 0);
+  assert(mr.replay_view_reset_109014 == 0);
+  assert(mr.render.replay.state == FIFA96_MATCH_REPLAY_ARMED);
+  fifa96_match_run_replay_exit(&mr);
+  assert(mr.replay_view_reset_109014 == 0);
+}
+
 int main(void) {
   test_ring_pack_apply_roundtrip();
   test_ring_capture_budget();
@@ -896,6 +927,7 @@ int main(void) {
   test_ring_compose_band_queue();
   test_replay_resync_queue_pop();
   test_ring_compose_queue6();
+  test_replay_arm_view_reset();
   puts("test_engine_replay_ring OK");
   return 0;
 }

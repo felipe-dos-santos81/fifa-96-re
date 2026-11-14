@@ -5435,6 +5435,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->replay_band_155c50 = 0;
   mr->replay_band_flag_155c51 = 0;
   memset(mr->replay_queue6, 0xFF, sizeof mr->replay_queue6);
+  /* C4R-L1: the projection-active flag starts clear (the native image default;
+   * `FUN_000585E4` is the separate setup writer that sets 1). */
+  mr->replay_view_reset_109014 = 0;
 }
 
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
@@ -5966,6 +5969,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->replay_band_155c50 = 0;
   mr->replay_band_flag_155c51 = 0;
   memset(mr->replay_queue6, 0xFF, sizeof mr->replay_queue6);
+  /* C4R-L1: the projection-active flag starts clear. */
+  mr->replay_view_reset_109014 = 0;
   return 0;
 }
 
@@ -10255,6 +10260,10 @@ int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
   mr->live_tackle_press = 0;
   mr->input_resync = 0;
   mr->replay_audio_armed = 1;   /* C4: the engine audio step arms the duck */
+  /* C4R-L1: the native arm `FUN_0005865C` writes `[0x109014]=0` (0x58666)
+   * before its three presentation calls (legs); the flag stays 0 through the
+   * replay exit. */
+  mr->replay_view_reset_109014 = 0;
   (void)fifa96_match_run_replay_camera_set(mr, 0);
   return FIFA96_OK;
 }

@@ -1966,6 +1966,14 @@ struct fifa96_match_run {
   uint8_t replay_band_155c50;
   uint8_t replay_band_flag_155c51;
   uint8_t replay_queue6[6];
+  /* C4R-L1: the shared projection-active flag `[0x109014]`. The native arm
+   * `FUN_0005865C` writes 0 (0x58666) before its three presentation calls —
+   * `FUN_00056B88(0x2B)`, the `0x14E9B8 >= 0x80` /3 loop over 23 dwords, and
+   * `FUN_00056894` — which stay numbered legs. `FUN_000585E4` is the separate
+   * setup writer that sets 1 (0x585F2); the flag has several consumer
+   * functions (including the read-write `FUN_000586C0`), so only the state is
+   * modeled. init and the replay arm clear it; the replay exit leaves it 0. */
+  uint8_t replay_view_reset_109014;
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
    * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/
