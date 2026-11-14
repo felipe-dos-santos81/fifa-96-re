@@ -5456,3 +5456,40 @@ close-out below).
   non-Slice-B `0x8ED40` sites (`0x775FD`/`0x77613`, `0x7ADD2`/`0x7AE04`) remain
   carried. Record: census `2026-11-12-slice-b-camera-census.md`, FU72/FU-351/
   FU145/FU164/FU186 closures, ENGINE Phase 123.
+
+- **Phase 124 — the B7–B8 replay chain closure (2026-11-13).** The replay
+  recorder/queue/arm/camera legs handed to Slice B (design
+  `2026-11-12-open-items-closure-slice-b-design.md` §B7/§B8, corrected by its §11
+  and the ring design §14; census `2026-11-13-replay-chain-census.md`) closed
+  across nine tasks (`docs/superpowers/plans/2026-11-13-replay-chain-b7-b8.md`).
+  **Landed per leg:** RR-L2 the recorder overlay gate (`recorder_latch_14e574` +
+  the `FUN_00053DC4`/`FUN_00053A48` disable/re-enable edges; the ring reset no
+  longer writes `enabled`); RR-L3 the focus band (`fifa96_camera_replay_band`),
+  band/flag/queue-pop cells, the `replay_queue6` six-byte `0xFF` lane and
+  `fifa96_match_run_replay_resync`; RR-L10 the 20-dword FIFO + drain gate
+  (`fifa96_match_run_replay_fifo_*`); C4R-L1 the projection flag
+  `replay_view_reset_109014` (init 0, arm 0); RR-L4 the appearance-byte identity
+  (proof tests, `stage.anim_id` is the identity — no code change); RR-L5 the
+  camera-cycle source selector (`fifa96_match_run_replay_camera_source`,
+  `native_view_cam`/`native_view_valid` widened to four); RR-L7 the
+  request/control/complete path (`FUN_00064E74` = `complete`,
+  `FUN_0006428C` = `replay_resync`). **Remaining legs (recorded, never faked):**
+  the `0x157C64` object producer and `FUN_0004BA44`/`FUN_0004BA00` (RR-L3
+  queue6); the `0x65CC0` voice notify (globals-only, `0xA7705`, audio inferred)
+  and the `[0x105FFC]` screen-id producer (RR-L10); `FUN_00056B88(0x2B)`, the
+  `0x14E9B8 >= 0x80` /3 loop, `FUN_00056894` and the setup writer `FUN_000585E4`
+  (C4R-L1); `FUN_00051270`/`FUN_000512B0` request sources, `FUN_00064DFC`
+  playback driver, the `0x510EB..0x51119` tick/LIVE arms, `FUN_00045069`, and
+  `FUN_00037114(4)`/`FUN_000642FC(0)`/`FUN_0004CD88` (RR-L7); the overlay call
+  site/state machine `0x4B1D7`/`0x4B257` (RR-L2); the `0x155C4E` bit-0x80/0x7F
+  arm, the per-goal clear and the post-`0x36F36` velocity checks (RR-L3); and
+  the BALL camera source (**RR-L5-BALL**). The `0x64270` arm stores `0x81` only
+  (gated `[0x109AB0] != 0`) with the `0x5865C` call mapped to the projection
+  flag; the `0x4D2C4` `record_index` store and the POSE `0x70`-stride
+  (`0x107968 + 112*[0x107DD0]`) are kept exact. The Task 9 zero/zero arm-only
+  guard is the one deliberate adapter (direct `replay_begin` vs
+  `replay_request` compatibility). **Gate:** `make check` **125/125**; M1 `cmp`
+  byte-exact; M2 `cmp` byte-exact (no re-pin); windowed smoke exit 124.
+  **Numbers unchanged:** 78/78 ported (100%), 61/80 naturally wired (64/80
+  install-live) — the replay producers are not dispatch rows. Record: FU-108
+  §11, FU-111 §13, FU-351 §31, FU-72 closure, ENGINE Phase 124.

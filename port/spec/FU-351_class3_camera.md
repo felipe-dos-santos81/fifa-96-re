@@ -1386,3 +1386,37 @@ reset (the replay view setup) is a new **C4R-L1** leg owned by Slice B." Fresh
 
 The engine models the flag (init 0, arm 0) and records the three projection
 bodies as legs. No code, golden or completion-number movement.
+
+## 31. Closure (2026-11-13) — the B7–B8 replay chain landed the camera cycle and C4R-L1
+
+The B7–B8 replay-chain slice closed the replay-camera legs handed here (design
+§11/§14, census `2026-11-13-replay-chain-census.md`). Append-only; quoted
+superseded lines are corrected below.
+
+**RR-L5 — the `0x20` camera cycle — closed (partial identity kept).** §27 read:
+
+> The remaining ring-scope legs are **RR-L5** (the `0x20` replay camera record
+> cycle / matrix precedence — the non-pose cameras still use the existing
+> source-4 path) and **RR-L7** (the mode-7 request/timed exit).
+
+`fifa96_match_run_replay_camera_source` (Task 8) selects the source from the
+retained `{camera_kind,camera_sub}` selection: index 0 → POSE (the recorded
+matrix `+0x1AE..+0x1C5`), 1/2/3/6 → VIEW (`camera_sub` 5/6/7/8 →
+`native_view_cam[sub-5]` when its valid byte is set, else the live follow),
+4 → ACTION, 5 → BALL. The `native_view_cam`/`native_view_valid` arrays are
+widened to four entries so sub 8 (index 6) maps to class 3 without an
+out-of-bounds read. Out-of-range `record_index` changes no selection — the
+`0x4D2AB` epilogue still stores `[0x107DDC]=index` at `0x4D2C4` — and POSE is
+`0x107968 + 112*[0x107DD0]` (the `0x70` stride), not the bare constant.
+**RR-L5-BALL stays a leg**: the engine has no dedicated BALL handler-state
+source, so BALL keeps the existing live-follow fallback.
+
+**C4R-L1 — the projection-reset flag — closed; the three bodies stay legs.**
+§30 records the shared `[0x109014]` flag and the three presentation bodies.
+`replay_view_reset_109014` models the flag (init 0, arm 0, exit 0) (Task 6).
+The three projection bodies — `FUN_00056B88(0x2B)`, the `0x14E9B8 >= 0x80` /3
+loop over 23 dwords, and `FUN_00056894` — and the setup writer `FUN_000585E4`
+(`0x585F2 [0x109014]=1`) stay legs.
+
+**RR-L7** is closed in FU-111 §13 (the request/control/complete path). No
+completion-number movement and no golden re-pin.

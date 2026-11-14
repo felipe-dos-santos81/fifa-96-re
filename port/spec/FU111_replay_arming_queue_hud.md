@@ -319,3 +319,43 @@ evidence-B) confirm the shape and pin the byte-level semantics:
 
 The C ring's conventional indexing preserves order, not the address offset. No
 code, golden or completion-number movement.
+
+## 13. Closure (2026-11-13) — the B7–B8 replay chain landed the queue, the arm and the request path
+
+The B7–B8 replay-chain slice closed the arming/queue/HUD legs handed here
+(design §11/§14, census `2026-11-13-replay-chain-census.md`). Append-only;
+quoted superseded lines are corrected below.
+
+**The FIFO / drain gate — closed (RR-L10).** §12's FIFO/queue exact semantics
+are ported as `fifa96_match_run_replay_fifo_*` (Task 3). The `FUN_00065CC0`
+notify body stays a leg (globals only, `0xA7705`, audio inferred) and the live
+`[0x105FFC]` screen-id producer stays a leg (the cell is staged only).
+
+**The `0x64270` arm — ported (state `0x81` + `0x5865C`).** §4 reads
+`FUN_00064270` — `if ([0x9AB0] != 0) { FUN_0005865c(); [0x9A98] = 0x81; }`.
+`fifa96_match_run_replay_begin` stores **`0x81` only** (gated
+`[0x109AB0] != 0`; the native has no `MOV [0x109A98],0x80` producer and none is
+invented). The `FUN_0005865C` call is the projection-reset flag
+`replay_view_reset_109014 = 0` (Task 6, FU-351 §30); its three presentation
+bodies (`FUN_00056B88(0x2B)`, the `0x14E9B8 >= 0x80` /3 loop, `FUN_00056894`)
+and the setup writer `FUN_000585E4` stay legs.
+
+**The `FUN_000510dc` request/control arm — closed (RR-L7).** §8 open leg 3 read:
+
+> 3. `FUN_000510dc`'s `[0x8E0C]`/`[0x8E10]`/`[0x4E58C]` semantics (the
+>    `0xF0`/`0x168` enter/exit timing).
+
+Ported as `fifa96_match_run_replay_request`/`_control`/`_complete` (Task 9):
+the request arm (`[0x14E58C]=1`, `CALL 0x64270`, `CALL 0x37114(4)`,
+`[0x108E0C]=1`, `[0x108E10]=0`) is `request(on=1)`; the `param_1==0` per-frame
+arm (the `0x510EB..0x51119` tick floor, the mode/accumulator windows, the phase
+ramp `0xF0`/`0x168`, and the completion-gated countdown) is `control`.
+`FUN_00064E74` is ported as `complete` (cursor >= count); `FUN_0006428C` is
+ported as `replay_resync` (Task 4, FU108 §11). Remaining legs: `FUN_00064DFC`
+(the playback driver), `FUN_00037114(4)`, `FUN_000642FC(0)`/`FUN_0004CD88`, the
+`0x510EB..0x51119` tick/LIVE arms, `FUN_00045069` (the negative-mode producer),
+and the request sources `FUN_00051270`/`FUN_000512B0` (the host key is the
+adapter at the arm).
+
+No completion-number movement and no golden re-pin (the replay producers are
+not dispatch rows).

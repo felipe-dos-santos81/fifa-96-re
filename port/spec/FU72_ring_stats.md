@@ -821,3 +821,26 @@ the abridged stream omitted the native `0x72CF9`/`0x7309E` target-block draws;
 M1 is unchanged. Completion unchanged (78/78, wired 61/80 / 64/80 install-live);
 the four non-Slice-B sites (`0x775FD`/`0x77613`, `0x7ADD2`/`0x7AE04`) stay
 carried.
+
+## Closure (2026-11-13) — the B7–B8 replay chain closed RR-L5/RR-L7 and the ring-scope legs
+
+The §Closure "recorded-frame ring leg landed" line quoted below is superseded —
+RR-L5 and RR-L7 are now closed by the B7–B8 replay-chain slice (plan
+`2026-11-13-replay-chain-b7-b8.md`, Tasks 1–9; census
+`2026-11-13-replay-chain-census.md`):
+
+> The remaining ring-scope legs are **RR-L5** (the `0x20` replay camera record
+> cycle / matrix precedence) and **RR-L7** (the mode-7 request/timed exit).
+
+- **RR-L5** is closed as the `fifa96_match_run_replay_camera_source` selector
+  (POSE/VIEW/ACTION/BALL) with the `native_view_cam`/`native_view_valid` arrays
+  widened to four entries; **RR-L5-BALL** stays a leg (no dedicated BALL source,
+  the live-follow fallback is kept).
+- **RR-L7** is closed as `fifa96_match_run_replay_request`/`_control`/`_complete`;
+  `FUN_00064E74` is ported as `complete` and `FUN_0006428C` as `replay_resync`.
+  The request sources (`FUN_00051270`/`FUN_000512B0`), `FUN_00064DFC`, the
+  `0x510EB..0x51119` tick/LIVE arms and `FUN_00045069` stay legs.
+
+The other FU-72 legs (B2-L1, the `0x8FF30` consumer, the four non-Slice-B
+`0x8ED40` sites) are unchanged. No completion-number movement and no golden
+re-pin.

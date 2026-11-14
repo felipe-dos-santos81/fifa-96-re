@@ -12751,3 +12751,61 @@ The port cannot decide those early exits, so it does not emit the pair;
 Only the three stat routes and the post-stat timer81/keeper_latch tail are
 closed. The `0x779EC..0x77D67` anim/camera body and the `0x8F188` requests
 remain FU186-L2 legs; the entire native tail is not claimed closed.
+
+## Phase 124 — the B7–B8 replay chain closure (2026-11-13)
+
+The replay recorder/queue/arm/camera legs handed to Slice B (design
+`2026-11-12-open-items-closure-slice-b-design.md` §B7/§B8, corrected by its §11
+and the ring design §14) closed across nine tasks (plan
+`docs/superpowers/plans/2026-11-13-replay-chain-b7-b8.md`); the leg table is
+`docs/superpowers/specs/2026-11-13-replay-chain-census.md`.
+
+**Landed per leg.**
+- **RR-L2** (recorder overlay gate): `recorder_latch_14e574` +
+  `fifa96_match_run_recorder_overlay_disable`/`_reenable` (the
+  `FUN_00053DC4`/`FUN_00053A48` disable/re-enable edges);
+  `fifa96_match_replay_ring_reset` no longer writes `enabled` (the
+  gate-preserving reset is native `FUN_00064030`). The live overlay call
+  site/state machine (`0x4B1D7`/`0x4B257`) stays a leg.
+- **RR-L3** (band/queue/queue-pop): `fifa96_camera_replay_band` (the
+  `FUN_000627F4` classifier), the `replay_view_flags_155c4e`/`replay_band_155c50`/
+  `replay_band_flag_155c51`/`replay_queue_pop_155c4f` cells, the `replay_queue6`
+  six-byte lane (`0xFF` init), and `fifa96_match_run_replay_resync`.
+- **RR-L10** (FIFO + drain): `fifa96_match_run_replay_fifo_{reset,push,pop,drain}`
+  and the `0x64EC0` drain gate.
+- **C4R-L1** (projection-reset flag): `replay_view_reset_109014` (init 0, arm 0,
+  exit 0).
+- **RR-L4** (appearance identity): proof tests only — the composed `stage.anim_id`
+  is the identity (`byte[[rec+0x28]]` / `byte[[0x158866]]`), no code change.
+- **RR-L5** (camera cycle): `fifa96_match_run_replay_camera_source` (POSE/VIEW/
+  ACTION/BALL) with `native_view_cam`/`native_view_valid` widened to four.
+- **RR-L7** (request/timed exit): `fifa96_match_run_replay_request`/`_control`/
+  `_complete`; `FUN_00064E74` = `complete`, `FUN_0006428C` = `replay_resync`.
+
+**Remaining legs (every producer/sink that stayed unported — never faked).**
+The `0x157C64` object producer and `FUN_0004BA44`/`FUN_0004BA00` (RR-L3 queue6);
+the `0x65CC0` voice notify (globals-only, `0xA7705`, audio inferred) and the
+`[0x105FFC]` screen-id producer (RR-L10); `FUN_00056B88(0x2B)`, the
+`0x14E9B8 >= 0x80` /3 loop and `FUN_00056894`, plus the setup writer
+`FUN_000585E4` (`0x585F2 [0x109014]=1`) (C4R-L1); `FUN_00051270`/`FUN_000512B0`
+request sources, `FUN_00064DFC` playback driver, the `0x510EB..0x51119`
+tick/LIVE arms, `FUN_00045069`, and `FUN_00037114(4)`/`FUN_000642FC(0)`/
+`FUN_0004CD88` (RR-L7); the overlay call site/state machine `0x4B1D7`/`0x4B257`
+(RR-L2); the `0x155C4E` bit-0x80/0x7F arm, the per-goal clear and the
+post-`0x36F36` velocity checks (RR-L3); and the BALL camera source
+(**RR-L5-BALL**). The `0x64270` arm stores `0x81` only (gated `[0x109AB0] != 0`)
+with the `0x5865C` call mapped to the projection flag; the `0x4D2C4`
+`record_index` store (out-of-range still writes `[0x107DDC]=index`) and the POSE
+`0x70`-stride (`0x107968 + 112*[0x107DD0]`) are kept exact in the selector. The
+Task 9 zero/zero arm-only guard is the one deliberate adapter (direct
+`replay_begin` vs `replay_request` compatibility; a real request always
+establishes phase 1 / mode 1).
+
+**Gate and unchanged numbers.** `make check` **125/125** strict-clean; M1 `cmp`
+byte-exact; M2 `cmp` byte-exact (no re-pin); windowed smoke exit 124, clean log.
+Port coverage **78/78 (100%)**, wired **61/80** (64/80 install-live) — the
+replay producers are not dispatch rows, so no completion-number movement and no
+golden re-pin.
+
+Record: FU-108 §11, FU-111 §13, FU-351 §31, FU-72 closure, census
+`2026-11-13-replay-chain-census.md`, PROGRESS Phase 124.

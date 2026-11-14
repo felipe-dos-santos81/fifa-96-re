@@ -184,3 +184,41 @@ evidence-A/B) correct the resync and pin the FIFO:
 
 The C ring's conventional indexing preserves order, not the address offset. No
 code, golden or completion-number movement.
+
+## 11. Closure (2026-11-13) — the B7–B8 replay chain landed the RR-L10 half
+
+The B7–B8 replay-chain slice (plan
+`docs/superpowers/plans/2026-11-13-replay-chain-b7-b8.md`, Tasks 1–9; census
+`docs/superpowers/specs/2026-11-13-replay-chain-census.md`; design
+`2026-11-12-open-items-closure-slice-b-design.md` §11 and
+`2026-11-12-recorded-replay-ring-design.md` §14) closed the ring legs handed
+here. Append-only; quoted superseded lines are corrected below.
+
+**`FUN_000974DC` — closed (RR-L10).** §8 read:
+
+> `FUN_000974DC` calls `FUN_00064EC0`, which gates on
+> `([0x109A98] & 0x80) == 0` **and** `FUN_00037AE4() == 0` (the latter true
+> when `[0x105FFC]` is not 5/7) and calls `FUN_00064EF0(1, ...)` (the 20-entry
+> `0x155C8C` queue push); it then calls `FUN_00065CC0`, which updates
+> `[0x10A254]` through `FUN_000A7705`. This half is a **B** handoff, not
+> closed.
+
+The 20-dword FIFO and the `FUN_00064EC0` drain gate are ported as
+`fifa96_match_run_replay_fifo_{reset,push,pop,drain}` (Task 3): the drain
+pushes only when `(state & 0x80) == 0` and the staged `replay_screen_id_105ffc`
+is not 5/7. `FUN_00065CC0` stays a leg — it reads only globals
+(`[0x155CE0]`/`[0x155D30]`/`[0x155D00]`/`[0x10A250]`) and writes `[0x10A254]`
+via `0xA7705`; "audio" is inferred, not proven — and the live `[0x105FFC]`
+screen-id producer stays a leg (the engine cell is staged only).
+
+**`FUN_0006428c` resync — closed (RR-L10).** §2/§10 record the re-sync hook. It
+is ported as `fifa96_match_run_replay_resync` (Task 4): sign-extend byte
+`0x155C4F` (`SAR EAX,0x18`); when nonzero drain `value − 1` through the FIFO
+gate without storing back to the cell — the native `0x64298 DEC EAX;
+0x64299 JMP 0x974DC` tail-jump.
+
+**`FUN_000974D8` / allocator — unchanged.** The `0x974D8` `RET` half stays
+closed (§8); `FUN_0004A448`/`FUN_000993EC` stay RR-L1 (out of contract).
+
+No completion-number movement and no golden re-pin (the FIFO/resync bodies are
+not dispatch rows).
