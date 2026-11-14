@@ -478,3 +478,15 @@ git commit -m "docs: close the replay chain B7-B8"
 **Review Focus:** the six lines are covered by Task 2 (gate/reset), Tasks 3–5 (queue/FIFO), Task 3 (drain), Task 9 (request chain), Task 7 (appearance), Task 8 (camera source/partial identity).
 
 **Proportion:** the plan is a task map with exact tests and interfaces; the body code is left to the implementer with the census and native reads.
+
+## Execution note (2026-11-14)
+
+The wired frame order in `fifa96_match_run.c`'s `fifa96_match_run_replay_family`
+branch is `fifa96_match_run_replay_control(mr, 1)` first, then
+`fifa96_match_run_replay_step(mr, ...)`. The Task 9 test-step wording ("call
+`fifa96_match_run_replay_step(mr, 0)` then `control(1)`") is superseded: the
+`test_replay_request_timed_exit` loop drives control-then-step to match the
+frame order, and its pinned phase/exit indices (0xF0 on 479, 0x168 on 599,
+clamp 0x169 on 600, exit on 961; empty-ring exit 241) describe that integrated
+timing. The code follows the frame order; this note records the correction
+without rewriting the Task 9 step.

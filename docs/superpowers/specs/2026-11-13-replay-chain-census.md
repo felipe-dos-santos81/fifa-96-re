@@ -57,3 +57,11 @@ has seven rows.
    EDX,0x35; 0x6281D JLE 0x62821; 0x6281F OR AL,0x2` arm runs only when
    `y >= 0x6A`. The two arms are mutually exclusive (`else if`): `(0,0x36)` and
    `(0,0x69)` return 9 (not 11) and `(0,0x6A)` returns 3.
+
+## Closure note (2026-11-14)
+
+The RR-L2 row's "`[0x14E574]` latch has no engine cell — OPEN" is historical.
+Task 2 closed it: the latch is now the engine cell `recorder_latch_14e574`
+(`fifa96_match_run.h`), driven by `fifa96_match_run_recorder_overlay_disable`/
+`_reenable` and reset in `fifa96_match_run_init`/`_begin`. The row above is left
+unchanged, as the closure is recorded here rather than rewriting it.
