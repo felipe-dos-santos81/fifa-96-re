@@ -5436,6 +5436,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
    * the native reset does not write the gate). */
   fifa96_match_replay_ring_reset(mr);
   fifa96_match_replay_ring_record(mr, 0);
+  mr->replay_mode_108e0c = 0;
+  mr->replay_mode_acc_108e10 = 0;
   mr->recorder_latch_14e574 = 0;
   /* RR-L10: the replay FIFO cursors and the staged drain screen id. */
   fifa96_match_run_replay_fifo_reset(mr);
@@ -8650,6 +8652,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     if (frozen_granted == 0) return 0;
     mr->state.frame_delta = (uint16_t)(FIFA96_MATCH_STATE_STEP >> 8);
     for (uint32_t i = 0; i < (uint32_t)frozen_granted; i++) {
+      (void)fifa96_match_run_replay_control(mr, 1);
       (void)fifa96_match_run_replay_step(mr, mr->render.replay.input_buttons);
       mr->render.replay.input_buttons = 0;
       /* RR-L5: the pose feed keeps its live-frame order, then the selected
@@ -10266,6 +10269,8 @@ int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
   r->state = FIFA96_MATCH_REPLAY_ARMED;
   r->hud_armed = 1;
   r->phase_counter = 0;
+  mr->replay_mode_108e0c = 0;
+  mr->replay_mode_acc_108e10 = 0;
   r->cursor = 0;
   r->advance = 0;
   r->camera_index = 0;
@@ -10285,6 +10290,83 @@ int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
   mr->replay_view_reset_109014 = 0;
   (void)fifa96_match_run_replay_camera_set(mr, 0);
   return FIFA96_OK;
+}
+
+int fifa96_match_run_replay_request(struct fifa96_match_run *mr, int on) {
+  int rc;
+  if (!on) return 0;
+  /* 0x51122..0x5114A: the request owns the phase/mode writes; replay_begin
+   * supplies 0x64270's reachable arm and 0x5865C's projection reset. Begin
+   * must run first so a rejected request leaves every request cell intact. */
+  rc = fifa96_match_run_replay_begin(mr);
+  if (rc != FIFA96_OK) return rc;
+  mr->render.replay.phase_counter = 1;
+  /* FUN_00037114(4) is an unported sink (RR-L7); no behavior is staged here. */
+  mr->replay_mode_108e0c = 1;
+  mr->replay_mode_acc_108e10 = 0;
+  return 0;
+}
+
+int fifa96_match_run_replay_complete(const struct fifa96_match_run *mr) {
+  if (!mr) return 0;
+  /* FUN_00064E74: SETGE is a signed cursor >= *count comparison. */
+  return (int32_t)mr->render.replay.cursor >= (int32_t)mr->replay_ring.count;
+}
+
+int fifa96_match_run_replay_control(struct fifa96_match_run *mr, int32_t tick) {
+  struct fifa96_match_run_replay *r;
+  if (!mr) return 0;
+  r = &mr->render.replay;
+  if (tick <= 0) tick = 1;             /* 0x510EB..0x510F4: max(tick, 1) */
+  /* 0x5110B..0x51119: FUN_0006400C's LIVE early return. */
+  if (fifa96_match_run_replay_live(r)) return 1;
+  /* Engine arm-only adapter: replay_begin is also a public 0x64270 seam used
+   * without FUN_000510DC(1). That path has no request countdown to spend; a
+   * zero phase plus zero mode must not manufacture an immediate empty-ring
+   * exit. A real request always establishes phase 1 / mode 1, and the native
+   * negative-mode arm still falls through to the countdown below. */
+  if (mr->replay_mode_108e0c == 0 && r->phase_counter == 0) return 0;
+
+  if (mr->replay_mode_108e0c == 1) {
+    /* 0x5115A..0x51184: FUN_000642FC(0) and FUN_0004CD88 remain legs. The
+     * frozen frame's existing replay_step owns their reachable playback work;
+     * control must not advance the ring a second time. */
+    mr->replay_mode_acc_108e10 += tick;
+    mr->replay_mode_108e0c++;
+    return 0;
+  }
+  if (mr->replay_mode_108e0c > 1 && mr->replay_mode_acc_108e10 < 0xF0) {
+    mr->replay_mode_acc_108e10 += tick;  /* 0x5118B..0x511B4 */
+    mr->replay_mode_108e0c++;
+    return 0;
+  }
+
+  if (mr->replay_mode_108e0c > 0) {
+    mr->replay_mode_acc_108e10 = 0;      /* 0x511B5..0x511C6 */
+    mr->replay_mode_108e0c = 0;
+  }
+  if (mr->replay_mode_108e0c == 0 && !fifa96_match_run_replay_complete(mr)) {
+    if (r->phase_counter > 0xF0) {
+      /* 0x511EA: FUN_00064DFC's 0x83 state/cursor body is an RR-L7 residual.
+       * The granted frame's sole replay_step owns its reachable PLAYING path. */
+    }
+    if (r->phase_counter < 0x168) {
+      r->phase_counter += tick;           /* 0x511FD..0x51206 */
+      return 0;
+    }
+    r->phase_counter = 0x169;             /* 0x5120F..0x51219 */
+    return 0;
+  }
+
+  /* 0x51222..0x51249: nonzero mode (including the 0x45069 negative-mode leg)
+   * or ring completion enters the same countdown. */
+  if (tick >= r->phase_counter) {
+    fifa96_match_run_replay_exit(mr);     /* FUN_00064E8C's reachable state */
+    r->phase_counter = 0;
+    return 1;
+  }
+  r->phase_counter -= tick;
+  return 0;
 }
 
 int fifa96_match_run_replay_target(struct fifa96_match_run *mr) {

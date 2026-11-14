@@ -354,6 +354,17 @@ int fifa96_match_run_replay_blink_step(struct fifa96_match_run_replay *replay,
  * on NULL, -FIFA96_ERR_STATE when the run is not running/ACTIVE or paused. */
 int fifa96_match_run_replay_begin(struct fifa96_match_run *mr);
 
+/* RR-L7: FUN_000510DC's request and param_1==0 timed-exit arms. A request
+ * first runs replay_begin; only a successful arm sets phase 1, mode 1 and
+ * accumulator 0. on=0 is a no-op. control floors tick to 1, runs the mode
+ * window/ramp and returns 1 on the LIVE guard or completed countdown. The
+ * native 0x37114(4), 0x642FC(0)/0x4CD88 and 0x64DFC sinks stay legs; the
+ * granted frozen frame's replay_step remains the sole playback advance.
+ * complete is FUN_00064E74's signed cursor >= ring-count test (0 on NULL). */
+int fifa96_match_run_replay_request(struct fifa96_match_run *mr, int on);
+int fifa96_match_run_replay_control(struct fifa96_match_run *mr, int32_t tick);
+int fifa96_match_run_replay_complete(const struct fifa96_match_run *mr);
+
 /* The reachable FUN_000642FC subset: the 0x80 -> 0x81 promotion, the 0x81 arm
  * (reset cursor, apply record 0 when the ring is non-empty, mirror the ring
  * count, reselect camera 0, run the target chooser, settle at IDLE), the
@@ -1952,6 +1963,11 @@ struct fifa96_match_run {
    * The playback index is `render.replay.cursor` (`[0x109A94]`), so the ring
    * carries no second copy of it. */
   struct fifa96_match_replay_ring replay_ring;
+  /* RR-L7: FUN_000510DC's mode window `[0x108E0C]` and tick accumulator
+   * `[0x108E10]`. init and replay_begin clear them; the request installs
+   * mode 1 / accumulator 0 and control advances them before the phase ramp. */
+  int32_t replay_mode_108e0c;
+  int32_t replay_mode_acc_108e10;
   /* RR-L2: the recorder overlay latch `[0x14E574]`. Set by the disable edge
    * (`FUN_00053DC4`, 0x53DD8), cleared by the re-enable edge (`FUN_00053A48`
    * state-5->6, 0x53AA2). A gate-preserving reset never touches it; init and

@@ -412,7 +412,7 @@ int fifa96_engine_step(struct fifa96_engine *e) {
     if (e->match && replay_edge &&
         e->match->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE && !e->match->paused &&
         !fifa96_match_run_replay_family(&e->match->render.replay))
-      (void)fifa96_match_run_replay_begin(e->match);
+      (void)fifa96_match_run_replay_request(e->match, 1);
     if (e->match)
       (void)fifa96_match_run_input(e->match, match_keys, match_count);
     if (e->match && e->match->live_start) {

@@ -234,6 +234,9 @@ static void test_engine_replay_key_arms(void) {
   assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM release */
   assert(fifa96_engine_step(f.engine) == 0);   /* R -> the 0x81 arm */
   assert(f.engine->match_run.render.replay.state == FIFA96_MATCH_REPLAY_ARMED);
+  assert(f.engine->match_run.render.replay.phase_counter == 1);
+  assert(f.engine->match_run.replay_mode_108e0c == 1);
+  assert(f.engine->match_run.replay_mode_acc_108e10 == 0);
   assert(f.engine->match_run.replay_audio_armed == 1);
   assert(fifa96_engine_step(f.engine) == 0);   /* release: stays in the family */
   assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
@@ -252,6 +255,38 @@ static void test_engine_replay_key_arms(void) {
   assert(!fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
   assert(f.engine->match_run.paused == 0);
   assert(f.engine->match_run.replay_audio_armed == 0);
+  drop_fixture(f);
+}
+
+/* RR-L7: the host key uses the request, and a granted frozen frame advances
+ * the request's mode window before the ordinary replay step. The exhausted
+ * tape supplies the R release; no live input or extra replay_step is needed. */
+static void test_engine_replay_request_frame_control(void) {
+  const fifa96_platform_key tape[] = {
+      {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
+      {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
+      {FIFA96_ENGINE_KEY_REPLAY, 1},
+  };
+  struct fixture f = make_fixture(tape, sizeof tape / sizeof tape[0], NULL);
+  assert(fifa96_engine_step(f.engine) == 0);   /* DECLINE -> panel */
+  assert(fifa96_engine_step(f.engine) == 0);   /* release */
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM -> bridge */
+  assert(fifa96_engine_step(f.engine) == 0);   /* CONFIRM release */
+  assert(fifa96_engine_step(f.engine) == 0);   /* R -> request */
+  assert(f.engine->match_run.render.replay.state == FIFA96_MATCH_REPLAY_ARMED);
+  assert(f.engine->match_run.render.replay.phase_counter == 1);
+  assert(f.engine->match_run.replay_mode_108e0c == 1);
+  assert(f.engine->match_run.replay_mode_acc_108e10 == 0);
+
+  int loops = 0;
+  while (f.engine->match_run.replay_mode_108e0c == 1 && loops < 8) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    loops++;
+  }
+  assert(f.engine->match_run.replay_mode_108e0c > 1);
+  assert(f.engine->match_run.replay_mode_acc_108e10 > 0);
+  assert(f.engine->match_run.render.replay.phase_counter == 1);
+  assert(fifa96_match_run_replay_family(&f.engine->match_run.render.replay));
   drop_fixture(f);
 }
 
@@ -459,6 +494,7 @@ int main(void) {
   test_bridge_starts_and_rebegins();
   test_engine_step_wires_bridge();
   test_engine_replay_key_arms();
+  test_engine_replay_request_frame_control();
   test_engine_replay_audio_duck_edge();
   test_kickoff_auto_pass_replay_gated();
   test_bridge_stages_render_with_iso();

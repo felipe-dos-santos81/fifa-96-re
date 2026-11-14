@@ -601,8 +601,12 @@ static void test_ring_empty(void) {
   r = &mr.render.replay;
 
   assert(fifa96_match_replay_count(&mr) == 0);
+  mr.replay_mode_108e0c = 4;
+  mr.replay_mode_acc_108e10 = 5;
   assert(fifa96_match_run_replay_begin(&mr) == 0);
   assert(r->state == FIFA96_MATCH_REPLAY_ARMED);
+  assert(mr.replay_mode_108e0c == 0);
+  assert(mr.replay_mode_acc_108e10 == 0);
 
   fifa96_match_run_replay_step(&mr, 0);
   assert(r->state == FIFA96_MATCH_REPLAY_IDLE);
@@ -976,6 +980,152 @@ static void test_replay_arm_view_reset(void) {
   assert(mr.replay_view_reset_109014 == 0);
 }
 
+/* Task 9 (RR-L7): the request starts the native mode window, then the ramp
+ * waits for playback completion before spending its countdown. A full ring
+ * stamped 4 completes on call 600: with replay_step before control, the phase
+ * first equals 0xF0 on call 479 and 0x168 on call 599, and the 360-tick
+ * countdown exits on call 959. The empty ring completes immediately, so its
+ * phase-1 countdown exits on call 241, directly after the 240-tick mode window. */
+static void test_replay_request_timed_exit(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_run_replay *r;
+  int first_f0 = 0;
+  int first_168 = 0;
+  int exit_index = 0;
+  int exits = 0;
+  int empty_exit = 0;
+  int empty_exits = 0;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.paused = 0;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  r = &mr.render.replay;
+
+  assert(fifa96_match_run_replay_complete(NULL) == 0);
+  assert(fifa96_match_run_replay_request(&mr, 1) == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_ARMED);
+  assert(r->phase_counter == 1);
+  assert(mr.replay_mode_108e0c == 1);
+  assert(mr.replay_mode_acc_108e10 == 0);
+
+  fill_ring_150(&mr);
+  for (uint32_t i = 0; i < FIFA96_MATCH_REPLAY_RING_RECORDS; i++)
+    put_u16(mr.replay_ring.record[i], 0x116, 4);
+  r->state = FIFA96_MATCH_REPLAY_PLAYING;
+  r->cursor = 0;
+  r->cursor_limit = mr.replay_ring.count;
+  r->advance = 0;
+  assert(fifa96_match_run_replay_complete(&mr) == 0);
+
+  for (int i = 1; i <= 0x400; i++) {
+    int complete_before_control;
+    int rc;
+    assert(fifa96_match_run_replay_step(&mr, 0) == 0);
+    complete_before_control = fifa96_match_run_replay_complete(&mr);
+    rc = fifa96_match_run_replay_control(&mr, 1);
+    if (first_f0 == 0 && r->phase_counter >= 0xF0) {
+      assert(r->phase_counter == 0xF0);
+      first_f0 = i;
+    }
+    if (first_168 == 0 && r->phase_counter >= 0x168) {
+      assert(r->phase_counter == 0x168);
+      first_168 = i;
+    }
+    if (rc != 0) {
+      assert(rc == 1);
+      assert(complete_before_control == 1);
+      exits++;
+      exit_index = i;
+      assert(r->state == FIFA96_MATCH_REPLAY_LIVE);
+      assert(r->phase_counter == 0);
+      break;
+    }
+  }
+
+  assert(exits == 1);
+  assert(first_f0 == 479);
+  assert(first_168 == 599);
+  assert(exit_index == 959);
+  assert(exit_index > first_168 && first_168 > first_f0);
+  assert(fifa96_match_run_replay_complete(&mr) == 1);
+  assert(r->state == FIFA96_MATCH_REPLAY_LIVE);
+  assert(r->phase_counter == 0);
+
+  /* An empty ring is already complete. Keep running the ordinary PLAYING
+   * state machine to prove that the timed exit needs no cursor advance. */
+  fifa96_match_replay_ring_reset(&mr);
+  assert(fifa96_match_run_replay_complete(&mr) == 1);
+  assert(fifa96_match_run_replay_request(&mr, 1) == 0);
+  r->state = FIFA96_MATCH_REPLAY_PLAYING;
+  r->cursor = 0;
+  r->cursor_limit = 0;
+  r->advance = 0;
+  for (int i = 1; i <= 0x400; i++) {
+    int rc;
+    assert(fifa96_match_run_replay_step(&mr, 0) == 0);
+    assert(r->cursor == 0);
+    rc = fifa96_match_run_replay_control(&mr, 1);
+    if (rc != 0) {
+      assert(rc == 1);
+      empty_exits++;
+      empty_exit = i;
+      break;
+    }
+  }
+  assert(empty_exits == 1);
+  assert(empty_exit == 241);
+  assert(r->cursor == 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_LIVE);
+  assert(r->phase_counter == 0);
+
+  printf("replay request: phase 0xF0=%d, phase 0x168=%d, exit=%d; "
+         "empty exit=%d\n",
+         first_f0, first_168, exit_index, empty_exit);
+}
+
+/* Task 9: begin validates before writing any request cell. The on=0 entry is
+ * the request API's no-op; per-frame work belongs to replay_control. */
+static void test_replay_request_failure_atomic(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_run_replay *r;
+
+  memset(&mr, 0xAA, sizeof mr);
+  fifa96_match_run_init(&mr);
+  assert(mr.replay_mode_108e0c == 0);
+  assert(mr.replay_mode_acc_108e10 == 0);
+  r = &mr.render.replay;
+  r->phase_counter = 0x55;
+  mr.replay_mode_108e0c = 7;
+  mr.replay_mode_acc_108e10 = 9;
+
+  assert(fifa96_match_run_replay_request(&mr, 1) == -FIFA96_ERR_STATE);
+  assert(r->phase_counter == 0x55);
+  assert(mr.replay_mode_108e0c == 7);
+  assert(mr.replay_mode_acc_108e10 == 9);
+  assert(fifa96_match_run_replay_request(&mr, 0) == 0);
+  assert(r->phase_counter == 0x55);
+  assert(mr.replay_mode_108e0c == 7);
+  assert(mr.replay_mode_acc_108e10 == 9);
+
+  mr.running = 1;
+  mr.paused = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  assert(fifa96_match_run_replay_request(&mr, 1) == -FIFA96_ERR_STATE);
+  assert(r->phase_counter == 0x55);
+  assert(mr.replay_mode_108e0c == 7);
+  assert(mr.replay_mode_acc_108e10 == 9);
+
+  mr.paused = 0;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_OVER;
+  assert(fifa96_match_run_replay_request(&mr, 1) == -FIFA96_ERR_STATE);
+  assert(r->phase_counter == 0x55);
+  assert(mr.replay_mode_108e0c == 7);
+  assert(mr.replay_mode_acc_108e10 == 9);
+  assert(fifa96_match_run_replay_request(NULL, 1) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_ring_pack_apply_roundtrip();
   test_ring_capture_budget();
@@ -996,6 +1146,8 @@ int main(void) {
   test_ring_compose_queue6();
   test_ring_appearance_identity();
   test_replay_arm_view_reset();
+  test_replay_request_timed_exit();
+  test_replay_request_failure_atomic();
   puts("test_engine_replay_ring OK");
   return 0;
 }
