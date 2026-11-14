@@ -1538,6 +1538,28 @@ static void test_replay_capture_in_frame(void) {
   fifa96_match_run_init(&mr);
 }
 
+/* Task 7 (RR-L4): the ball appearance-byte identity. The native composer's
+ * ball slot (`0x36E20 MOV ECX,[0x158866]; 0x36E2D MOV CL,[ECX]`) is one
+ * pointer load then one byte load at offset 0 (`row[0]`), and the engine's
+ * source-to-stage link (`ball->stage.anim_id = mr->entities.ball.appear_row`,
+ * fifa96_match_run.c:2790) carries that row id through the real scene stage to
+ * the composed view byte `+0x17C+22` and the packed record `+0xC4+22`. This
+ * fixture runs the real stage path (render.enabled) and asserts the staged
+ * ball slot equals the staged appear row — not a separately staged copy. */
+static void test_replay_ball_appearance_link(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.state.phase = 0;
+  mr.state.period_length = 90;
+  mr.render.enabled = 1;
+  mr.entities.ball.appear_row = 0x2B;
+  one_granted_frame(&mr);
+  assert(mr.render.entities[22].stage.anim_id == 0x2B);
+}
+
 /* Task 5: the replay draws the recorded past. Two captured frames at position
  * A, then two at position B, arm the replay and run one frozen frame: the
  * stage must draw record 0 (A), not the live pool (still B), and the next live
@@ -11499,6 +11521,7 @@ int main(void) {
   test_replay_frozen_live_view_applies_target();
   test_replay_frozen_scene_stage_keeps_record_anim();
   test_replay_capture_in_frame();
+  test_replay_ball_appearance_link();
   test_replay_draws_recorded_past();
   test_goal_zone_classifier();
   test_goal_arm_gates_and_snapshot();

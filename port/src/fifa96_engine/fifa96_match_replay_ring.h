@@ -31,6 +31,17 @@
  * (`word_55C72`, the composer's `FUN_000492CC` word). Every other lane is a
  * byte-exact inverse.
  *
+ * The appearance lane is the identity, not a mapping (RR-L4, census
+ * `2026-11-13-replay-chain-census.md`): the composer writes
+ * `view[+0x17C+i] = stage.anim_id` byte-exact, where a team slot's
+ * `stage.anim_id` is `byte[[rec+0x28]]` (the native `0x36D44 MOV ECX,[EDX+0x28];
+ * 0x36D47 MOV CL,[ECX]`) and the ball slot 22's is `byte[[0x158866]]`
+ * (`0x36E20 MOV ECX,[0x158866]; 0x36E2D MOV CL,[ECX]`) — one pointer load then
+ * one byte load at offset 0 (`row[0]`), carried by the source-to-stage link
+ * `ball->stage.anim_id = mr->entities.ball.appear_row`. The packer copies it
+ * to `record[+0xC4+i]` and the applier returns it; there is no row+offset
+ * composition on the appearance byte.
+ *
  * The ring cursors are the native cells `*[0x109AB8]` (read), `*[0x109ABC]`
  * (write), `*[0x109AC0]` (count), `[0x109AAC]` (the packer accumulator),
  * `[0x107310]` (the 90-frame mode-window budget) and `[0x109A90]` (the

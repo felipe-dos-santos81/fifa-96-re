@@ -878,6 +878,56 @@ static void test_ring_compose_queue6(void) {
   }
 }
 
+/* Task 7 (RR-L4): the appearance-byte identity. The composer writes
+ * `view[+0x17C+i] = stage.anim_id` byte-exact (no transform), the packer copies
+ * it to record `+0xC4+i`, and the applier returns it. The ball slot 22's byte
+ * is the staged row id (`0x2B`), not a composed row+offset — the same value
+ * the link test proves the real stage path produces from `appear_row`. */
+static void test_ring_appearance_identity(void) {
+  struct fifa96_match_run mr;
+  uint8_t *view;
+  uint8_t record[FIFA96_MATCH_REPLAY_RECORD_SIZE];
+  uint8_t applied[FIFA96_MATCH_REPLAY_VIEW_SIZE];
+  size_t i;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  mr.state.frame_delta = 2;
+  view = mr.render.replay.replay_view;
+  memset(view, 0xCC, FIFA96_MATCH_REPLAY_VIEW_SIZE);
+
+  /* Stage the appearance bytes: slots 0..21 as i + 0x20, the ball 0x2B. */
+  for (i = 0; i < FIFA96_MATCH_REPLAY_VIEW_SLOTS; i++)
+    mr.render.entities[i].stage.anim_id =
+        (i == 22) ? 0x2B : (uint8_t)(i + 0x20);
+
+  fifa96_match_replay_compose(&mr);
+
+  /* Identity: the composed view byte equals the staged row id, untransformed. */
+  for (i = 0; i < FIFA96_MATCH_REPLAY_VIEW_SLOTS; i++)
+    assert(view[0x17C + i] == mr.render.entities[i].stage.anim_id);
+
+  /* Pack: the record byte copies the composed lane verbatim. */
+  memset(record, 0, sizeof record);
+  fifa96_match_replay_pack(view, record, 1);
+  for (i = 0; i < FIFA96_MATCH_REPLAY_VIEW_SLOTS; i++)
+    assert(record[0xC4 + i] == mr.render.entities[i].stage.anim_id);
+
+  /* Unpack: the applied lane returns the same row id. */
+  memset(applied, 0, sizeof applied);
+  fifa96_match_replay_unpack(record, applied);
+  for (i = 0; i < FIFA96_MATCH_REPLAY_VIEW_SLOTS; i++)
+    assert(applied[0x17C + i] == mr.render.entities[i].stage.anim_id);
+
+  /* The ball's record byte is the row id 0x2B, not a composed row+offset. */
+  assert(mr.render.entities[22].stage.anim_id == 0x2B);
+  assert(view[0x17C + 22] == 0x2B);
+  assert(record[0xC4 + 22] == 0x2B);
+  assert(applied[0x17C + 22] == 0x2B);
+}
+
 /* Task 6 (C4R-L1): the arm's projection-reset flag `[0x109014]`. The native
  * `FUN_0005865C` arm writes `[0x109014]=0` (0x58666) before its three
  * presentation calls — `FUN_00056B88(0x2B)`, the `0x14E9B8 >= 0x80` /3 loop
@@ -927,6 +977,7 @@ int main(void) {
   test_ring_compose_band_queue();
   test_replay_resync_queue_pop();
   test_ring_compose_queue6();
+  test_ring_appearance_identity();
   test_replay_arm_view_reset();
   puts("test_engine_replay_ring OK");
   return 0;
