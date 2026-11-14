@@ -813,3 +813,22 @@ Append-only; the §7.8/§13 lines quoted in the B7–B8 plan are corrected here.
   `0x14E9B8 >= 0x80` /3 loop and `FUN_00056894` are presentation bodies.
   The image default of `[0x109014]` is 0; `FUN_000585E4` is the setup writer
   that sets 1.
+
+## 14.1 Fresh-read deltas (2026-11-13)
+
+Append-only; the §14 bullets are corrected by the 2026-11-13 B7–B8 fresh reads
+(`.superpowers/sdd/2026-11-13-replay-chain-b7-b8/evidence-B`). These are the
+deltas §14 does not already carry.
+
+- **§14 RR-L10 — the drain gate and the FIFO semantics.** `FUN_00064EC0` is the
+  drain gate: it tests `[0x109A98] & 0x80` (`0x64EC3..0x64ECD`), then
+  `FUN_00037AE4`/`FUN_00036BC8` compare `[0x105FFC]` against 5 and 7
+  (`0x64ECF`); on pass it sets `EAX=1` (push selector) and calls `0x64EF0` with
+  the caller's value in `EDX`. `FUN_000974DC` calls the gate then `FUN_00065CC0`;
+  `FUN_00065CC0` reads only globals (`[0x155CE0]`/`[0x155D30]`/`[0x155D00]`/
+  `[0x10A250]`) and writes `[0x10A254]` via `0xA7705` — "audio" is inferred, not
+  proven. The FIFO selector is `EAX==1` push / `0` pop, value `EDX`; push store
+  base `0x155C8C + head*4`, pop base `0x155C90 + tail*4`; the push
+  pre-increments head, evicts the tail when `count == 20`, and pop returns
+  `value + 1`. The C ring's conventional indexing preserves order, not the
+  address offset.

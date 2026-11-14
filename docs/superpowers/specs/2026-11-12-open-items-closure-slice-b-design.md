@@ -410,3 +410,37 @@ wording below. The §B7/§B8 text is left verbatim as the record.
   `**(byte **)(rec+0x28)` (one pointer load, one byte load); the ball is
   `*[0x158866]`. The earlier `***(byte**)(rec+0x28)` in the plan review focus
   had one extra dereference.
+
+## 11.1 Fresh-read deltas (2026-11-13)
+
+Append-only; the §11 bullets are corrected by the 2026-11-13 B7–B8 fresh reads
+(`.superpowers/sdd/2026-11-13-replay-chain-b7-b8/evidence-A/B/C/D`). These are
+the deltas §11 does not already carry.
+
+- **RR-L2 — nine named functions plus five orphans, not "eight".** §11 reads
+  "`[0x14E574]` has 35 xrefs across eight functions". The 35 xrefs are
+  attributed to **nine** named functions (`FUN_000513EC`, `FUN_00051AB8`,
+  `FUN_000537F8`, `FUN_00053DC4`, `FUN_00053DE0`, `FUN_00053BB8`,
+  `FUN_00052030`, `FUN_00053A48`, `FUN_00052D68`) plus **five** orphan xrefs
+  (`0x51485`, `0x51535`, `0x51805`, `0x518D5`, `0x51A49`) in the un-named
+  `0x51441..0x51AB7` region. The `FUN_00053A48` re-enable call is conditional on
+  the latch being nonzero: `0x53A95 CMP ESI,[0x14E574]; 0x53A9B JZ 0x53AAD;
+  0x53A9D CALL 0x64080`.
+- **Ring reset — the five exact cells.** `FUN_00064030` writes
+  `*[0x109AB8]`, `*[0x109ABC]`, `[0x109A94]`, `[0x109AAC]`, `*[0x109AC0]`
+  (all zero); it does **not** write `[0x109A90]` or `[0x107310]`.
+- **RR-L7 — the `0x510DC` range map and `FUN_00064270`.** The ranges are
+  `0x510EB..0x51119` tick floor (`EDX = max(tick,1)`) + early return;
+  `0x51122..0x5114A` request arm (`[0x14E58C]=1`, `CALL 0x64270`,
+  `CALL 0x37114(4)`, `[0x108E0C]=1`, `[0x108E10]=0`); `0x5114F..0x5118A`
+  `[0x108E0C]==1` arm; `0x5118B..0x511B4` mode advance; `0x511B5..0x51221` ramp
+  (`0xF0`/`0x168`/clamp `0x169`, `CALL 0x64DFC` when phase > `0xF0`);
+  `0x511D5`/`0x511DC` complete gate; `0x51222..0x51249` countdown. `FUN_00064270`
+  only stores `[0x109A98]=0x81` (gated `[0x109AB0]!=0`) and calls `0x5865C`; it
+  does **not** write mode/acc/phase.
+- **RR-L5 — the selector's epilogue, POSE stride and wrap location.** Index > 6
+  jumps to the epilogue `0x4D2AB`, which still stores `[0x107DDC]=index`
+  (`0x4D2C4`); out-of-range changes no selection. POSE computes
+  `0x107968 + ([0x107DD0]*8 − [0x107DD0])*0x10` (a `0x70` stride), not the bare
+  constant. The `0x20` wrap is in `FUN_000642FC` (`0x644B2..0x644C6`), not the
+  selector.

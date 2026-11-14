@@ -158,3 +158,29 @@ before the wrap, so index 0 of the base is never written: the actual storage is
 **`0x155C90..0x155CDC`** (`0x155C90 + 4*i`, `i = 0..0x13`), and **`0x155C8C`
 is HUD state** (FU-111 §5), not the queue. The `0x974DC` half remains a
 **B** handoff, unchanged.
+
+## 10. Replay-chain census (2026-11-13) — resync and FIFO exact semantics
+
+**Erratum (quoted).** §2 records "**`FUN_0006428c`**: `if ([0x55C4C] >> 24 !=
+0) FUN_000974dc();` — a re-sync hook called by the mode-0x83 loop." Fresh
+`disassemble_function 0x6428C`/`0x64EF0`/`0x64EC0` (2026-11-13 B7–B8 census,
+evidence-A/B) correct the resync and pin the FIFO:
+
+- **Resync.** `0x6428C MOV EAX,[0x155C4C]; 0x64291 SAR EAX,0x18` reads byte
+  `0x155C4F` (the queue-pop byte); `0x64296 JZ` early-returns when zero; else
+  `0x64298 DEC EAX` and `0x64299 JMP 0x974DC` (a **tail-jump**, not a call). The
+  value passed to `FUN_000974DC` is `byte[0x155C4F] − 1` — caller-supplied, not a
+  constant inside `0x974DC`.
+- **FIFO exact semantics.** `FUN_00064EF0` selector `EAX==1` push / `0` pop,
+  value in `EDX`: push store base `0x155C8C + head*4` (`0x64F21`), pop base
+  `0x155C90 + tail*4` (`0x64F3B`); the push **pre-increments** head (`0x64F1F`),
+  evicts the tail when `count == 20` (`0x64F10`), and pop returns `value + 1`
+  (`0x64F4C`). count/head/tail are `[0x109AEC]/[0x109AF0]/[0x109AF4]`.
+- **Drain gate.** `FUN_00064EC0` tests `[0x109A98] & 0x80` (`0x64EC3..0x64ECD`)
+  then `FUN_00037AE4`/`FUN_00036BC8` compare `[0x105FFC]` against 5 and 7; on
+  pass it sets `EAX=1` and calls `0x64EF0` with the caller's value in `EDX`.
+  `FUN_00065CC0` reads only globals and writes `[0x10A254]` via `0xA7705`;
+  "audio" is inferred, not proven.
+
+The C ring's conventional indexing preserves order, not the address offset. No
+code, golden or completion-number movement.

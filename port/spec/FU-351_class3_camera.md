@@ -1365,3 +1365,24 @@ open legs (`0x72649` +0x32, `0x72660` −0x4B, `0x7270F` +0x19, `0x8AD54` −0x9
 The M2 golden is re-pinned (SHA `3bdfbbe…`, 3,978-frame hash-only diff) because
 the abridged stream omitted the native `0x72CF9`/`0x7309E` target-block draws.
 Completion unchanged (78/78, 61/80 wired / 64/80 install-live).
+
+## 30. Erratum (2026-11-13) — C4R-L1: the flag is shared, the reset is presentation-only
+
+**Erratum (quoted).** §28 reads: "The arm's real `0x5865C` screen/projection
+reset (the replay view setup) is a new **C4R-L1** leg owned by Slice B." Fresh
+`disassemble_function 0x5865C`/`0x585E4` and `get_xrefs_to 0x109014`
+(2026-11-13 B7–B8 census, evidence-D) refine C4R-L1:
+
+- **`[0x109014]=0` is NOT presentation-only.** It is a shared projection-active
+  flag with two writers — `FUN_0005865C` writes 0 (`0x58666`) and
+  `FUN_000585E4` writes 1 (`0x585F2`) — and five consumer functions
+  (`FUN_000574B8`, `FUN_00057594`, `FUN_00057754`, `FUN_00057510`,
+  `FUN_000586C0` incl. read-write at `0x586E5`/`0x58715`). It is consumed by the
+  wider pipeline, not just the present view.
+- **The reset body is presentation-only.** `FUN_00056B88(0x2B)` (the band/view
+  structure), the in-place `/3` loop over the 23 dwords at `0x14E9B8`
+  (`0x58684..0x5869D`), and `FUN_00056894` (the matrix recompute) operate on the
+  view/projection/band buffers.
+
+The engine models the flag (init 0, arm 0) and records the three projection
+bodies as legs. No code, golden or completion-number movement.

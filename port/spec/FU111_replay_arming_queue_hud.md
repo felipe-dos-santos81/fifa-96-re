@@ -291,3 +291,31 @@ as a documented mapping: the port's `state.phase` **is** the
 `[0x157A4A] >> 24` model and the increment/reset sets are FU-111's (§1), so the
 budget gate follows the mode byte, not the phase table. Re-labeled, not a new
 port. No code, golden or completion-number movement.
+
+## 12. Erratum (2026-11-13) — the FIFO/queue exact semantics
+
+**Erratum (quoted).** §3's decompile reads the push as "`(&0x55C8C)[head] =
+param_2;`" with "evict ... wrap 0x13" and the pop as "`*(int *)(&0x55C90 +
+old_tail*4) + 1`"; §3 calls `FUN_00065cc0` "the device-layer notify". Fresh
+`disassemble_function 0x64EF0`/`0x64EC0`/`0x65CC0` (2026-11-13 B7–B8 census,
+evidence-B) confirm the shape and pin the byte-level semantics:
+
+- **FIFO.** Selector `EAX==1` push / `0` pop, value in `EDX`; push store base
+  `0x155C8C + head*4` (`0x64F21`), pop base `0x155C90 + tail*4` (`0x64F3B`); the
+  push **pre-increments** head (`0x64F1F INC EDI`) and stores before the wrap;
+  the tail evicts when `count == 20` (`0x64F10 CMP EBX,0x14`); pop returns
+  `value + 1` (`0x64F4C LEA EAX,[EDX+1]`). count/head/tail are
+  `[0x109AEC]/[0x109AF0]/[0x109AF4]` — §3's shape is exact.
+- **Drain gate.** `FUN_00064EC0` tests `[0x109A98] & 0x80` (`0x64EC3..0x64ECD`)
+  then `FUN_00037AE4`/`FUN_00036BC8` compare `[0x105FFC]` against 5 and 7
+  (`0x64ECF CALL 0x37AE4`); on pass it sets `EAX=1` and calls `0x64EF0` with the
+  caller's value in `EDX` (`0x64ED8..0x64EDD`).
+- **`FUN_00065CC0` reads only globals.** It consumes `[0x155CE0]`, `[0x155D30]`,
+  `[0x155D00]`, `[0x10A250]` and writes `[0x10A254]` via `FUN_000A7705`
+  (`0x65CE9`); it does **not** read `EAX`, so the value `0x974DC` passes in is
+  dropped here. The "audio" label is inferred from the gating shape + call
+  signature, not a symbol — the exact audio semantics of `0xA7705`/`0xA7728`
+  are not proven.
+
+The C ring's conventional indexing preserves order, not the address offset. No
+code, golden or completion-number movement.
