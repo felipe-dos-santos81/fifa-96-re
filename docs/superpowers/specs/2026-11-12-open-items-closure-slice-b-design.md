@@ -440,7 +440,6 @@ the deltas §11 does not already carry.
   does **not** write mode/acc/phase.
 - **RR-L5 — the selector's epilogue, POSE stride and wrap location.** Index > 6
   jumps to the epilogue `0x4D2AB`, which still stores `[0x107DDC]=index`
-  (`0x4D2C4`); out-of-range changes no selection. POSE computes
-  `0x107968 + ([0x107DD0]*8 − [0x107DD0])*0x10` (a `0x70` stride), not the bare
-  constant. The `0x20` wrap is in `FUN_000642FC` (`0x644B2..0x644C6`), not the
-  selector.
+  (`0x4D2C4`, evidence-D §1a epilogue); out-of-range changes no selection. POSE
+  computes `0x107968 + 112*[0x107DD0]` (a `0x70` stride), not the bare constant.
+  The `0x20` wrap is in `FUN_000642FC` (`0x644B2..0x644C6`), not the selector.
