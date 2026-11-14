@@ -35,6 +35,17 @@ int fifa96_camera_focus_clamp(int32_t x, int32_t y, int32_t z,
   return FIFA96_OK;
 }
 
+int fifa96_camera_replay_band(int32_t x, int32_t y) {
+  /* FUN_000627F4 (RR-L3): the x band is exclusive (1 / 4 / 0), the y band ORs
+   * 8 / 2, and the return is value + 1 unconditionally. Signed compares. */
+  int value = 0;
+  if (x > 0x46) value = 1;
+  else if (x < -0x46) value = 4;
+  if (y < 0x6A) value |= 8;
+  if (y > 0x35) value |= 2;
+  return value + 1;
+}
+
 int fifa96_camera_target_slot(int32_t roster, int32_t side, int32_t ac2) {
   /* FUN_0004BE44 0x4B99F..0x4B9FF. FUN_0004B678 is `ac2 >= 4`; the odd
    * `ac2 & 1` arm flips which side receives the away-bank addend. */

@@ -5427,6 +5427,11 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   /* RR-L10: the replay FIFO cursors and the staged drain screen id. */
   fifa96_match_run_replay_fifo_reset(mr);
   mr->replay_screen_id_105ffc = 0;
+  /* RR-L3: the composer's band/flag/queue-pop cells start clear. */
+  mr->replay_view_flags_155c4e = 0;
+  mr->replay_queue_pop_155c4f = 0;
+  mr->replay_band_155c50 = 0;
+  mr->replay_band_flag_155c51 = 0;
 }
 
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
@@ -5950,6 +5955,11 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   /* RR-L10: the replay FIFO cursors and the staged drain screen id. */
   fifa96_match_run_replay_fifo_reset(mr);
   mr->replay_screen_id_105ffc = 0;
+  /* RR-L3: the composer's band/flag/queue-pop cells start clear. */
+  mr->replay_view_flags_155c4e = 0;
+  mr->replay_queue_pop_155c4f = 0;
+  mr->replay_band_155c50 = 0;
+  mr->replay_band_flag_155c51 = 0;
   return 0;
 }
 
@@ -10322,10 +10332,16 @@ static void replay_transition(struct fifa96_match_run *mr) {
   (void)mr;
 }
 
-/* RR-L10: the native `FUN_0006428C` resync, run after each countdown step.
- * The body is unproved (leg); the port keeps the call site as a no-op. */
+/* RR-L10/RR-L3: the native `FUN_0006428C` resync, run after each countdown
+ * step. `MOV EAX,[0x155C4C]; SAR EAX,0x18` reads the queue-pop byte
+ * (`0x155C4F`); if nonzero it decrements and tail-calls `0x974DC`, which runs
+ * the `0x64EC0` drain gate then `0x65CC0`. The `FUN_00065CC0` notification
+ * body is a numbered leg (globals only, `0xA7705` call; audio inferred). */
 static void replay_resync(struct fifa96_match_run *mr) {
-  (void)mr;
+  if (mr->replay_queue_pop_155c4f != 0) {
+    mr->replay_queue_pop_155c4f--;
+    (void)fifa96_match_run_replay_fifo_drain(mr, mr->replay_queue_pop_155c4f);
+  }
 }
 
 int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons) {

@@ -2918,6 +2918,17 @@ static void test_classifier_bits(void) {
   assert(fifa96_camera_classify(p0, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* RR-L3: FUN_000627F4, the focus band classifier the composer feeds into the
+ * `0x155C50` band byte. Signed compares: x > 0x46 -> 1, x < -0x46 -> 4, else
+ * 0; y < 0x6A -> |8, y > 0x35 -> |2; the return is value + 1, unconditionally. */
+static void test_replay_band_classifier(void) {
+  assert(fifa96_camera_replay_band(0x47, 0x6A) == 4);
+  assert(fifa96_camera_replay_band(0, 0) == 9);
+  assert(fifa96_camera_replay_band(-0x47, 0) == 13);
+  assert(fifa96_camera_replay_band(-0x46, 0x6A) == 3);
+  assert(fifa96_camera_replay_band(0, 0x6B) == 3);
+}
+
 static void test_pan_band(void) {
   /* FUN_000709D0 band ladder (first-hand decompile): h < 0x29 ->
    * (class 1, 2h+0x14); h < 0x65 -> (class 2, (h+0x50)/2); h < 0x12D ->
@@ -4044,6 +4055,7 @@ int main(void) {
   test_pose_axis_a();
   test_pose_feed_default_handler_arm();
   test_classifier_bits();
+  test_replay_band_classifier();
   test_pan_band();
   test_rate_event();
   test_camera_height_producer();

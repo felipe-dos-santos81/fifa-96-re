@@ -262,13 +262,33 @@ void fifa96_match_replay_compose(struct fifa96_match_run *mr) {
   for (i = 0; i < FIFA96_MATCH_REPLAY_VIEW_SLOTS; i++)
     replay_view_put_slot(view, i, &r->entities[i].stage);
 
-  /* The camera cluster: the roll byte, the three staged-zero bytes
-   * (queue pop / band / flag, RR-L3), the six queue bytes, the `FUN_000974D0`
-   * stub 1 and the `FUN_000492CC` frame-delta stand-in (RR-L6). */
-  view[FIFA96_REPLAY_CAMERA_BYTES + 0] = r->ball_roll;
-  view[FIFA96_REPLAY_CAMERA_BYTES + 1] = 0;
-  view[FIFA96_REPLAY_CAMERA_BYTES + 2] = 0;
-  view[FIFA96_REPLAY_CAMERA_BYTES + 3] = 0;
+  /* RR-L3: the band gate and the queue pop run before the cluster is written.
+   * The band gate fires once per goal (the bit-0x40 latch persists in
+   * `replay_view_flags_155c4e`); the queue pop is outside the gate. */
+  if (mr->goal_counter_15781c != 0 &&
+      (mr->replay_view_flags_155c4e & 0x40) == 0) {
+    mr->replay_view_flags_155c4e |= 0x40;
+    mr->replay_band_155c50 =
+        (uint8_t)fifa96_camera_replay_band(focus.x, focus.y);
+    mr->replay_band_flag_155c51 = 1;
+  }
+  {
+    uint32_t raw = 0;
+    if (fifa96_match_run_replay_fifo_pop(mr, &raw))
+      mr->replay_queue_pop_155c4f = (uint8_t)(raw + 1);
+    else
+      mr->replay_queue_pop_155c4f = 0;
+  }
+
+  /* The camera cluster: the roll byte (merged with the band-latch flag bits),
+   * the queue-pop byte, the band and the flag, the six queue bytes, the
+   * `FUN_000974D0` stub 1 and the `FUN_000492CC` frame-delta stand-in
+   * (RR-L6). */
+  view[FIFA96_REPLAY_CAMERA_BYTES + 0] =
+      (uint8_t)(r->ball_roll | (mr->replay_view_flags_155c4e & 0xC0));
+  view[FIFA96_REPLAY_CAMERA_BYTES + 1] = mr->replay_queue_pop_155c4f;
+  view[FIFA96_REPLAY_CAMERA_BYTES + 2] = mr->replay_band_155c50;
+  view[FIFA96_REPLAY_CAMERA_BYTES + 3] = mr->replay_band_flag_155c51;
   memset(view + FIFA96_REPLAY_QUEUE6, 0, 6);
   replay_put_word(view, FIFA96_REPLAY_WORD_1CC, 1);
   replay_put_word(view, FIFA96_REPLAY_WORD_1CE, mr->state.frame_delta);

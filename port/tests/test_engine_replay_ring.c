@@ -712,6 +712,101 @@ static void test_replay_fifo_drain_gate(void) {
   assert(v == 42);
 }
 
+/* Task 4 (RR-L3): the composer writes the band/flag/queue-pop bytes and merges
+ * the band-latch flag bits into the roll byte. The band gate fires once per
+ * goal (the bit-0x40 latch); the queue pop runs outside the gate. */
+static void test_ring_compose_band_queue(void) {
+  struct fifa96_match_run mr;
+  uint8_t *view;
+  uint8_t record[FIFA96_MATCH_REPLAY_RECORD_SIZE];
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  mr.state.frame_delta = 2;
+  view = mr.render.replay.replay_view;
+  memset(view, 0xCC, FIFA96_MATCH_REPLAY_VIEW_SIZE);
+
+  /* Stage the focus triple, the band gate, the roll byte and the FIFO. */
+  mr.render.render_focus_valid = 1;
+  mr.render.render_focus_x = 0x47;
+  mr.render.render_focus_y = 0x6A;
+  mr.render.render_focus_z = 0;
+  mr.goal_counter_15781c = 1;
+  mr.render.ball_roll = 0x05;
+  fifa96_match_run_replay_fifo_reset(&mr);
+  assert(fifa96_match_run_replay_fifo_push(&mr, 0x2A) == 1);
+  assert(fifa96_match_run_replay_fifo_push(&mr, 0x30) == 1);
+
+  fifa96_match_replay_compose(&mr);
+
+  assert(view[0x1AC] == 4);    /* band = classifier(0x47, 0x6A) */
+  assert(view[0x1AD] == 1);    /* flag */
+  assert(view[0x1AB] == 0x2B); /* queue pop = 0x2A + 1 */
+  assert(view[0x1AA] == 0x45); /* roll 0x05 | the bit-0x40 latch */
+  assert(mr.replay_view_flags_155c4e == 0x40);
+  assert(mr.replay_band_155c50 == 4 && mr.replay_band_flag_155c51 == 1);
+  assert(mr.replay_queue_pop_155c4f == 0x2B);
+
+  /* Pack: the camera-byte lane maps view +0x1AA to record +0xF2. */
+  memset(record, 0, sizeof record);
+  fifa96_match_replay_pack(view, record, 1);
+  assert(record[0xF2] == 0x45);
+
+  /* Second compose: the flag is already set, so band/flag stay; the queue pop
+   * consumes the next FIFO value (0x30 + 1) outside the band gate. */
+  fifa96_match_replay_compose(&mr);
+  assert(view[0x1AC] == 4);
+  assert(view[0x1AD] == 1);
+  assert(view[0x1AB] == 0x31);
+  assert(view[0x1AA] == 0x45);
+
+  /* Third compose: the FIFO is empty, so the queue-pop byte is 0. */
+  fifa96_match_replay_compose(&mr);
+  assert(view[0x1AB] == 0);
+  assert(mr.replay_queue_pop_155c4f == 0);
+}
+
+/* Task 4 (RR-L3): the `FUN_0006428C` resync decrements the queue-pop byte and
+ * drains it through the gate. With state 0x83 (the live call site's family,
+ * bit 0x80 set) the 0x64EC0 gate blocks the push, so the FIFO stays empty
+ * while the pop byte counts down to 0. */
+static void test_replay_resync_queue_pop(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_run_replay *r;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  r = &mr.render.replay;
+  fill_ring_150(&mr);
+
+  r->state = FIFA96_MATCH_REPLAY_PLAYING;
+  r->cursor = 0;
+  r->cursor_limit = 150;
+  r->advance = 0;
+  mr.replay_queue_pop_155c4f = 2;
+  fifa96_match_run_replay_fifo_reset(&mr);
+
+  /* Two PLAYING ticks -> one record step -> one resync: 2 -> 1, no push. */
+  fifa96_match_run_replay_step(&mr, 0);
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(mr.replay_queue_pop_155c4f == 1);
+  assert(mr.replay_fifo.count == 0);
+
+  /* The next resync decrements to 0, still no push. */
+  fifa96_match_run_replay_step(&mr, 0);
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(mr.replay_queue_pop_155c4f == 0);
+  assert(mr.replay_fifo.count == 0);
+
+  /* A third resync leaves it at 0. */
+  fifa96_match_run_replay_step(&mr, 0);
+  fifa96_match_run_replay_step(&mr, 0);
+  assert(mr.replay_queue_pop_155c4f == 0);
+  assert(mr.replay_fifo.count == 0);
+}
+
 int main(void) {
   test_ring_pack_apply_roundtrip();
   test_ring_capture_budget();
@@ -727,6 +822,8 @@ int main(void) {
   test_replay_fifo_eviction();
   test_replay_fifo_wrap();
   test_replay_fifo_drain_gate();
+  test_ring_compose_band_queue();
+  test_replay_resync_queue_pop();
   puts("test_engine_replay_ring OK");
   return 0;
 }

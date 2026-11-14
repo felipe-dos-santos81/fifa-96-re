@@ -1942,6 +1942,17 @@ struct fifa96_match_run {
    * as a staged `uint8_t`; init/begin zero it and the FIFO cursors. */
   struct fifa96_match_replay_fifo replay_fifo;
   uint8_t replay_screen_id_105ffc;   /* [0x105FFC] (staged; producer is a leg) */
+  /* RR-L3: the composer's four camera-cluster bytes (native `0x155C4E..0x155C51`).
+   * `replay_view_flags_155c4e` is the shared roll/flag byte: the bit-0x40 band
+   * latch lives here and is merged into the view `+0x1AA` (and record `+0xF2`)
+   * as `ball_roll | (flags & 0xC0)`; the bit 0x80/0x7F arm stays a numbered
+   * leg. `replay_band_155c50`/`replay_band_flag_155c51` are the band and the
+   * flag the band gate stages; `replay_queue_pop_155c4f` is the FIFO pop status
+   * (raw + 1, 0 when empty). init/begin zero all four. */
+  uint8_t replay_view_flags_155c4e;
+  uint8_t replay_queue_pop_155c4f;
+  uint8_t replay_band_155c50;
+  uint8_t replay_band_flag_155c51;
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
    * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/
