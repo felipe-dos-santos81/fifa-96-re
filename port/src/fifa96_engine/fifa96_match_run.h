@@ -372,6 +372,26 @@ int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons);
  * arm freed. The hero/selection release and audio sinks stay legs. */
 void fifa96_match_run_replay_exit(struct fifa96_match_run *mr);
 
+/* RR-L2: the recorder overlay gate's two edges.
+ *
+ * `fifa96_match_run_recorder_overlay_disable` is `FUN_00053DC4`'s disable edge
+ * (`0x53DD3 CALL 0x64074`, `0x53DD8 [0x14E574] = 1`): when the latch is clear
+ * it closes the recorder gate (`fifa96_match_replay_ring_record(mr, 0)`),
+ * sets the latch and returns 1; when the latch is already set it is a no-op
+ * (returns 0).
+ *
+ * `fifa96_match_run_recorder_overlay_reenable` is `FUN_00053A48`'s state-5->6
+ * re-enable edge (`0x53A9D CALL 0x64080`, `0x53AA2 [0x14E574] = 0`): when the
+ * latch is set it reopens the gate (`...record(mr, 1)`), clears the latch and
+ * returns 1; when the latch is clear it is a no-op (returns 0).
+ *
+ * They are distinct edges, not one `overlay(active)` setter: `_disable` acts
+ * only when the latch is 0, `_reenable` only when it is 1. The live overlay
+ * call site (the native `0x4B1D7`/`0x4B257` path) stays a numbered leg until
+ * the overlay state machine is ported; these functions are the seam. */
+int fifa96_match_run_recorder_overlay_disable(struct fifa96_match_run *mr);
+int fifa96_match_run_recorder_overlay_reenable(struct fifa96_match_run *mr);
+
 /* FUN_0004D134: select replay camera `index` (0..6; the native default only
  * records the index). The engine always stores the `[0x107DDC]` cell
  * (`record_index`) and keeps the current `{kind, sub}` selection on the
@@ -1872,6 +1892,12 @@ struct fifa96_match_run {
    * The playback index is `render.replay.cursor` (`[0x109A94]`), so the ring
    * carries no second copy of it. */
   struct fifa96_match_replay_ring replay_ring;
+  /* RR-L2: the recorder overlay latch `[0x14E574]`. Set by the disable edge
+   * (`FUN_00053DC4`, 0x53DD8), cleared by the re-enable edge (`FUN_00053A48`
+   * state-5->6, 0x53AA2). A gate-preserving reset never touches it; init and
+   * begin clear it. The recorder gate `replay_ring.enabled` is the only cell
+   * the two edges toggle. */
+  uint8_t recorder_latch_14e574;
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
    * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/

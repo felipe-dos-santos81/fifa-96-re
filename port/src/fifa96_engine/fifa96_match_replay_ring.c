@@ -185,9 +185,12 @@ void fifa96_match_replay_ring_reset(struct fifa96_match_run *mr) {
   mr->replay_ring.count = 0;
   mr->replay_ring.stamp_acc = 0;
   mr->replay_ring.budget = 0;
-  mr->replay_ring.enabled = 0;
-  /* The native `FUN_00064030` writes `[0x9A94] = 0`; the count mirror
-   * (`cursor_limit`) follows it. */
+  /* The native `FUN_00064030` writes `*[0x109AB8]`, `*[0x109ABC]`,
+   * `[0x109A94]`, `[0x109AAC]`, `*[0x109AC0]` (all zero); it does NOT write
+   * the recorder gate `[0x109A90]` or the mode-window budget `[0x107310]`. The
+   * engine zeroes the budget as an adapter but preserves the gate — the gate
+   * is toggled only by `FUN_00064074`/`FUN_00064080` (the overlay latch's
+   * `fifa96_match_replay_ring_record` edges). */
   mr->render.replay.cursor = 0;
   mr->render.replay.cursor_limit = 0;
 }

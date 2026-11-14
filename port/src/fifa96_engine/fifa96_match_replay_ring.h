@@ -71,8 +71,11 @@ void fifa96_match_replay_pack(const uint8_t *view, uint8_t *record,
 void fifa96_match_replay_unpack(const uint8_t *record, uint8_t *view);
 
 /* `FUN_00064030`: zero the read/write cursors, the count, the packer
- * accumulator, the mode-window budget, the recorder gate and the playback
- * index/limit (`render.replay.cursor`/`cursor_limit`). */
+ * accumulator and the playback index (`render.replay.cursor`), with the count
+ * mirror (`cursor_limit`) following. The native body does NOT write the
+ * mode-window budget (`[0x107310]`) or the recorder gate (`[0x109A90]`): the
+ * engine zeroes the budget as an adapter and preserves the gate, which is
+ * toggled only by `FUN_00064074`/`FUN_00064080`. */
 void fifa96_match_replay_ring_reset(struct fifa96_match_run *mr);
 
 /* `FUN_00064074`/`FUN_00064080`: clear/set the `[0x109A90]` recorder gate. */

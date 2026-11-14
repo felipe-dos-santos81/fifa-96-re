@@ -5418,9 +5418,12 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
-  /* RR-L1: the recorded-frame ring is reset at init with the recorder gate
-   * off (the match begin is the only path that enables it). */
+  /* RR-L1/RR-L2: the recorded-frame ring is reset at init; the recorder gate
+   * and the overlay latch are cleared explicitly (the run is not memset, and
+   * the native reset does not write the gate). */
   fifa96_match_replay_ring_reset(mr);
+  fifa96_match_replay_ring_record(mr, 0);
+  mr->recorder_latch_14e574 = 0;
 }
 
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
@@ -5936,8 +5939,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   match_run_camera_trace_open(mr);   /* FU313 §4.1: immediately before return 0 */
   /* RR-L1: the match begin resets the recorded-frame ring and turns the
    * recorder on (the live frame body then composes + captures once per granted
-   * frame inside the render-enabled branch). */
+   * frame inside the render-enabled branch). RR-L2: the overlay latch is
+   * cleared so the recorder starts from the open-gate, no-overlay state. */
   fifa96_match_replay_ring_reset(mr);
+  mr->recorder_latch_14e574 = 0;
   fifa96_match_replay_ring_record(mr, 1);
   return 0;
 }
@@ -9350,8 +9355,10 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   mr->render.team_remap_ready = 0;
   mr->render.hud_colors_ready = 0;
   mr->render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
-  /* RR-L1: the match end resets the recorded-frame ring (clears the recorder
-   * gate, the cursors and the count). */
+  /* RR-L1/RR-L2: the match end closes the recorder gate (the gate-preserving
+   * reset no longer writes it) and then resets the recorded-frame ring (the
+   * cursors and count). */
+  fifa96_match_replay_ring_record(mr, 0);
   fifa96_match_replay_ring_reset(mr);
   if (eng) {
     if (eng->match == mr) eng->match = NULL;
@@ -10126,6 +10133,31 @@ static int32_t match_run_replay_roster_id(const struct fifa96_match_run *mr,
       mr->sub_lineup[side][slot] < FIFA96_CAMERA_REPLAY_SLOTS)
     return (int32_t)mr->sub_lineup[side][slot];
   return (int32_t)slot;
+}
+
+/* RR-L2: the recorder overlay gate's two edges (see the header contract).
+ *
+ * `_disable` is FUN_00053DC4's edge: `0x53DC5 CMP [0x14E574],0; 0x53DD3 CALL
+ * 0x64074; 0x53DD8 [0x14E574]=1`. It closes the recorder gate and latches the
+ * overlay only when the latch is clear (a repeat disable is a no-op).
+ *
+ * `_reenable` is FUN_00053A48's state-5->6 edge: `0x53A95 CMP ESI,[0x14E574];
+ * 0x53A9B JZ 0x53AAD; 0x53A9D CALL 0x64080; 0x53AA2 [0x14E574]=0`. It reopens
+ * the gate and clears the latch only when the latch is set. */
+int fifa96_match_run_recorder_overlay_disable(struct fifa96_match_run *mr) {
+  if (!mr) return 0;
+  if (mr->recorder_latch_14e574 != 0) return 0;
+  fifa96_match_replay_ring_record(mr, 0);
+  mr->recorder_latch_14e574 = 1;
+  return 1;
+}
+
+int fifa96_match_run_recorder_overlay_reenable(struct fifa96_match_run *mr) {
+  if (!mr) return 0;
+  if (mr->recorder_latch_14e574 == 0) return 0;
+  fifa96_match_replay_ring_record(mr, 1);
+  mr->recorder_latch_14e574 = 0;
+  return 1;
 }
 
 int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {

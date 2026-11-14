@@ -242,13 +242,16 @@ static void test_ring_empty_reset(void) {
 
   memset(&mr, 0, sizeof mr);
   fifa96_match_run_init(&mr);
+  /* Set the gate before the reset: the native FUN_00064030 does not write
+   * [0x109A90], so the reset must preserve it. */
+  fifa96_match_replay_ring_record(&mr, 1);
   fifa96_match_replay_ring_reset(&mr);
   ring = &mr.replay_ring;
 
   assert(fifa96_match_replay_count(&mr) == 0);
   assert(fifa96_match_replay_count(NULL) == 0);
   assert(ring->read == 0 && ring->write == 0 && ring->count == 0);
-  assert(ring->stamp_acc == 0 && ring->budget == 0 && ring->enabled == 0);
+  assert(ring->stamp_acc == 0 && ring->budget == 0 && ring->enabled == 1);
   assert(mr.render.replay.cursor == 0 && mr.render.replay.cursor_limit == 0);
 
   /* The gate is off: two ticks record nothing. */
@@ -275,9 +278,65 @@ static void test_ring_empty_reset(void) {
   assert(get_u16(ring->record[0], 0x116) == 1);
 
   fifa96_match_replay_ring_reset(&mr);
+  /* The gate is still 1 from the flush test's `record(1)`: the reset preserves
+   * the recorder gate. */
   assert(ring->read == 0 && ring->write == 0 && ring->count == 0);
-  assert(ring->stamp_acc == 0 && ring->budget == 0 && ring->enabled == 0);
+  assert(ring->stamp_acc == 0 && ring->budget == 0 && ring->enabled == 1);
   assert(mr.render.replay.cursor == 0 && mr.render.replay.cursor_limit == 0);
+}
+
+/* Task 2 (RR-L2): the recorder overlay gate. The disable edge closes the gate
+ * and latches the overlay; the re-enable edge reopens the gate and clears the
+ * latch; a repeat of either edge is a no-op (the `[0x14E574]` one-shot). A
+ * closed gate packs nothing even with the two-tick cadence satisfied, and the
+ * ring reset preserves the gate (the native FUN_00064030 does not write
+ * [0x109A90]). */
+static void test_recorder_overlay_gate(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_replay_ring *ring;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  mr.replay_ring.enabled = 1;
+  ring = &mr.replay_ring;
+
+  /* disable: gate 0, latch 1, returns 1; a closed gate packs nothing. */
+  assert(fifa96_match_run_recorder_overlay_disable(&mr) == 1);
+  assert(ring->enabled == 0);
+  assert(mr.recorder_latch_14e574 == 1);
+  fifa96_match_replay_compose(&mr);
+  fifa96_match_replay_capture(&mr, 1);
+  fifa96_match_replay_capture(&mr, 1);
+  assert(fifa96_match_replay_count(&mr) == 0);
+
+  /* a repeat disable is a no-op: state unchanged. */
+  assert(fifa96_match_run_recorder_overlay_disable(&mr) == 0);
+  assert(ring->enabled == 0);
+  assert(mr.recorder_latch_14e574 == 1);
+
+  /* re-enable: gate 1, latch 0, returns 1; the two-tick cadence packs one. */
+  assert(fifa96_match_run_recorder_overlay_reenable(&mr) == 1);
+  assert(ring->enabled == 1);
+  assert(mr.recorder_latch_14e574 == 0);
+  fifa96_match_replay_compose(&mr);
+  fifa96_match_replay_capture(&mr, 1);
+  fifa96_match_replay_capture(&mr, 1);
+  assert(fifa96_match_replay_count(&mr) == 1);
+
+  /* the ring reset preserves the gate and the latch. */
+  fifa96_match_replay_ring_reset(&mr);
+  assert(ring->enabled == 1);
+  assert(mr.recorder_latch_14e574 == 0);
+}
+
+/* Task 2 (RR-L2): init clears the gate and the latch even on a 0xAA-filled run
+ * (the run is not memset by init). */
+static void test_ring_init_clears_gate(void) {
+  struct fifa96_match_run mr;
+  memset(&mr, 0xAA, sizeof mr);
+  fifa96_match_run_init(&mr);
+  assert(mr.replay_ring.enabled == 0);
+  assert(mr.recorder_latch_14e574 == 0);
 }
 
 /* Task 3: the composer fills the native `0x155AA4` view block from the staged
@@ -549,6 +608,8 @@ int main(void) {
   test_ring_capture_budget();
   test_ring_eviction();
   test_ring_empty_reset();
+  test_recorder_overlay_gate();
+  test_ring_init_clears_gate();
   test_ring_compose();
   test_ring_playback_cadence();
   test_ring_step_modes();

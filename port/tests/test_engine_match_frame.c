@@ -855,6 +855,24 @@ static void test_probe_cells_begin_reset(void) {
   drop_fixture(f);
 }
 
+/* Task 2 (RR-L2): begin arms the recorder gate (enabled 1, latch 0) and end
+ * closes it (enabled 0), through the same begin/end seam the other fixtures
+ * use. */
+static void test_frame_recorder_gate(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.replay_ring.enabled == 0);
+  assert(mr.recorder_latch_14e574 == 0);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.replay_ring.enabled == 1);
+  assert(mr.recorder_latch_14e574 == 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+  assert(mr.replay_ring.enabled == 0);
+  assert(mr.recorder_latch_14e574 == 0);
+  drop_fixture(f);
+}
+
 /* FU-208 §4.2 / FU-209 §6 (M2 phase-19 T2): the situation-8 selection. When the
  * T1 period-index roll lands the index on 4 (the native `[0x157AC2] == 4`
  * extra-time period) and the completed period left the phase-0xC screen, the
@@ -11466,6 +11484,7 @@ int main(void) {
   test_phase_drive_period4_skip_and_w5();
   test_phase_drive_probe_cells();
   test_probe_cells_begin_reset();
+  test_frame_recorder_gate();
   test_phase_drive_situation8_selects_act7();
   test_roll_flag_staged_zero();
   test_phase_drive_roll4_flag_differing();
