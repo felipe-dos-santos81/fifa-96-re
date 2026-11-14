@@ -754,10 +754,14 @@ static void test_ring_compose_band_queue(void) {
   fifa96_match_replay_pack(view, record, 1);
   assert(record[0xF2] == 0x45);
 
-  /* Second compose: the flag is already set, so band/flag stay; the queue pop
-   * consumes the next FIFO value (0x30 + 1) outside the band gate. */
+  /* Second compose: the flag is already set, so band/flag stay even when the
+   * focus moves to a point that classifies differently (proving the gate
+   * skipped reclassification); the queue pop consumes the next FIFO value
+   * (0x30 + 1) outside the band gate. */
+  mr.render.render_focus_x = -0x47;
+  mr.render.render_focus_y = 0;
   fifa96_match_replay_compose(&mr);
-  assert(view[0x1AC] == 4);
+  assert(view[0x1AC] == 4);    /* unchanged: the bit-0x40 latch skipped the band */
   assert(view[0x1AD] == 1);
   assert(view[0x1AB] == 0x31);
   assert(view[0x1AA] == 0x45);
@@ -768,43 +772,58 @@ static void test_ring_compose_band_queue(void) {
   assert(mr.replay_queue_pop_155c4f == 0);
 }
 
-/* Task 4 (RR-L3): the `FUN_0006428C` resync decrements the queue-pop byte and
- * drains it through the gate. With state 0x83 (the live call site's family,
- * bit 0x80 set) the 0x64EC0 gate blocks the push, so the FIFO stays empty
- * while the pop byte counts down to 0. */
+/* Task 4 (RR-L3): the `FUN_0006428C` resync sign-extends the queue-pop byte
+ * and drains `value - 1` through the gate without storing back to the cell. */
 static void test_replay_resync_queue_pop(void) {
   struct fifa96_match_run mr;
-  struct fifa96_match_run_replay *r;
+  uint32_t v;
 
   memset(&mr, 0, sizeof mr);
   fifa96_match_run_init(&mr);
-  r = &mr.render.replay;
-  fill_ring_150(&mr);
-
-  r->state = FIFA96_MATCH_REPLAY_PLAYING;
-  r->cursor = 0;
-  r->cursor_limit = 150;
-  r->advance = 0;
-  mr.replay_queue_pop_155c4f = 2;
   fifa96_match_run_replay_fifo_reset(&mr);
 
-  /* Two PLAYING ticks -> one record step -> one resync: 2 -> 1, no push. */
-  fifa96_match_run_replay_step(&mr, 0);
-  fifa96_match_run_replay_step(&mr, 0);
-  assert(mr.replay_queue_pop_155c4f == 1);
+  /* State 0 (the gate passes): the cell is never stored back, so a repeated
+   * resync drains the same value (2 - 1 = 1) each time. */
+  mr.render.replay.state = 0;
+  mr.replay_queue_pop_155c4f = 2;
+  fifa96_match_run_replay_resync(&mr);
+  assert(mr.replay_queue_pop_155c4f == 2);
+  assert(mr.replay_fifo.count == 1);
+  assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+  assert(v == 1);
+
+  fifa96_match_run_replay_resync(&mr);
+  assert(mr.replay_queue_pop_155c4f == 2);
+  assert(mr.replay_fifo.count == 1);
+  assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+  assert(v == 1);                          /* still 2 - 1, not 0 */
+
+  /* State 0x83 (bit 0x80 set): the gate blocks, the cell is still unchanged. */
+  fifa96_match_run_replay_fifo_reset(&mr);
+  mr.render.replay.state = 0x83;
+  mr.replay_queue_pop_155c4f = 2;
+  fifa96_match_run_replay_resync(&mr);
+  assert(mr.replay_queue_pop_155c4f == 2);
   assert(mr.replay_fifo.count == 0);
 
-  /* The next resync decrements to 0, still no push. */
-  fifa96_match_run_replay_step(&mr, 0);
-  fifa96_match_run_replay_step(&mr, 0);
+  /* A zero cell is a no-op: no push, no change. */
+  fifa96_match_run_replay_fifo_reset(&mr);
+  mr.render.replay.state = 0;
+  mr.replay_queue_pop_155c4f = 0;
+  fifa96_match_run_replay_resync(&mr);
   assert(mr.replay_queue_pop_155c4f == 0);
   assert(mr.replay_fifo.count == 0);
 
-  /* A third resync leaves it at 0. */
-  fifa96_match_run_replay_step(&mr, 0);
-  fifa96_match_run_replay_step(&mr, 0);
-  assert(mr.replay_queue_pop_155c4f == 0);
-  assert(mr.replay_fifo.count == 0);
+  /* Sign extension: cell 0x81 reads as -127 (SAR 0x18), so the drain receives
+   * -127 - 1 = -128 = 0xFFFFFF80. */
+  fifa96_match_run_replay_fifo_reset(&mr);
+  mr.render.replay.state = 0;
+  mr.replay_queue_pop_155c4f = 0x81;
+  fifa96_match_run_replay_resync(&mr);
+  assert(mr.replay_queue_pop_155c4f == 0x81);
+  assert(mr.replay_fifo.count == 1);
+  assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+  assert(v == 0xFFFFFF80u);
 }
 
 int main(void) {

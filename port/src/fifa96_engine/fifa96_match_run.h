@@ -418,6 +418,12 @@ int fifa96_match_run_replay_fifo_push(struct fifa96_match_run *mr, uint32_t valu
 int fifa96_match_run_replay_fifo_pop(struct fifa96_match_run *mr, uint32_t *value);
 int fifa96_match_run_replay_fifo_drain(struct fifa96_match_run *mr, uint32_t value);
 
+/* RR-L3: the `FUN_0006428C` resync, run after each countdown step. Sign-extends
+ * the queue-pop byte (`0x155C4F`) and, when nonzero, drains `value - 1` through
+ * the FIFO gate without storing back to the cell. The `FUN_00065CC0`
+ * notification body is a numbered leg. */
+void fifa96_match_run_replay_resync(struct fifa96_match_run *mr);
+
 
 /* FUN_0004D134: select replay camera `index` (0..6; the native default only
  * records the index). The engine always stores the `[0x107DDC]` cell

@@ -263,8 +263,10 @@ void fifa96_match_replay_compose(struct fifa96_match_run *mr) {
     replay_view_put_slot(view, i, &r->entities[i].stage);
 
   /* RR-L3: the band gate and the queue pop run before the cluster is written.
-   * The band gate fires once per goal (the bit-0x40 latch persists in
-   * `replay_view_flags_155c4e`); the queue pop is outside the gate. */
+   * The band gate sets the bit-0x40 latch in `replay_view_flags_155c4e`; that
+   * latch persists until init/begin (the per-goal clear arm is not ported, so
+   * the gate does not re-fire for a later goal). The queue pop is outside the
+   * gate. */
   if (mr->goal_counter_15781c != 0 &&
       (mr->replay_view_flags_155c4e & 0x40) == 0) {
     mr->replay_view_flags_155c4e |= 0x40;
