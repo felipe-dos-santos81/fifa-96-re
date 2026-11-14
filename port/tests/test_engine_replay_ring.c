@@ -603,6 +603,115 @@ static void test_ring_empty(void) {
   assert(r->state == 0);
 }
 
+/* Task 3 (RR-L10): the 20-dword FIFO and the drain gate. The C ring uses
+ * conventional indexing (`head` = next write, `tail` = oldest, both 0..19), so
+ * push stores at `value[head]`, pop reads `value[tail]`, and a full push evicts
+ * the tail first — preserving the native observable order/eviction, not the
+ * native's pre-increment address offset (push index 1..20 of 0x155C8C vs the
+ * C index 0..19 of 0x155C90). */
+static void test_replay_fifo_order(void) {
+  struct fifa96_match_run mr;
+  uint32_t v, i;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  fifa96_match_run_replay_fifo_reset(&mr);
+
+  for (i = 1; i <= 20; i++)
+    assert(fifa96_match_run_replay_fifo_push(&mr, i) == 1);
+  assert(mr.replay_fifo.count == 20);
+  assert(mr.replay_fifo.head == 0);
+  assert(mr.replay_fifo.tail == 0);
+
+  for (i = 1; i <= 20; i++) {
+    assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+    assert(v == i);
+  }
+  assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 0);   /* empty */
+  assert(mr.replay_fifo.count == 0);
+}
+
+static void test_replay_fifo_eviction(void) {
+  struct fifa96_match_run mr;
+  uint32_t v, i;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  fifa96_match_run_replay_fifo_reset(&mr);
+
+  for (i = 1; i <= 20; i++)
+    assert(fifa96_match_run_replay_fifo_push(&mr, i) == 1);
+  assert(fifa96_match_run_replay_fifo_push(&mr, 21) == 1);
+  assert(mr.replay_fifo.count == 20);
+  assert(mr.replay_fifo.head == 1);
+  assert(mr.replay_fifo.tail == 1);
+
+  for (i = 2; i <= 21; i++) {
+    assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+    assert(v == i);
+  }
+}
+
+static void test_replay_fifo_wrap(void) {
+  struct fifa96_match_run mr;
+  uint32_t v, i;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  fifa96_match_run_replay_fifo_reset(&mr);
+
+  for (i = 1; i <= 20; i++)
+    assert(fifa96_match_run_replay_fifo_push(&mr, i) == 1);
+  for (i = 0; i < 5; i++)
+    assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+  for (i = 6; i <= 10; i++)
+    assert(fifa96_match_run_replay_fifo_push(&mr, i) == 1);
+  assert(mr.replay_fifo.count == 20);
+  assert(mr.replay_fifo.head == 5);
+  assert(mr.replay_fifo.tail == 5);
+
+  for (i = 6; i <= 20; i++) {
+    assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+    assert(v == i);
+  }
+  for (i = 6; i <= 10; i++) {
+    assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+    assert(v == i);
+  }
+}
+
+static void test_replay_fifo_drain_gate(void) {
+  struct fifa96_match_run mr;
+  uint32_t v;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  fifa96_match_run_replay_fifo_reset(&mr);
+
+  /* state 0x80 → no push */
+  mr.render.replay.state = 0x80;
+  assert(fifa96_match_run_replay_fifo_drain(&mr, 42) == 0);
+  assert(mr.replay_fifo.count == 0);
+
+  /* state 0 + screen 5 → no push */
+  mr.render.replay.state = 0;
+  mr.replay_screen_id_105ffc = 5;
+  assert(fifa96_match_run_replay_fifo_drain(&mr, 42) == 0);
+  assert(mr.replay_fifo.count == 0);
+
+  /* state 0 + screen 7 → no push */
+  mr.replay_screen_id_105ffc = 7;
+  assert(fifa96_match_run_replay_fifo_drain(&mr, 42) == 0);
+  assert(mr.replay_fifo.count == 0);
+
+  /* state 0 + screen 0 → push */
+  mr.replay_screen_id_105ffc = 0;
+  assert(fifa96_match_run_replay_fifo_drain(&mr, 42) == 1);
+  assert(mr.replay_fifo.count == 1);
+  assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+  assert(v == 42);
+}
+
 int main(void) {
   test_ring_pack_apply_roundtrip();
   test_ring_capture_budget();
@@ -614,6 +723,10 @@ int main(void) {
   test_ring_playback_cadence();
   test_ring_step_modes();
   test_ring_empty();
+  test_replay_fifo_order();
+  test_replay_fifo_eviction();
+  test_replay_fifo_wrap();
+  test_replay_fifo_drain_gate();
   puts("test_engine_replay_ring OK");
   return 0;
 }

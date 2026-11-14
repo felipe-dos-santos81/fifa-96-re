@@ -5424,6 +5424,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   fifa96_match_replay_ring_reset(mr);
   fifa96_match_replay_ring_record(mr, 0);
   mr->recorder_latch_14e574 = 0;
+  /* RR-L10: the replay FIFO cursors and the staged drain screen id. */
+  fifa96_match_run_replay_fifo_reset(mr);
+  mr->replay_screen_id_105ffc = 0;
 }
 
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
@@ -5944,6 +5947,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   fifa96_match_replay_ring_reset(mr);
   mr->recorder_latch_14e574 = 0;
   fifa96_match_replay_ring_record(mr, 1);
+  /* RR-L10: the replay FIFO cursors and the staged drain screen id. */
+  fifa96_match_run_replay_fifo_reset(mr);
+  mr->replay_screen_id_105ffc = 0;
   return 0;
 }
 
@@ -10159,6 +10165,52 @@ int fifa96_match_run_recorder_overlay_reenable(struct fifa96_match_run *mr) {
   mr->recorder_latch_14e574 = 0;
   return 1;
 }
+
+/* RR-L10: the 20-dword replay FIFO (FUN_00064EF0) and the drain gate
+ * (FUN_00064EC0). The C ring keeps `head` = next write and `tail` = oldest,
+ * both 0..19, preserving the native observable push/pop order/eviction without
+ * the native's pre-increment address offset (push index 1..20 of 0x155C8C vs
+ * the C index 0..19 of 0x155C90). See the header contract. */
+void fifa96_match_run_replay_fifo_reset(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  mr->replay_fifo.count = 0;
+  mr->replay_fifo.head = 0;
+  mr->replay_fifo.tail = 0;
+}
+
+int fifa96_match_run_replay_fifo_push(struct fifa96_match_run *mr, uint32_t value) {
+  if (!mr) return 0;
+  if (mr->replay_fifo.count == 20) {
+    /* The native evicts the tail when count == 20 before storing the new
+     * head slot. */
+    mr->replay_fifo.tail = (mr->replay_fifo.tail + 1) % 20;
+    mr->replay_fifo.count--;
+  }
+  mr->replay_fifo.value[mr->replay_fifo.head] = value;
+  mr->replay_fifo.head = (mr->replay_fifo.head + 1) % 20;
+  mr->replay_fifo.count++;
+  return 1;
+}
+
+int fifa96_match_run_replay_fifo_pop(struct fifa96_match_run *mr, uint32_t *value) {
+  if (!mr || !value) return 0;
+  if (mr->replay_fifo.count == 0) return 0;
+  *value = mr->replay_fifo.value[mr->replay_fifo.tail];
+  mr->replay_fifo.tail = (mr->replay_fifo.tail + 1) % 20;
+  mr->replay_fifo.count--;
+  return 1;
+}
+
+int fifa96_match_run_replay_fifo_drain(struct fifa96_match_run *mr, uint32_t value) {
+  if (!mr) return 0;
+  if ((mr->render.replay.state & 0x80u) != 0) return 0;
+  if (mr->replay_screen_id_105ffc == 5 || mr->replay_screen_id_105ffc == 7)
+    return 0;
+  /* The native drain then calls the push with the caller's value; the
+   * `[0x10A254]` voice notify (FUN_00065CC0 -> 0xA7705) stays a numbered leg. */
+  return fifa96_match_run_replay_fifo_push(mr, value);
+}
+
 
 int fifa96_match_run_replay_begin(struct fifa96_match_run *mr) {
   struct fifa96_match_run_replay *r;

@@ -392,6 +392,33 @@ void fifa96_match_run_replay_exit(struct fifa96_match_run *mr);
 int fifa96_match_run_recorder_overlay_disable(struct fifa96_match_run *mr);
 int fifa96_match_run_recorder_overlay_reenable(struct fifa96_match_run *mr);
 
+/* RR-L10: the 20-dword replay FIFO (`FUN_00064EF0`) and the drain gate
+ * (`FUN_00064EC0`).
+ *
+ * `fifa96_match_run_replay_fifo_reset` clears count/head/tail (the value array
+ * is not touched: count == 0 means no valid entries). Called by init/begin.
+ *
+ * `fifa96_match_run_replay_fifo_push` stores `value` at `value[head]`, advances
+ * `head` (wrap at 20) and increments `count`; when full it first evicts the
+ * tail (`tail = (tail + 1) % 20`, `count--`). Returns 1 (0 on NULL).
+ *
+ * `fifa96_match_run_replay_fifo_pop` writes `value[tail]` into `*value`,
+ * advances `tail` (wrap) and decrements `count`. Returns 0 on empty (or NULL
+ * `mr`/`value`), else 1. The raw value is returned; the native `value + 1`
+ * belongs to the composer (Task 4), not this API.
+ *
+ * `fifa96_match_run_replay_fifo_drain` is the gate: it pushes only when
+ * `(mr->render.replay.state & 0x80) == 0` and `mr->replay_screen_id_105ffc` is
+ * neither 5 nor 7 (the native `0x64EC3..0x64ECD` state test then the
+ * `0x37AE4`/`0x36BC8` screen-id compare). The `[0x10A254]` voice notify
+ * (`FUN_00065CC0` -> `0xA7705`) is a numbered leg. Returns 1 on a push, 0 when
+ * gated out (or NULL). */
+void fifa96_match_run_replay_fifo_reset(struct fifa96_match_run *mr);
+int fifa96_match_run_replay_fifo_push(struct fifa96_match_run *mr, uint32_t value);
+int fifa96_match_run_replay_fifo_pop(struct fifa96_match_run *mr, uint32_t *value);
+int fifa96_match_run_replay_fifo_drain(struct fifa96_match_run *mr, uint32_t value);
+
+
 /* FUN_0004D134: select replay camera `index` (0..6; the native default only
  * records the index). The engine always stores the `[0x107DDC]` cell
  * (`record_index`) and keeps the current `{kind, sub}` selection on the
@@ -909,6 +936,18 @@ struct fifa96_match_stats {
   int32_t max_value;
   int32_t max_key;
   uint16_t max_block;
+};
+
+/* RR-L10: the 20-dword replay FIFO (`FUN_00064EF0`'s ring, base
+ * `0x155C90..0x155CDC`; count/head/tail `[0x109AEC]/[0x109AF0]/[0x109AF4]`).
+ * The C ring uses conventional indexing — `head` = next write, `tail` = oldest,
+ * both 0..19 — so it preserves the native observable push/pop order and
+ * eviction, not the native's pre-increment address offset (the native stores
+ * push index 1..20 of `0x155C8C` while its pop base is `0x155C90` = index
+ * 0..19). */
+struct fifa96_match_replay_fifo {
+  uint32_t value[20];
+  uint32_t count, head, tail;   /* head = next write, tail = oldest, 0..19 */
 };
 
 struct fifa96_match_run {
@@ -1898,6 +1937,11 @@ struct fifa96_match_run {
    * begin clear it. The recorder gate `replay_ring.enabled` is the only cell
    * the two edges toggle. */
   uint8_t recorder_latch_14e574;
+  /* RR-L10: the 20-dword replay FIFO and the drain-gate staged screen id. The
+   * live `[0x105FFC]` producer is a numbered leg, so the engine keeps the cell
+   * as a staged `uint8_t`; init/begin zero it and the FIFO cursors. */
+  struct fifa96_match_replay_fifo replay_fifo;
+  uint8_t replay_screen_id_105ffc;   /* [0x105FFC] (staged; producer is a leg) */
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
    * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/
