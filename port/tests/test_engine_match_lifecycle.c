@@ -119,6 +119,25 @@ static void test_init_resets(void) {
   fifa96_match_run_init(NULL);
 }
 
+/* RR-L7 review: match begin, not only init/replay_begin, clears the request
+ * mode cells when a run is reused. */
+static void test_reused_begin_clears_replay_mode_cells(void) {
+  struct fixture f = make_fixture();
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+  mr.replay_mode_108e0c = 7;
+  mr.replay_mode_acc_108e10 = 9;
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.replay_mode_108e0c == 0);
+  assert(mr.replay_mode_acc_108e10 == 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+
+  drop_fixture(f);
+}
+
 /* A complete caller-supplied backend is used verbatim, so the test can count
  * the lifecycle callbacks while still beginning through the engine run path. */
 static void test_stub_backend_lifecycle(void) {
@@ -344,6 +363,7 @@ static void test_unbooted_and_quit_rejected(void) {
 
 int main(void) {
   test_init_resets();
+  test_reused_begin_clears_replay_mode_cells();
   test_stub_backend_lifecycle();
   test_register_failure_rolls_back();
   test_incomplete_backend_installs_engine_defaults();

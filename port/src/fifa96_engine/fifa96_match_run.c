@@ -5986,6 +5986,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   memset(mr->replay_queue6, 0xFF, sizeof mr->replay_queue6);
   /* C4R-L1: the projection-active flag starts clear. */
   mr->replay_view_reset_109014 = 0;
+  /* RR-L7: a reused match starts without a replay request mode window. */
+  mr->replay_mode_108e0c = 0;
+  mr->replay_mode_acc_108e10 = 0;
   return 0;
 }
 
@@ -10346,10 +10349,9 @@ int fifa96_match_run_replay_control(struct fifa96_match_run *mr, int32_t tick) {
     mr->replay_mode_108e0c = 0;
   }
   if (mr->replay_mode_108e0c == 0 && !fifa96_match_run_replay_complete(mr)) {
-    if (r->phase_counter > 0xF0) {
-      /* 0x511EA: FUN_00064DFC's 0x83 state/cursor body is an RR-L7 residual.
-       * The granted frame's sole replay_step owns its reachable PLAYING path. */
-    }
+    /* 0x511DE..0x511EA: phase > 0xF0 calls FUN_00064DFC natively. Its 0x83
+     * state/cursor body is an RR-L7 residual; the granted frame's sole
+     * replay_step owns the reachable PLAYING path. */
     if (r->phase_counter < 0x168) {
       r->phase_counter += tick;           /* 0x511FD..0x51206 */
       return 0;
