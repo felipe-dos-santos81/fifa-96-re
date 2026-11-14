@@ -782,3 +782,34 @@ the wrap, so index 0 of the base is never written: the actual storage is
 **`0x155C90..0x155CDC`** (`0x155C90 + 4*i`, `i = 0..0x13`), and **`0x155C8C`
 is HUD state** (FU-111 §5), not the queue. The `0x974DC` half remains a
 **B** handoff, unchanged.
+
+## 14. Replay-chain corrections (2026-11-13)
+
+Append-only; the §7.8/§13 lines quoted in the B7–B8 plan are corrected here.
+
+- **§7.8 RR-L2 / the recorder gate.** `FUN_00064030` writes only the three
+  cursors, the playback index `[0x109A94]` and the accumulator `[0x109AAC]`;
+  it does not write `[0x109A90]` or `[0x107310]`. The gate is toggled only by
+  `FUN_00064074`/`FUN_00064080`, and `[0x14E574]` is a shared 35-xref latch,
+  not a `FUN_00053DC4`-owned cell. A reset that preserves the gate is native;
+  the engine's budget zeroing is an adapter.
+- **§7.8 RR-L3.** The band (`0x155C50`), band flag (`0x155C51`) and queue-pop
+  (`0x155C4F`) are separate bytes from the six-byte queue6
+  (`0x155C6A..0x155C6F`). The queue6 native initializes to `0xFF` and overlays
+  the `0x157C64` object bytes; staging it zero is not native.
+- **§7.8 RR-L5.** The `[0x7DC8]` identity is partial: the six-field shape and
+  the VIEW/ACTION objects match, but POSE and BALL are fed from other sources
+  and `camera_sub` is not consumed. The closure does not claim the full pool.
+- **§7.8 RR-L7.** The request source is `FUN_00051270`/`FUN_000512B0` →
+  `FUN_000510DC` → `FUN_00064270`; `FUN_0004B100` is not the request source.
+  The `0x14E58C` ramp exits only when `FUN_00064E74` (cursor >= count) lets
+  the countdown run; `FUN_00064DFC` advances playback.
+- **§7.8 RR-L10.** `FUN_0006428C` reads the high byte of `[0x155C4C]` (byte
+  `0x155C4F`, the queue-pop byte), decrements it when nonzero and tail-jumps
+  to `FUN_000974DC`. The resync is not a no-op; the plan ports the decrement
+  plus the drain or records the residual.
+- **§7.8 C4R-L1.** `FUN_0005865C` is a screen/projection reset: the
+  `[0x109014]=0` flag is modelable; `FUN_00056B88(0x2B)`, the
+  `0x14E9B8 >= 0x80` /3 loop and `FUN_00056894` are presentation bodies.
+  The image default of `[0x109014]` is 0; `FUN_000585E4` is the setup writer
+  that sets 1.

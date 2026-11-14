@@ -348,3 +348,65 @@ corrected here; §5/§6 keep the old wording as the record.
   not `fifa96_match_run_situation(6)`; `[0x157A9B]`'s writers are
   `FUN_00088940` at `0x8895B/0x88A1C/0x88AA4`, and an unproved producer stays
   an open leg. The closure reports the actual wired count, not necessarily 19.
+
+## 11. Replay-chain corrections (2026-11-13)
+
+The B7–B8 plan review and fresh `/FIFA96.EXE` reads correct the §B7/§B8
+wording below. The §B7/§B8 text is left verbatim as the record.
+
+- **RR-L2 ownership.** `[0x14E574]` has 35 xrefs across eight functions
+  (`FUN_000513EC`, `FUN_000537F8`, `FUN_00053DC4`, `FUN_00053DE0`,
+  `FUN_00052030`, `FUN_00053A48`, `FUN_00052D68`, `FUN_00053BB8`); it is a
+  shared overlay-cluster latch, not owned by `FUN_00053DC4`. The
+  `FUN_00053DC4`/`FUN_00053A48` pair is the recorder disable/re-enable edge:
+  `0x53DD3 CALL 0x64074` clears `[0x109A90]` and sets the latch; the
+  state-5→6 arm (`0x53A8E`) calls `0x64080` and clears the latch. The packer
+  gate is `0x640A2 CMP [0x109A90],0`. The engine's live call site/state
+  machine stays a numbered leg until the overlay state is ported.
+- **Ring reset.** `FUN_00064030` writes only the three cursors, the playback
+  index `[0x109A94]` and the accumulator `[0x109AAC]`; it does **not** write
+  the recorder gate `[0x109A90]` or the mode budget `[0x107310]`. A
+  gate-preserving reset is correct; the engine's budget zeroing is an adapter,
+  and the `fifa96_match_replay_ring.h` comment that attributes both to the
+  native reset is corrected.
+- **RR-L3 is three bytes plus the queue6 lane.** `0x155C50` is the focus band
+  from `FUN_000627F4(focus_x, focus_y)` (x>0x46→1, x<-0x46→4, y<0x6A→+8,
+  y>0x35→+2, all +1); `0x155C51` is the band flag; `0x155C4F` is the FIFO
+  pop (`FUN_00064EE4` = pop, returns `value+1`). The six-byte queue6
+  `0x155C6A..0x155C6F` is a separate lane: native initializes it to `0xFF`
+  and overlays the four `0x157C64` objects' `+0x8D` bytes (plus `0x0B` when
+  the object's team byte matches `[0x157ABF]`) and the `FUN_0004BA44`/
+  `FUN_0004BA00` bytes. The band/flag/pop gate is `[0x15781C] != 0` and
+  `(0x155C4E & 0x40)==0`; the queue-pop is outside that gate. The
+  `0x157C64` object producer remains a numbered leg.
+- **RR-L5 identity is partial.** `[0x7DC8]` points into a seven-object pool
+  (POSE `0x107968`, VIEW `0x107CE8` ×4, ACTION `0x107B98`, BALL `0x107B28`,
+  plus the base camera records). The port models the three VIEW classes and
+  ACTION; POSE is fed from the recorded matrix and BALL from the ball
+  position. The selector index→base table is exact, but the `camera_sub`
+  value has no consumer and BALL has no dedicated source. The engine's
+  `native_view_cam`/`native_view_valid` arrays currently hold three entries;
+  the plan widens them to four so sub 8 (index 6) maps to class 3 without an
+  out-of-bounds read. The closure either implements the source selection or
+  keeps explicit RR-L5 residuals.
+- **RR-L7 request chain.** The request source is `FUN_00051270`/
+  `FUN_000512B0` → `FUN_000510DC` → `FUN_00064270`; `FUN_0004B100` is the
+  live-frame chain and is **not** the request source. The arm writes
+  `[0x14E58C]=1` and calls `FUN_00064270`; the per-frame arm drives
+  `[0x108E0C]`/`[0x108E10]` and ramps `[0x14E58C]` through `0xF0`/`0x168`.
+- **Timed exit is conditional.** The ramp alone does not exit: `FUN_00064E74`
+  returns `cursor >= count` and gates the exit countdown at `0x511DC`;
+  `FUN_00064DFC` sets state `0x83` and advances playback while records remain.
+  With an empty/one-record ring the native can exit right after the mode
+  window; with records, the cursor must advance. The plan either maps
+  `FUN_00064DFC` to the existing `replay_step` PLAYING path or records it as
+  a leg, and does not claim a universal "after both thresholds" exit.
+- **C4R-L1 is presentation-only except the flag.** `[0x109014]=0` is the
+  projection-active flag (the image default 0; `FUN_000585E4` writes 1 as the
+  setup writer). `FUN_00056B88(0x2B)`, the `0x14E9B8 >= 0x80` /3 loop and
+  `FUN_00056894` are projection-transform bodies, not audio. The engine
+  models the flag (init 0, arm 0) and records the three bodies as legs.
+- **Appearance notation.** The native appearance is
+  `**(byte **)(rec+0x28)` (one pointer load, one byte load); the ball is
+  `*[0x158866]`. The earlier `***(byte**)(rec+0x28)` in the plan review focus
+  had one extra dereference.
