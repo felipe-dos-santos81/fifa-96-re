@@ -1018,16 +1018,24 @@ static void test_replay_arm_view_reset(void) {
 }
 
 /* Task 9 (RR-L7): the request starts the native mode window, then the ramp
- * waits for playback completion before spending its countdown. A full ring
- * stamped 4 completes on call 600: with replay_step before control, the phase
- * first equals 0xF0 on call 479 and 0x168 on call 599, and the 360-tick
- * countdown exits on call 959. The empty ring completes immediately, so its
- * phase-1 countdown exits on call 241, directly after the 240-tick mode window. */
+ * waits for playback completion before spending its countdown. This loop
+ * mirrors the frozen frame's order in fifa96_match_run.c — control(1) first,
+ * then replay_step — so the pinned indices describe the integrated exit
+ * timing, not the plan's Task 9 step-then-control test wording (superseded).
+ * A full ring stamped 4 completes on the 600th step, but control spends the
+ * phase before that step, so the phase first equals 0xF0 on control call 479
+ * and 0x168 on control call 599; the wired order then clamps the phase to
+ * 0x169 on call 600 (it does not stop at 0x168, and the completion lands one
+ * control call later than the step-then-control order), and the 360-tick
+ * countdown exits on control call 961. The empty ring completes immediately,
+ * so its phase-1 countdown exits on call 241, directly after the 240-tick mode
+ * window. */
 static void test_replay_request_timed_exit(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_run_replay *r;
   int first_f0 = 0;
   int first_168 = 0;
+  int clamped_169 = 0;
   int exit_index = 0;
   int exits = 0;
   int empty_exit = 0;
@@ -1059,9 +1067,9 @@ static void test_replay_request_timed_exit(void) {
   for (int i = 1; i <= 0x400; i++) {
     int complete_before_control;
     int rc;
-    assert(fifa96_match_run_replay_step(&mr, 0) == 0);
     complete_before_control = fifa96_match_run_replay_complete(&mr);
     rc = fifa96_match_run_replay_control(&mr, 1);
+    assert(fifa96_match_run_replay_step(&mr, 0) == 0);
     if (first_f0 == 0 && r->phase_counter >= 0xF0) {
       assert(r->phase_counter == 0xF0);
       first_f0 = i;
@@ -1070,6 +1078,8 @@ static void test_replay_request_timed_exit(void) {
       assert(r->phase_counter == 0x168);
       first_168 = i;
     }
+    if (clamped_169 == 0 && r->phase_counter == 0x169)
+      clamped_169 = i;
     if (rc != 0) {
       assert(rc == 1);
       assert(complete_before_control == 1);
@@ -1084,14 +1094,17 @@ static void test_replay_request_timed_exit(void) {
   assert(exits == 1);
   assert(first_f0 == 479);
   assert(first_168 == 599);
-  assert(exit_index == 959);
-  assert(exit_index > first_168 && first_168 > first_f0);
+  assert(clamped_169 == 600);
+  assert(exit_index == 961);
+  assert(exit_index > clamped_169 && clamped_169 > first_168 &&
+         first_168 > first_f0);
   assert(fifa96_match_run_replay_complete(&mr) == 1);
   assert(r->state == FIFA96_MATCH_REPLAY_LIVE);
   assert(r->phase_counter == 0);
 
   /* An empty ring is already complete. Keep running the ordinary PLAYING
-   * state machine to prove that the timed exit needs no cursor advance. */
+   * state machine (in the same control-then-step order) to prove that the
+   * timed exit needs no cursor advance. */
   fifa96_match_replay_ring_reset(&mr);
   assert(fifa96_match_run_replay_complete(&mr) == 1);
   assert(fifa96_match_run_replay_request(&mr, 1) == 0);
@@ -1101,9 +1114,9 @@ static void test_replay_request_timed_exit(void) {
   r->advance = 0;
   for (int i = 1; i <= 0x400; i++) {
     int rc;
+    rc = fifa96_match_run_replay_control(&mr, 1);
     assert(fifa96_match_run_replay_step(&mr, 0) == 0);
     assert(r->cursor == 0);
-    rc = fifa96_match_run_replay_control(&mr, 1);
     if (rc != 0) {
       assert(rc == 1);
       empty_exits++;
@@ -1117,9 +1130,9 @@ static void test_replay_request_timed_exit(void) {
   assert(r->state == FIFA96_MATCH_REPLAY_LIVE);
   assert(r->phase_counter == 0);
 
-  printf("replay request: phase 0xF0=%d, phase 0x168=%d, exit=%d; "
-         "empty exit=%d\n",
-         first_f0, first_168, exit_index, empty_exit);
+  printf("replay request: phase 0xF0=%d, phase 0x168=%d, clamp 0x169=%d, "
+         "exit=%d; empty exit=%d\n",
+         first_f0, first_168, clamped_169, exit_index, empty_exit);
 }
 
 /* Task 9: begin validates before writing any request cell. The on=0 entry is
