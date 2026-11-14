@@ -50,3 +50,10 @@ has seven rows.
    store base `0x155C8C + head*4`, pop base `0x155C90 + tail*4`; pre-increment
    head, evict tail when `count==20`, pop returns `value+1`. The C ring's
    conventional indexing preserves order, not the address offset.
+7. `FUN_000627F4`'s y band is **exclusive**, not two independent ORs. The RR-L3
+   row's shorthand "y<0x6A→|8, y>0x35→|2" reads as two independent ORs, but the
+   native `0x6280F CMP EDX,0x6A; 0x62812 JGE 0x6281A; 0x62814 OR AL,0x8;
+   0x62816 INC AL; RET` **returns** from the `|8` arm, so the `0x6281A CMP
+   EDX,0x35; 0x6281D JLE 0x62821; 0x6281F OR AL,0x2` arm runs only when
+   `y >= 0x6A`. The two arms are mutually exclusive (`else if`): `(0,0x36)` and
+   `(0,0x69)` return 9 (not 11) and `(0,0x6A)` returns 3.

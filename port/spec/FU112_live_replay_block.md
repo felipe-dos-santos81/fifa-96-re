@@ -139,3 +139,13 @@ the same 23 staged render slots + focus + camera cluster into the view
 (`fifa96_match_replay_compose`); the ball frame byte is staged 0 until the
 `0x15887B` producer lands (RR-L9). The `+0x55C4C` byte-1 overlap note in §1 is
 unaffected. No completion-number movement and no golden re-pin.
+
+## 8. Erratum (2026-11-14) — the band classifier's y arms are exclusive
+
+**Errata (quoted).** §1's "pitch thresholds ±0x46, ball-Y thresholds 0x35/0x6A,
+result 1..0xF" reads the two ball-Y thresholds as independent ORs, but
+`FUN_000627F4`'s y band is **exclusive**: `0x6280F CMP EDX,0x6A; 0x62812 JGE
+0x6281A; 0x62814 OR AL,0x8; 0x62816 INC AL; RET` returns from the `|8` arm, so
+the `0x6281A CMP EDX,0x35; 0x6281D JLE 0x62821; 0x6281F OR AL,0x2` arm runs
+only when `y >= 0x6A`. The two arms are mutually exclusive (`else if`):
+`(0,0x36)` and `(0,0x69)` return 9 (not 11) and `(0,0x6A)` returns 3.
