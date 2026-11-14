@@ -12769,10 +12769,11 @@ and the ring design §14) closed across nine tasks (plan
   site/state machine (`0x4B1D7`/`0x4B257`) stays a leg.
 - **RR-L3** (band/queue/queue-pop): `fifa96_camera_replay_band` (the
   `FUN_000627F4` classifier), the `replay_view_flags_155c4e`/`replay_band_155c50`/
-  `replay_band_flag_155c51`/`replay_queue_pop_155c4f` cells, the `replay_queue6`
-  six-byte lane (`0xFF` init), and `fifa96_match_run_replay_resync`.
-- **RR-L10** (FIFO + drain): `fifa96_match_run_replay_fifo_{reset,push,pop,drain}`
-  and the `0x64EC0` drain gate.
+  `replay_band_flag_155c51`/`replay_queue_pop_155c4f` cells, and the `replay_queue6`
+  six-byte lane (`0xFF` init). The resync is RR-L10 (see below).
+- **RR-L10** (FIFO + drain + resync): `fifa96_match_run_replay_fifo_{reset,push,pop,drain}`,
+  the `0x64EC0` drain gate, and `fifa96_match_run_replay_resync`
+  (`FUN_0006428C`; its input is the RR-L3 queue-pop byte `0x155C4F`).
 - **C4R-L1** (projection-reset flag): `replay_view_reset_109014` (init 0, arm 0,
   exit 0).
 - **RR-L4** (appearance identity): proof tests only — the composed `stage.anim_id`
@@ -12780,7 +12781,8 @@ and the ring design §14) closed across nine tasks (plan
 - **RR-L5** (camera cycle): `fifa96_match_run_replay_camera_source` (POSE/VIEW/
   ACTION/BALL) with `native_view_cam`/`native_view_valid` widened to four.
 - **RR-L7** (request/timed exit): `fifa96_match_run_replay_request`/`_control`/
-  `_complete`; `FUN_00064E74` = `complete`, `FUN_0006428C` = `replay_resync`.
+  `_complete`; `FUN_00064E74` = `complete` (the resync `FUN_0006428C` is
+  RR-L10, not RR-L7).
 
 **Remaining legs (every producer/sink that stayed unported — never faked).**
 The `0x157C64` object producer and `FUN_0004BA44`/`FUN_0004BA00` (RR-L3 queue6);
@@ -12788,9 +12790,10 @@ the `0x65CC0` voice notify (globals-only, `0xA7705`, audio inferred) and the
 `[0x105FFC]` screen-id producer (RR-L10); `FUN_00056B88(0x2B)`, the
 `0x14E9B8 >= 0x80` /3 loop and `FUN_00056894`, plus the setup writer
 `FUN_000585E4` (`0x585F2 [0x109014]=1`) (C4R-L1); `FUN_00051270`/`FUN_000512B0`
-request sources, `FUN_00064DFC` playback driver, the `0x510EB..0x51119`
-tick/LIVE arms, `FUN_00045069`, and `FUN_00037114(4)`/`FUN_000642FC(0)`/
-`FUN_0004CD88` (RR-L7); the overlay call site/state machine `0x4B1D7`/`0x4B257`
+request sources, `FUN_00037114(4)`, `FUN_000642FC(0)`/`FUN_0004CD88`,
+`FUN_00064DFC` (playback driver, mapped to the existing PLAYING step), and
+`FUN_00045069` (negative-mode producer) (RR-L7); the overlay call site/state
+machine `0x4B1D7`/`0x4B257`
 (RR-L2); the `0x155C4E` bit-0x80/0x7F arm, the per-goal clear and the
 post-`0x36F36` velocity checks (RR-L3); and the BALL camera source
 (**RR-L5-BALL**). The `0x64270` arm stores `0x81` only (gated `[0x109AB0] != 0`)

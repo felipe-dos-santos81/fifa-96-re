@@ -351,11 +351,12 @@ the request arm (`[0x14E58C]=1`, `CALL 0x64270`, `CALL 0x37114(4)`,
 arm (the `0x510EB..0x51119` tick floor, the mode/accumulator windows, the phase
 ramp `0xF0`/`0x168`, and the completion-gated countdown) is `control`.
 `FUN_00064E74` is ported as `complete` (cursor >= count); `FUN_0006428C` is
-ported as `replay_resync` (Task 4, FU108 §11). Remaining legs: `FUN_00064DFC`
-(the playback driver), `FUN_00037114(4)`, `FUN_000642FC(0)`/`FUN_0004CD88`, the
-`0x510EB..0x51119` tick/LIVE arms, `FUN_00045069` (the negative-mode producer),
-and the request sources `FUN_00051270`/`FUN_000512B0` (the host key is the
-adapter at the arm).
+ported as `replay_resync` (Task 4, FU108 §11 — the RR-L10 mapping). The tick
+floor and the LIVE early return are implemented in `_control`, not legs.
+Remaining legs: `FUN_00037114(4)`, `FUN_000642FC(0)`/`FUN_0004CD88`,
+`FUN_00064DFC` (the playback driver, mapped to the existing PLAYING step),
+`FUN_00045069` (the negative-mode producer), and the request sources
+`FUN_00051270`/`FUN_000512B0` (the host key is the adapter at the arm).
 
 No completion-number movement and no golden re-pin (the replay producers are
 not dispatch rows).

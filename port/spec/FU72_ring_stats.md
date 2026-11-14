@@ -837,9 +837,11 @@ RR-L5 and RR-L7 are now closed by the B7–B8 replay-chain slice (plan
   widened to four entries; **RR-L5-BALL** stays a leg (no dedicated BALL source,
   the live-follow fallback is kept).
 - **RR-L7** is closed as `fifa96_match_run_replay_request`/`_control`/`_complete`;
-  `FUN_00064E74` is ported as `complete` and `FUN_0006428C` as `replay_resync`.
-  The request sources (`FUN_00051270`/`FUN_000512B0`), `FUN_00064DFC`, the
-  `0x510EB..0x51119` tick/LIVE arms and `FUN_00045069` stay legs.
+  `FUN_00064E74` is ported as `complete` and `FUN_0006428C` as `replay_resync`
+  (the RR-L10 mapping, FU108 §11). The tick floor and the LIVE early return are
+  implemented in `_control`. The remaining legs are `FUN_00037114(4)`,
+  `FUN_000642FC(0)`/`FUN_0004CD88`, `FUN_00064DFC` (mapped to the PLAYING step),
+  `FUN_00045069` and the request sources (`FUN_00051270`/`FUN_000512B0`).
 
 The other FU-72 legs (B2-L1, the `0x8FF30` consumer, the four non-Slice-B
 `0x8ED40` sites) are unchanged. No completion-number movement and no golden
