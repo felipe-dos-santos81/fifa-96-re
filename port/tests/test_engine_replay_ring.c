@@ -464,6 +464,23 @@ static void test_ring_compose(void) {
   assert((int32_t)get_u32(view, 0x1BA) == 4);
   assert((int32_t)get_u32(view, 0x1BE) == 5);
   assert((int32_t)get_u32(view, 0x1C2) == 6);
+
+  /* RR-L5: class 3 is the sub-8 VIEW variant. A valid fourth state wins over
+   * the action fallback; the invalid class-3 case above keeps that fallback. */
+  mr.render.native_view_valid[3] = 1;
+  mr.render.native_view_cam[3].pos_x = 11;
+  mr.render.native_view_cam[3].pos_y = 12;
+  mr.render.native_view_cam[3].pos_z = 13;
+  mr.render.native_view_cam[3].yaw = 14;
+  mr.render.native_view_cam[3].pitch = 15;
+  mr.render.native_view_cam[3].ratio = 16;
+  fifa96_match_replay_compose(&mr);
+  assert((int32_t)get_u32(view, 0x1AE) == 11);
+  assert((int32_t)get_u32(view, 0x1B2) == 12);
+  assert((int32_t)get_u32(view, 0x1B6) == 13);
+  assert((int32_t)get_u32(view, 0x1BA) == 14);
+  assert((int32_t)get_u32(view, 0x1BE) == 15);
+  assert((int32_t)get_u32(view, 0x1C2) == 16);
 }
 
 /* Task 4: fill the ring with 150 records, each stamped 2 with a slot-0

@@ -2462,8 +2462,22 @@ static void match_run_camera_action_table(
   table[22][2] = mr->entities.ball.z;
 }
 
+static void match_run_publish_handler_camera(
+    struct fifa96_match_run_render *r,
+    const fifa96_camera_handler_state *st) {
+  r->render_eye_x = st->pos_x;
+  r->render_eye_y = st->pos_y;
+  r->render_eye_z = st->pos_z;
+  r->render_eye_valid = 1u;
+  r->yaw = st->yaw;
+  r->pitch = st->pitch;
+  r->view_ratio = st->ratio;
+}
+
 /* Run the selected native class and publish its record cells to the render
- * eye/orientation. Returns 1 on success. */
+ * eye/orientation. Returns 1 on success. RR-L5 class 3 is the staged sub-8
+ * VIEW source: its placement body is not modeled as one of the three live
+ * behavior handlers, so only an already-valid state can be published. */
 static int match_run_native_view_step(struct fifa96_match_run *mr,
                                       int32_t class_of, int32_t tick,
                                       int settle) {
@@ -2472,7 +2486,12 @@ static int match_run_native_view_step(struct fifa96_match_run *mr,
   fifa96_camera_handler_block *block;
   fifa96_camera_handler_out out;
   int steps = settle ? MATCH_RUN_NATIVE_VIEW_SETTLE : 1;
-  if (class_of < 0 || class_of > 2) return 0;
+  if (class_of < 0 || class_of > 3) return 0;
+  if (class_of == 3) {
+    if (r->native_view_valid[class_of] == 0u) return 0;
+    match_run_publish_handler_camera(r, &r->native_view_cam[class_of]);
+    return 1;
+  }
   if (r->native_view_valid[class_of] == 0u)
     match_run_native_view_init(r, class_of);
   st = &r->native_view_cam[class_of];
@@ -2516,13 +2535,7 @@ static int match_run_native_view_step(struct fifa96_match_run *mr,
         FIFA96_OK)
       return 0;
   }
-  r->render_eye_x = st->pos_x;
-  r->render_eye_y = st->pos_y;
-  r->render_eye_z = st->pos_z;
-  r->render_eye_valid = 1u;
-  r->yaw = st->yaw;
-  r->pitch = st->pitch;
-  r->view_ratio = st->ratio;
+  match_run_publish_handler_camera(r, st);
   return 1;
 }
 
@@ -2588,7 +2601,7 @@ static void match_run_live_camera_follow(struct fifa96_match_run *mr) {
       r->native_view_variant = view.variant;
       r->native_view_class = view.class_of;
     }
-    if (r->native_view_class >= 0 && r->native_view_class <= 2)
+    if (r->native_view_class >= 0 && r->native_view_class <= 3)
       native_ok = match_run_native_view_step(mr, r->native_view_class, tick,
                                              changed);
     if (!native_ok) {
@@ -8639,33 +8652,39 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     for (uint32_t i = 0; i < (uint32_t)frozen_granted; i++) {
       (void)fifa96_match_run_replay_step(mr, mr->render.replay.input_buttons);
       mr->render.replay.input_buttons = 0;
-      /* Review F1: the replay view. `replay_target` selects the source-4
-       * camera on the 0x81 arm; the 0x20 cycle only stores the camera-record
-       * selection (`camera_kind`/`camera_sub`/`record_index`), which the view
-       * does not consume (leg). `match_run_live_camera_follow` is the only
-       * source-4 camera/view consumer and live `render_eye_*` writer;
-       * `replay_exit` only resets the source. Without the driver a frozen
-       * live replay stays on the frozen live view and the camera cycle
-       * changes only the caption. The pose feed keeps the staged orientation
-       * input in the live-frame order (pose before the view driver). Review
-       * F3: the live pan/event camera walk (`match_run_frame_camera`) is NOT
-       * run on the frozen path — it spends the shared match RNG on pan/event
-       * state the replay driver replaces, and its FU-71 armer is live camera
-       * motion. The frozen view is the replay driver plus the pose feed, so
-       * the match RNG stream is untouched by replay frames. */
+      /* RR-L5: the pose feed keeps its live-frame order, then the selected
+       * replay source publishes the six camera fields. POSE consumes the
+       * recorded matrix; VIEW/ACTION consume their handler state directly.
+       * An invalid VIEW state falls back to the existing live follow. BALL
+       * has no dedicated engine source (RR-L5-BALL) and keeps that fallback.
+       * No live follow is overwritten by a recorded matrix in the same frame.
+       * Review F3: the live pan/event camera walk stays out of the frozen path
+       * so replay frames do not spend the shared match RNG stream. */
       (void)fifa96_camera_pose_feed(&mr->render.camera, &mr->render.yaw,
                                     &mr->render.pitch, &mr->render.view_ratio,
                                     &mr->render.camera_pose);
-      /* The live view driver (source-4 replay camera) runs only for a live
-       * run on a non-POSE replay camera; the POSE camera draws the recorded
-       * matrix instead. A non-live frozen run keeps the pose feed above and
-       * nothing else. */
-      if (mr->live_start &&
-          mr->render.replay.camera_kind != FIFA96_CAMERA_REPLAY_POSE)
-        match_run_live_camera_follow(mr);
-      /* The POSE feed lands after the pose feed/driver so the recorded matrix
-       * wins over the live pose feed (spec §7.5). */
-      fifa96_match_replay_pose(mr);
+      switch (fifa96_match_run_replay_camera_source(mr)) {
+        case FIFA96_MATCH_REPLAY_SOURCE_POSE:
+          fifa96_match_replay_pose(mr);
+          break;
+        case FIFA96_MATCH_REPLAY_SOURCE_VIEW: {
+          uint32_t class_of = (uint32_t)mr->render.replay.camera_sub - 5u;
+          if (class_of < 4u && mr->render.native_view_valid[class_of] != 0u) {
+            match_run_publish_handler_camera(
+                &mr->render, &mr->render.native_view_cam[class_of]);
+          } else if (mr->live_start) {
+            match_run_live_camera_follow(mr);
+          }
+          break;
+        }
+        case FIFA96_MATCH_REPLAY_SOURCE_ACTION:
+          match_run_publish_handler_camera(&mr->render, &mr->render.action_cam);
+          break;
+        case FIFA96_MATCH_REPLAY_SOURCE_BALL:
+        default:
+          if (mr->live_start) match_run_live_camera_follow(mr);
+          break;
+      }
       (void)fifa96_match_display_update(&mr->render.display,
                                         mr->state.frame_delta, 0);
       /* Review F2: stage the recorded view (the frozen past), not the live
@@ -10321,6 +10340,26 @@ int fifa96_match_run_replay_camera_set(struct fifa96_match_run *mr, uint32_t ind
   mr->render.replay.camera_kind = (uint8_t)kind;
   mr->render.replay.camera_sub = (uint8_t)sub;
   return 1;
+}
+
+int fifa96_match_run_replay_camera_source(struct fifa96_match_run *mr) {
+  const struct fifa96_match_run_replay *replay;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  replay = &mr->render.replay;
+  switch (replay->camera_kind) {
+    case FIFA96_CAMERA_REPLAY_POSE:
+      return FIFA96_MATCH_REPLAY_SOURCE_POSE;
+    case FIFA96_CAMERA_REPLAY_VIEW:
+      if (replay->camera_sub < 5u || replay->camera_sub > 8u)
+        return -FIFA96_ERR_INVALID;
+      return FIFA96_MATCH_REPLAY_SOURCE_VIEW;
+    case FIFA96_CAMERA_REPLAY_ACTION:
+      return FIFA96_MATCH_REPLAY_SOURCE_ACTION;
+    case FIFA96_CAMERA_REPLAY_BALL:
+      return FIFA96_MATCH_REPLAY_SOURCE_BALL;
+    default:
+      return -FIFA96_ERR_INVALID;
+  }
 }
 
 void fifa96_match_run_replay_exit(struct fifa96_match_run *mr) {

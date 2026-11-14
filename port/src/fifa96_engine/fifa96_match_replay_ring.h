@@ -103,8 +103,8 @@ void fifa96_match_replay_ring_record(struct fifa96_match_run *mr, int on);
  * from `mr->replay_queue6` (staged `0xFF` by default),
  * `+0x1CC` is the `FUN_000974D0` stub 1 and `+0x1CE` the `FUN_000492CC`
  * stand-in (`state.frame_delta`). The matrix comes from
- * `native_view_cam[native_view_class]` when that class is a valid 0..2 view,
- * else `action_cam`. */
+ * `native_view_cam[native_view_class]` when that class is a valid 0..3 view
+ * (class 3 is RR-L5's staged sub-8 variant), else `action_cam`. */
 void fifa96_match_replay_compose(struct fifa96_match_run *mr);
 
 /* One live frame of the recorder: the 90-frame mode-window budget gate

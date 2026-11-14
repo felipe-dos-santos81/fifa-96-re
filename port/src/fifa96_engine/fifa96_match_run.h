@@ -432,6 +432,20 @@ void fifa96_match_run_replay_resync(struct fifa96_match_run *mr);
  * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_replay_camera_set(struct fifa96_match_run *mr, uint32_t index);
 
+/* RR-L5: the selected camera's frozen-frame source. VIEW uses
+ * `native_view_cam[camera_sub - 5]` only when its valid byte is set, ACTION
+ * uses `action_cam`, and POSE uses the recorded six-dword matrix. BALL is the
+ * RR-L5-BALL leg: no dedicated engine source exists, so the frame retains the
+ * live-follow fallback. The selector itself only classifies the current
+ * selection; an out-of-range `record_index` does not change it. */
+enum {
+  FIFA96_MATCH_REPLAY_SOURCE_POSE = 0,
+  FIFA96_MATCH_REPLAY_SOURCE_VIEW = 1,
+  FIFA96_MATCH_REPLAY_SOURCE_ACTION = 2,
+  FIFA96_MATCH_REPLAY_SOURCE_BALL = 3,
+};
+int fifa96_match_run_replay_camera_source(struct fifa96_match_run *mr);
+
 /* FU351-L2k: the FUN_0004BBFC/FUN_0004BCC4 replay target chooser. Builds
  * the score pair, the `0x157B02/16` goal ring and the `0x14C360` order ids
  * from the run, calls `fifa96_camera_replay_choice_select`, and stages
@@ -597,15 +611,16 @@ struct fifa96_match_run_render {
    * 0x107968+slot*0x70 carry behavior rows 3/4/5 (the camera-config records
    * 0x107508+slot*0x70 carry 0/1/2; the rows are duplicates in the image).
    * Slot 5 is class 3 / selector 5 and keeps the action-camera fallback. The
-   * three class states below are the selected records' +0x10/14/18/4C/58/5C
-   * cells; each is seeded from the image record (-1920,160,30, ratio 0x1500,
-   * yaw 0xBF9C, pitch 0xC8) on first use and then persists. The image's
-   * [0x107DD0]/[0x107DD4] start as slot 1 / variant 0. */
+   * class states below are the selected records' +0x10/14/18/4C/58/5C cells;
+   * classes 0..2 are seeded from the image record (-1920,160,30, ratio 0x1500,
+   * yaw 0xBF9C, pitch 0xC8) on first use and then persist. RR-L5 class 3 is
+   * the separately staged sub-8 VIEW state; it has no modeled behavior block.
+   * The image's [0x107DD0]/[0x107DD4] start as slot 1 / variant 0. */
   int32_t native_view_preset, native_view_slot, native_view_variant;
   int32_t native_view_class;
-  fifa96_camera_handler_state native_view_cam[3];
+  fifa96_camera_handler_state native_view_cam[4];
   fifa96_camera_handler_block native_view_block[3];
-  uint8_t native_view_valid[3];
+  uint8_t native_view_valid[4];
   /* Phase 81 [D]: the live ball focus. The native FU-71 focus must stay
    * untouched for the ball machine/AI while a native pan is active; the side
    * presentation eye converges on this focus. `camera.pos_*` is staged from

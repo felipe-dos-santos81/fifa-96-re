@@ -1430,6 +1430,165 @@ static void test_replay_frozen_live_view_applies_target(void) {
   fifa96_match_run_init(&mr);
 }
 
+static void frame_stage_handler_camera(fifa96_camera_handler_state *st,
+                                       int32_t x, int32_t y, int32_t z,
+                                       int32_t yaw, int32_t pitch,
+                                       int32_t ratio) {
+  st->pos_x = x;
+  st->pos_y = y;
+  st->pos_z = z;
+  st->yaw = yaw;
+  st->pitch = pitch;
+  st->ratio = ratio;
+}
+
+static void frame_assert_handler_camera(const struct fifa96_match_run *mr,
+                                        int32_t x, int32_t y, int32_t z,
+                                        int32_t yaw, int32_t pitch,
+                                        int32_t ratio) {
+  assert(mr->render.render_eye_valid == 1u);
+  assert(mr->render.render_eye_x == x);
+  assert(mr->render.render_eye_y == y);
+  assert(mr->render.render_eye_z == z);
+  assert(mr->render.yaw == yaw);
+  assert(mr->render.pitch == pitch);
+  assert(mr->render.view_ratio == ratio);
+}
+
+/* RR-L5: the selector table, its 0x20 caller wrap, and the frozen-frame source
+ * consumption. The native [0x7DC8] identity is partial: the three original
+ * VIEW objects plus ACTION have handler state, POSE consumes the recorded
+ * matrix, and sub 8 adds the fourth staged VIEW state. BALL has no dedicated
+ * engine source (RR-L5-BALL), so it keeps the existing live-follow fallback;
+ * no matrix is fabricated for it. */
+static void test_replay_camera_cycle_sources(void) {
+  static const uint8_t want_kind[7] = {
+      FIFA96_CAMERA_REPLAY_POSE, FIFA96_CAMERA_REPLAY_VIEW,
+      FIFA96_CAMERA_REPLAY_VIEW, FIFA96_CAMERA_REPLAY_VIEW,
+      FIFA96_CAMERA_REPLAY_ACTION, FIFA96_CAMERA_REPLAY_BALL,
+      FIFA96_CAMERA_REPLAY_VIEW};
+  static const uint8_t want_sub[7] = {0, 5, 6, 7, 0, 0, 8};
+  static const int want_source[7] = {
+      FIFA96_MATCH_REPLAY_SOURCE_POSE, FIFA96_MATCH_REPLAY_SOURCE_VIEW,
+      FIFA96_MATCH_REPLAY_SOURCE_VIEW, FIFA96_MATCH_REPLAY_SOURCE_VIEW,
+      FIFA96_MATCH_REPLAY_SOURCE_ACTION, FIFA96_MATCH_REPLAY_SOURCE_BALL,
+      FIFA96_MATCH_REPLAY_SOURCE_VIEW};
+  struct fifa96_match_run mr;
+  uint8_t *view;
+
+  fifa96_match_run_init(&mr);
+  for (uint32_t i = 0; i < 7; i++) {
+    assert(fifa96_match_run_replay_camera_set(&mr, i) == 1);
+    assert(mr.render.replay.camera_index == i);
+    assert(mr.render.replay.record_index == i);
+    assert(mr.render.replay.camera_kind == want_kind[i]);
+    assert(mr.render.replay.camera_sub == want_sub[i]);
+    assert(fifa96_match_run_replay_camera_source(&mr) == want_source[i]);
+  }
+
+  /* The native JA epilogue records the out-of-range index but retains the
+   * selection (and therefore its source). */
+  assert(fifa96_match_run_replay_camera_set(&mr, 7) == 0);
+  assert(mr.render.replay.record_index == 7);
+  assert(mr.render.replay.camera_index == 6);
+  assert(mr.render.replay.camera_kind == FIFA96_CAMERA_REPLAY_VIEW);
+  assert(mr.render.replay.camera_sub == 8);
+  assert(fifa96_match_run_replay_camera_source(&mr) ==
+         FIFA96_MATCH_REPLAY_SOURCE_VIEW);
+
+  /* FUN_000642FC, not the selector, wraps the cycle: 5 -> 0 (index 6 is only
+   * reachable through the direct selector callers). */
+  assert(fifa96_match_run_replay_camera_set(&mr, 5) == 1);
+  mr.render.replay.state = FIFA96_MATCH_REPLAY_IDLE;
+  assert(fifa96_match_run_replay_step(&mr, 0x20) == 0);
+  assert(mr.render.replay.camera_index == 0);
+  assert(mr.render.replay.record_index == 0);
+  assert(mr.render.replay.camera_kind == FIFA96_CAMERA_REPLAY_POSE);
+  assert(fifa96_match_run_replay_camera_source(&mr) ==
+         FIFA96_MATCH_REPLAY_SOURCE_POSE);
+
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  mr.lc.screen = FIFA96_MATCH_SCREEN_ACTIVE;
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.render.replay.state = FIFA96_MATCH_REPLAY_IDLE;
+  view = mr.render.replay.replay_view;
+
+  /* POSE: +0x1AE..+0x1C5 is the sole camera source. */
+  for (int k = 0; k < 6; k++) {
+    uint32_t value = (uint32_t)(0x101 + k * 0x101);
+    memcpy(view + 0x1AE + 4 * k, &value, sizeof value);
+  }
+  assert(fifa96_match_run_replay_camera_set(&mr, 0) == 1);
+  one_granted_frame(&mr);
+  frame_assert_handler_camera(&mr, 0x101, 0x202, 0x303,
+                              0x404, 0x505, 0x606);
+
+  /* VIEW: a valid handler state wins over both the live follow and the
+   * recorded matrix. */
+  assert(fifa96_match_run_replay_camera_set(&mr, 1) == 1);
+  mr.render.native_view_valid[0] = 1;
+  frame_stage_handler_camera(&mr.render.native_view_cam[0],
+                             0x111, 0x122, 0x133, 0x144, 0x155, 0x166);
+  one_granted_frame(&mr);
+  frame_assert_handler_camera(&mr, 0x111, 0x122, 0x133,
+                              0x144, 0x155, 0x166);
+
+  /* ACTION likewise publishes its own handler state, not the POSE matrix. */
+  assert(fifa96_match_run_replay_camera_set(&mr, 4) == 1);
+  frame_stage_handler_camera(&mr.render.action_cam,
+                             0x211, 0x222, 0x233, 0x244, 0x255, 0x266);
+  one_granted_frame(&mr);
+  frame_assert_handler_camera(&mr, 0x211, 0x222, 0x233,
+                              0x244, 0x255, 0x266);
+
+  /* Index 6/sub 8 is class 3, a distinct fourth entry rather than an alias of
+   * class 2. Its valid state is consumed directly. */
+  assert(fifa96_match_run_replay_camera_set(&mr, 6) == 1);
+  mr.render.native_view_valid[3] = 1;
+  frame_stage_handler_camera(&mr.render.native_view_cam[3],
+                             0x311, 0x322, 0x333, 0x344, 0x355, 0x366);
+  one_granted_frame(&mr);
+  frame_assert_handler_camera(&mr, 0x311, 0x322, 0x333,
+                              0x344, 0x355, 0x366);
+
+  /* BALL is the documented RR-L5-BALL residual: with no dedicated source the
+   * existing live follow runs. Compare against the handler it actually steps. */
+  assert(fifa96_match_run_replay_camera_set(&mr, 5) == 1);
+  mr.render.native_view_class = 1;
+  mr.render.native_view_valid[1] = 0;
+  one_granted_frame(&mr);
+  assert(mr.render.native_view_valid[1] == 1u);
+  frame_assert_handler_camera(&mr, mr.render.native_view_cam[1].pos_x,
+                              mr.render.native_view_cam[1].pos_y,
+                              mr.render.native_view_cam[1].pos_z,
+                              mr.render.native_view_cam[1].yaw,
+                              mr.render.native_view_cam[1].pitch,
+                              mr.render.native_view_cam[1].ratio);
+
+  /* An invalid sub-8 state takes the same live-follow fallback. Poison the
+   * fourth entry so an out-of-bounds or unconditional class-3 read cannot
+   * satisfy the expected live class-1 result. */
+  assert(fifa96_match_run_replay_camera_set(&mr, 6) == 1);
+  mr.render.native_view_valid[3] = 0;
+  frame_stage_handler_camera(&mr.render.native_view_cam[3],
+                             -701, -702, -703, -704, -705, -706);
+  mr.render.native_view_class = 1;
+  mr.render.native_view_valid[1] = 0;
+  one_granted_frame(&mr);
+  assert(mr.render.native_view_valid[1] == 1u);
+  frame_assert_handler_camera(&mr, mr.render.native_view_cam[1].pos_x,
+                              mr.render.native_view_cam[1].pos_y,
+                              mr.render.native_view_cam[1].pos_z,
+                              mr.render.native_view_cam[1].yaw,
+                              mr.render.native_view_cam[1].pitch,
+                              mr.render.native_view_cam[1].ratio);
+  assert(mr.render.render_eye_x != -701);
+  assert(mr.render.yaw != -704);
+}
+
 /* C3 review F2: the frozen render staging is positions-only. The animator half
  * of `match_run_scene_stage` writes the sim-visible record fields (+0x3D
  * `frame` and, on a row successor, +0x28 `anim_id`) that the entity machine
@@ -11519,6 +11678,7 @@ int main(void) {
   test_natural_phase2_never_scores();
   test_replay_freezes_live_frame();
   test_replay_frozen_live_view_applies_target();
+  test_replay_camera_cycle_sources();
   test_replay_frozen_scene_stage_keeps_record_anim();
   test_replay_capture_in_frame();
   test_replay_ball_appearance_link();

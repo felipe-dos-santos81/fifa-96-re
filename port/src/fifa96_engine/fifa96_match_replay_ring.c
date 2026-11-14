@@ -297,9 +297,10 @@ void fifa96_match_replay_compose(struct fifa96_match_run *mr) {
   replay_put_word(view, FIFA96_REPLAY_WORD_1CC, 1);
   replay_put_word(view, FIFA96_REPLAY_WORD_1CE, mr->state.frame_delta);
 
-  /* The matrix is the selected live view class when it is a valid 0..2 view,
-   * else the class-3 action camera. */
-  if (r->native_view_class >= 0 && r->native_view_class < 3 &&
+  /* The matrix is the selected live view class when it is valid. Classes 0..2
+   * are the live behavior handlers; RR-L5 class 3 is the staged sub-8 VIEW
+   * variant. An invalid class falls back to the action camera. */
+  if (r->native_view_class >= 0 && r->native_view_class < 4 &&
       r->native_view_valid[r->native_view_class])
     cam = &r->native_view_cam[r->native_view_class];
   else
