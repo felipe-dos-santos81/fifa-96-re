@@ -88,7 +88,8 @@ void fifa96_match_replay_ring_record(struct fifa96_match_run *mr, int on);
  * `camera_override_157a6f`, else `render.camera.pos_*`, clamped with
  * `fifa96_camera_focus_clamp`. The packed heading is the native folded
  * `((0x400 - (stage.heading >> 16)) & 0x3FF) << 6`, a hidden slot writes
- * `FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y` in y, the six queue bytes are staged 0,
+ * `FIFA96_MATCH_REPLAY_VIEW_HIDDEN_Y` in y, the six queue bytes are copied
+ * from `mr->replay_queue6` (staged `0xFF` by default),
  * `+0x1CC` is the `FUN_000974D0` stub 1 and `+0x1CE` the `FUN_000492CC`
  * stand-in (`state.frame_delta`). The matrix comes from
  * `native_view_cam[native_view_class]` when that class is a valid 0..2 view,

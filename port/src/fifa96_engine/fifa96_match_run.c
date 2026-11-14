@@ -5427,11 +5427,14 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   /* RR-L10: the replay FIFO cursors and the staged drain screen id. */
   fifa96_match_run_replay_fifo_reset(mr);
   mr->replay_screen_id_105ffc = 0;
-  /* RR-L3: the composer's band/flag/queue-pop cells start clear. */
+  /* RR-L3: the composer's band/flag/queue-pop cells start clear; the six-byte
+   * queue lane defaults to the native `0xFF` fill (the object-array producer
+   * is a numbered leg). */
   mr->replay_view_flags_155c4e = 0;
   mr->replay_queue_pop_155c4f = 0;
   mr->replay_band_155c50 = 0;
   mr->replay_band_flag_155c51 = 0;
+  memset(mr->replay_queue6, 0xFF, sizeof mr->replay_queue6);
 }
 
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
@@ -5955,11 +5958,14 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   /* RR-L10: the replay FIFO cursors and the staged drain screen id. */
   fifa96_match_run_replay_fifo_reset(mr);
   mr->replay_screen_id_105ffc = 0;
-  /* RR-L3: the composer's band/flag/queue-pop cells start clear. */
+  /* RR-L3: the composer's band/flag/queue-pop cells start clear; the six-byte
+   * queue lane defaults to the native `0xFF` fill (the object-array producer
+   * is a numbered leg). */
   mr->replay_view_flags_155c4e = 0;
   mr->replay_queue_pop_155c4f = 0;
   mr->replay_band_155c50 = 0;
   mr->replay_band_flag_155c51 = 0;
+  memset(mr->replay_queue6, 0xFF, sizeof mr->replay_queue6);
   return 0;
 }
 

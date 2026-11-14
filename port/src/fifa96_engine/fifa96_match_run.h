@@ -1954,11 +1954,18 @@ struct fifa96_match_run {
    * as `ball_roll | (flags & 0xC0)`; the bit 0x80/0x7F arm stays a numbered
    * leg. `replay_band_155c50`/`replay_band_flag_155c51` are the band and the
    * flag the band gate stages; `replay_queue_pop_155c4f` is the FIFO pop status
-   * (raw + 1, 0 when empty). init/begin zero all four. */
+   * (raw + 1, 0 when empty). init/begin zero all four.
+   *
+   * `replay_queue6` is the six-byte queue lane (native `0x155C6A..0x155C6F`):
+   * the composer copies it to the view `+0x1C6..+0x1CB` lane. The native
+   * object-array producer (`0x157C64` objects, `0x157C83`/`0x157C86`,
+   * `FUN_0004BA44`/`FUN_0004BA00`) is a numbered leg, so the engine stages the
+   * lane and init/begin default it to the native `0xFF` fill. */
   uint8_t replay_view_flags_155c4e;
   uint8_t replay_queue_pop_155c4f;
   uint8_t replay_band_155c50;
   uint8_t replay_band_flag_155c51;
+  uint8_t replay_queue6[6];
   void *stage_owner;                             /* Task 2 staging arena (owned) */
   /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
    * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/

@@ -421,12 +421,14 @@ static void test_ring_compose(void) {
   assert(view[0x17C + 22] == 9);
   assert(view[0x193 + 22] == 0);
 
-  /* The camera cluster: roll, staged-zero queue bytes, the `=1` word, the
-   * frame-delta stamp, and the six-dword matrix in the *view* offsets. */
+  /* The camera cluster: roll, staged-zero queue bytes, the six-byte queue lane
+   * (`0xFF` default, the object-array producer is a numbered leg), the `=1`
+   * word, the frame-delta stamp, and the six-dword matrix in the *view*
+   * offsets. */
   assert(view[0x1AA] == 0xA5);
   assert(view[0x1AB] == 0 && view[0x1AC] == 0 && view[0x1AD] == 0);
-  assert(view[0x1C6] == 0 && view[0x1C7] == 0 && view[0x1C8] == 0);
-  assert(view[0x1C9] == 0 && view[0x1CA] == 0 && view[0x1CB] == 0);
+  assert(view[0x1C6] == 0xFF && view[0x1C7] == 0xFF && view[0x1C8] == 0xFF);
+  assert(view[0x1C9] == 0xFF && view[0x1CA] == 0xFF && view[0x1CB] == 0xFF);
   assert(get_u16(view, 0x1CC) == 1);
   assert(get_u16(view, 0x1CE) == 2);
   assert((int32_t)get_u32(view, 0x1AE) == -10);
@@ -826,6 +828,56 @@ static void test_replay_resync_queue_pop(void) {
   assert(v == 0xFFFFFF80u);
 }
 
+/* Task 5 (RR-L3): the six-byte queue lane. The composer copies `replay_queue6`
+ * to the view `+0x1C6..+0x1CB` lane; the packer already maps it to record
+ * `+0x10E..+0x113` and the applier returns it. A fresh run (init, no staging)
+ * composes the native `0xFF` default six times. */
+static void test_ring_compose_queue6(void) {
+  struct fifa96_match_run mr;
+  uint8_t *view;
+  uint8_t record[FIFA96_MATCH_REPLAY_RECORD_SIZE];
+  uint8_t applied[FIFA96_MATCH_REPLAY_VIEW_SIZE];
+  static const uint8_t staged[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+  size_t i;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.live_start = 1;
+  view = mr.render.replay.replay_view;
+  memset(view, 0xCC, FIFA96_MATCH_REPLAY_VIEW_SIZE);
+
+  /* Stage the six bytes and compose: the lane carries them. */
+  memcpy(mr.replay_queue6, staged, sizeof staged);
+  fifa96_match_replay_compose(&mr);
+  for (i = 0; i < 6; i++)
+    assert(view[0x1C6 + i] == staged[i]);
+
+  /* Pack with stamp 0x1234: the lane lands at record +0x10E..+0x113. */
+  memset(record, 0, sizeof record);
+  fifa96_match_replay_pack(view, record, 0x1234u);
+  assert(memcmp(record + 0x10E, staged, 6) == 0);
+
+  /* Unpack into a cleared view: the lane returns. */
+  memset(applied, 0, sizeof applied);
+  fifa96_match_replay_unpack(record, applied);
+  assert(memcmp(applied + 0x1C6, staged, 6) == 0);
+
+  /* A fresh run without staging composes the native 0xFF default. */
+  {
+    struct fifa96_match_run fresh;
+    memset(&fresh, 0, sizeof fresh);
+    fifa96_match_run_init(&fresh);
+    fresh.running = 1;
+    fresh.live_start = 1;
+    memset(fresh.render.replay.replay_view, 0xCC,
+           FIFA96_MATCH_REPLAY_VIEW_SIZE);
+    fifa96_match_replay_compose(&fresh);
+    for (i = 0; i < 6; i++)
+      assert(fresh.render.replay.replay_view[0x1C6 + i] == 0xFF);
+  }
+}
+
 int main(void) {
   test_ring_pack_apply_roundtrip();
   test_ring_capture_budget();
@@ -843,6 +895,7 @@ int main(void) {
   test_replay_fifo_drain_gate();
   test_ring_compose_band_queue();
   test_replay_resync_queue_pop();
+  test_ring_compose_queue6();
   puts("test_engine_replay_ring OK");
   return 0;
 }

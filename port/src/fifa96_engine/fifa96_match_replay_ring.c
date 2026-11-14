@@ -283,7 +283,8 @@ void fifa96_match_replay_compose(struct fifa96_match_run *mr) {
   }
 
   /* The camera cluster: the roll byte (merged with the band-latch flag bits),
-   * the queue-pop byte, the band and the flag, the six queue bytes, the
+   * the queue-pop byte, the band and the flag, the six queue bytes (staged via
+   * `replay_queue6`; the object-array producer is a numbered leg), the
    * `FUN_000974D0` stub 1 and the `FUN_000492CC` frame-delta stand-in
    * (RR-L6). */
   view[FIFA96_REPLAY_CAMERA_BYTES + 0] =
@@ -291,7 +292,8 @@ void fifa96_match_replay_compose(struct fifa96_match_run *mr) {
   view[FIFA96_REPLAY_CAMERA_BYTES + 1] = mr->replay_queue_pop_155c4f;
   view[FIFA96_REPLAY_CAMERA_BYTES + 2] = mr->replay_band_155c50;
   view[FIFA96_REPLAY_CAMERA_BYTES + 3] = mr->replay_band_flag_155c51;
-  memset(view + FIFA96_REPLAY_QUEUE6, 0, 6);
+  memcpy(view + FIFA96_REPLAY_QUEUE6, mr->replay_queue6,
+         sizeof mr->replay_queue6);
   replay_put_word(view, FIFA96_REPLAY_WORD_1CC, 1);
   replay_put_word(view, FIFA96_REPLAY_WORD_1CE, mr->state.frame_delta);
 
