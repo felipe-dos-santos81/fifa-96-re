@@ -36,13 +36,15 @@ int fifa96_camera_focus_clamp(int32_t x, int32_t y, int32_t z,
 }
 
 int fifa96_camera_replay_band(int32_t x, int32_t y) {
-  /* FUN_000627F4 (RR-L3): the x band is exclusive (1 / 4 / 0), the y band ORs
-   * 8 / 2, and the return is value + 1 unconditionally. Signed compares. */
+  /* FUN_000627F4 (RR-L3): the x band is exclusive (1 / 4 / 0). The y band's
+   * two arms are mutually exclusive: y < 0x6A sets 8 and returns, so the
+   * y > 0x35 arm (setting 2) runs only when y >= 0x6A. The return is
+   * value + 1 unconditionally. Signed compares. */
   int value = 0;
   if (x > 0x46) value = 1;
   else if (x < -0x46) value = 4;
   if (y < 0x6A) value |= 8;
-  if (y > 0x35) value |= 2;
+  else if (y > 0x35) value |= 2;
   return value + 1;
 }
 

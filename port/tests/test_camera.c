@@ -2920,13 +2920,18 @@ static void test_classifier_bits(void) {
 
 /* RR-L3: FUN_000627F4, the focus band classifier the composer feeds into the
  * `0x155C50` band byte. Signed compares: x > 0x46 -> 1, x < -0x46 -> 4, else
- * 0; y < 0x6A -> |8, y > 0x35 -> |2; the return is value + 1, unconditionally. */
+ * 0. The y arms are exclusive — y < 0x6A -> |8 (and return), else y > 0x35
+ * -> |2. The return is value + 1, unconditionally. */
 static void test_replay_band_classifier(void) {
   assert(fifa96_camera_replay_band(0x47, 0x6A) == 4);
   assert(fifa96_camera_replay_band(0, 0) == 9);
   assert(fifa96_camera_replay_band(-0x47, 0) == 13);
   assert(fifa96_camera_replay_band(-0x46, 0x6A) == 3);
   assert(fifa96_camera_replay_band(0, 0x6B) == 3);
+  /* The y arms are mutually exclusive: 0x36..0x69 (< 0x6A) take |8 only. */
+  assert(fifa96_camera_replay_band(0, 0x36) == 9);
+  assert(fifa96_camera_replay_band(0, 0x69) == 9);
+  assert(fifa96_camera_replay_band(0, 0x6A) == 3);
 }
 
 static void test_pan_band(void) {

@@ -364,9 +364,15 @@ int fifa96_match_replay_apply(struct fifa96_match_run *mr, uint32_t index) {
   idx = (ring->read + index) % FIFA96_MATCH_REPLAY_RING_RECORDS;
   fifa96_match_replay_unpack(ring->record[idx],
                              mr->render.replay.replay_view);
-  /* The applier also latches the roll byte from the camera cluster. */
+  /* The applier also latches the roll byte and the queue-pop byte from the
+   * camera cluster. FUN_0006428C reads [0x155C4C] and SAR EAX,0x18 — the
+   * current view byte at 0x155C4F = view +0x1AB, which is the applied
+   * record's queue-pop byte, so resync must consume the record's value, not
+   * the last live-compose mirror. */
   mr->render.ball_roll =
       mr->render.replay.replay_view[FIFA96_REPLAY_CAMERA_BYTES];
+  mr->replay_queue_pop_155c4f =
+      mr->render.replay.replay_view[FIFA96_REPLAY_CAMERA_BYTES + 1];
   return 1;
 }
 

@@ -373,10 +373,10 @@ int fifa96_match_run_replay_complete(const struct fifa96_match_run *mr);
  * step/slow reset to IDLE and the exit arm (bit 0x80 -> state 0, HUD arm
  * cleared). The embedded ring advances here: the ring tick is 1 inside the
  * PLAYING countdown, which consumes each record's stamp through the forward
- * step (FUN_00063D34/CBC) and calls the FUN_0006428C re-sync no-op; the Q8
- * frame delta stays in the scene staging, not the replay step. The held pad
- * probe FUN_000451F1, the pan keys FUN_0004CA08 and the FUN_0006428C body
- * stay legs. */
+ * step (FUN_00063D34/CBC) and calls the FUN_0006428C re-sync (implemented:
+ * the local sign-extended decrement + drain); the Q8 frame delta stays in the
+ * scene staging, not the replay step. The held pad probe FUN_000451F1, the
+ * pan keys FUN_0004CA08 and the FUN_00065CC0 notification body stay legs. */
 int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons);
 
 /* The exit chain FUN_00064E8C's reachable state: [0x109A98] = 0 and the HUD

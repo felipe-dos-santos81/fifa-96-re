@@ -849,6 +849,43 @@ static void test_replay_resync_queue_pop(void) {
   assert(v == 0xFFFFFF80u);
 }
 
+/* RR-L3 apply latch: `fifa96_match_replay_apply` unpacks a record into the
+ * view, so the current queue-pop byte is the record's (view +0x1AB = record
+ * +0xF3). The native `FUN_0006428C` reads `[0x155C4C]; SAR EAX,0x18` — the
+ * current view byte at `0x155C4F` — so resync must consume the applied
+ * record's byte, not the last live-compose mirror. */
+static void test_replay_apply_latches_queue_pop(void) {
+  struct fifa96_match_run mr;
+  uint32_t v;
+
+  memset(&mr, 0, sizeof mr);
+  fifa96_match_run_init(&mr);
+  fifa96_match_run_replay_fifo_reset(&mr);
+
+  /* Stage one record whose queue-pop byte (record +0xF3) is a known nonzero
+   * value, and leave the live mirror at a different value so the apply
+   * overwrite is observable. */
+  memset(mr.replay_ring.record[0], 0, FIFA96_MATCH_REPLAY_RECORD_SIZE);
+  mr.replay_ring.record[0][0xF3] = 0x2A;
+  mr.replay_ring.read = 0;
+  mr.replay_ring.write = 1;
+  mr.replay_ring.count = 1;
+  mr.replay_queue_pop_155c4f = 0x7F;   /* the stale live-compose value */
+
+  assert(fifa96_match_replay_apply(&mr, 0) == 1);
+  assert(mr.render.replay.replay_view[0x1AB] == 0x2A);
+  assert(mr.replay_queue_pop_155c4f == 0x2A);   /* latched from the record */
+
+  /* Resync with the drain gate passing (state 0, screen id 0): the FIFO
+   * receives the sign-extended record byte minus one (0x2A - 1 = 0x29). */
+  mr.render.replay.state = 0;
+  mr.replay_screen_id_105ffc = 0;
+  fifa96_match_run_replay_resync(&mr);
+  assert(mr.replay_fifo.count == 1);
+  assert(fifa96_match_run_replay_fifo_pop(&mr, &v) == 1);
+  assert(v == 0x2Au - 1u);
+}
+
 /* Task 5 (RR-L3): the six-byte queue lane. The composer copies `replay_queue6`
  * to the view `+0x1C6..+0x1CB` lane; the packer already maps it to record
  * `+0x10E..+0x113` and the applier returns it. A fresh run (init, no staging)
@@ -1143,6 +1180,7 @@ int main(void) {
   test_replay_fifo_drain_gate();
   test_ring_compose_band_queue();
   test_replay_resync_queue_pop();
+  test_replay_apply_latches_queue_pop();
   test_ring_compose_queue6();
   test_ring_appearance_identity();
   test_replay_arm_view_reset();

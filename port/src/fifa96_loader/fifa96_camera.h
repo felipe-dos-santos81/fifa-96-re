@@ -489,8 +489,9 @@ int fifa96_camera_focus_clamp(int32_t x, int32_t y, int32_t z,
 
 /* RR-L3: FUN_000627F4, the focus band classifier the replay composer feeds
  * into the native `0x155C50` band byte. Signed compares: x > 0x46 -> 1,
- * x < -0x46 -> 4, else 0; y < 0x6A -> |8, y > 0x35 -> |2. The return is
- * `value + 1`, unconditionally (so the empty band is 1, never 0). */
+ * x < -0x46 -> 4, else 0. The y band is exclusive: y < 0x6A -> |8 (and
+ * returns), else y > 0x35 -> |2. The return is `value + 1`, unconditionally
+ * (so the empty band is 1, never 0). */
 int fifa96_camera_replay_band(int32_t x, int32_t y);
 
 /* FU-351-L1: FUN_0004BE44's 23-slot table index for a record
