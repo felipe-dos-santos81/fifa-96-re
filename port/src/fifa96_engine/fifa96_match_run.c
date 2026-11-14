@@ -5147,6 +5147,17 @@ static void match_run_sub_roster_reset(struct fifa96_match_run *mr) {
   match_run_sub_menu_reset(mr);
 }
 
+/* RR-L3: the composer's band/flag/queue-pop cells start clear and the six-byte
+ * queue lane defaults to the native `0xFF` fill. init and begin share this
+ * exact reset (see the explanatory comments at the two call sites). */
+static void match_run_replay_composer_reset(struct fifa96_match_run *mr) {
+  mr->replay_view_flags_155c4e = 0;
+  mr->replay_queue_pop_155c4f = 0;
+  mr->replay_band_155c50 = 0;
+  mr->replay_band_flag_155c51 = 0;
+  memset(mr->replay_queue6, 0xFF, sizeof mr->replay_queue6);
+}
+
 void fifa96_match_run_init(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_lifecycle_init(&mr->lc);
@@ -5445,11 +5456,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   /* RR-L3: the composer's band/flag/queue-pop cells start clear; the six-byte
    * queue lane defaults to the native `0xFF` fill (the object-array producer
    * is a numbered leg). */
-  mr->replay_view_flags_155c4e = 0;
-  mr->replay_queue_pop_155c4f = 0;
-  mr->replay_band_155c50 = 0;
-  mr->replay_band_flag_155c51 = 0;
-  memset(mr->replay_queue6, 0xFF, sizeof mr->replay_queue6);
+  match_run_replay_composer_reset(mr);
   /* C4R-L1: the projection-active flag starts clear (the native image default;
    * `FUN_000585E4` is the separate setup writer that sets 1). */
   mr->replay_view_reset_109014 = 0;
@@ -5979,11 +5986,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   /* RR-L3: the composer's band/flag/queue-pop cells start clear; the six-byte
    * queue lane defaults to the native `0xFF` fill (the object-array producer
    * is a numbered leg). */
-  mr->replay_view_flags_155c4e = 0;
-  mr->replay_queue_pop_155c4f = 0;
-  mr->replay_band_155c50 = 0;
-  mr->replay_band_flag_155c51 = 0;
-  memset(mr->replay_queue6, 0xFF, sizeof mr->replay_queue6);
+  match_run_replay_composer_reset(mr);
   /* C4R-L1: the projection-active flag starts clear. */
   mr->replay_view_reset_109014 = 0;
   /* RR-L7: a reused match starts without a replay request mode window. */
